@@ -8,6 +8,14 @@ from typing import Any
 
 jax.config.update('jax_enable_x64', True)
 
+# Global figure counter and output directory
+_figure_counter = 1
+def get_figure_filename():
+    global _figure_counter
+    filename = f"{_figure_counter:03d}.png"
+    _figure_counter += 1
+    return filename
+
 # In[ ]:
 
 #@title Base config
@@ -467,7 +475,8 @@ def detailed_plot_single_sim(dt: xr.DataTree, time: float | None = None):
 
     plt.tight_layout()
 
-    plt.show()
+    plt.savefig(get_figure_filename())
+    plt.close()
 
 
 # In[ ]:
@@ -620,7 +629,8 @@ def compare_timetraces(datatrees: list[xr.DataTree],
     axes[1, 3].legend(fontsize=fsize - fontreduction)
 
     plt.tight_layout()
-    plt.show()
+    plt.savefig(get_figure_filename())
+    plt.close()
 
 
 # In[ ]:
@@ -739,7 +749,8 @@ def compare_profiles(datatrees: list[xr.DataTree],
     axes[1, 2].legend()
 
     plt.tight_layout()
-    plt.show()
+    plt.savefig(get_figure_filename())
+    plt.close()
 
 
 # In[ ]:
@@ -1084,8 +1095,8 @@ compare_profiles([out0, out3],
 # In[ ]:
 
 # Optional, can investigate the more detailed plots
-# detailed_plot_single_sim(out0, time = 60)
-# detailed_plot_single_sim(out3, time = 120)
+detailed_plot_single_sim(out0, time = 60)
+detailed_plot_single_sim(out3, time = 120)
 
 # In[ ]:
 
