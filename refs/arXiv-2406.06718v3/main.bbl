@@ -1,0 +1,331 @@
+\begin{thebibliography}{44}
+\providecommand{\natexlab}[1]{#1}
+\providecommand{\url}[1]{\texttt{#1}}
+\expandafter\ifx\csname urlstyle\endcsname\relax
+  \providecommand{\doi}[1]{doi: #1}\else
+  \providecommand{\doi}{doi: \begingroup \urlstyle{rm}\Url}\fi
+
+\bibitem[Ongena et~al.(2016)Ongena, Koch, Wolf, and Zohm]{ongena:2016}
+Jozef Ongena, R~Koch, R~Wolf, and H~Zohm.
+\newblock Magnetic-confinement fusion.
+\newblock \emph{Nature Physics}, 12\penalty0 (5):\penalty0 398--410, 2016.
+
+\bibitem[Poli(2018)]{poli:2018}
+Francesca~Maria Poli.
+\newblock Integrated tokamak modeling: When physics informs engineering and
+  research planning.
+\newblock \emph{Physics of Plasmas}, 25\penalty0 (5):\penalty0 055602, 2018.
+
+\bibitem[Fasoli et~al.(2016)Fasoli, Brunner, Cooper, Graves, Ricci, Sauter, and
+  Villard]{fasoli:2016}
+A~Fasoli, S~Brunner, WA~Cooper, JP~Graves, P~Ricci, O~Sauter, and L~Villard.
+\newblock Computational challenges in magnetic-confinement fusion physics.
+\newblock \emph{Nature Physics}, 12\penalty0 (5):\penalty0 411--423, 2016.
+
+\bibitem[Cenacchi and Taroni(1988)]{cenacchi:1988}
+G.~Cenacchi and A.~Taroni.
+\newblock {JETTO: A free boundary plasma transport code}.
+\newblock Technical report, ENEA, Rome (Italy), 1988.
+
+\bibitem[Pereverzev et~al.(1991)Pereverzev, Yushmanov, Dnestrovskii, Polevoi,
+  Tarasjan, and Zakharov]{pereverzev:1991}
+Gregorij~V Pereverzev, PN~Yushmanov, A~Yu Dnestrovskii, AR~Polevoi,
+  KN~Tarasjan, and LE~Zakharov.
+\newblock {ASTRA-an automatic system for transport analysis in a tokamak}.
+\newblock Technical report, Max-Planck-Institut fuer Plasmaphysik, Garching
+  (Germany), 1991.
+
+\bibitem[Breslau et~al.(2018)Breslau, Gorelenkova, Poli, Sachdev, Pankin,
+  Perumpilly, Yuan, Glant, and of~Science]{transp:2018}
+Joshua Breslau, Marina Gorelenkova, Francesca Poli, Jai Sachdev, Alexei Pankin,
+  Gopan Perumpilly, Xingqiu Yuan, Laszlo Glant, and USDOE~Office of~Science.
+\newblock Transp, 6 2018.
+\newblock URL \url{https://www.osti.gov/biblio/1489900}.
+
+\bibitem[Kalupin et~al.(2013)Kalupin, Ivanova-Stanik, Voitsekhovitch, Ferreira,
+  Coster, Alves, Aniel, Artaud, Basiuk, Bizarro, et~al.]{kalupin:2013}
+Denis Kalupin, I~Ivanova-Stanik, I~Voitsekhovitch, J~Ferreira, D~Coster,
+  LL~Alves, Th~Aniel, JF~Artaud, V~Basiuk, Joao~PS Bizarro, et~al.
+\newblock {Numerical analysis of JET discharges with the European Transport
+  Simulator}.
+\newblock \emph{Nuclear Fusion}, 53\penalty0 (12):\penalty0 123007, 2013.
+
+\bibitem[Felici and Sauter(2012)]{felici:2012}
+F~Felici and O~Sauter.
+\newblock Non-linear model-based optimization of actuator trajectories for
+  tokamak plasma profile control.
+\newblock \emph{Plasma Physics and Controlled Fusion}, 54\penalty0
+  (2):\penalty0 025002, 2012.
+
+\bibitem[Felici et~al.(2018)Felici, Citrin, Teplukhina, Redondo, Bourdelle,
+  Imbeaux, Sauter, Contributors, Team, et~al.]{felici:2018}
+F~Felici, J~Citrin, AA~Teplukhina, J~Redondo, C~Bourdelle, F~Imbeaux, O~Sauter,
+  JET Contributors, EUROfusion~MST1 Team, et~al.
+\newblock {Real-time-capable prediction of temperature and density profiles in
+  a tokamak using RAPTOR and a first-principle-based transport model}.
+\newblock \emph{Nuclear Fusion}, 58\penalty0 (9):\penalty0 096006, 2018.
+
+\bibitem[Artaud et~al.(2018)Artaud, Imbeaux, Garcia, Giruzzi, Aniel, Basiuk,
+  B{\'e}coulet, Bourdelle, Buravand, Decker, et~al.]{artaud:2018}
+Jean-Fran{\c{c}}ois Artaud, Fr{\'e}d{\'e}ric Imbeaux, J~Garcia, G~Giruzzi,
+  T~Aniel, V~Basiuk, A~B{\'e}coulet, C~Bourdelle, Y~Buravand, J~Decker, et~al.
+\newblock Metis: a fast integrated tokamak modelling tool for scenario design.
+\newblock \emph{Nuclear Fusion}, 58\penalty0 (10):\penalty0 105001, 2018.
+
+\bibitem[Janky et~al.(2021)Janky, Fable, Englberger, and
+  Treutterer]{janky:2021}
+F.~Janky, E.~Fable, M.~Englberger, and W.~Treutterer.
+\newblock Validation of the fenix asdex upgrade flight simulator.
+\newblock \emph{Fusion Engineering and Design}, 163:\penalty0 112126, 2021.
+\newblock ISSN 0920-3796.
+\newblock \doi{https://doi.org/10.1016/j.fusengdes.2020.112126}.
+
+\bibitem[Morosohk et~al.(2021)Morosohk, Pajares, Rafiq, and
+  Schuster]{morosohk:2021}
+Shira~M Morosohk, Andres Pajares, Tariq Rafiq, and Eugenio Schuster.
+\newblock Neural network model of the multi-mode anomalous transport module for
+  accelerated transport simulations.
+\newblock \emph{Nuclear Fusion}, 61\penalty0 (10):\penalty0 106040, 2021.
+
+\bibitem[Meneghini et~al.(2017)Meneghini, Smith, Snyder, Staebler, Candy,
+  Belli, Lao, Kostuk, Luce, Luda, et~al.]{meneghini:2017}
+Orso Meneghini, Sterling~P Smith, Philip~B Snyder, Gary~M Staebler, Jeffrey
+  Candy, E~Belli, L~Lao, Mark Kostuk, T~Luce, Teobaldo Luda, et~al.
+\newblock Self-consistent core-pedestal transport simulations with neural
+  network accelerated models.
+\newblock \emph{Nuclear Fusion}, 57\penalty0 (8):\penalty0 086034, 2017.
+
+\bibitem[van~de Plassche et~al.(2020)van~de Plassche, Citrin, Bourdelle,
+  Camenen, Casson, Dagnelie, Felici, Ho, Van~Mulders, and {{JET
+  Contributors}}]{vandeplassche:2020}
+Karel~Lucas van~de Plassche, Jonathan Citrin, Clarisse Bourdelle, Yann Camenen,
+  Francis~J Casson, Victor~I Dagnelie, Federico Felici, Aaron Ho, Simon
+  Van~Mulders, and {{JET Contributors}}.
+\newblock Fast modeling of turbulent transport in fusion plasmas using neural
+  networks.
+\newblock \emph{Physics of Plasmas}, 27\penalty0 (2):\penalty0 022310, 2020.
+
+\bibitem[Ho et~al.(2023)Ho, Citrin, Challis, Bourdelle, Casson, Garcia, Hobirk,
+  Kappatou, Keeling, King, et~al.]{ho:2023}
+Aaron Ho, J~Citrin, CD~Challis, C~Bourdelle, FJ~Casson, J~Garcia, J~Hobirk,
+  A~Kappatou, DL~Keeling, DB~King, et~al.
+\newblock {Predictive JET current ramp-up modelling using
+  QuaLiKiz-neural-network}.
+\newblock \emph{Nuclear Fusion}, 63\penalty0 (6):\penalty0 066014, 2023.
+
+\bibitem[Boyer et~al.(2019)Boyer, Kaye, and Erickson]{boyer:2019}
+MD~Boyer, S~Kaye, and K~Erickson.
+\newblock {Real-time capable modeling of neutral beam injection on NSTX-U using
+  neural networks}.
+\newblock \emph{Nuclear Fusion}, 59\penalty0 (5):\penalty0 056008, 2019.
+
+\bibitem[Citrin et~al.(2023)Citrin, Trochim, Goerler, Pfau, van~de Plassche,
+  and Jenko]{citrin:2023genenn}
+J~Citrin, P~Trochim, T~Goerler, D~Pfau, KL~van~de Plassche, and F~Jenko.
+\newblock {Fast transport simulations with higher-fidelity surrogate models for
+  ITER}.
+\newblock \emph{Physics of Plasmas}, 30\penalty0 (6), 2023.
+
+\bibitem[Joung et~al.(2023)Joung, Ghim, Kim, Kwak, Kwon, Sung, Kim, Kim, Bak,
+  and Yoon]{joung:2023}
+Semin Joung, Y-C Ghim, Jaewook Kim, Sehyun Kwak, Daeho Kwon, C~Sung, D~Kim,
+  Hyun-Seok Kim, JG~Bak, and SW~Yoon.
+\newblock {GS-DeepNet: mastering tokamak plasma equilibria with deep neural
+  networks and the Grad--Shafranov equation}.
+\newblock \emph{Scientific Reports}, 13\penalty0 (1):\penalty0 15799, 2023.
+
+\bibitem[Rodriguez-Fernandez et~al.(2022)Rodriguez-Fernandez, Howard, and
+  Candy]{rodriguez-fernandez:2022c}
+P~Rodriguez-Fernandez, NT~Howard, and J~Candy.
+\newblock {Nonlinear gyrokinetic predictions of SPARC burning plasma profiles
+  enabled by surrogate modeling}.
+\newblock \emph{Nuclear Fusion}, 62\penalty0 (7):\penalty0 076036, 2022.
+
+\bibitem[Morosohk et~al.(2024)Morosohk, Leard, Rafiq, and
+  Schuster]{morosohk:2024}
+S~Morosohk, B~Leard, T~Rafiq, and E~Schuster.
+\newblock {Machine learning-enhanced model-based scenario optimization for
+  DIII-D}.
+\newblock \emph{Nuclear Fusion}, 64\penalty0 (5):\penalty0 056018, 2024.
+
+\bibitem[Bradbury et~al.(2018)Bradbury, Frostig, Hawkins, Johnson, Leary,
+  Maclaurin, Necula, Paszke, Vander{P}las, Wanderman-{M}ilne, and
+  Zhang]{jax:2018github}
+James Bradbury, Roy Frostig, Peter Hawkins, Matthew~James Johnson, Chris Leary,
+  Dougal Maclaurin, George Necula, Adam Paszke, Jake Vander{P}las, Skye
+  Wanderman-{M}ilne, and Qiao Zhang.
+\newblock {JAX}: composable transformations of {P}ython+{N}um{P}y programs,
+  2018.
+\newblock URL \url{http://github.com/google/jax}.
+
+\bibitem[Hinton and Hazeltine(1976)]{hinton:1976}
+F.L. Hinton and R.D. Hazeltine.
+\newblock Theory of plasma transport in toroidal confinement systems.
+\newblock \emph{Rev. Mod. Phys.}, 48:\penalty0 239, 1976.
+
+\bibitem[Felici(2011)]{felici:2011}
+Federico Felici.
+\newblock \emph{Real-time control of tokamak plasmas: from control of physics
+  to physics-based control}.
+\newblock PhD thesis, EPFL, 2011.
+
+\bibitem[Eymard et~al.(2000)Eymard, Gallou{\"e}t, and Herbin]{eymard:2000}
+Robert Eymard, Thierry Gallou{\"e}t, and Rapha{\`e}le Herbin.
+\newblock Finite volume methods.
+\newblock \emph{Handbook of numerical analysis}, 7:\penalty0 713--1018, 2000.
+
+\bibitem[Guyer et~al.(2009)Guyer, Wheeler, and Warren]{FiPy:2009}
+Jonathan~E. Guyer, Daniel Wheeler, and James~A. Warren.
+\newblock {FiPy}: Partial differential equations with {P}ython.
+\newblock \emph{Computing in Science \& Engineering}, 11\penalty0 (3):\penalty0
+  6--15, 2009.
+\newblock \doi{10.1109/MCSE.2009.52}.
+\newblock URL \url{http://www.ctcms.nist.gov/fipy}.
+
+\bibitem[Pereverzev and Corrigan(2008)]{pereverzev:2008}
+GV~Pereverzev and G~Corrigan.
+\newblock Stable numeric scheme for diffusion equation with a stiff transport.
+\newblock \emph{Computer Physics Communications}, 179\penalty0 (8):\penalty0
+  579--585, 2008.
+
+\bibitem[Blondel et~al.(2021)Blondel, Berthet, Cuturi, Frostig, Hoyer,
+  Llinares-L{\'o}pez, Pedregosa, and Vert]{jaxopt:2021}
+Mathieu Blondel, Quentin Berthet, Marco Cuturi, Roy Frostig, Stephan Hoyer,
+  Felipe Llinares-L{\'o}pez, Fabian Pedregosa, and Jean-Philippe Vert.
+\newblock Efficient and modular implicit differentiation.
+\newblock \emph{arXiv preprint arXiv:2105.15183}, 2021.
+
+\bibitem[H. et~al.(1996)H., A., and O.]{lutjens:1996}
+Lutjens H., Bondeson A., and Sauter O.
+\newblock {The CHEASE Code for Toroidal MHD Equilibria}.
+\newblock \emph{Comput. Phys. Commun.}, 97:\penalty0 219, 1996.
+
+\bibitem[Garbet et~al.(2004)Garbet, Mantica, Angioni, Asp, Baranov, Bourdelle,
+  Budny, Crisanti, Cordey, Garzotti, et~al.]{garbet:2004}
+X~Garbet, P~Mantica, C~Angioni, E~Asp, Y~Baranov, C~Bourdelle, R~Budny,
+  F~Crisanti, G~Cordey, L~Garzotti, et~al.
+\newblock Physics of transport in tokamaks.
+\newblock \emph{Plasma Physics and Controlled Fusion}, 46\penalty0
+  (12B):\penalty0 B557, 2004.
+
+\bibitem[Guo and Romanelli(1993)]{guo:1993}
+SC~Guo and F~Romanelli.
+\newblock The linear threshold of the ion-temperature-gradient-driven mode.
+\newblock \emph{Physics of Fluids B: Plasma Physics}, 5\penalty0 (2):\penalty0
+  520--533, 1993.
+
+\bibitem[Bourdelle et~al.(2015)Bourdelle, Citrin, Baiocchi, Casati, Cottier,
+  Garbet, Imbeaux, and Contributors]{bourdelle:2015}
+C~Bourdelle, J~Citrin, B~Baiocchi, A~Casati, P~Cottier, X~Garbet, F~Imbeaux,
+  and JET Contributors.
+\newblock {Core turbulent transport in tokamak plasmas: bridging theory and
+  experiment with QuaLiKiz}.
+\newblock \emph{Plasma Physics and Controlled Fusion}, 58\penalty0
+  (1):\penalty0 014036, 2015.
+
+\bibitem[Citrin et~al.(2017)Citrin, Bourdelle, Casson, Angioni, Bonanomi,
+  Camenen, Garbet, Garzotti, G{\"o}rler, G{\"u}rcan, Koechl, Imbeaux, Linder,
+  van~de Plassche, Strand, and contributors]{citrin:2017}
+J.~Citrin, C.~Bourdelle, F.J. Casson, C.~Angioni, N.~Bonanomi, Y.~Camenen,
+  X.~Garbet, L.~Garzotti, T.~G{\"o}rler, O.~G{\"u}rcan, F.~Koechl, F.~Imbeaux,
+  O.~Linder, K.L. van~de Plassche, P.~Strand, and G.~Szepesi~JET contributors.
+\newblock {Tractable flux-driven temperature, density, and rotation profile
+  evolution with the quasilinear gyrokinetic transport model QuaLiKiz;
+  https://qualikiz.com}.
+\newblock \emph{Plasma Physics and Controlled Fusion}, 59\penalty0
+  (12):\penalty0 124005, 2017.
+
+\bibitem[Heek et~al.(2023)Heek, Levskaya, Oliver, Ritter, Rondepierre, Steiner,
+  and van {Z}ee]{flax:2020}
+Jonathan Heek, Anselm Levskaya, Avital Oliver, Marvin Ritter, Bertrand
+  Rondepierre, Andreas Steiner, and Marc van {Z}ee.
+\newblock {F}lax: A neural network library and ecosystem for {JAX}, 2023.
+\newblock URL \url{http://github.com/google/flax}.
+
+\bibitem[Kumar et~al.(2021)Kumar, Camenen, Benkadda, Bourdelle, Loarte,
+  Polevoi, Widmer, et~al.]{kumar:2021}
+Neeraj Kumar, Yann Camenen, Sadruddin Benkadda, Clarisse Bourdelle, Alberto
+  Loarte, Alexei~R Polevoi, Fabien Widmer, et~al.
+\newblock {Turbulent transport driven by kinetic ballooning modes in the inner
+  core of JET hybrid H-modes}.
+\newblock \emph{Nuclear Fusion}, 61\penalty0 (3):\penalty0 036005, 2021.
+
+\bibitem[Wagner et~al.(1982)Wagner, Becker, Behringer, Campbell, Eberhagen,
+  Engelhardt, Fussmann, Gehre, Gernhardt, v.~Gierke, Haas, Huang, Karger,
+  Keilhacker, Kl{\"u}ber, Kornherr, Lackner, Lisitano, Lister, Mayer, Meisel,
+  M{\"u}ller, Murmann, Niedermeyer, Poschenrieder, Rapp, and
+  R{\"o}hr]{Wagner_PRL82}
+F.~Wagner, G.~Becker, K.~Behringer, D.~Campbell, A.~Eberhagen, W.~Engelhardt,
+  G.~Fussmann, O.~Gehre, J.~Gernhardt, G.~v.~Gierke, G.~Haas, M.~Huang,
+  F.~Karger, M.~Keilhacker, O.~Kl{\"u}ber, M.~Kornherr, K.~Lackner,
+  G.~Lisitano, G.~G. Lister, H.~M. Mayer, D.~Meisel, E.~R. M{\"u}ller,
+  H.~Murmann, H.~Niedermeyer, W.~Poschenrieder, H.~Rapp, and H.~R{\"o}hr.
+\newblock Regime of improved confinement and high beta in neutral-beam-heated
+  divertor discharges of the asdex tokamak.
+\newblock \emph{Phys. Rev. Lett.}, 49\penalty0 (19):\penalty0 1408--1412, Nov
+  1982.
+\newblock \doi{10.1103/PhysRevLett.49.1408}.
+
+\bibitem[Sauter et~al.(1999)Sauter, Angioni, and Lin-Liu]{sauter:1999}
+O.~Sauter, C.~Angioni, and Y.R. Lin-Liu.
+\newblock Neoclassical conductivity and bootstrap current formulas for general
+  axisymmetric equilibria and arbitrary collisionality regime.
+\newblock \emph{Phys. Plasmas}, 6:\penalty0 2834, 1999.
+
+\bibitem[Redl et~al.(2021)Redl, Angioni, Belli, Sauter, Team, Team,
+  et~al.]{redl:2021}
+A~Redl, C~Angioni, E~Belli, O~Sauter, ASDEX~Upgrade Team, EUROfusion~MST1 Team,
+  et~al.
+\newblock A new set of analytical formulae for the computation of the bootstrap
+  current and the neoclassical conductivity in tokamaks.
+\newblock \emph{Physics of Plasmas}, 28\penalty0 (2), 2021.
+
+\bibitem[Angioni(2021)]{angioni:2021}
+Clemente Angioni.
+\newblock Impurity transport in tokamak plasmas, theory, modelling and
+  comparison with experiments.
+\newblock \emph{Plasma Physics and Controlled Fusion}, 63\penalty0
+  (7):\penalty0 073001, 2021.
+
+\bibitem[Fajardo et~al.(2023)Fajardo, Angioni, Casson, Field, Maget, Manas,
+  Contributors, Team, et~al.]{fajardo:2023}
+Daniel Fajardo, Clemente Angioni, Francis~J Casson, Anthony~R Field, Patrick
+  Maget, Pierre Manas, JET Contributors, ASDEX~Upgrade Team, et~al.
+\newblock Analytical model for the combined effects of rotation and
+  collisionality on neoclassical impurity transport.
+\newblock \emph{Plasma Physics and Controlled Fusion}, 65\penalty0
+  (3):\penalty0 035021, 2023.
+
+\bibitem[Bosch and Hale(1992)]{bosch:1992}
+H-S Bosch and GM~Hale.
+\newblock Improved formulas for fusion cross-sections and thermal reactivities.
+\newblock \emph{Nuclear fusion}, 32\penalty0 (4):\penalty0 611, 1992.
+
+\bibitem[Mikkelsen and Singer(1983)]{mikkelsen:1983}
+David~R. Mikkelsen and Clifford~E. Singer.
+\newblock {Optimization of Steady-State Beam-Driven Tokamak Reactors}.
+\newblock \emph{Nuclear Technology - Fusion}, 4\penalty0 (2P1):\penalty0
+  237--252, 1983.
+
+\bibitem[Hoyer and Joseph(2017)]{hoyer:xarray}
+Stephan Hoyer and Hamman Joseph.
+\newblock {xarray: N-D labeled Arrays and Datasets in Python}.
+\newblock \emph{Journal of Open Research Software}, 5\penalty0 (1), April 2017.
+\newblock \doi{10.5334/jors.148}.
+
+\bibitem[Cacuci(1981)]{cacuci:1981}
+Dan~G Cacuci.
+\newblock {Sensitivity theory for nonlinear systems. I. Nonlinear functional
+  analysis approach}.
+\newblock \emph{Journal of Mathematical Physics}, 22\penalty0 (12):\penalty0
+  2794--2802, 1981.
+
+\bibitem[Na et~al.(2019)Na, Koechl, Polevoi, Byun, Na, Seo, Felici, Fukuyama,
+  Garcia, Hayashi, et~al.]{na:2019}
+Yong-Su Na, Florian Koechl, Alexei~R Polevoi, Cheol-Sik Byun, DongHyeon Na,
+  Jaemin Seo, Federico Felici, Atsushi Fukuyama, Jeronimo Garcia, Nobuhiko
+  Hayashi, et~al.
+\newblock On benchmarking of simulations of particle transport in iter.
+\newblock \emph{Nuclear Fusion}, 59\penalty0 (7):\penalty0 076026, 2019.
+
+\end{thebibliography}
