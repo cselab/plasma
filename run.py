@@ -1248,3 +1248,4 @@ state_history = output.StateHistory(
 )
 
 data_tree = state_history.simulation_output_to_xr()
+data_tree.to_netcdf("run.nc")
