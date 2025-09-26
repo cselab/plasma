@@ -28,7 +28,6 @@ from torax._src.mhd.sawtooth import sawtooth_solver as sawtooth_solver_lib
 from torax._src.neoclassical.conductivity import base as conductivity_base
 from torax._src.neoclassical import pydantic_model as neoclassical_pydantic_model
 from torax._src.orchestration import sim_state
-from torax._src.orchestration import step_function
 from torax._src.output_tools import impurity_radiation
 from torax._src.output_tools import output
 from torax._src.output_tools import post_processing
@@ -794,7 +793,7 @@ def get_initial_state_and_post_processed_outputs(
     t: float,
     runtime_params_provider: build_runtime_params.RuntimeParamsProvider,
     geometry_provider: geometry_provider_lib.GeometryProvider,
-    step_fn: step_function.SimulationStepFn,
+    step_fn,
 ) -> tuple[sim_state.ToraxSimState, post_processing.PostProcessedOutputs]:
   """Returns the initial state and post processed outputs."""
   runtime_params_for_init, geo_for_init = (
@@ -818,7 +817,7 @@ def get_initial_state_and_post_processed_outputs(
 def _get_initial_state(
     runtime_params: runtime_params_slice.RuntimeParams,
     geo: geometry.Geometry,
-    step_fn: step_function.SimulationStepFn,
+    step_fn,
 ) -> sim_state.ToraxSimState:
   """Returns the initial state to be used by run_simulation()."""
   physics_models = step_fn.solver.physics_models
@@ -871,7 +870,7 @@ def get_initial_state_and_post_processed_outputs_from_file(
     file_restart: file_restart_pydantic_model.FileRestart,
     runtime_params_provider: build_runtime_params.RuntimeParamsProvider,
     geometry_provider: geometry_provider_lib.GeometryProvider,
-    step_fn: step_function.SimulationStepFn,
+    step_fn,
 ) -> tuple[sim_state.ToraxSimState, post_processing.PostProcessedOutputs]:
   """Returns the initial state and post processed outputs from a file."""
   data_tree = output.load_state_file(file_restart.filename)
@@ -1013,7 +1012,7 @@ def run_loop(
     runtime_params_provider: build_runtime_params.RuntimeParamsProvider,
     initial_state: sim_state.ToraxSimState,
     initial_post_processed_outputs: post_processing.PostProcessedOutputs,
-    step_fn: step_function.SimulationStepFn,
+    step_fn,
     log_timestep_info: bool = False,
     progress_bar: bool = True,
 ) -> tuple[
@@ -1048,7 +1047,7 @@ def run_loop(
                 current_state,
                 post_processing_history[-1],
             )
-            sim_error = step_function.check_for_errors(
+            sim_error = check_for_errors(
                 runtime_params_provider.numerics,
                 current_state,
                 post_processed_outputs,
