@@ -16,7 +16,6 @@ from torax._src.geometry import pydantic_model as geometry_pydantic_model
 from torax._src import array_typing
 from torax._src import jax_utils
 from torax._src import physics_models
-from torax._src import physics_models as physics_models_lib
 from torax._src import state
 from torax._src import version
 from torax._src import xnp
