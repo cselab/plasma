@@ -40,7 +40,6 @@ from torax._src.time_step_calculator import pydantic_model as time_step_calculat
 from torax._src.time_step_calculator import time_step_calculator as ts
 from torax._src.torax_pydantic import file_restart as file_restart_pydantic_model
 from torax._src.torax_pydantic import model_config
-from torax._src.torax_pydantic import torax_pydantic
 from torax._src.transport_model import pydantic_model as transport_model_pydantic_model
 from torax._src.transport_model import transport_coefficients_builder
 from torax._src.transport_model import transport_model as transport_model_lib
@@ -66,6 +65,61 @@ import tqdm
 import treelib
 import typing_extensions
 import xarray as xr
+
+import functools
+from typing import TypeAlias
+
+import pydantic
+from torax._src.torax_pydantic import interpolated_param_1d
+from torax._src.torax_pydantic import interpolated_param_2d
+from torax._src.torax_pydantic import model_base
+from torax._src.torax_pydantic import pydantic_types
+from typing_extensions import Annotated
+
+TIME_INVARIANT = model_base.TIME_INVARIANT
+JAX_STATIC = model_base.JAX_STATIC
+
+# Physical units.
+# keep-sorted start
+CubicMeter: TypeAlias = pydantic.PositiveFloat
+GreenwaldFraction: TypeAlias = pydantic.PositiveFloat
+KiloElectronVolt: TypeAlias = pydantic.PositiveFloat
+Meter: TypeAlias = pydantic.PositiveFloat
+MeterPerSecond: TypeAlias = float
+MeterSquaredPerSecond: TypeAlias = pydantic.NonNegativeFloat
+Pascal: TypeAlias = pydantic.PositiveFloat
+PositiveMeterSquaredPerSecond: TypeAlias = pydantic.PositiveFloat
+# Time can sometimes be 0, eg. for the start of an interval.
+Second: TypeAlias = pydantic.NonNegativeFloat
+Tesla: TypeAlias = pydantic.PositiveFloat
+# keep-sorted end
+Density: TypeAlias = CubicMeter | GreenwaldFraction
+
+UnitInterval: TypeAlias = Annotated[float, pydantic.Field(ge=0.0, le=1.0)]
+OpenUnitInterval: TypeAlias = Annotated[float, pydantic.Field(gt=0.0, lt=1.0)]
+
+NumpyArray = pydantic_types.NumpyArray
+NumpyArray1D = pydantic_types.NumpyArray1D
+NumpyArray1DSorted = pydantic_types.NumpyArray1DSorted
+
+BaseModelFrozen = model_base.BaseModelFrozen
+
+TimeVaryingScalar = interpolated_param_1d.TimeVaryingScalar
+TimeVaryingArray = interpolated_param_2d.TimeVaryingArray
+NonNegativeTimeVaryingArray = interpolated_param_2d.NonNegativeTimeVaryingArray
+PositiveTimeVaryingScalar = interpolated_param_1d.PositiveTimeVaryingScalar
+NonNegativeTimeVaryingScalar = (
+    interpolated_param_1d.NonNegativeTimeVaryingScalar
+)
+UnitIntervalTimeVaryingScalar = (
+    interpolated_param_1d.UnitIntervalTimeVaryingScalar
+)
+PositiveTimeVaryingArray = interpolated_param_2d.PositiveTimeVaryingArray
+
+ValidatedDefault = functools.partial(pydantic.Field, validate_default=True)
+
+Grid1D = interpolated_param_2d.Grid1D
+set_grid = interpolated_param_2d.set_grid
 
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
@@ -331,7 +385,7 @@ class Geometry:
   """
 
     geometry_type: GeometryType
-    torax_mesh: torax_pydantic.Grid1D
+    torax_mesh: Any
     Phi: array_typing.Array
     Phi_face: array_typing.Array
     R_major: array_typing.FloatScalar
@@ -1943,7 +1997,7 @@ def _get_geo_and_runtime_params_at_t_plus_dt_and_phibdot(
     )
 
 
-class ToraxConfig(torax_pydantic.BaseModelFrozen):
+class ToraxConfig(BaseModelFrozen):
     profile_conditions: profile_conditions_lib.ProfileConditions
     numerics: numerics_lib.Numerics
     plasma_composition: plasma_composition_lib.PlasmaComposition
@@ -2024,7 +2078,7 @@ class ToraxConfig(torax_pydantic.BaseModelFrozen):
     @pydantic.model_validator(mode='after')
     def _set_grid(self) -> Self:
         mesh = self.geometry.build_provider.torax_mesh
-        torax_pydantic.set_grid(self, mesh, mode='relaxed')
+        set_grid(self, mesh, mode='relaxed')
         return self
 
     @pydantic.computed_field
