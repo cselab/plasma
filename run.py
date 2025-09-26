@@ -119,9 +119,6 @@ def _get_initial_state(
       source_models=physics_models.source_models,
       neoclassical_models=physics_models.neoclassical_models,
   )
-  # Populate the starting state with source profiles from the implicit sources
-  # before starting the run-loop. The explicit source profiles will be computed
-  # inside the loop and will be merged with these implicit source profiles.
   initial_core_sources = source_profile_builders.get_all_source_profiles(
       runtime_params=runtime_params,
       geo=geo,
@@ -397,11 +394,8 @@ def check_for_errors(
     output_state: sim_state.ToraxSimState,
     post_processed_outputs: post_processing.PostProcessedOutputs,
 ) -> state.SimError:
-    """Checks for errors in the simulation state."""
     if numerics.adaptive_dt:
         if output_state.solver_numeric_outputs.solver_error_state == 1:
-            # Only check for min dt if the solver did not converge. Else we may have
-            # converged at a dt > min_dt just before we reach min_dt.
             if output_state.dt / numerics.dt_reduction_factor < numerics.min_dt:
                 return state.SimError.REACHED_MIN_DT
     state_error = output_state.check_for_errors()
@@ -476,35 +470,6 @@ class SimulationStepFn:
             sim_state.ToraxSimState,
             post_processing.PostProcessedOutputs,
     ]:
-        """Advances the simulation state one time step.
-
-      If a sawtooth model is provided, it will be checked to see if a sawtooth
-    should trigger. If it does, the sawtooth model will be applied and instead
-    of a full PDE solve, the step_fn will return early with a state following
-    sawtooth redistribution, at a t+dt set by the sawtooth model.
-
-    Args:
-      input_state: State at the start of the time step, including the core
-        profiles which are being evolved.
-      previous_post_processed_outputs: Post-processed outputs from the previous
-        time step.
-
-    Returns:
-      ToraxSimState containing:
-        - the core profiles at the end of the time step.
-        - time and time step calculator state info.
-        - core_sources and core_transport at the end of the time step.
-        - solver_numeric_outputs. This contains the number of iterations
-          performed in the solver and the error state. The error states are:
-            0 if solver converged with fine tolerance for this step
-            1 if solver did not converge for this step (was above coarse tol)
-            2 if solver converged within coarse tolerance. Allowed to pass with
-              a warning. Occasional error=2 has low impact on final sim state.
-      PostProcessedOutputs containing:
-        - post-processed outputs at the end of the time step.
-        - cumulative quantities.
-      SimError indicating if an error has occurred during simulation.
-    """
         runtime_params_t, geo_t = (
             build_runtime_params.get_consistent_runtime_params_and_geometry(
                 t=input_state.t,
@@ -559,10 +524,6 @@ class SimulationStepFn:
                 geo_t,
                 self._geometry_provider,
             ))
-
-        # If no sawtooth crash is triggered, output_state and
-        # post_processed_outputs will be the same as the input state and
-        # previous_post_processed_outputs.
         output_state, post_processed_outputs = _sawtooth_step(
             sawtooth_solver=self._sawtooth_solver,
             runtime_params_t=runtime_params_t,
@@ -588,35 +549,7 @@ class SimulationStepFn:
             tuple[cell_variable.CellVariable, ...],
             state.SolverNumericOutputs,
     ]:
-        """Performs a simulation step with given dt.
-
-    Solver may fail to converge in which case _adaptive_step() can be used to
-    try smaller time step durations.
-
-    Args:
-      dt: Time step duration.
-      runtime_params_t: Runtime parameters at time t.
-      runtime_params_t_plus_dt: Runtime parameters at time t + dt.
-      geo_t: The geometry of the torus during this time step of the simulation.
-      geo_t_plus_dt: The geometry of the torus during the next time step of the
-        simulation.
-      input_state: State at the start of the time step, including the core
-        profiles which are being evolved.
-      explicit_source_profiles: Explicit source profiles computed based on the
-        core profiles at the start of the time step.
-
-    Returns:
-      tuple:
-        tuple of CellVariables corresponding to the evolved state variables
-        SolverNumericOutputs containing error state and other solver-specific
-        outputs.
-    """
-
         core_profiles_t = input_state.core_profiles
-
-        # Construct the CoreProfiles object for time t+dt with evolving boundary
-        # conditions and time-dependent prescribed profiles not directly solved by
-        # PDE system.
         core_profiles_t_plus_dt = updaters.provide_core_profiles_t_plus_dt(
             dt=dt,
             runtime_params_t=runtime_params_t,
@@ -624,9 +557,6 @@ class SimulationStepFn:
             geo_t_plus_dt=geo_t_plus_dt,
             core_profiles_t=core_profiles_t,
         )
-
-        # Initial trial for solver. If did not converge (can happen for nonlinear
-        # step with large dt) we apply the adaptive time step routine if requested.
         return self._solver(
             t=input_state.t,
             dt=dt,
@@ -874,30 +804,6 @@ def _sawtooth_step(
     input_state: sim_state.ToraxSimState,
     input_post_processed_outputs: post_processing.PostProcessedOutputs,
 ) -> tuple[sim_state.ToraxSimState, post_processing.PostProcessedOutputs]:
-    """Checks for and handles a sawtooth crash.
-
-  If a sawtooth model is provided and a crash is triggered, this method
-  computes the post-crash state and returns it. Otherwise, returns the input
-  state and post-processed outputs unchanged.
-
-  Consecutive sawtooth crashes are not allowed since standard PDE steps
-  may then not take place. Therefore if the input state has sawtooth_crash set
-  to True, then no crash is triggered.
-
-  Args:
-    sawtooth_solver: Sawtooth model which carries out sawtooth step..
-    runtime_params_t: Runtime params at time t.
-    runtime_params_t_plus_crash_dt: Runtime params at time t + crash_dt.
-    geo_t: Geometry at time t.
-    geo_t_plus_crash_dt: Geometry at time t + crash_dt.
-    explicit_source_profiles: Explicit source profiles at time t.
-    input_state: State at the start of the time step.
-    input_post_processed_outputs: Post-processed outputs from the previous step.
-
-  Returns:
-    Returns a tuple (output_state, post_processed_outputs).
-  """
-
     # Asserts needed for linter.
     assert runtime_params_t.mhd.sawtooth is not None
     assert sawtooth_solver is not None
@@ -939,23 +845,6 @@ def _get_geo_and_runtime_params_at_t_plus_dt_and_phibdot(
         geometry.Geometry,
         geometry.Geometry,
 ]:
-    """Returns the geos including Phibdot, and runtime params at t + dt.
-
-  Args:
-    t: Time at which the simulation is currently at.
-    dt: Time step duration.
-    runtime_params_provider: Object that returns a set of runtime parameters
-      which may change from time step to time step or simulation run to run.
-    geo_t: The geometry of the torus during this time step of the simulation.
-    geometry_provider: Provides the magnetic geometry for each time step based
-      on the ToraxSimState at the start of the time step.
-
-  Returns:
-    Tuple containing:
-      - The runtime params at time t + dt.
-      - The geometry of the torus during this time step of the simulation.
-      - The geometry of the torus during the next time step of the simulation.
-  """
     runtime_params_t_plus_dt, geo_t_plus_dt = (
         build_runtime_params.get_consistent_runtime_params_and_geometry(
             t=t + dt,
