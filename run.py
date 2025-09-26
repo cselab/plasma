@@ -12,7 +12,6 @@ from torax._src.core_profiles import updaters
 from torax._src.core_profiles.plasma_composition import plasma_composition as plasma_composition_lib
 from torax._src.fvm import cell_variable
 from torax._src.fvm import enums
-from torax._src.geometry import geometry_provider as geometry_provider_lib
 from torax._src.geometry import pydantic_model as geometry_pydantic_model
 from torax._src import array_typing
 from torax._src import jax_utils
@@ -1260,12 +1259,11 @@ class StateHistory:
     return xr_dict
 
 def get_initial_state_and_post_processed_outputs(
-    t: float,
-    runtime_params_provider: build_runtime_params.RuntimeParamsProvider,
-    geometry_provider: geometry_provider_lib.GeometryProvider,
+    t,
+    runtime_params_provider,
+    geometry_provider,
     step_fn,
 ):
-  """Returns the initial state and post processed outputs."""
   runtime_params_for_init, geo_for_init = (
       build_runtime_params.get_consistent_runtime_params_and_geometry(
           t=t,
@@ -1334,11 +1332,11 @@ def _get_initial_state(
 
 
 def get_initial_state_and_post_processed_outputs_from_file(
-    t_initial: float,
-    file_restart: file_restart_pydantic_model.FileRestart,
-    runtime_params_provider: build_runtime_params.RuntimeParamsProvider,
-    geometry_provider: geometry_provider_lib.GeometryProvider,
-    step_fn,
+    t_initial,
+    file_restart,
+    runtime_params_provider,
+    geometry_provider,
+    step_fn
 ):
   data_tree = output.load_state_file(file_restart.filename)
   # Find the closest time in the given dataset.
@@ -1579,10 +1577,10 @@ def check_for_errors(
 class SimulationStepFn:
     def __init__(
         self,
-        solver: solver_lib.Solver,
-        time_step_calculator: ts.TimeStepCalculator,
-        runtime_params_provider: build_runtime_params.RuntimeParamsProvider,
-        geometry_provider: geometry_provider_lib.GeometryProvider,
+        solver,
+        time_step_calculator,
+        runtime_params_provider,
+        geometry_provider
     ):
         self._solver = solver
         if self._solver.physics_models.mhd_models.sawtooth_models is not None:
@@ -1620,11 +1618,11 @@ class SimulationStepFn:
         )
 
     @property
-    def geometry_provider(self) -> geometry_provider_lib.GeometryProvider:
+    def geometry_provider(self):
         return self._geometry_provider
 
     @property
-    def solver(self) -> solver_lib.Solver:
+    def solver(self):
         return self._solver
 
     @property
