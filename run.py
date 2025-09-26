@@ -26,7 +26,21 @@ from torax._src.torax_pydantic import torax_pydantic
 from torax._src.transport_model import pydantic_model as transport_model_pydantic_model
 import typing_extensions
 from typing_extensions import Self
+from collections.abc import Set
+import functools
+import inspect
+from typing import Any, Final, Mapping, Sequence, TypeAlias
 
+import jax
+import pydantic
+import treelib
+from typing_extensions import Self
+
+TIME_INVARIANT: Final[str] = '_pydantic_time_invariant_field'
+JAX_STATIC: Final[str] = '_pydantic_jax_static_field'
+
+StaticKwargs: TypeAlias = dict[str, Any]
+DynamicArgs: TypeAlias = list[Any]
 
 class ToraxConfig(torax_pydantic.BaseModelFrozen):
   profile_conditions: profile_conditions_lib.ProfileConditions
