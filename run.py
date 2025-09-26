@@ -39,12 +39,18 @@ from torax._src.sources import source_profiles as source_profiles_lib
 from torax._src.time_step_calculator import pydantic_model as time_step_calculator_pydantic_model
 from torax._src.time_step_calculator import time_step_calculator as ts
 from torax._src.torax_pydantic import file_restart as file_restart_pydantic_model
+from torax._src.torax_pydantic import interpolated_param_1d
+from torax._src.torax_pydantic import interpolated_param_2d
+from torax._src.torax_pydantic import model_base
 from torax._src.torax_pydantic import model_config
+from torax._src.torax_pydantic import pydantic_types
 from torax._src.transport_model import pydantic_model as transport_model_pydantic_model
 from torax._src.transport_model import transport_coefficients_builder
 from torax._src.transport_model import transport_model as transport_model_lib
 from typing import Any, Final, Mapping, Sequence, TypeAlias
 from typing import Any, Mapping
+from typing import TypeAlias
+from typing_extensions import Annotated
 from typing_extensions import Self
 import chex
 import copy
@@ -65,16 +71,6 @@ import tqdm
 import treelib
 import typing_extensions
 import xarray as xr
-
-import functools
-from typing import TypeAlias
-
-import pydantic
-from torax._src.torax_pydantic import interpolated_param_1d
-from torax._src.torax_pydantic import interpolated_param_2d
-from torax._src.torax_pydantic import model_base
-from torax._src.torax_pydantic import pydantic_types
-from typing_extensions import Annotated
 
 TIME_INVARIANT = model_base.TIME_INVARIANT
 JAX_STATIC = model_base.JAX_STATIC
