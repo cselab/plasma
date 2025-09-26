@@ -76,73 +76,14 @@ def run_loop(
         tuple[post_processing.PostProcessedOutputs, ...],
         state.SimError,
 ]:
-    """Runs the simulation loop.
-
-  Iterates over the step function until the time_step_calculator tells us we are
-  done or the simulation hits an error state.
-
-  Performs logging and updates the progress bar if requested.
-
-  Args:
-    runtime_params_provider: Provides a RuntimeParams to use as input for each
-      time step.
-    initial_state: The starting state of the simulation. This includes both the
-      state variables which the solver.Solver will evolve (like ion temp, psi,
-      etc.) as well as other states that need to be be tracked, like time.
-    initial_post_processed_outputs: The post-processed outputs at the start of
-      the simulation. This is used to calculate cumulative quantities.
-    step_fn: Callable which takes in ToraxSimState and outputs the ToraxSimState
-      after one timestep. Note that step_fn determines dt (how long the timestep
-      is). The state_history that run_simulation() outputs comes from these
-      ToraxSimState objects.
-    log_timestep_info: If True, logs basic timestep info, like time, dt, on
-      every step.
-    progress_bar: If True, displays a progress bar.
-
-  Returns:
-    A tuple of:
-      - the simulation history, consisting of a tuple of ToraxSimState objects,
-        one for each time step. There are N+1 objects returned, where N is the
-        number of simulation steps taken. The first object in the tuple is for
-        the initial state. If the sim error state is 1, then a trunctated
-        simulation history is returned up until the last valid timestep.
-      - the post-processed outputs history, consisting of a tuple of
-        PostProcessedOutputs objects, one for each time step. There are N+1
-        objects returned, where N is the number of simulation steps taken. The
-        first object in the tuple is for the initial state. If the sim error
-        state is 1, then a trunctated simulation history is returned up until
-        the last valid timestep.
-      - The sim error state.
-  """
-
-    # Provide logging information on precision setting
-    if jax.config.read('jax_enable_x64'):
-        logging.info('Precision is set at float64')
-    else:
-        logging.info('Precision is set at float32')
-
-    logging.info('Starting simulation.')
-    # Python while loop implementation.
-    # Not efficient for grad, jit of grad.
-    # Uses time_step_calculator.not_done to decide when to stop.
-    # Note: can't use a jax while loop due to appending to history.
-
     running_main_loop_start_time = time.time()
     wall_clock_step_times = []
-
     current_state = initial_state
     state_history = [current_state]
     post_processing_history = [initial_post_processed_outputs]
-
-    # Set the sim_error to NO_ERROR. If we encounter an error, we will set it to
-    # the appropriate error code.
     sim_error = state.SimError.NO_ERROR
-
-    # Some of the runtime params are not time-dependent, so we can get them once
-    # before the loop.
     initial_runtime_params = runtime_params_provider(initial_state.t)
     time_step_calculator_params = initial_runtime_params.time_step_calculator
-
     with tqdm.tqdm(
             total=
             100,  # This makes it so that the progress bar measures a percentage
@@ -150,17 +91,14 @@ def run_loop(
             disable=not progress_bar,
             leave=True,
     ) as pbar:
-        # Advance the simulation until the time_step_calculator tells us we are done
         while step_fn.time_step_calculator.not_done(
                 current_state.t,
                 runtime_params_provider.numerics.t_final,
                 time_step_calculator_params,
         ):
-            # Measure how long in wall clock time each simulation step takes.
             step_start_time = time.time()
             if log_timestep_info:
                 _log_timestep(current_state)
-
             current_state, post_processed_outputs = step_fn(
                 current_state,
                 post_processing_history[-1],
@@ -170,19 +108,13 @@ def run_loop(
                 current_state,
                 post_processed_outputs,
             )
-
             wall_clock_step_times.append(time.time() - step_start_time)
-
-            # Checks if sim_state is valid. If not, exit simulation early.
-            # We don't raise an Exception because we want to return the truncated
-            # simulation history to the user for inspection.
             if sim_error != state.SimError.NO_ERROR:
                 sim_error.log_error()
                 break
             else:
                 state_history.append(current_state)
                 post_processing_history.append(post_processed_outputs)
-                # Calculate progress ratio and update pbar.n
                 progress_ratio = (
                     float(current_state.t) -
                     runtime_params_provider.numerics.t_initial) / (
@@ -191,14 +123,8 @@ def run_loop(
                 pbar.n = int(progress_ratio * pbar.total)
                 pbar.set_description(f'Simulating (t={current_state.t:.5f})')
                 pbar.refresh()
-
-    # Log final timestep
     if log_timestep_info and sim_error == state.SimError.NO_ERROR:
-        # The "sim_state" here has been updated by the loop above.
         _log_timestep(current_state)
-
-    # If the first step of the simulation was very long, call it out. It might
-    # have to do with tracing the jitted step_fn.
     std_devs = 2  # Check if the first step is more than 2 std devs longer.
     if wall_clock_step_times and wall_clock_step_times[0] > (
             np.mean(wall_clock_step_times) +
