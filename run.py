@@ -74,30 +74,6 @@ import xarray as xr
 
 TIME_INVARIANT = model_base.TIME_INVARIANT
 JAX_STATIC = model_base.JAX_STATIC
-
-# Physical units.
-# keep-sorted start
-CubicMeter: TypeAlias = pydantic.PositiveFloat
-GreenwaldFraction: TypeAlias = pydantic.PositiveFloat
-KiloElectronVolt: TypeAlias = pydantic.PositiveFloat
-Meter: TypeAlias = pydantic.PositiveFloat
-MeterPerSecond: TypeAlias = float
-MeterSquaredPerSecond: TypeAlias = pydantic.NonNegativeFloat
-Pascal: TypeAlias = pydantic.PositiveFloat
-PositiveMeterSquaredPerSecond: TypeAlias = pydantic.PositiveFloat
-# Time can sometimes be 0, eg. for the start of an interval.
-Second: TypeAlias = pydantic.NonNegativeFloat
-Tesla: TypeAlias = pydantic.PositiveFloat
-# keep-sorted end
-Density: TypeAlias = CubicMeter | GreenwaldFraction
-
-UnitInterval: TypeAlias = Annotated[float, pydantic.Field(ge=0.0, le=1.0)]
-OpenUnitInterval: TypeAlias = Annotated[float, pydantic.Field(gt=0.0, lt=1.0)]
-
-NumpyArray = pydantic_types.NumpyArray
-NumpyArray1D = pydantic_types.NumpyArray1D
-NumpyArray1DSorted = pydantic_types.NumpyArray1DSorted
-
 BaseModelFrozen = model_base.BaseModelFrozen
 
 TimeVaryingScalar = interpolated_param_1d.TimeVaryingScalar
