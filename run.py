@@ -1,4 +1,5 @@
 from absl import logging
+from absl import logging
 from collections.abc import Sequence
 from collections.abc import Set
 from torax._src.config import build_runtime_params
@@ -13,13 +14,16 @@ from torax._src.core_profiles.plasma_composition import plasma_composition as pl
 from torax._src.fvm import cell_variable
 from torax._src.fvm import enums
 from torax._src.geometry import geometry
+from torax._src.geometry import geometry
 from torax._src.geometry import geometry as geometry_lib
 from torax._src.geometry import geometry_provider as geometry_provider_lib
 from torax._src.geometry import pydantic_model as geometry_pydantic_model
 from torax._src import array_typing
+from torax._src import array_typing
 from torax._src import jax_utils
 from torax._src import physics_models
 from torax._src import physics_models as physics_models_lib
+from torax._src import state
 from torax._src import state
 from torax._src import version
 from torax._src import xnp
@@ -27,7 +31,6 @@ from torax._src.mhd import pydantic_model as mhd_pydantic_model
 from torax._src.mhd.sawtooth import sawtooth_solver as sawtooth_solver_lib
 from torax._src.neoclassical.conductivity import base as conductivity_base
 from torax._src.neoclassical import pydantic_model as neoclassical_pydantic_model
-from torax._src.orchestration import sim_state
 from torax._src.output_tools import impurity_radiation
 from torax._src.output_tools import output
 from torax._src.output_tools import post_processing
@@ -38,6 +41,7 @@ from torax._src.solver import solver as solver_lib
 from torax._src.sources import pydantic_model as sources_pydantic_model
 from torax._src.sources import qei_source as qei_source_lib
 from torax._src.sources import source_profile_builders
+from torax._src.sources import source_profiles
 from torax._src.sources import source_profiles as source_profiles_lib
 from torax._src.time_step_calculator import pydantic_model as time_step_calculator_pydantic_model
 from torax._src.time_step_calculator import time_step_calculator as ts
@@ -52,11 +56,14 @@ from typing import Any, Mapping
 import chex
 import copy
 import dataclasses
+import dataclasses
 import functools
 import inspect
 import itertools
 import jax
+import jax
 import logging
+import numpy as np
 import numpy as np
 import os
 import pydantic
@@ -156,6 +163,83 @@ EXCLUDED_GEOMETRY_NAMES = frozenset({
     "q_correction_factor",
 })
 
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass
+class ToraxSimState:
+  """Full simulator state.
+
+  The simulation stepping in sim.py evolves core_profiles which includes all
+  the attributes the simulation is advancing. But beyond those, there are
+  additional stateful elements which may evolve on each simulation step, such
+  as sources and transport.
+
+  This class includes both core_profiles and these additional elements.
+
+  Attributes:
+    t: time coordinate.
+    dt: timestep interval.
+    core_profiles: Core plasma profiles at time t.
+    core_transport: Core plasma transport coefficients computed at time t.
+    core_sources: Profiles for all sources/sinks. These are the profiles that
+      are used to calculate the coefficients for the t+dt time step. For the
+      explicit sources, these are calculated at the start of the time step, so
+      are the values at time t. For the implicit sources, these are the most
+      recent guess for time t+dt. The profiles here are the merged version of
+      the explicit and implicit profiles.
+    geometry: Geometry at this time step used for the simulation.
+    solver_numeric_outputs: Numerical quantities related to the solver.
+  """
+
+  t: array_typing.FloatScalar
+  dt: array_typing.FloatScalar
+  core_profiles: state.CoreProfiles
+  core_transport: state.CoreTransport
+  core_sources: source_profiles.SourceProfiles
+  geometry: geometry.Geometry
+  solver_numeric_outputs: state.SolverNumericOutputs
+
+  def check_for_errors(self) -> state.SimError:
+    """Checks for errors in the simulation state."""
+    if self.core_profiles.negative_temperature_or_density():
+      logging.info("Unphysical negative values detected in core profiles:\n")
+      _log_negative_profile_names(self.core_profiles)
+      return state.SimError.NEGATIVE_CORE_PROFILES
+    if self.has_nan():
+      logging.info("NaNs detected in ToraxSimState:\n")
+      _log_nans(self)
+      return state.SimError.NAN_DETECTED
+    elif not self.core_profiles.quasineutrality_satisfied():
+      return state.SimError.QUASINEUTRALITY_BROKEN
+    else:
+      return state.SimError.NO_ERROR
+
+  def has_nan(self) -> bool:
+    return any([np.any(np.isnan(x)) for x in jax.tree.leaves(self)])
+
+
+def _log_nans(
+    inputs: ToraxSimState,
+) -> None:
+  path_vals, _ = jax.tree.flatten_with_path(inputs)
+  nan_count = 0
+  for path, value in path_vals:
+    if np.any(np.isnan(value)):
+      logging.info("Found NaNs in sim_state%s", jax.tree_util.keystr(path))
+      nan_count += 1
+  if nan_count >= 10:
+    logging.info("""\nA common cause of widespread NaNs is negative densities or
+        temperatures evolving during the solver step. This often arises through
+        physical reasons like radiation collapse, or unphysical configuration
+        such as impurity densities incompatible with physical quasineutrality.
+        Check the output file for near-zero temperatures or densities at the
+        last valid step.""")
+
+
+def _log_negative_profile_names(inputs: state.CoreProfiles) -> None:
+  path_vals, _ = jax.tree.flatten_with_path(inputs)
+  for path, value in path_vals:
+    if np.any(np.less(value, 0.0)):
+      logging.info("Found negative value in %s", jax.tree_util.keystr(path))
 
 def safe_load_dataset(filepath: str) -> xr.DataTree:
   with open(filepath, "rb") as f:
@@ -247,7 +331,7 @@ class StateHistory:
 
   def __init__(
       self,
-      state_history: tuple[sim_state.ToraxSimState, ...],
+      state_history,
       post_processed_outputs_history: tuple[
           post_processing.PostProcessedOutputs, ...
       ],
@@ -794,7 +878,7 @@ def get_initial_state_and_post_processed_outputs(
     runtime_params_provider: build_runtime_params.RuntimeParamsProvider,
     geometry_provider: geometry_provider_lib.GeometryProvider,
     step_fn,
-) -> tuple[sim_state.ToraxSimState, post_processing.PostProcessedOutputs]:
+):
   """Returns the initial state and post processed outputs."""
   runtime_params_for_init, geo_for_init = (
       build_runtime_params.get_consistent_runtime_params_and_geometry(
@@ -818,8 +902,7 @@ def _get_initial_state(
     runtime_params: runtime_params_slice.RuntimeParams,
     geo: geometry.Geometry,
     step_fn,
-) -> sim_state.ToraxSimState:
-  """Returns the initial state to be used by run_simulation()."""
+):
   physics_models = step_fn.solver.physics_models
   initial_core_profiles = initialization.initial_core_profiles(
       runtime_params,
@@ -850,7 +933,7 @@ def _get_initial_state(
       )
   )
 
-  return sim_state.ToraxSimState(
+  return ToraxSimState(
       t=np.array(runtime_params.numerics.t_initial),
       dt=np.zeros(()),
       core_profiles=initial_core_profiles,
@@ -871,8 +954,7 @@ def get_initial_state_and_post_processed_outputs_from_file(
     runtime_params_provider: build_runtime_params.RuntimeParamsProvider,
     geometry_provider: geometry_provider_lib.GeometryProvider,
     step_fn,
-) -> tuple[sim_state.ToraxSimState, post_processing.PostProcessedOutputs]:
-  """Returns the initial state and post processed outputs from a file."""
+):
   data_tree = output.load_state_file(file_restart.filename)
   # Find the closest time in the given dataset.
   data_tree = data_tree.sel(time=file_restart.time, method='nearest')
@@ -1010,16 +1092,12 @@ def _override_initial_runtime_params_from_file(
 
 def run_loop(
     runtime_params_provider: build_runtime_params.RuntimeParamsProvider,
-    initial_state: sim_state.ToraxSimState,
+    initial_state,
     initial_post_processed_outputs: post_processing.PostProcessedOutputs,
     step_fn,
     log_timestep_info: bool = False,
     progress_bar: bool = True,
-) -> tuple[
-        tuple[sim_state.ToraxSimState, ...],
-        tuple[post_processing.PostProcessedOutputs, ...],
-        state.SimError,
-]:
+):
     running_main_loop_start_time = time.time()
     wall_clock_step_times = []
     current_state = initial_state
@@ -1099,9 +1177,9 @@ def run_loop(
 
 def check_for_errors(
     numerics: numerics_lib.Numerics,
-    output_state: sim_state.ToraxSimState,
+    output_state,
     post_processed_outputs: post_processing.PostProcessedOutputs,
-) -> state.SimError:
+):
     if numerics.adaptive_dt:
         if output_state.solver_numeric_outputs.solver_error_state == 1:
             if output_state.dt / numerics.dt_reduction_factor < numerics.min_dt:
@@ -1172,12 +1250,9 @@ class SimulationStepFn:
     @xnp.jit
     def __call__(
         self,
-        input_state: sim_state.ToraxSimState,
-        previous_post_processed_outputs: post_processing.PostProcessedOutputs,
-    ) -> tuple[
-            sim_state.ToraxSimState,
-            post_processing.PostProcessedOutputs,
-    ]:
+        input_state,
+        previous_post_processed_outputs,
+    ):
         runtime_params_t, geo_t = (
             build_runtime_params.get_consistent_runtime_params_and_geometry(
                 t=input_state.t,
@@ -1214,12 +1289,9 @@ class SimulationStepFn:
         runtime_params_t: runtime_params_slice.RuntimeParams,
         geo_t: geometry.Geometry,
         explicit_source_profiles: source_profiles_lib.SourceProfiles,
-        input_state: sim_state.ToraxSimState,
+        input_state,
         previous_post_processed_outputs: post_processing.PostProcessedOutputs,
-    ) -> tuple[
-            sim_state.ToraxSimState,
-            post_processing.PostProcessedOutputs,
-    ]:
+    ):
         """Performs a simulation step if a sawtooth crash is triggered."""
         assert runtime_params_t.mhd.sawtooth is not None
         dt_crash = runtime_params_t.mhd.sawtooth.crash_step_duration
@@ -1251,7 +1323,7 @@ class SimulationStepFn:
         runtime_params_t_plus_dt: runtime_params_slice.RuntimeParams,
         geo_t: geometry.Geometry,
         geo_t_plus_dt: geometry.Geometry,
-        input_state: sim_state.ToraxSimState,
+        input_state,
         explicit_source_profiles: source_profiles_lib.SourceProfiles,
     ) -> tuple[
             tuple[cell_variable.CellVariable, ...],
@@ -1282,12 +1354,9 @@ class SimulationStepFn:
         runtime_params_t: runtime_params_slice.RuntimeParams,
         geo_t: geometry.Geometry,
         explicit_source_profiles: source_profiles_lib.SourceProfiles,
-        input_state: sim_state.ToraxSimState,
+        input_state,
         previous_post_processed_outputs: post_processing.PostProcessedOutputs,
-    ) -> tuple[
-            sim_state.ToraxSimState,
-            post_processing.PostProcessedOutputs,
-    ]:
+    ):
         """Performs a (possibly) adaptive simulation step."""
         evolving_names = runtime_params_t.numerics.evolving_names
 
@@ -1453,7 +1522,7 @@ def _finalize_outputs(
     physics_models: physics_models_lib.PhysicsModels,
     evolving_names: tuple[str, ...],
     input_post_processed_outputs: post_processing.PostProcessedOutputs,
-) -> tuple[sim_state.ToraxSimState, post_processing.PostProcessedOutputs]:
+):
     """Returns the final state and post-processed outputs."""
     final_core_profiles, final_source_profiles = (
         updaters.update_core_and_source_profiles_after_step(
@@ -1478,7 +1547,7 @@ def _finalize_outputs(
             final_core_profiles,
         ))
 
-    output_state = sim_state.ToraxSimState(
+    output_state = ToraxSimState(
         t=t + dt,
         dt=dt,
         core_profiles=final_core_profiles,
@@ -1509,9 +1578,9 @@ def _sawtooth_step(
     geo_t: geometry.Geometry,
     geo_t_plus_crash_dt: geometry.Geometry,
     explicit_source_profiles: source_profiles_lib.SourceProfiles,
-    input_state: sim_state.ToraxSimState,
+    input_state,
     input_post_processed_outputs: post_processing.PostProcessedOutputs,
-) -> tuple[sim_state.ToraxSimState, post_processing.PostProcessedOutputs]:
+):
     # Asserts needed for linter.
     assert runtime_params_t.mhd.sawtooth is not None
     assert sawtooth_solver is not None
