@@ -5,34 +5,6 @@ from torax._src.orchestration import initial_state as initial_state_lib
 from torax._src.orchestration import run_loop
 from torax._src.output_tools import output
 
-
-def prepare_simulation(torax_config, ):
-    geometry_provider = torax_config.geometry.build_provider
-    physics_models = torax_config.build_physics_models()
-    solver = torax_config.solver.build_solver(physics_models=physics_models, )
-    runtime_params_provider = (
-        build_runtime_params.RuntimeParamsProvider.from_config(torax_config))
-    step_fn = step_function.SimulationStepFn(
-        solver=solver,
-        time_step_calculator=torax_config.time_step_calculator.
-        time_step_calculator,
-        geometry_provider=geometry_provider,
-        runtime_params_provider=runtime_params_provider,
-    )
-    initial_state, post_processed_outputs = (
-        initial_state_lib.get_initial_state_and_post_processed_outputs(
-            t=torax_config.numerics.t_initial,
-            runtime_params_provider=runtime_params_provider,
-            geometry_provider=geometry_provider,
-            step_fn=step_fn,
-        ))
-    return (
-        runtime_params_provider,
-        initial_state,
-        post_processed_outputs,
-        step_fn,
-    )
-
 CONFIG = {
     'plasma_composition': {
         'main_ion': {
@@ -170,12 +142,25 @@ CONFIG = {
     },
 }
 torax_config = torax.ToraxConfig.from_dict(CONFIG)
-(
-    runtime_params_provider,
-    initial_state,
-    post_processed_outputs,
-    step_fn,
-) = prepare_simulation(torax_config)
+geometry_provider = torax_config.geometry.build_provider
+physics_models = torax_config.build_physics_models()
+solver = torax_config.solver.build_solver(physics_models=physics_models, )
+runtime_params_provider = (
+    build_runtime_params.RuntimeParamsProvider.from_config(torax_config))
+step_fn = step_function.SimulationStepFn(
+    solver=solver,
+    time_step_calculator=torax_config.time_step_calculator.
+    time_step_calculator,
+    geometry_provider=geometry_provider,
+    runtime_params_provider=runtime_params_provider,
+)
+initial_state, post_processed_outputs = (
+    initial_state_lib.get_initial_state_and_post_processed_outputs(
+        t=torax_config.numerics.t_initial,
+        runtime_params_provider=runtime_params_provider,
+        geometry_provider=geometry_provider,
+        step_fn=step_fn,
+    ))
 
 state_history, post_processed_outputs_history, sim_error = run_loop.run_loop(
     runtime_params_provider=runtime_params_provider,
