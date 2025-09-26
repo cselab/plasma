@@ -240,26 +240,6 @@ def run_loop(
     return tuple(state_history), tuple(post_processing_history), sim_error
 
 
-def _log_timestep(current_state: sim_state.ToraxSimState, ) -> None:
-    """Logs basic timestep info."""
-    log_str = (
-        f'Simulation time: {current_state.t:.5f}, previous dt:'
-        f' {current_state.dt:.6f}, previous solver iterations:'
-        f' {current_state.solver_numeric_outputs.outer_solver_iterations}')
-    # TODO(b/330172917): once tol and coarse_tol are configurable in the
-    # runtime_params, also log the value of tol and coarse_tol below
-    match current_state.solver_numeric_outputs.solver_error_state:
-        case 0:
-            pass
-        case 1:
-            log_str += ' Solver did not converge in previous step.'
-        case 2:
-            log_str += (
-                ' Solver converged only within coarse tolerance in previous step.'
-            )
-    tqdm.tqdm.write(log_str)
-
-
 def check_for_errors(
     numerics: numerics_lib.Numerics,
     output_state: sim_state.ToraxSimState,
@@ -731,71 +711,6 @@ class SimulationStepFn:
         )
         return output_state, post_processed_outputs
 
-    def _fixed_step(
-        self,
-        runtime_params_t: runtime_params_slice.RuntimeParams,
-        geo_t: geometry.Geometry,
-        explicit_source_profiles: source_profiles_lib.SourceProfiles,
-        input_state: sim_state.ToraxSimState,
-        previous_post_processed_outputs: post_processing.PostProcessedOutputs,
-    ) -> tuple[
-            sim_state.ToraxSimState,
-            post_processing.PostProcessedOutputs,
-    ]:
-        """Performs a single simulation step."""
-        dt = self.time_step_calculator.next_dt(
-            input_state.t,
-            runtime_params_t,
-            geo_t,
-            input_state.core_profiles,
-            input_state.core_transport,
-        )
-
-        runtime_params_t_plus_dt, geo_t, geo_t_plus_dt = (
-            _get_geo_and_runtime_params_at_t_plus_dt_and_phibdot(
-                input_state.t,
-                dt,
-                self._runtime_params_provider,
-                geo_t,
-                self._geometry_provider,
-            ))
-        core_profiles_t_plus_dt = updaters.provide_core_profiles_t_plus_dt(
-            dt=dt,
-            runtime_params_t=runtime_params_t,
-            runtime_params_t_plus_dt=runtime_params_t_plus_dt,
-            geo_t_plus_dt=geo_t_plus_dt,
-            core_profiles_t=input_state.core_profiles,
-        )
-        # The solver returned state is still "intermediate" since the CoreProfiles
-        # need to be updated by the evolved CellVariables in x_new
-        x_new, solver_numeric_outputs = self._solver(
-            t=input_state.t,
-            dt=dt,
-            runtime_params_t=runtime_params_t,
-            runtime_params_t_plus_dt=runtime_params_t_plus_dt,
-            geo_t=geo_t,
-            geo_t_plus_dt=geo_t_plus_dt,
-            core_profiles_t=input_state.core_profiles,
-            core_profiles_t_plus_dt=core_profiles_t_plus_dt,
-            explicit_source_profiles=explicit_source_profiles,
-        )
-        output_state, post_processed_outputs = _finalize_outputs(
-            t=input_state.t,
-            dt=dt,
-            x_new=x_new,
-            solver_numeric_outputs=solver_numeric_outputs,
-            runtime_params_t_plus_dt=runtime_params_t_plus_dt,
-            geometry_t_plus_dt=geo_t_plus_dt,
-            core_profiles_t=input_state.core_profiles,
-            core_profiles_t_plus_dt=core_profiles_t_plus_dt,
-            explicit_source_profiles=explicit_source_profiles,
-            physics_models=self._solver.physics_models,
-            evolving_names=runtime_params_t.numerics.evolving_names,
-            input_post_processed_outputs=previous_post_processed_outputs,
-        )
-        return output_state, post_processed_outputs
-
-
 @functools.partial(
     jax_utils.jit,
     static_argnames=[
@@ -1021,74 +936,6 @@ def _get_geo_and_runtime_params_at_t_plus_dt_and_phibdot(
         geo_t,
         geo_t_plus_dt,
     )
-
-
-def _evolve_x_after_sawtooth(
-    x_redistributed: tuple[cell_variable.CellVariable, ...],
-    runtime_params_t_plus_crash_dt: runtime_params_slice.RuntimeParams,
-    core_profiles_redistributed: state.CoreProfiles,
-    geo_t_plus_crash_dt: geometry.Geometry,
-    previous_post_processed_outputs: post_processing.PostProcessedOutputs,
-    evolving_names: tuple[str, ...],
-    dt_crash: jax.Array,
-) -> tuple[cell_variable.CellVariable, ...]:
-    """Evolves the x_redistributed after the sawtooth redistribution."""
-
-    updated_core_profiles = convertors.solver_x_tuple_to_core_profiles(
-        x_new=x_redistributed,
-        evolving_names=evolving_names,
-        core_profiles=core_profiles_redistributed,
-    )
-
-    ions = getters.get_updated_ions(
-        runtime_params_t_plus_crash_dt,
-        geo_t_plus_crash_dt,
-        updated_core_profiles.n_e,
-        updated_core_profiles.T_e,
-    )
-
-    updated_core_profiles = dataclasses.replace(
-        updated_core_profiles,
-        n_i=ions.n_i,
-        n_impurity=ions.n_impurity,
-    )
-
-    (
-        pressure_thermal_el,
-        pressure_thermal_ion,
-        pressure_thermal_tot,
-    ) = formulas.calculate_pressure(updated_core_profiles)
-
-    _, _, W_thermal_tot = formulas.calculate_stored_thermal_energy(
-        pressure_thermal_el,
-        pressure_thermal_ion,
-        pressure_thermal_tot,
-        geo_t_plus_crash_dt,
-    )
-
-    # Update temperatures to maintain constant dW/dt over the sawtooth period.
-    dW_target = previous_post_processed_outputs.dW_thermal_dt * dt_crash
-
-    factor = 1 + dW_target / W_thermal_tot
-
-    updated_core_profiles = dataclasses.replace(
-        updated_core_profiles,
-        T_e=dataclasses.replace(
-            updated_core_profiles.T_e,
-            value=updated_core_profiles.T_e.value * factor,
-        ),
-        T_i=dataclasses.replace(
-            updated_core_profiles.T_i,
-            value=updated_core_profiles.T_i.value * factor,
-        ),
-    )
-
-    x_evolved = convertors.core_profiles_to_solver_x_tuple(
-        updated_core_profiles,
-        evolving_names,
-    )
-
-    return x_evolved
 
 
 class ToraxConfig(torax_pydantic.BaseModelFrozen):
