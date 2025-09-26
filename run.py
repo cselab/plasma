@@ -414,17 +414,6 @@ def check_for_errors(
 
 @jax.tree_util.register_pytree_node_class
 class SimulationStepFn:
-    """Advances the TORAX simulation one time step.
-
-  Unlike the Solver class, which updates certain parts of the state, a
-  SimulationStepFn takes in the ToraxSimState and outputs the updated
-  ToraxSimState, which contains not only the CoreProfiles but also extra
-  simulation state useful for stepping as well as extra outputs useful for
-  inspection inside the main run loop in `run_simulation()`. It wraps calls to
-  Solver with useful features to increase robustness for convergence, like
-  dt-backtracking.
-  """
-
     def __init__(
         self,
         solver: solver_lib.Solver,
@@ -432,22 +421,6 @@ class SimulationStepFn:
         runtime_params_provider: build_runtime_params.RuntimeParamsProvider,
         geometry_provider: geometry_provider_lib.GeometryProvider,
     ):
-        """Initializes the SimulationStepFn.
-
-    Args:
-      solver: Evolves the core profiles.
-      time_step_calculator: Calculates the dt for each time step.
-      runtime_params_provider: Object that returns a set of runtime parameters
-        which may change from time step to time step or simulation run to run.
-      geometry_provider: Provides the magnetic geometry for each time step based
-        on the ToraxSimState at the start of the time step. The geometry may
-        change from time step to time step, so the sim needs a function to
-        provide which geometry to use for a given time step. A GeometryProvider
-        is any callable (class or function) which takes the ToraxSimState at the
-        start of a time step and returns the Geometry for that time step. For
-        most use cases, only the time will be relevant from the ToraxSimState
-        (in order to support time-dependent geometries).
-    """
         self._solver = solver
         if self._solver.physics_models.mhd_models.sawtooth_models is not None:
             self._sawtooth_solver = sawtooth_solver_lib.SawtoothSolver(
