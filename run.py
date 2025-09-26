@@ -1,74 +1,61 @@
-import torax
-import time
 from absl import logging
-import jax
-import numpy as np
-from torax._src import state
-from torax._src.config import build_runtime_params
-from torax._src.orchestration import sim_state
-from torax._src.orchestration import step_function
-from torax._src.output_tools import post_processing
-import tqdm
-from torax._src.config import build_runtime_params
-from torax._src.orchestration import initial_state as initial_state_lib
-from torax._src.output_tools import output
-import copy
-import logging
-from typing import Any, Mapping
-import pydantic
-from torax._src import physics_models
-from torax._src import version
-from torax._src.config import numerics as numerics_lib
-from torax._src.core_profiles import profile_conditions as profile_conditions_lib
-from torax._src.core_profiles.plasma_composition import plasma_composition as plasma_composition_lib
-from torax._src.fvm import enums
-from torax._src.geometry import pydantic_model as geometry_pydantic_model
-from torax._src.mhd import pydantic_model as mhd_pydantic_model
-from torax._src.neoclassical import pydantic_model as neoclassical_pydantic_model
-from torax._src.pedestal_model import pydantic_model as pedestal_pydantic_model
-from torax._src.solver import pydantic_model as solver_pydantic_model
-from torax._src.sources import pydantic_model as sources_pydantic_model
-from torax._src.time_step_calculator import pydantic_model as time_step_calculator_pydantic_model
-from torax._src.torax_pydantic import file_restart as file_restart_pydantic_model
-from torax._src.torax_pydantic import torax_pydantic
-from torax._src.transport_model import pydantic_model as transport_model_pydantic_model
-import typing_extensions
-from typing_extensions import Self
 from collections.abc import Set
-import functools
-import inspect
-from typing import Any, Final, Mapping, Sequence, TypeAlias
-
-import jax
-import pydantic
-import treelib
-from typing_extensions import Self
-import dataclasses
-import functools
-
-import jax
-from torax._src import jax_utils
-from torax._src import physics_models as physics_models_lib
-from torax._src import state
-from torax._src import xnp
 from torax._src.config import build_runtime_params
 from torax._src.config import numerics as numerics_lib
 from torax._src.config import runtime_params_slice
 from torax._src.core_profiles import convertors
 from torax._src.core_profiles import getters
+from torax._src.core_profiles import profile_conditions as profile_conditions_lib
 from torax._src.core_profiles import updaters
+from torax._src.core_profiles.plasma_composition import plasma_composition as plasma_composition_lib
 from torax._src.fvm import cell_variable
+from torax._src.fvm import enums
 from torax._src.geometry import geometry
 from torax._src.geometry import geometry_provider as geometry_provider_lib
+from torax._src.geometry import pydantic_model as geometry_pydantic_model
+from torax._src import jax_utils
+from torax._src import physics_models
+from torax._src import physics_models as physics_models_lib
+from torax._src import state
+from torax._src import version
+from torax._src import xnp
+from torax._src.mhd import pydantic_model as mhd_pydantic_model
 from torax._src.mhd.sawtooth import sawtooth_solver as sawtooth_solver_lib
+from torax._src.neoclassical import pydantic_model as neoclassical_pydantic_model
+from torax._src.orchestration import initial_state as initial_state_lib
 from torax._src.orchestration import sim_state
+from torax._src.orchestration import step_function
+from torax._src.output_tools import output
 from torax._src.output_tools import post_processing
+from torax._src.pedestal_model import pydantic_model as pedestal_pydantic_model
 from torax._src.physics import formulas
+from torax._src.solver import pydantic_model as solver_pydantic_model
 from torax._src.solver import solver as solver_lib
+from torax._src.sources import pydantic_model as sources_pydantic_model
 from torax._src.sources import source_profile_builders
 from torax._src.sources import source_profiles as source_profiles_lib
+from torax._src.time_step_calculator import pydantic_model as time_step_calculator_pydantic_model
 from torax._src.time_step_calculator import time_step_calculator as ts
+from torax._src.torax_pydantic import file_restart as file_restart_pydantic_model
+from torax._src.torax_pydantic import torax_pydantic
+from torax._src.transport_model import pydantic_model as transport_model_pydantic_model
 from torax._src.transport_model import transport_coefficients_builder
+from typing_extensions import Self
+from typing import Any, Final, Mapping, Sequence, TypeAlias
+from typing import Any, Mapping
+import copy
+import dataclasses
+import functools
+import inspect
+import jax
+import logging
+import numpy as np
+import pydantic
+import time
+import torax
+import tqdm
+import treelib
+import typing_extensions
 
 TIME_INVARIANT: Final[str] = '_pydantic_time_invariant_field'
 JAX_STATIC: Final[str] = '_pydantic_jax_static_field'
