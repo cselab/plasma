@@ -7,7 +7,6 @@ from torax._src.output_tools import output
 import copy
 import logging
 from typing import Any, Mapping
-
 import pydantic
 from torax._src import physics_models
 from torax._src import version
@@ -30,28 +29,6 @@ from typing_extensions import Self
 
 
 class ToraxConfig(torax_pydantic.BaseModelFrozen):
-  """Base config class for Torax.
-
-  Attributes:
-    profile_conditions: Config for the profile conditions.
-    numerics: Config for the numerics.
-    plasma_composition: Config for the plasma composition.
-    geometry: Config for the geometry.
-    pedestal: Config for the pedestal model. If an empty dictionary is passed
-      in, the pedestal model will be set to `no_pedestal`.
-    sources: Config for the sources.
-    neoclassical: Config for the neoclassical models.
-    solver: Config for the solver. If an empty dictionary is passed in, the
-      solver model will be set to `linear`.
-    transport: Config for the transport model. If an empty dictionary is passed
-      in, the transport model will be set to `constant`.
-    mhd: Optional config for mhd models. If None, no MHD models are used.
-    time_step_calculator: Optional config for the time step calculator. If not
-      provided the default chi time step calculator is used.
-    restart: Optional config for file restart. If None, no file restart is
-      performed.
-  """
-
   profile_conditions: profile_conditions_lib.ProfileConditions
   numerics: numerics_lib.Numerics
   plasma_composition: plasma_composition_lib.PlasmaComposition
@@ -125,90 +102,29 @@ class ToraxConfig(torax_pydantic.BaseModelFrozen):
         if using_linear_solver
         else self.solver.initial_guess_mode == enums.InitialGuessMode.LINEAR
     )
-
-    if (
-        using_nonlinear_transport_model
-        and (using_linear_solver or initial_guess_mode_is_linear)
-        and not self.solver.use_pereverzev
-    ):
-      logging.warning("""
-          use_pereverzev=False in a configuration where setting
-          use_pereverzev=True is recommended.
-
-          A nonlinear transport model is used. However, a linear solver is also
-          being used, either directly, or to provide an initial guess for a
-          nonlinear solver.
-
-          With this configuration, it is strongly recommended to set
-          use_pereverzev=True to avoid numerical instability in the solver.
-          """)
     return self
 
   @pydantic.model_validator(mode='after')
   def _check_psidot_and_evolve_current(self) -> typing_extensions.Self:
-    """Warns if psidot is provided but evolve_current is True."""
-    if (
-        self.profile_conditions.psidot is not None
-        and self.numerics.evolve_current
-    ):
-      logging.warning("""
-          profile_conditions.psidot input is ignored as numerics.evolve_current
-          is True.
-
-          Prescribed psidot is only applied when current diffusion is off.
-          """)
     return self
 
   def update_fields(self, x: Mapping[str, Any]):
-    """Safely update fields in the config.
-
-    This works with Frozen models.
-
-    This method will invalidate all `functools.cached_property` caches of
-    all ancestral models in the nested tree, as these could have a dependency
-    on the updated model. In addition, these ancestral models will be
-    re-validated.
-
-    Args:
-      x: A dictionary whose key is a path `'some.path.to.field_name'` and the
-        `value` is the new value for `field_name`. The path can be dictionary
-        keys or attribute names, but `field_name` must be an attribute of a
-        Pydantic model.
-
-    Raises:
-      ValueError: all submodels must be unique object instances. A `ValueError`
-        will be raised if this is not the case.
-    """
-
     old_mesh = self.geometry.build_provider.torax_mesh
     self._update_fields(x)
     new_mesh = self.geometry.build_provider.torax_mesh
-
     if old_mesh != new_mesh:
-      # The grid has changed, e.g. due to a new n_rho.
-      # Clear the cached properties of all submodels and update the grid.
       for model in self.submodels:
         model.clear_cached_properties()
       torax_pydantic.set_grid(self, new_mesh, mode='force')
     else:
-      # Update the grid on any new models which are added and have not had their
-      # grid set yet.
       torax_pydantic.set_grid(self, new_mesh, mode='relaxed')
 
   @pydantic.model_validator(mode='after')
   def _set_grid(self) -> Self:
-    # Interpolated `TimeVaryingArray` objects require a mesh, only available
-    # once the geometry provider is built. This could be done in the before
-    # validator, but is harder than setting it after construction.
     mesh = self.geometry.build_provider.torax_mesh
-    # Note that the grid could already be set, eg. if the config is serialized
-    # and deserialized. In this case, we do not want to overwrite it nor fail
-    # when trying to set it, which is why mode='relaxed'.
     torax_pydantic.set_grid(self, mesh, mode='relaxed')
     return self
 
-  # This is primarily used for serialization, so the importer can check which
-  # version of Torax was used to generate the serialized config.
   @pydantic.computed_field
   @property
   def torax_version(self) -> str:
