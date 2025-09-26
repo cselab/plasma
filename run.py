@@ -843,53 +843,6 @@ def _sawtooth_step(
         explicit_source_profiles=explicit_source_profiles,
     )
 
-    def _make_post_crash_state_and_post_processed_outputs():
-        """Returns the post-crash state and post-processed outputs."""
-
-        # We also update the temperature profiles over the sawtooth time to
-        # maintain constant dW/dt over the sawtooth period. While not strictly
-        # realistic this avoids non-physical dW/dt=perturbations in
-        # post-processing.
-        # Following the sawtooth redistribution, the PDE will take over the
-        # energy evolution and the physical dW/dt corresponding to the new profile
-        # distribution will be calculated.
-        # This must be done here and not in the sawtooth model since the Solver
-        # API does not include the post-processed outputs.
-        x_evolved = _evolve_x_after_sawtooth(
-            x_redistributed=x_candidate,
-            runtime_params_t_plus_crash_dt=runtime_params_t_plus_crash_dt,
-            core_profiles_redistributed=core_profiles_t_plus_crash_dt,
-            geo_t_plus_crash_dt=geo_t_plus_crash_dt,
-            previous_post_processed_outputs=input_post_processed_outputs,
-            evolving_names=runtime_params_t.numerics.evolving_names,
-            dt_crash=dt_crash,
-        )
-
-        return _finalize_outputs(
-            t=input_state.t,
-            dt=dt_crash,
-            x_new=x_evolved,
-            solver_numeric_outputs=solver_numeric_outputs,
-            runtime_params_t_plus_dt=runtime_params_t_plus_crash_dt,
-            geometry_t_plus_dt=geo_t_plus_crash_dt,
-            core_profiles_t=input_state.core_profiles,
-            core_profiles_t_plus_dt=core_profiles_t_plus_crash_dt,
-            explicit_source_profiles=explicit_source_profiles,
-            physics_models=sawtooth_solver.physics_models,
-            evolving_names=runtime_params_t.numerics.evolving_names,
-            input_post_processed_outputs=input_post_processed_outputs,
-        )
-
-    return jax.lax.cond(
-        solver_numeric_outputs.sawtooth_crash,
-        _make_post_crash_state_and_post_processed_outputs,
-        lambda: (
-            input_state,
-            input_post_processed_outputs,
-        ),
-    )
-
-
 def _get_geo_and_runtime_params_at_t_plus_dt_and_phibdot(
     t: jax.Array,
     dt: jax.Array,
