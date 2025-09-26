@@ -1351,8 +1351,8 @@ state_history, post_processed_outputs_history, sim_error = run_loop(
     initial_state=initial_state,
     initial_post_processed_outputs=post_processed_outputs,
     step_fn=step_fn,
-    log_timestep_info=True,
-    progress_bar=True,
+    log_timestep_info=False,
+    progress_bar=False,
 )
 
 state_history = output.StateHistory(
