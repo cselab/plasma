@@ -22,7 +22,6 @@ from torax._src import xnp
 from torax._src.mhd import pydantic_model as mhd_pydantic_model
 from torax._src.mhd.sawtooth import sawtooth_solver as sawtooth_solver_lib
 from torax._src.neoclassical import pydantic_model as neoclassical_pydantic_model
-# from torax._src.orchestration import initial_state as initial_state_lib
 from torax._src.orchestration import sim_state
 from torax._src.orchestration import step_function
 from torax._src.output_tools import output
