@@ -12,7 +12,6 @@ from torax._src.core_profiles import updaters
 from torax._src.core_profiles.plasma_composition import plasma_composition as plasma_composition_lib
 from torax._src.fvm import cell_variable
 from torax._src.fvm import enums
-from torax._src.geometry import geometry as geometry_lib
 from torax._src.geometry import geometry_provider as geometry_provider_lib
 from torax._src.geometry import pydantic_model as geometry_pydantic_model
 from torax._src import array_typing
@@ -803,8 +802,7 @@ class StateHistory:
     return self._rho_norm
 
   @property
-  def geometries(self) -> Sequence[geometry_lib.Geometry]:
-    """Returns the geometries of the simulation."""
+  def geometries(self):
     return self._geometries
 
   @property
