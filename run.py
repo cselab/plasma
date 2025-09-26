@@ -33,18 +33,6 @@ def prepare_simulation(torax_config, ):
         step_fn,
     )
 
-
-def run_simulation(
-    torax_config,
-    log_timestep_info=False,
-    progress_bar=False,
-):
-    return (
-        state_history.simulation_output_to_xr(),
-        state_history,
-    )
-
-
 CONFIG = {
     'plasma_composition': {
         'main_ion': {
