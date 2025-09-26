@@ -1,5 +1,4 @@
 from absl import logging
-from absl import logging
 from collections.abc import Sequence
 from collections.abc import Set
 from torax._src.config import build_runtime_params
@@ -14,16 +13,13 @@ from torax._src.core_profiles.plasma_composition import plasma_composition as pl
 from torax._src.fvm import cell_variable
 from torax._src.fvm import enums
 from torax._src.geometry import geometry
-from torax._src.geometry import geometry
 from torax._src.geometry import geometry as geometry_lib
 from torax._src.geometry import geometry_provider as geometry_provider_lib
 from torax._src.geometry import pydantic_model as geometry_pydantic_model
 from torax._src import array_typing
-from torax._src import array_typing
 from torax._src import jax_utils
 from torax._src import physics_models
 from torax._src import physics_models as physics_models_lib
-from torax._src import state
 from torax._src import state
 from torax._src import version
 from torax._src import xnp
@@ -56,14 +52,11 @@ from typing import Any, Mapping
 import chex
 import copy
 import dataclasses
-import dataclasses
 import functools
 import inspect
 import itertools
 import jax
-import jax
 import logging
-import numpy as np
 import numpy as np
 import os
 import pydantic
