@@ -963,24 +963,23 @@ class StateHistory:
     is_scalar = lambda x: x.ndim == 1 and x.shape == (len(self.times),)
     is_constant = lambda x: x.ndim == 0
 
-    match data:
-      case data if is_face_var(data):
-        dims = [TIME, RHO_FACE_NORM]
-      case data if is_cell_var(data):
-        dims = [TIME, RHO_CELL_NORM]
-      case data if is_scalar(data):
-        dims = [TIME]
-      case data if is_constant(data):
-        dims = []
-      case data if is_cell_plus_boundaries_var(data):
-        dims = [TIME, RHO_NORM]
-      case _:
-        logging.warning(
-            "Unsupported data shape for %s: %s. Skipping persisting.",
-            name,
-            data.shape,  # pytype: disable=attribute-error
-        )
-        return None
+    if is_face_var(data):
+      dims = [TIME, RHO_FACE_NORM]
+    elif is_cell_var(data):
+      dims = [TIME, RHO_CELL_NORM]
+    elif is_scalar(data):
+      dims = [TIME]
+    elif is_constant(data):
+      dims = []
+    elif is_cell_plus_boundaries_var(data):
+      dims = [TIME, RHO_NORM]
+    else:
+      logging.warning(
+        "Unsupported data shape for %s: %s. Skipping persisting.",
+        name,
+        data.shape,  # pytype: disable=attribute-error
+      )
+      return None
 
     return xr.DataArray(data, dims=dims, name=name)
 
