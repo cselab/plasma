@@ -15,7 +15,6 @@ from torax._src.core_profiles import initialization
 from torax._src.core_profiles import profile_conditions as profile_conditions_lib
 from torax._src.core_profiles import updaters
 from torax._src.core_profiles.plasma_composition import plasma_composition as plasma_composition_lib
-from torax._src.fvm import cell_variable
 from torax._src.fvm import enums
 from torax._src.geometry import pydantic_model as geometry_pydantic_model
 from torax._src.mhd import base as mhd_model_lib
@@ -1655,17 +1654,14 @@ class SimulationStepFn:
 
     def step(
         self,
-        dt: jax.Array,
-        runtime_params_t: runtime_params_slice.RuntimeParams,
-        runtime_params_t_plus_dt: runtime_params_slice.RuntimeParams,
+        dt,
+        runtime_params_t,
+        runtime_params_t_plus_dt,
         geo_t,
         geo_t_plus_dt,
         input_state,
-        explicit_source_profiles: source_profiles_lib.SourceProfiles,
-    ) -> tuple[
-            tuple[cell_variable.CellVariable, ...],
-            state.SolverNumericOutputs,
-    ]:
+        explicit_source_profiles
+    ):
         core_profiles_t = input_state.core_profiles
         core_profiles_t_plus_dt = updaters.provide_core_profiles_t_plus_dt(
             dt=dt,
