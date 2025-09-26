@@ -1,6 +1,11 @@
 from absl import logging
 from collections.abc import Sequence
 from collections.abc import Set
+from torax._src import array_typing
+from torax._src import jax_utils
+from torax._src import state
+from torax._src import version
+from torax._src import xnp
 from torax._src.config import build_runtime_params
 from torax._src.config import numerics as numerics_lib
 from torax._src.config import runtime_params_slice
@@ -13,25 +18,23 @@ from torax._src.core_profiles.plasma_composition import plasma_composition as pl
 from torax._src.fvm import cell_variable
 from torax._src.fvm import enums
 from torax._src.geometry import pydantic_model as geometry_pydantic_model
-from torax._src import array_typing
-from torax._src import jax_utils
-from torax._src import physics_models
-from torax._src import state
-from torax._src import version
-from torax._src import xnp
+from torax._src.mhd import base as mhd_model_lib
 from torax._src.mhd import pydantic_model as mhd_pydantic_model
 from torax._src.mhd.sawtooth import sawtooth_solver as sawtooth_solver_lib
-from torax._src.neoclassical.conductivity import base as conductivity_base
+from torax._src.neoclassical import neoclassical_models as neoclassical_models_lib
 from torax._src.neoclassical import pydantic_model as neoclassical_pydantic_model
+from torax._src.neoclassical.conductivity import base as conductivity_base
 from torax._src.output_tools import impurity_radiation
 from torax._src.output_tools import output
 from torax._src.output_tools import post_processing
+from torax._src.pedestal_model import pedestal_model as pedestal_model_lib
 from torax._src.pedestal_model import pydantic_model as pedestal_pydantic_model
 from torax._src.physics import formulas
 from torax._src.solver import pydantic_model as solver_pydantic_model
 from torax._src.solver import solver as solver_lib
 from torax._src.sources import pydantic_model as sources_pydantic_model
 from torax._src.sources import qei_source as qei_source_lib
+from torax._src.sources import source_models as source_models_lib
 from torax._src.sources import source_profile_builders
 from torax._src.sources import source_profiles
 from torax._src.sources import source_profiles as source_profiles_lib
@@ -42,9 +45,10 @@ from torax._src.torax_pydantic import model_config
 from torax._src.torax_pydantic import torax_pydantic
 from torax._src.transport_model import pydantic_model as transport_model_pydantic_model
 from torax._src.transport_model import transport_coefficients_builder
-from typing_extensions import Self
+from torax._src.transport_model import transport_model as transport_model_lib
 from typing import Any, Final, Mapping, Sequence, TypeAlias
 from typing import Any, Mapping
+from typing_extensions import Self
 import chex
 import copy
 import dataclasses
@@ -64,6 +68,27 @@ import tqdm
 import treelib
 import typing_extensions
 import xarray as xr
+
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(frozen=True)
+class PhysicsModels:
+  """A container for all physics models."""
+
+  source_models: source_models_lib.SourceModels = dataclasses.field(
+      metadata=dict(static=True)
+  )
+  transport_model: transport_model_lib.TransportModel = dataclasses.field(
+      metadata=dict(static=True)
+  )
+  pedestal_model: pedestal_model_lib.PedestalModel = dataclasses.field(
+      metadata=dict(static=True)
+  )
+  neoclassical_models: neoclassical_models_lib.NeoclassicalModels = (
+      dataclasses.field(metadata=dict(static=True))
+  )
+  mhd_models: mhd_model_lib.MHDModels = dataclasses.field(
+      metadata=dict(static=True)
+  )
 
 TIME_INVARIANT: Final[str] = '_pydantic_time_invariant_field'
 JAX_STATIC: Final[str] = '_pydantic_jax_static_field'
@@ -1946,7 +1971,7 @@ class ToraxConfig(torax_pydantic.BaseModelFrozen):
         default=None)
 
     def build_physics_models(self):
-        return physics_models.PhysicsModels(
+        return PhysicsModels(
             pedestal_model=self.pedestal.build_pedestal_model(),
             source_models=self.sources.build_models(),
             transport_model=self.transport.build_transport_model(),
