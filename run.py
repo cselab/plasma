@@ -39,29 +39,6 @@ def run_simulation(
     log_timestep_info=False,
     progress_bar=False,
 ):
-    (
-        runtime_params_provider,
-        initial_state,
-        post_processed_outputs,
-        step_fn,
-    ) = prepare_simulation(torax_config)
-
-    state_history, post_processed_outputs_history, sim_error = run_loop.run_loop(
-        runtime_params_provider=runtime_params_provider,
-        initial_state=initial_state,
-        initial_post_processed_outputs=post_processed_outputs,
-        step_fn=step_fn,
-        log_timestep_info=log_timestep_info,
-        progress_bar=progress_bar,
-    )
-
-    state_history = output.StateHistory(
-        state_history=state_history,
-        post_processed_outputs_history=post_processed_outputs_history,
-        sim_error=sim_error,
-        torax_config=torax_config,
-    )
-
     return (
         state_history.simulation_output_to_xr(),
         state_history,
@@ -205,4 +182,27 @@ CONFIG = {
     },
 }
 torax_config = torax.ToraxConfig.from_dict(CONFIG)
-data_tree, _ = run_simulation(torax_config, log_timestep_info=False)
+(
+    runtime_params_provider,
+    initial_state,
+    post_processed_outputs,
+    step_fn,
+) = prepare_simulation(torax_config)
+
+state_history, post_processed_outputs_history, sim_error = run_loop.run_loop(
+    runtime_params_provider=runtime_params_provider,
+    initial_state=initial_state,
+    initial_post_processed_outputs=post_processed_outputs,
+    step_fn=step_fn,
+    log_timestep_info=False,
+    progress_bar=False,
+)
+
+state_history = output.StateHistory(
+    state_history=state_history,
+    post_processed_outputs_history=post_processed_outputs_history,
+    sim_error=sim_error,
+    torax_config=torax_config,
+)
+
+data_tree = state_history.simulation_output_to_xr()
