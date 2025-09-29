@@ -1,44 +1,9 @@
-# Copyright 2024 DeepMind Technologies Limited
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-"""The Block1DCoeffs dataclass.
-
-This is the key interface between the `fvm` module, which is abstracted to the
-level of a coupled 1D fluid dynamics PDE, and the rest of `torax`, which
-includes
-calculations specific to plasma physics to provide these coefficients.
-"""
-
 import dataclasses
 from typing import Any, TypeAlias
-
 import jax
 
-# An optional argument, consisting of a 2D matrix of nested tuples, with each
-# leaf being either None or a JAX Array. Used to define block matrices.
-# examples:
-#
-# ((a, b), (c, d)) where a, b, c, d are each jax.Array
-#
-# ((a, None), (None, d)) : represents a diagonal block matrix
 OptionalTupleMatrix: TypeAlias = tuple[tuple[jax.Array | None, ...], ...] | None
-
-
-# Alias for better readability.
 AuxiliaryOutput: TypeAlias = Any
-
-
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class Block1DCoeffs:
@@ -90,19 +55,6 @@ class Block1DCoeffs:
   v_face: tuple[jax.Array, ...] | None = None
   source_mat_cell: OptionalTupleMatrix = None
   source_cell: tuple[jax.Array | None, ...] | None = None
-# Copyright 2024 DeepMind Technologies Limited
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 
 """Calculates Block1DCoeffs for a time step."""
 import functools
@@ -125,7 +77,6 @@ from torax._src.sources import source_profiles as source_profiles_lib
 import typing_extensions
 
 
-# pylint: disable=invalid-name
 class CoeffsCallback:
   """Calculates Block1DCoeffs for a state."""
 
@@ -744,19 +695,6 @@ def _calc_coeffs_reduced(
       transient_in_cell=transient_in_cell,
   )
   return coeffs
-# Copyright 2024 DeepMind Technologies Limited
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 
 """The CellVariable class.
 
@@ -1012,20 +950,6 @@ class CellVariable:
       return True
     except AssertionError:
       return False
-# Copyright 2024 DeepMind Technologies Limited
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 """The `make_convection_terms` function.
 
 Builds the convection terms of the discrete matrix equation.
@@ -1230,20 +1154,6 @@ def make_convection_terms(
   vec = vec.at[-1].set(vec_value)
 
   return mat, vec
-# Copyright 2024 DeepMind Technologies Limited
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 """The `make_diffusion_terms` function.
 
 Builds the diffusion terms of the discrete matrix equation.
@@ -1319,19 +1229,6 @@ def make_diffusion_terms(
   # Build the matrix
   mat = math_utils.tridiag(diag, off, off) / denom
   return mat, vec
-# Copyright 2024 DeepMind Technologies Limited
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 """Functionality for building discrete linear systems.
 
 This file is expected to be used mostly internally by `fvm` itself.
@@ -1465,19 +1362,6 @@ def calc_c(
   c = jnp.block(c)
 
   return c_mat, c
-# Copyright 2024 DeepMind Technologies Limited
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 """The `enums` module.
 
 Enums shared through the `fvm` package.
@@ -1573,20 +1457,6 @@ def vec_to_cell_variable_tuple(
   ]
 
   return tuple(x_out)
-# Copyright 2024 DeepMind Technologies Limited
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 """The `implicit_solve_block` function.
 
 See function docstring for details.
@@ -1686,20 +1556,6 @@ def implicit_solve_block(
   out = tuple(out)
 
   return out
-# Copyright 2024 DeepMind Technologies Limited
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 """Finite volume method.
 
 This module contains functionality related to solving differential equations
@@ -1707,20 +1563,6 @@ built using the finite volume method. This module is meant to be somewhat
 problem-independent, with other modules providing the coefficients on relatively
 generic differential equations.
 """
-# Copyright 2024 DeepMind Technologies Limited
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 """JAX root finding functions."""
 import dataclasses
 import functools
@@ -2006,20 +1848,6 @@ def _delta_body(
       tau=jnp.array(input_delta_state['tau'][...], dtype=jax_utils.get_dtype())
       * delta_reduction_factor,
   )
-# Copyright 2024 DeepMind Technologies Limited
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 """The `newton_raphson_solve_block` function.
 
 See function docstring for details.
@@ -2248,19 +2076,6 @@ def newton_raphson_solve_block(
   )
 
   return x_new, solver_numeric_outputs
-# Copyright 2024 DeepMind Technologies Limited
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 """The `optimizer_solve_block` function.
 
 See function docstring for details.
@@ -2452,19 +2267,6 @@ def optimizer_solve_block(
   )
 
   return x_new, solver_numeric_outputs
-# Copyright 2024 DeepMind Technologies Limited
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 """Residual functions and loss functions.
 
 Residual functions define a full differential equation and give a vector
