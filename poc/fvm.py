@@ -1,6 +1,45 @@
-import dataclasses
+from jax import numpy as jnp
+from torax._src.config import runtime_params_slice
+from torax._src.core_profiles import convertors
+from torax._src.core_profiles import updaters
+from torax._src.fvm import block_1d_coeffs
+from torax._src.fvm import calc_coeffs
+from torax._src.fvm import cell_variable
+from torax._src.fvm import convection_terms
+from torax._src.fvm import diffusion_terms
+from torax._src.fvm import discrete_system
+from torax._src.fvm import enums
+from torax._src.fvm import fvm_conversions
+from torax._src.fvm import jax_root_finding
+from torax._src.fvm import residual_and_loss
+from torax._src.geometry import geometry
+from torax._src import array_typing
+from torax._src import constants
+from torax._src import jax_utils
+from torax._src import math_utils
+from torax._src import physics_models as physics_models_lib
+from torax._src import state
+from torax._src import state as state_module
+from torax._src.pedestal_model import pedestal_model as pedestal_model_lib
+from torax._src.solver import predictor_corrector_method
+from torax._src.sources import source_profile_builders
+from torax._src.sources import source_profiles
+from torax._src.sources import source_profiles as source_profiles_lib
 from typing import Any, TypeAlias
+from typing import Callable, Final
+from typing import Final
+from typing import TypeAlias
+import chex
+import dataclasses
+import enum
+import functools
 import jax
+import jax.numpy as jnp
+import jaxopt
+import jaxtyping as jt
+import numpy as np
+import typing_extensions
+
 
 OptionalTupleMatrix: TypeAlias = tuple[tuple[jax.Array | None, ...], ...] | None
 AuxiliaryOutput: TypeAlias = Any
@@ -57,25 +96,6 @@ class Block1DCoeffs:
   source_cell: tuple[jax.Array | None, ...] | None = None
 
 """Calculates Block1DCoeffs for a time step."""
-import functools
-
-import jax
-import jax.numpy as jnp
-from torax._src import constants
-from torax._src import jax_utils
-from torax._src import physics_models as physics_models_lib
-from torax._src import state
-from torax._src.config import runtime_params_slice
-from torax._src.core_profiles import convertors
-from torax._src.core_profiles import updaters
-from torax._src.fvm import block_1d_coeffs
-from torax._src.fvm import cell_variable
-from torax._src.geometry import geometry
-from torax._src.pedestal_model import pedestal_model as pedestal_model_lib
-from torax._src.sources import source_profile_builders
-from torax._src.sources import source_profiles as source_profiles_lib
-import typing_extensions
-
 
 class CoeffsCallback:
   """Calculates Block1DCoeffs for a state."""
@@ -703,14 +723,6 @@ solver.
 Naming conventions and API are similar to those developed in the FiPy fvm solver
 [https://www.ctcms.nist.gov/fipy/]
 """
-import dataclasses
-
-import chex
-import jax
-from jax import numpy as jnp
-import jaxtyping as jt
-from torax._src import array_typing
-import typing_extensions
 
 
 def _zero() -> array_typing.FloatScalar:
@@ -955,12 +967,6 @@ class CellVariable:
 Builds the convection terms of the discrete matrix equation.
 """
 
-import chex
-import jax
-from jax import numpy as jnp
-from torax._src import jax_utils
-from torax._src import math_utils
-from torax._src.fvm import cell_variable
 
 
 def make_convection_terms(
@@ -1158,14 +1164,6 @@ def make_convection_terms(
 
 Builds the diffusion terms of the discrete matrix equation.
 """
-
-import chex
-from jax import numpy as jnp
-from torax._src import array_typing
-from torax._src import math_utils
-from torax._src.fvm import cell_variable
-
-
 def make_diffusion_terms(
     d_face: array_typing.FloatVectorFace, var: cell_variable.CellVariable
 ) -> tuple[array_typing.FloatMatrixCell, array_typing.FloatVectorCell]:
@@ -1241,14 +1239,6 @@ expressions, not just numeric values, so nonlinear solvers like
 newton_raphson_solve_block can capture nonlinear dynamics even when
 each step is expressed using a matrix multiply.
 """
-from typing import TypeAlias
-
-import jax
-from jax import numpy as jnp
-from torax._src.fvm import block_1d_coeffs
-from torax._src.fvm import cell_variable
-from torax._src.fvm import convection_terms
-from torax._src.fvm import diffusion_terms
 
 AuxiliaryOutput: TypeAlias = block_1d_coeffs.AuxiliaryOutput
 Block1DCoeffs: TypeAlias = block_1d_coeffs.Block1DCoeffs
@@ -1366,7 +1356,6 @@ def calc_c(
 
 Enums shared through the `fvm` package.
 """
-import enum
 
 
 @enum.unique
@@ -1392,14 +1381,6 @@ class InitialGuessMode(enum.StrEnum):
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Conversions utilities for fvm objects."""
-
-import dataclasses
-
-import jax
-from jax import numpy as jnp
-from torax._src import state
-from torax._src.core_profiles import convertors
-from torax._src.fvm import cell_variable
 
 
 def cell_variable_tuple_to_vec(
@@ -1461,17 +1442,6 @@ def vec_to_cell_variable_tuple(
 
 See function docstring for details.
 """
-import dataclasses
-import functools
-
-import jax
-from jax import numpy as jnp
-from torax._src import jax_utils
-from torax._src.fvm import block_1d_coeffs
-from torax._src.fvm import cell_variable
-from torax._src.fvm import fvm_conversions
-from torax._src.fvm import residual_and_loss
-
 
 @functools.partial(
     jax_utils.jit,
@@ -1564,14 +1534,6 @@ problem-independent, with other modules providing the coefficients on relatively
 generic differential equations.
 """
 """JAX root finding functions."""
-import dataclasses
-import functools
-from typing import Callable, Final
-
-import jax
-import jax.numpy as jnp
-import numpy as np
-from torax._src import jax_utils
 
 # Delta is a vector. If no entry of delta is above this magnitude, we terminate
 # the delta loop. This is to avoid getting stuck in an infinite loop in edge
@@ -1852,25 +1814,6 @@ def _delta_body(
 
 See function docstring for details.
 """
-
-import functools
-from typing import Final
-from torax._src import array_typing
-from torax._src import jax_utils
-from torax._src import physics_models as physics_models_lib
-from torax._src import state as state_module
-from torax._src.config import runtime_params_slice
-from torax._src.core_profiles import convertors
-from torax._src.fvm import calc_coeffs
-from torax._src.fvm import cell_variable
-from torax._src.fvm import enums
-from torax._src.fvm import fvm_conversions
-from torax._src.fvm import jax_root_finding
-from torax._src.fvm import residual_and_loss
-from torax._src.geometry import geometry
-from torax._src.solver import predictor_corrector_method
-from torax._src.sources import source_profiles
-
 # Delta is a vector. If no entry of delta is above this magnitude, we terminate
 # the delta loop. This is to avoid getting stuck in an infinite loop in edge
 # cases with bad numerics.
@@ -2080,24 +2023,6 @@ def newton_raphson_solve_block(
 
 See function docstring for details.
 """
-import functools
-from typing import TypeAlias
-
-import jax
-from torax._src import jax_utils
-from torax._src import physics_models as physics_models_lib
-from torax._src import state
-from torax._src.config import runtime_params_slice
-from torax._src.core_profiles import convertors
-from torax._src.fvm import block_1d_coeffs
-from torax._src.fvm import calc_coeffs
-from torax._src.fvm import cell_variable
-from torax._src.fvm import enums
-from torax._src.fvm import fvm_conversions
-from torax._src.fvm import residual_and_loss
-from torax._src.geometry import geometry
-from torax._src.solver import predictor_corrector_method
-from torax._src.sources import source_profiles
 
 AuxiliaryOutput: TypeAlias = block_1d_coeffs.AuxiliaryOutput
 
@@ -2276,25 +2201,6 @@ Residual functions are for use with e.g. the Newton-Raphson method
 while loss functions can be minimized using any optimization method.
 """
 
-import functools
-from typing import TypeAlias
-
-import chex
-import jax
-from jax import numpy as jnp
-import jaxopt
-from torax._src import jax_utils
-from torax._src import physics_models as physics_models_lib
-from torax._src import state
-from torax._src.config import runtime_params_slice
-from torax._src.core_profiles import updaters
-from torax._src.fvm import block_1d_coeffs
-from torax._src.fvm import calc_coeffs
-from torax._src.fvm import cell_variable
-from torax._src.fvm import discrete_system
-from torax._src.fvm import fvm_conversions
-from torax._src.geometry import geometry
-from torax._src.sources import source_profiles
 
 Block1DCoeffs: TypeAlias = block_1d_coeffs.Block1DCoeffs
 
