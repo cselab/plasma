@@ -25,7 +25,6 @@ import numpy as np
 import pydantic
 from torax._src.torax_pydantic import torax_pydantic
 from torax._src.transport_model import bohm_gyrobohm
-from torax._src.transport_model import combined
 from torax._src.transport_model import constant
 from torax._src.transport_model import critical_gradient
 from torax._src.transport_model import pydantic_model_base
@@ -381,7 +380,7 @@ class CombinedTransportModel(pydantic_model_base.TransportBase):
       'combined'
   )
 
-  def build_transport_model(self) -> combined.CombinedTransportModel:
+  def build_transport_model(self):
     transport_models = [
         model.build_transport_model() for model in self.transport_models
     ]
@@ -397,7 +396,7 @@ class CombinedTransportModel(pydantic_model_base.TransportBase):
 
   def build_runtime_params(
       self, t: chex.Numeric
-  ) -> combined.RuntimeParams:
+  ):
     base_kwargs = dataclasses.asdict(super().build_runtime_params(t))
     transport_model_params = [
         model.build_runtime_params(t) for model in self.transport_models
