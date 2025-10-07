@@ -21,7 +21,6 @@ import os
 import jax
 from torax._src import version
 from torax._src.geometry.geometry import Geometry
-from torax._src.output_tools.output import StateHistory
 from torax._src.output_tools.post_processing import PostProcessedOutputs
 from torax._src.sources.source_profiles import SourceProfiles
 from torax._src.state import CoreProfiles
