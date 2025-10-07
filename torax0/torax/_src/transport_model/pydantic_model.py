@@ -29,7 +29,6 @@ from torax._src.transport_model import combined
 from torax._src.transport_model import constant
 from torax._src.transport_model import critical_gradient
 from torax._src.transport_model import pydantic_model_base
-from torax._src.transport_model import qlknn_10d
 from torax._src.transport_model import qlknn_transport_model
 import typing_extensions
 
@@ -131,17 +130,8 @@ class QLKNNTransportModel(pydantic_model_base.TransportBase):
         model_path=data.get('model_path', ''),
     )
 
-    if data['qlknn_model_name'] == qlknn_10d.QLKNN10D_NAME:
-      if 'collisionality_multiplier' not in data:
-        # Correction factor to a more recent QLK collision operator.
-        data['collisionality_multiplier'] = 0.25
-      if 'ITG_flux_ratio_correction' not in data:
-        # The QLK version this specific QLKNN was trained on tends to
-        # underpredict ITG electron heat flux in shaped, high-beta scenarios.
-        data['ITG_flux_ratio_correction'] = 2.0
-    else:
-      if 'smoothing_width' not in data:
-        data['smoothing_width'] = 0.1
+    if 'smoothing_width' not in data:
+      data['smoothing_width'] = 0.1
     return data
 
   def build_transport_model(self) -> qlknn_transport_model.QLKNNTransportModel:

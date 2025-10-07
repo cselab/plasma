@@ -26,7 +26,6 @@ from torax._src.config import runtime_params_slice
 from torax._src.geometry import geometry
 from torax._src.pedestal_model import pedestal_model as pedestal_model_lib
 from torax._src.transport_model import base_qlknn_model
-from torax._src.transport_model import qlknn_10d
 from torax._src.transport_model import qlknn_model_wrapper
 from torax._src.transport_model import qualikiz_based_transport_model
 from torax._src.transport_model import runtime_params as runtime_params_lib
@@ -63,10 +62,6 @@ def get_model(path: str, name: str) -> base_qlknn_model.BaseQLKNNModel:
         return qlknn_10d.QLKNN10D(path, name)
       else:
         return qlknn_model_wrapper.QLKNNModelWrapper(path, name)
-    elif name == qlknn_10d.QLKNN10D_NAME:
-      raise ValueError(
-          'To use QLKNN10D, please provide a path to the qlknn-hyper directory.'
-      )
     return qlknn_model_wrapper.QLKNNModelWrapper(path, name)
   except FileNotFoundError as fnfe:
     raise FileNotFoundError(
