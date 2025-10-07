@@ -864,11 +864,6 @@ class ToraxConfig(BaseModelFrozen):
     def torax_version(self) -> str:
         return version.TORAX_VERSION
 
-    @pydantic.model_validator(mode='before')
-    @classmethod
-    def _remove_version_field(cls, data: Any) -> Any:
-        return data
-
 
 CONFIG = {
     'plasma_composition': {
