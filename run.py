@@ -187,7 +187,7 @@ class RuntimeParamsProvider:
     pedestal: pedestal_pydantic_model.PedestalConfig
     mhd: mhd_pydantic_model.MHD
     neoclassical: neoclassical_pydantic_model.Neoclassical
-    time_step_calculator: time_step_calculator_pydantic_model.TimeStepCalculator
+    time_step_calculator: TimeStepCalculator
 
     @classmethod
     def from_config(cls, config) -> typing_extensions.Self:
