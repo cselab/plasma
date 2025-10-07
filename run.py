@@ -876,9 +876,6 @@ class ToraxConfig(BaseModelFrozen):
     @pydantic.model_validator(mode='before')
     @classmethod
     def _remove_version_field(cls, data: Any) -> Any:
-        if isinstance(data, dict):
-            if 'torax_version' in data:
-                data = {k: v for k, v in data.items() if k != 'torax_version'}
         return data
 
 
