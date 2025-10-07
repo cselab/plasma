@@ -22,7 +22,6 @@ from torax._src.neoclassical import runtime_params
 from torax._src.neoclassical.bootstrap_current import sauter as sauter_current
 from torax._src.neoclassical.bootstrap_current import zeros as bootstrap_current_zeros
 from torax._src.neoclassical.conductivity import sauter as sauter_conductivity
-from torax._src.neoclassical.transport import angioni_sauter
 from torax._src.neoclassical.transport import zeros as transport_zeros
 from torax._src.torax_pydantic import torax_pydantic
 
@@ -38,7 +37,7 @@ class Neoclassical(torax_pydantic.BaseModelFrozen):
       torax_pydantic.ValidatedDefault(sauter_conductivity.SauterModelConfig())
   )
   transport: (
-      transport_zeros.ZerosModelConfig | angioni_sauter.AngioniSauterModelConfig
+      transport_zeros.ZerosModelConfig
   ) = pydantic.Field(discriminator="model_name")
 
   @pydantic.model_validator(mode="before")
