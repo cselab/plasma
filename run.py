@@ -1464,7 +1464,6 @@ initial_state, post_processed_outputs = (
     ))
 
 initial_post_processed_outputs = post_processed_outputs
-log_timestep_info = False
 running_main_loop_start_time = time.time()
 wall_clock_step_times = []
 current_state = initial_state
@@ -1479,8 +1478,6 @@ while step_fn.time_step_calculator.not_done(
         time_step_calculator_params,
 ):
     step_start_time = time.time()
-    if log_timestep_info:
-        _log_timestep(current_state)
     current_state, post_processed_outputs = step_fn(
         current_state,
         post_processing_history[-1],
@@ -1491,36 +1488,12 @@ while step_fn.time_step_calculator.not_done(
         post_processed_outputs,
     )
     wall_clock_step_times.append(time.time() - step_start_time)
-    if sim_error != state.SimError.NO_ERROR:
-        sim_error.log_error()
-        break
-    else:
-        state_history.append(current_state)
-        post_processing_history.append(post_processed_outputs)
-        progress_ratio = (float(current_state.t) -
-                          runtime_params_provider.numerics.t_initial) / (
-                              runtime_params_provider.numerics.t_final -
-                              runtime_params_provider.numerics.t_initial)
-if log_timestep_info and sim_error == state.SimError.NO_ERROR:
-    _log_timestep(current_state)
-std_devs = 2  # Check if the first step is more than 2 std devs longer.
-if wall_clock_step_times and wall_clock_step_times[0] > (
-        np.mean(wall_clock_step_times) +
-        std_devs * np.std(wall_clock_step_times)):
-    long_first_step = True
-else:
-    long_first_step = False
-
-wall_clock_time_elapsed = time.time() - running_main_loop_start_time
-simulation_time = state_history[-1].t - state_history[0].t
-if long_first_step:
-    wall_clock_time_elapsed -= wall_clock_step_times[0]
+    state_history.append(current_state)
+    post_processing_history.append(post_processed_outputs)
 state_history = tuple(state_history)
-post_processed_outputs_history = tuple(post_processing_history)
-
 state_history = StateHistory(
     state_history=state_history,
-    post_processed_outputs_history=post_processed_outputs_history,
+    post_processed_outputs_history=tuple(post_processing_history),
     sim_error=sim_error,
     torax_config=torax_config,
 )
