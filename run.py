@@ -1373,8 +1373,7 @@ solver = torax_config.solver.build_solver(physics_models=physics_models, )
 runtime_params_provider = (RuntimeParamsProvider.from_config(torax_config))
 step_fn = SimulationStepFn(
     solver=solver,
-    time_step_calculator=torax_config.time_step_calculator.
-    time_step_calculator,
+    time_step_calculator=ChiTimeStepCalculator(),
     geometry_provider=geometry_provider,
     runtime_params_provider=runtime_params_provider,
 )

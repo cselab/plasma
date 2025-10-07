@@ -48,6 +48,3 @@ class TimeStepCalculator(torax_pydantic.BaseModelFrozen):
   def build_runtime_params(self) -> runtime_params.RuntimeParams:
     return runtime_params.RuntimeParams(tolerance=self.tolerance)
 
-  @property
-  def time_step_calculator(self) -> time_step_calculator.TimeStepCalculator:
-    return chi_time_step_calculator.ChiTimeStepCalculator()
