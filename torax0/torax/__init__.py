@@ -27,7 +27,6 @@ from torax._src.state import CoreProfiles
 from torax._src.state import CoreTransport
 from torax._src.state import SimError
 from torax._src.state import SolverNumericOutputs
-from torax._src.torax_pydantic.model_config import ToraxConfig
 
 # pylint: enable=g-importing-member
 
