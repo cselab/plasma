@@ -89,6 +89,8 @@ from torax._src.config import runtime_params_slice
 from torax._src.geometry import geometry
 from torax._src.time_step_calculator import time_step_calculator
 
+class g:
+  pass
 
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
@@ -1418,6 +1420,7 @@ CONFIG = {
         'calculator_type': 'chi',
     },
 }
+g.ts = ChiTimeStepCalculator()
 torax_config = ToraxConfig.from_dict(CONFIG)
 mesh = torax_config.geometry.build_provider.torax_mesh
 interpolated_param_2d.set_grid(torax_config, mesh, mode='relaxed')
