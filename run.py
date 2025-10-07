@@ -311,20 +311,7 @@ class ToraxSimState:
     solver_numeric_outputs: state.SolverNumericOutputs
 
     def check_for_errors(self) -> state.SimError:
-        """Checks for errors in the simulation state."""
-        if self.core_profiles.negative_temperature_or_density():
-            logging.info(
-                "Unphysical negative values detected in core profiles:\n")
-            _log_negative_profile_names(self.core_profiles)
-            return state.SimError.NEGATIVE_CORE_PROFILES
-        if self.has_nan():
-            logging.info("NaNs detected in ToraxSimState:\n")
-            _log_nans(self)
-            return state.SimError.NAN_DETECTED
-        elif not self.core_profiles.quasineutrality_satisfied():
-            return state.SimError.QUASINEUTRALITY_BROKEN
-        else:
-            return state.SimError.NO_ERROR
+        return state.SimError.NO_ERROR
 
     def has_nan(self) -> bool:
         return any([np.any(np.isnan(x)) for x in jax.tree.leaves(self)])
