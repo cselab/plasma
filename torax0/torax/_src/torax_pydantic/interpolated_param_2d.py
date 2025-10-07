@@ -363,81 +363,12 @@ def _load_from_primitives(
   return loaded_values
 
 
-def _load_from_arrays(
-    arrays: tuple[array_typing.Array, ...] | xr.DataArray,
-) -> Mapping[float, tuple[np.ndarray, np.ndarray]]:
-  """Loads the data from numpy arrays.
-
-  Args:
-    arrays: A tuple of (times, rho_norm, values) or (rho_norm, values), or an
-      xarray.DataArray.
-
-  Returns:
-    A mapping from time to (rho_norm, values)
-  """
-
-  if isinstance(arrays, xr.DataArray):
-    if interpolated_param.RHO_NORM not in arrays.coords:
-      raise ValueError(
-          f'"{interpolated_param.RHO_NORM}" must be a coordinate in given'
-          ' dataset.'
-      )
-    if 'time' in arrays.coords:
-      arrays = (arrays.time.data, arrays.rho_norm.data, arrays.data)
-    else:
-      arrays = (arrays.rho_norm.data, arrays.data)
-
-  if len(arrays) == 2:
-    # Shortcut for initial condition profile.
-    rho_norm, values = arrays  # pytype: disable=bad-unpacking
-    return {
-        0.0: (
-            np.asarray(rho_norm, dtype=jax_utils.get_np_dtype()),
-            np.asarray(values, dtype=jax_utils.get_np_dtype()),
-        )
-    }
-  if len(arrays) == 3:
-    times = np.asarray(arrays[0], dtype=jax_utils.get_np_dtype())
-    rho_norm = np.asarray(arrays[1], dtype=jax_utils.get_np_dtype())
-    values = np.asarray(arrays[2], dtype=jax_utils.get_np_dtype())
-
-    if values.ndim != 2:
-      raise ValueError(
-          f'The values array must have ndim=2, but got {values.ndim}.'
-      )
-
-    if rho_norm.ndim == 1:
-      rho_norm = np.stack([rho_norm] * len(times))
-
-    return {t: (rho_norm[i], values[i]) for i, t in enumerate(times)}
-  else:
-    raise ValueError(f'arrays must be length 2 or 3. Given: {len(arrays)}.')
-
-
 def set_grid(
     model: model_base.BaseModelFrozen,
     grid: Grid1D,
     mode: Literal['strict', 'force', 'relaxed'] = 'strict',
 ):
-  """Sets the grid for for the model and all its submodels.
-
-  Args:
-    model: The model to set the geometry mesh for.
-    grid: A `Grid1D` object.
-    mode: The update mode. With `'strict'` (default), an error will be raised if
-      the `grid` is already set in `model` or any of its submodels. With
-      `'force'`, `grid` will be overwritten in a potentially unsafe way (no
-      cache invalidation). With `'relaxed'`, `grid` will only be set if it is
-      not already set.
-
-  Raises:
-    RuntimeError: If `force_update=False` and `grid` is already set.
-  """
-
   def _update_rule(submodel):
-    # The update API assumes all submodels are unique objects. Construct
-    # a new Grid1D object (without validation) to ensure this. We do reuse
-    # the same NumPy arrays.
     new_grid = Grid1D.model_construct(
         nx=grid.nx,
         face_centers=grid.face_centers,
