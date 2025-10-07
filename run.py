@@ -18,7 +18,6 @@ from torax._src.core_profiles.plasma_composition import plasma_composition as pl
 from torax._src.geometry import pydantic_model as geometry_pydantic_model
 from torax._src.mhd import base as mhd_model_lib
 from torax._src.mhd import pydantic_model as mhd_pydantic_model
-from torax._src.mhd.sawtooth import sawtooth_solver as sawtooth_solver_lib
 from torax._src.neoclassical import neoclassical_models as neoclassical_models_lib
 from torax._src.neoclassical import pydantic_model as neoclassical_pydantic_model
 from torax._src.neoclassical.conductivity import base as conductivity_base
