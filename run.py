@@ -734,28 +734,6 @@ class ToraxSimState:
         return any([np.any(np.isnan(x)) for x in jax.tree.leaves(self)])
 
 
-def get_initial_state_and_post_processed_outputs(
-    t,
-    runtime_params_provider,
-    geometry_provider,
-    step_fn,
-):
-    runtime_params_for_init, geo_for_init = (
-        build_runtime_params.get_consistent_runtime_params_and_geometry(
-            t=t,
-            runtime_params_provider=runtime_params_provider,
-            geometry_provider=geometry_provider,
-        ))
-    initial_state = _get_initial_state(
-        runtime_params=runtime_params_for_init,
-        geo=geo_for_init,
-        step_fn=step_fn,
-    )
-    post_processed_outputs = post_processing.make_post_processed_outputs(
-        initial_state, runtime_params_for_init)
-    return initial_state, post_processed_outputs
-
-
 def _get_initial_state(runtime_params, geo, step_fn):
     physics_models = step_fn.solver.physics_models
     initial_core_profiles = initialization.initial_core_profiles(
@@ -1290,13 +1268,20 @@ step_fn = SimulationStepFn(
     geometry_provider=geometry_provider,
     runtime_params_provider=runtime_params_provider,
 )
-initial_state, post_processed_outputs = (
-    get_initial_state_and_post_processed_outputs(
+
+runtime_params_for_init, geo_for_init = (
+    build_runtime_params.get_consistent_runtime_params_and_geometry(
         t=torax_config.numerics.t_initial,
         runtime_params_provider=runtime_params_provider,
         geometry_provider=geometry_provider,
-        step_fn=step_fn,
     ))
+initial_state = _get_initial_state(
+    runtime_params=runtime_params_for_init,
+    geo=geo_for_init,
+    step_fn=step_fn,
+)
+post_processed_outputs = post_processing.make_post_processed_outputs(
+    initial_state, runtime_params_for_init)
 
 initial_post_processed_outputs = post_processed_outputs
 current_state = initial_state
