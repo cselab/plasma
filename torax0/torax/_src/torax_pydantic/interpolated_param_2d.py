@@ -446,15 +446,7 @@ def set_grid(
     if submodel.grid is None:
       submodel.__dict__['grid'] = new_grid
     else:
-      match mode:
-        case 'force':
-          submodel.__dict__['grid'] = new_grid
-        case 'relaxed':
-          pass
-        case 'strict':
-          raise RuntimeError(
-              '`grid` is already set and using strict update mode.'
-          )
+      assert False
 
   for submodel in model.submodels:
     if isinstance(submodel, TimeVaryingArray):
