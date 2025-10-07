@@ -51,8 +51,4 @@ class TimeStepCalculator(torax_pydantic.BaseModelFrozen):
 
   @property
   def time_step_calculator(self) -> time_step_calculator.TimeStepCalculator:
-    match self.calculator_type:
-      case TimeStepCalculatorType.CHI:
-        return chi_time_step_calculator.ChiTimeStepCalculator()
-      case TimeStepCalculatorType.FIXED:
-        return fixed_time_step_calculator.FixedTimeStepCalculator()
+    return chi_time_step_calculator.ChiTimeStepCalculator()
