@@ -74,18 +74,6 @@ import xarray as xr
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class RuntimeParamsProvider:
-    """Provides a RuntimeParamsSlice to use during time t of the sim.
-
-  The RuntimeParams may change from time step to time step, so this
-  class interpolates any time-dependent params in the input config to the values
-  they should be at time t.
-
-  NOTE: In order to maintain consistency between the RuntimeParams
-  and the geometry, `get_consistent_runtime_params_and_geometry`
-  should be used to get a slice of the RuntimeParams and a
-  corresponding geometry.
-  """
-
     sources: sources_pydantic_model.Sources
     numerics: numerics_lib.Numerics
     profile_conditions: profile_conditions_lib.ProfileConditions
