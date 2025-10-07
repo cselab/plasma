@@ -18,7 +18,6 @@ import enum
 from typing import Annotated
 
 from torax._src.time_step_calculator import chi_time_step_calculator
-from torax._src.time_step_calculator import fixed_time_step_calculator
 from torax._src.time_step_calculator import runtime_params
 from torax._src.time_step_calculator import time_step_calculator
 from torax._src.torax_pydantic import torax_pydantic
