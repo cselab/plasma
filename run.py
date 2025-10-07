@@ -89,9 +89,6 @@ PositiveTimeVaryingArray = interpolated_param_2d.PositiveTimeVaryingArray
 
 ValidatedDefault = functools.partial(pydantic.Field, validate_default=True)
 
-Grid1D = interpolated_param_2d.Grid1D
-set_grid = interpolated_param_2d.set_grid
-
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class PhysicsModels:
@@ -856,7 +853,7 @@ class ToraxConfig(BaseModelFrozen):
     @pydantic.model_validator(mode='after')
     def _set_grid(self) -> Self:
         mesh = self.geometry.build_provider.torax_mesh
-        set_grid(self, mesh, mode='relaxed')
+        interpolated_param_2d.set_grid(self, mesh, mode='relaxed')
         return self
 
     @pydantic.computed_field
