@@ -830,15 +830,6 @@ class ToraxConfig(BaseModelFrozen):
     @classmethod
     def _defaults(cls, data: dict[str, Any]) -> dict[str, Any]:
         configurable_data = copy.deepcopy(data)
-        if (isinstance(configurable_data['pedestal'], dict)
-                and 'model_name' not in configurable_data['pedestal']):
-            configurable_data['pedestal']['model_name'] = 'no_pedestal'
-        if (isinstance(configurable_data['transport'], dict)
-                and 'model_name' not in configurable_data['transport']):
-            configurable_data['transport']['model_name'] = 'constant'
-        if (isinstance(configurable_data['solver'], dict)
-                and 'solver_type' not in configurable_data['solver']):
-            configurable_data['solver']['solver_type'] = 'linear'
         return configurable_data
 
     @pydantic.model_validator(mode='after')
