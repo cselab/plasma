@@ -29,7 +29,6 @@ from torax._src.fvm import calc_coeffs
 from torax._src.fvm import cell_variable
 from torax._src.fvm import enums
 from torax._src.fvm import fvm_conversions
-from torax._src.fvm import jax_root_finding
 from torax._src.fvm import residual_and_loss
 from torax._src.geometry import geometry
 from torax._src.solver import predictor_corrector_method
