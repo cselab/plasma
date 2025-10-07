@@ -1465,7 +1465,6 @@ initial_state, post_processed_outputs = (
 
 initial_post_processed_outputs = post_processed_outputs
 running_main_loop_start_time = time.time()
-wall_clock_step_times = []
 current_state = initial_state
 state_history = [current_state]
 post_processing_history = [initial_post_processed_outputs]
@@ -1477,7 +1476,6 @@ while step_fn.time_step_calculator.not_done(
         runtime_params_provider.numerics.t_final,
         time_step_calculator_params,
 ):
-    step_start_time = time.time()
     current_state, post_processed_outputs = step_fn(
         current_state,
         post_processing_history[-1],
@@ -1487,7 +1485,6 @@ while step_fn.time_step_calculator.not_done(
         current_state,
         post_processed_outputs,
     )
-    wall_clock_step_times.append(time.time() - step_start_time)
     state_history.append(current_state)
     post_processing_history.append(post_processed_outputs)
 state_history = tuple(state_history)
