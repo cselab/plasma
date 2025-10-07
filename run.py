@@ -138,19 +138,19 @@ class TimeStepCalculator(abc.ABC):
     @abc.abstractmethod
     def _next_dt(
         self,
-        runtime_params: runtime_params_slice.RuntimeParams,
-        geo: geometry.Geometry,
-        core_profiles: state.CoreProfiles,
-        core_transport: state.CoreTransport,
-    ) -> jax.Array:
+        runtime_params,
+        geo,
+        core_profiles,
+        core_transport,
+    ):
         """Returns the next time step duration."""
 
     @abc.abstractmethod
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other):
         """Equality for the TimeStepCalculator, needed for JAX."""
 
     @abc.abstractmethod
-    def __hash__(self) -> int:
+    def __hash__(self):
         """Hash for the TimeStepCalculator, needed for JAX."""
 
 
@@ -168,10 +168,10 @@ class ChiTimeStepCalculator(TimeStepCalculator):
 
         return dt
 
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other):
         return isinstance(other, type(self))
 
-    def __hash__(self) -> int:
+    def __hash__(self):
         return hash(type(self))
 
 
