@@ -23,7 +23,6 @@ from typing import Annotated, Any, Literal, TypeAlias, TypeVar
 
 from imas import ids_toplevel
 import pydantic
-from torax._src.geometry import circular_geometry
 from torax._src.geometry import geometry
 from torax._src.geometry import geometry_provider
 from torax._src.geometry import standard_geometry
