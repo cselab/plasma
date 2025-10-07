@@ -201,23 +201,6 @@ EXCLUDED_GEOMETRY_NAMES = frozenset({
     "q_correction_factor",
 })
 
-
-def face_to_cell(
-    face: array_typing.FloatVectorFace, ) -> array_typing.FloatVectorCell:
-    """Infers cell values corresponding to a vector of face values.
-
-  Simply a linear interpolation between face values.
-
-  Args:
-    face: An array containing face values.
-
-  Returns:
-    cell: An array containing cell values.
-  """
-
-    return 0.5 * (face[:-1] + face[1:])
-
-
 @enum.unique
 class GeometryType(enum.IntEnum):
     """Integer enum for geometry type.
