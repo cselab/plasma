@@ -369,50 +369,6 @@ class StandardGeometryIntermediates:
     )
 
   @classmethod
-  def _get_LY_single_slice_from_bundle(
-      cls,
-      LY_bundle: Mapping[str, np.ndarray],
-      idx: int,
-  ) -> Mapping[str, np.ndarray]:
-    """Returns a single LY slice from a bundled LY file, at index idx."""
-
-    # The keys below are the relevant LY keys for the FBT geometry provider.
-    relevant_keys = [
-        'rBt',
-        'aminor',
-        'rgeom',
-        'epsilon',
-        'TQ',
-        'FB',
-        'FA',
-        'Q0Q',
-        'Q1Q',
-        'Q2Q',
-        'Q3Q',
-        'Q4Q',
-        'Q5Q',
-        'ItQ',
-        'deltau',
-        'deltal',
-        'kappa',
-        'zA',
-    ]
-    LY_single_slice = {key: LY_bundle[key][..., idx] for key in relevant_keys}
-
-    # load FtPVQ if it exists, otherwise use FtPQ for toroidal flux.
-    if 'FtPVQ' in LY_bundle:
-      LY_single_slice['FtPVQ'] = LY_bundle['FtPVQ'][..., idx]
-    else:
-      # TODO(b/412965439) remove support for LY files that don't contain FtPVQ.
-      logging.warning(
-          'FtPVQ not found in LY bundle, using FtPQ instead. Please upgrade to'
-          ' a newer version of MEQ as the source of the LY data. This will'
-          ' throw an error in a future version.'
-      )
-      LY_single_slice['FtPVQ'] = LY_bundle['FtPQ'][..., idx]
-    return LY_single_slice
-
-  @classmethod
   def _from_fbt(
       cls,
       LY: Mapping[str, np.ndarray],
