@@ -587,36 +587,6 @@ class SimulationStepFn:
         output_state, post_processed_outputs = _step()
         return output_state, post_processed_outputs
 
-    def step(
-        self,
-        dt,
-        runtime_params_t,
-        runtime_params_t_plus_dt,
-        geo_t,
-        geo_t_plus_dt,
-        input_state,
-        explicit_source_profiles
-    ):
-        core_profiles_t = input_state.core_profiles
-        core_profiles_t_plus_dt = updaters.provide_core_profiles_t_plus_dt(
-            dt=dt,
-            runtime_params_t=runtime_params_t,
-            runtime_params_t_plus_dt=runtime_params_t_plus_dt,
-            geo_t_plus_dt=geo_t_plus_dt,
-            core_profiles_t=core_profiles_t,
-        )
-        return self._solver(
-            t=input_state.t,
-            dt=dt,
-            runtime_params_t=runtime_params_t,
-            runtime_params_t_plus_dt=runtime_params_t_plus_dt,
-            geo_t=geo_t,
-            geo_t_plus_dt=geo_t_plus_dt,
-            core_profiles_t=core_profiles_t,
-            core_profiles_t_plus_dt=core_profiles_t_plus_dt,
-            explicit_source_profiles=explicit_source_profiles,
-        )
-
     def _adaptive_step(
         self,
         runtime_params_t,
