@@ -89,132 +89,91 @@ from torax._src.config import runtime_params_slice
 from torax._src.geometry import geometry
 from torax._src.time_step_calculator import time_step_calculator
 
+
 class g:
-  pass
+    pass
+
 
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class RuntimeParams:
-  """Runtime parameters for the time step calculator."""
-
-  tolerance: float
+    tolerance: float
 
 
 class TimeStepCalculator(abc.ABC):
-  """Iterates over time during simulation.
 
-  Usage follows this pattern:
+    def not_done(self, t, t_final, time_calculator_params):
+        return t < (t_final - time_calculator_params.tolerance)
 
-  .. code-block: python
-
-    ts = <TimeStepCalculator subclass constructor>
-    ts_state = ts.initial_state()
-    t = 0.
-    while ts.not_done(t):
-      dt, ts_state = ts.next_dt(geo, time_step_calculator_state)
-      t += dt
-      sim_state = <update sim_state with step of size dt>
-  """
-
-  def not_done(
-      self,
-      t: float | jax.Array,
-      t_final: float,
-      time_calculator_params: time_runtime_params.RuntimeParams,
-  ) -> bool | jax.Array:
-    return t < (t_final - time_calculator_params.tolerance)
-
-  @functools.partial(
-      jax_utils.jit,
-      static_argnames=['self'],
-  )
-  def next_dt(
-      self,
-      t: jax.Array,
-      runtime_params: runtime_params_slice.RuntimeParams,
-      geo: geometry.Geometry,
-      core_profiles: state.CoreProfiles,
-      core_transport: state.CoreTransport,
-  ) -> jax.Array:
-    """Returns the next time step duration."""
-    dt = self._next_dt(
+    @functools.partial(
+        jax_utils.jit,
+        static_argnames=['self'],
+    )
+    def next_dt(
+        self,
+        t,
         runtime_params,
         geo,
         core_profiles,
         core_transport,
-    )
-    crosses_t_final = (t < runtime_params.numerics.t_final) * (
-        t + dt > runtime_params.numerics.t_final
-    )
-    dt = jax.lax.select(
-        jnp.logical_and(
-            runtime_params.numerics.exact_t_final,
-            crosses_t_final,
-        ),
-        runtime_params.numerics.t_final - t,
-        dt,
-    )
-    return dt
+    ):
+        dt = self._next_dt(
+            runtime_params,
+            geo,
+            core_profiles,
+            core_transport,
+        )
+        crosses_t_final = (t < runtime_params.numerics.t_final) * (
+            t + dt > runtime_params.numerics.t_final)
+        dt = jax.lax.select(
+            jnp.logical_and(
+                runtime_params.numerics.exact_t_final,
+                crosses_t_final,
+            ),
+            runtime_params.numerics.t_final - t,
+            dt,
+        )
+        return dt
 
-  @abc.abstractmethod
-  def _next_dt(
-      self,
-      runtime_params: runtime_params_slice.RuntimeParams,
-      geo: geometry.Geometry,
-      core_profiles: state.CoreProfiles,
-      core_transport: state.CoreTransport,
-  ) -> jax.Array:
-    """Returns the next time step duration."""
+    @abc.abstractmethod
+    def _next_dt(
+        self,
+        runtime_params: runtime_params_slice.RuntimeParams,
+        geo: geometry.Geometry,
+        core_profiles: state.CoreProfiles,
+        core_transport: state.CoreTransport,
+    ) -> jax.Array:
+        """Returns the next time step duration."""
 
-  @abc.abstractmethod
-  def __eq__(self, other) -> bool:
-    """Equality for the TimeStepCalculator, needed for JAX."""
+    @abc.abstractmethod
+    def __eq__(self, other) -> bool:
+        """Equality for the TimeStepCalculator, needed for JAX."""
 
-  @abc.abstractmethod
-  def __hash__(self) -> int:
-    """Hash for the TimeStepCalculator, needed for JAX."""
+    @abc.abstractmethod
+    def __hash__(self) -> int:
+        """Hash for the TimeStepCalculator, needed for JAX."""
 
-class ChiTimeStepCalculator(time_step_calculator.TimeStepCalculator):
-  """TimeStepCalculator based on chi_max heuristic."""
 
-  def _next_dt(
-      self,
-      runtime_params: runtime_params_slice.RuntimeParams,
-      geo: geometry.Geometry,
-      core_profiles: state_module.CoreProfiles,
-      core_transport: state_module.CoreTransport,
-  ) -> jax.Array:
-    """Calculates the next time step duration.
+class ChiTimeStepCalculator(TimeStepCalculator):
 
-    This calculation is a heuristic scaling of the maximum stable step
-    size for the explicit method, and is therefore a function of chi_max.
+    def _next_dt(self, runtime_params, geo, core_profiles, core_transport):
+        chi_max = core_transport.chi_max(geo)
 
-    Args:
-      runtime_params: Input runtime parameters for the current timestep.
-      geo: Geometry for the tokamak being simulated for the current timestep.
-      core_profiles: Current core plasma profiles.
-      core_transport: Used to calculate maximum step size.
+        basic_dt = (3.0 / 4.0) * (geo.drho_norm**2) / chi_max
 
-    Returns:
-      dt: Scalar time step duration.
-    """
+        dt = jnp.minimum(
+            runtime_params.numerics.chi_timestep_prefactor * basic_dt,
+            runtime_params.numerics.max_dt,
+        )
 
-    chi_max = core_transport.chi_max(geo)
+        return dt
 
-    basic_dt = (3.0 / 4.0) * (geo.drho_norm**2) / chi_max
+    def __eq__(self, other) -> bool:
+        return isinstance(other, type(self))
 
-    dt = jnp.minimum(
-        runtime_params.numerics.chi_timestep_prefactor * basic_dt,
-        runtime_params.numerics.max_dt,
-    )
+    def __hash__(self) -> int:
+        return hash(type(self))
 
-    return dt
-
-  def __eq__(self, other) -> bool:
-    return isinstance(other, type(self))
-
-  def __hash__(self) -> int:
-    return hash(type(self))
 
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
@@ -270,12 +229,8 @@ class RuntimeParamsProvider:
         )
 
 
-def get_consistent_runtime_params_and_geometry(
-    *,
-    t,
-    runtime_params_provider,
-    geometry_provider
-):
+def get_consistent_runtime_params_and_geometry(*, t, runtime_params_provider,
+                                               geometry_provider):
     geo = geometry_provider(t)
     runtime_params = runtime_params_provider(t=t)
     return runtime_params_slice.make_ip_consistent(runtime_params, geo)
