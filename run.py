@@ -1106,10 +1106,6 @@ class ToraxConfig(BaseModelFrozen):
                                         == enums.InitialGuessMode.LINEAR)
         return self
 
-    @pydantic.model_validator(mode='after')
-    def _check_psidot_and_evolve_current(self) -> typing_extensions.Self:
-        return self
-
     @pydantic.computed_field
     @property
     def torax_version(self) -> str:
