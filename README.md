@@ -28,6 +28,7 @@ rm -rf torax/.git
 ```
 
 ```
+python3 -m pip install -e ./torax
 python -m coverage run run.py
 python -m coverage html
 ```
