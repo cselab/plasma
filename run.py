@@ -1464,7 +1464,6 @@ initial_state, post_processed_outputs = (
     ))
 
 initial_post_processed_outputs = post_processed_outputs
-running_main_loop_start_time = time.time()
 current_state = initial_state
 state_history = [current_state]
 post_processing_history = [initial_post_processed_outputs]
