@@ -933,11 +933,6 @@ class SimulationStepFn:
     def __init__(self, solver, time_step_calculator, runtime_params_provider,
                  geometry_provider):
         self._solver = solver
-        if self._solver.physics_models.mhd_models.sawtooth_models is not None:
-            self._sawtooth_solver = sawtooth_solver_lib.SawtoothSolver(
-                physics_models=self._solver.physics_models, )
-        else:
-            self._sawtooth_solver = None
         self._time_step_calculator = time_step_calculator
         self._geometry_provider = geometry_provider
         self._runtime_params_provider = runtime_params_provider
