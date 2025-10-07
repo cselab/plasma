@@ -1269,10 +1269,9 @@ while step_fn.time_step_calculator.not_done(
     )
     state_history.append(current_state)
     post_processing_history.append(post_processed_outputs)
-state_history = tuple(state_history)
 state_history = StateHistory(
     state_history=state_history,
-    post_processed_outputs_history=tuple(post_processing_history),
+    post_processed_outputs_history=post_processing_history,
     sim_error=sim_error,
     torax_config=torax_config,
 )
