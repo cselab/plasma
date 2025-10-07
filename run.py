@@ -944,35 +944,6 @@ class SimulationStepFn:
         self._runtime_params_provider = runtime_params_provider
 
     @property
-    def runtime_params_provider(
-        self, ) -> build_runtime_params.RuntimeParamsProvider:
-        return self._runtime_params_provider
-
-    def tree_flatten(self):
-        children = (
-            self._runtime_params_provider,
-            self._geometry_provider,
-        )
-        aux_data = (
-            self._solver,
-            self._time_step_calculator,
-        )
-        return children, aux_data
-
-    @classmethod
-    def tree_unflatten(cls, aux_data, children):
-        return cls(
-            solver=aux_data[0],
-            time_step_calculator=aux_data[1],
-            runtime_params_provider=children[0],
-            geometry_provider=children[1],
-        )
-
-    @property
-    def geometry_provider(self):
-        return self._geometry_provider
-
-    @property
     def solver(self):
         return self._solver
 
