@@ -267,27 +267,6 @@ class StateHistory:
     def geometries(self) -> Sequence[geometry_lib.Geometry]:
         return self._geometries
 
-    @property
-    def core_profiles(self) -> Sequence[state.CoreProfiles]:
-        return self._core_profiles
-
-    @property
-    def source_profiles(self) -> Sequence[source_profiles_lib.SourceProfiles]:
-        return self._core_sources
-
-    @property
-    def core_transport(self) -> Sequence[state.CoreTransport]:
-        return self._transport
-
-    @property
-    def solver_numeric_outputs(self) -> Sequence[state.SolverNumericOutputs]:
-        return self._solver_numeric_outputs
-
-    @property
-    def post_processed_outputs(
-        self, ) -> Sequence[post_processing.PostProcessedOutputs]:
-        return self._post_processed_outputs
-
     def simulation_output_to_xr(self) -> xr.DataTree:
         time = xr.DataArray(self.times, dims=[TIME], name=TIME)
         rho_face_norm = xr.DataArray(self.rho_face_norm,
