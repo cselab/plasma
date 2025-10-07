@@ -25,7 +25,6 @@ from torax._src import state
 from torax._src.config import runtime_params_slice
 from torax._src.core_profiles import getters
 from torax._src.geometry import geometry
-from torax._src.mhd.sawtooth import flatten_profile
 from torax._src.mhd.sawtooth import redistribution_base
 from torax._src.mhd.sawtooth import runtime_params as sawtooth_runtime_params
 from torax._src.physics import psi_calculations
