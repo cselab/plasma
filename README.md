@@ -21,6 +21,7 @@ run_torax --config=iterhybrid_rampup.py --quit
 
 ```
 python -m coverage run run.py
+python -m coverage html
 ```
 
 # Refs
