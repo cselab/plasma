@@ -850,12 +850,6 @@ class ToraxConfig(BaseModelFrozen):
     def _check_psidot_and_evolve_current(self) -> typing_extensions.Self:
         return self
 
-    @pydantic.model_validator(mode='after')
-    def _set_grid(self) -> Self:
-        mesh = self.geometry.build_provider.torax_mesh
-        interpolated_param_2d.set_grid(self, mesh, mode='relaxed')
-        return self
-
     @pydantic.computed_field
     @property
     def torax_version(self) -> str:
@@ -999,6 +993,9 @@ CONFIG = {
     },
 }
 torax_config = ToraxConfig.from_dict(CONFIG)
+mesh = torax_config.geometry.build_provider.torax_mesh
+interpolated_param_2d.set_grid(torax_config, mesh, mode='relaxed')
+
 geometry_provider = torax_config.geometry.build_provider
 physics_models = torax_config.build_physics_models()
 solver = torax_config.solver.build_solver(physics_models=physics_models, )
