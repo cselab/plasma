@@ -2,13 +2,16 @@ from absl import logging
 from collections.abc import Sequence
 from collections.abc import Set
 from torax._src.config import numerics as numerics_lib
+from torax._src.config import runtime_params_slice
 from torax._src.core_profiles import convertors
 from torax._src.core_profiles import getters
 from torax._src.core_profiles import initialization
 from torax._src.core_profiles import profile_conditions as profile_conditions_lib
 from torax._src.core_profiles import updaters
 from torax._src.core_profiles.plasma_composition import plasma_composition as plasma_composition_lib
+from torax._src.geometry import geometry
 from torax._src.geometry import geometry as geometry_lib
+from torax._src.geometry import geometry_provider as geometry_provider_lib
 from torax._src.geometry import pydantic_model as geometry_pydantic_model
 from torax._src import array_typing
 from torax._src import jax_utils
@@ -40,6 +43,7 @@ from torax._src.torax_pydantic import interpolated_param_2d
 from torax._src.torax_pydantic import model_base
 from torax._src.torax_pydantic import pydantic_types
 from torax._src.transport_model import pydantic_model as transport_model_pydantic_model
+from torax._src.transport_model import pydantic_model as transport_pydantic_model
 from torax._src.transport_model import transport_coefficients_builder
 from torax._src.transport_model import transport_model as transport_model_lib
 from typing_extensions import Annotated
@@ -65,25 +69,6 @@ import torax
 import treelib
 import typing_extensions
 import xarray as xr
-import dataclasses
-
-import chex
-import jax
-from torax._src import jax_utils
-from torax._src.config import numerics as numerics_lib
-from torax._src.config import runtime_params_slice
-from torax._src.core_profiles import profile_conditions as profile_conditions_lib
-from torax._src.core_profiles.plasma_composition import plasma_composition as plasma_composition_lib
-from torax._src.geometry import geometry
-from torax._src.geometry import geometry_provider as geometry_provider_lib
-from torax._src.mhd import pydantic_model as mhd_pydantic_model
-from torax._src.neoclassical import pydantic_model as neoclassical_pydantic_model
-from torax._src.pedestal_model import pydantic_model as pedestal_pydantic_model
-from torax._src.solver import pydantic_model as solver_pydantic_model
-from torax._src.sources import pydantic_model as sources_pydantic_model
-from torax._src.time_step_calculator import pydantic_model as time_step_calculator_pydantic_model
-from torax._src.transport_model import pydantic_model as transport_pydantic_model
-import typing_extensions
 
 
 @jax.tree_util.register_dataclass
@@ -113,8 +98,7 @@ class RuntimeParamsProvider:
     time_step_calculator: time_step_calculator_pydantic_model.TimeStepCalculator
 
     @classmethod
-    def from_config(cls, config
-    ) -> typing_extensions.Self:
+    def from_config(cls, config) -> typing_extensions.Self:
         return cls(
             sources=config.sources,
             numerics=config.numerics,
@@ -290,13 +274,8 @@ def _extend_cell_grid_to_boundaries(
 
 class StateHistory:
 
-    def __init__(
-        self,
-        state_history,
-        post_processed_outputs_history,
-        sim_error,
-        torax_config
-    ):
+    def __init__(self, state_history, post_processed_outputs_history,
+                 sim_error, torax_config):
         if (not torax_config.restart and not torax_config.profile_conditions.
                 use_v_loop_lcfs_boundary_condition
                 and len(state_history) >= 2):
