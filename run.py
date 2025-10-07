@@ -913,91 +913,6 @@ def _get_initial_state(runtime_params, geo, step_fn):
     )
 
 
-def run_loop(
-    runtime_params_provider: build_runtime_params.RuntimeParamsProvider,
-    initial_state,
-    initial_post_processed_outputs: post_processing.PostProcessedOutputs,
-    step_fn,
-    log_timestep_info: bool = False,
-    progress_bar: bool = True,
-):
-    running_main_loop_start_time = time.time()
-    wall_clock_step_times = []
-    current_state = initial_state
-    state_history = [current_state]
-    post_processing_history = [initial_post_processed_outputs]
-    sim_error = state.SimError.NO_ERROR
-    initial_runtime_params = runtime_params_provider(initial_state.t)
-    time_step_calculator_params = initial_runtime_params.time_step_calculator
-    with tqdm.tqdm(
-            total=
-            100,  # This makes it so that the progress bar measures a percentage
-            desc='Simulating',
-            disable=not progress_bar,
-            leave=True,
-    ) as pbar:
-        while step_fn.time_step_calculator.not_done(
-                current_state.t,
-                runtime_params_provider.numerics.t_final,
-                time_step_calculator_params,
-        ):
-            step_start_time = time.time()
-            if log_timestep_info:
-                _log_timestep(current_state)
-            current_state, post_processed_outputs = step_fn(
-                current_state,
-                post_processing_history[-1],
-            )
-            sim_error = check_for_errors(
-                runtime_params_provider.numerics,
-                current_state,
-                post_processed_outputs,
-            )
-            wall_clock_step_times.append(time.time() - step_start_time)
-            if sim_error != state.SimError.NO_ERROR:
-                sim_error.log_error()
-                break
-            else:
-                state_history.append(current_state)
-                post_processing_history.append(post_processed_outputs)
-                progress_ratio = (
-                    float(current_state.t) -
-                    runtime_params_provider.numerics.t_initial) / (
-                        runtime_params_provider.numerics.t_final -
-                        runtime_params_provider.numerics.t_initial)
-                pbar.n = int(progress_ratio * pbar.total)
-                pbar.set_description(f'Simulating (t={current_state.t:.5f})')
-                pbar.refresh()
-    if log_timestep_info and sim_error == state.SimError.NO_ERROR:
-        _log_timestep(current_state)
-    std_devs = 2  # Check if the first step is more than 2 std devs longer.
-    if wall_clock_step_times and wall_clock_step_times[0] > (
-            np.mean(wall_clock_step_times) +
-            std_devs * np.std(wall_clock_step_times)):
-        long_first_step = True
-        logging.info(
-            'The first step took more than %.1f std devs longer than other steps. '
-            'It likely was tracing and compiling the step_fn. It took %.2fs '
-            'of wall clock time.',
-            std_devs,
-            wall_clock_step_times[0],
-        )
-    else:
-        long_first_step = False
-
-    wall_clock_time_elapsed = time.time() - running_main_loop_start_time
-    simulation_time = state_history[-1].t - state_history[0].t
-    if long_first_step:
-        # Don't include the long first step in the total time logged.
-        wall_clock_time_elapsed -= wall_clock_step_times[0]
-    logging.info(
-        'Simulated %.2fs of physics in %.2fs of wall clock time.',
-        simulation_time,
-        wall_clock_time_elapsed,
-    )
-    return tuple(state_history), tuple(post_processing_history), sim_error
-
-
 def check_for_errors(
     numerics: numerics_lib.Numerics,
     output_state,
@@ -1549,14 +1464,84 @@ initial_state, post_processed_outputs = (
         step_fn=step_fn,
     ))
 
-state_history, post_processed_outputs_history, sim_error = run_loop(
-    runtime_params_provider=runtime_params_provider,
-    initial_state=initial_state,
-    initial_post_processed_outputs=post_processed_outputs,
-    step_fn=step_fn,
-    log_timestep_info=False,
-    progress_bar=False,
+initial_post_processed_outputs = post_processed_outputs
+log_timestep_info = False
+progress_bar = False
+running_main_loop_start_time = time.time()
+wall_clock_step_times = []
+current_state = initial_state
+state_history = [current_state]
+post_processing_history = [initial_post_processed_outputs]
+sim_error = state.SimError.NO_ERROR
+initial_runtime_params = runtime_params_provider(initial_state.t)
+time_step_calculator_params = initial_runtime_params.time_step_calculator
+with tqdm.tqdm(
+        total=
+        100,  # This makes it so that the progress bar measures a percentage
+        desc='Simulating',
+        disable=not progress_bar,
+        leave=True,
+) as pbar:
+    while step_fn.time_step_calculator.not_done(
+            current_state.t,
+            runtime_params_provider.numerics.t_final,
+            time_step_calculator_params,
+    ):
+        step_start_time = time.time()
+        if log_timestep_info:
+            _log_timestep(current_state)
+        current_state, post_processed_outputs = step_fn(
+            current_state,
+            post_processing_history[-1],
+        )
+        sim_error = check_for_errors(
+            runtime_params_provider.numerics,
+            current_state,
+            post_processed_outputs,
+        )
+        wall_clock_step_times.append(time.time() - step_start_time)
+        if sim_error != state.SimError.NO_ERROR:
+            sim_error.log_error()
+            break
+        else:
+            state_history.append(current_state)
+            post_processing_history.append(post_processed_outputs)
+            progress_ratio = (float(current_state.t) -
+                              runtime_params_provider.numerics.t_initial) / (
+                                  runtime_params_provider.numerics.t_final -
+                                  runtime_params_provider.numerics.t_initial)
+            pbar.n = int(progress_ratio * pbar.total)
+            pbar.set_description(f'Simulating (t={current_state.t:.5f})')
+            pbar.refresh()
+if log_timestep_info and sim_error == state.SimError.NO_ERROR:
+    _log_timestep(current_state)
+std_devs = 2  # Check if the first step is more than 2 std devs longer.
+if wall_clock_step_times and wall_clock_step_times[0] > (
+        np.mean(wall_clock_step_times) +
+        std_devs * np.std(wall_clock_step_times)):
+    long_first_step = True
+    logging.info(
+        'The first step took more than %.1f std devs longer than other steps. '
+        'It likely was tracing and compiling the step_fn. It took %.2fs '
+        'of wall clock time.',
+        std_devs,
+        wall_clock_step_times[0],
+    )
+else:
+    long_first_step = False
+
+wall_clock_time_elapsed = time.time() - running_main_loop_start_time
+simulation_time = state_history[-1].t - state_history[0].t
+if long_first_step:
+    # Don't include the long first step in the total time logged.
+    wall_clock_time_elapsed -= wall_clock_step_times[0]
+logging.info(
+    'Simulated %.2fs of physics in %.2fs of wall clock time.',
+    simulation_time,
+    wall_clock_time_elapsed,
 )
+state_history = tuple(state_history)
+post_processed_outputs_history = tuple(post_processing_history)
 
 state_history = StateHistory(
     state_history=state_history,
