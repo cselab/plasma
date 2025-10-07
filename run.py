@@ -269,47 +269,6 @@ class Geometry:
     _z_magnetic_axis: array_typing.FloatScalar | None
 
 
-def stack_geometries(geometries: Sequence[Geometry]) -> Geometry:
-    """Batch together a sequence of geometries.
-
-  Args:
-    geometries: A sequence of geometries to stack. The geometries must have the
-      same mesh, geometry type.
-
-  Returns:
-    A Geometry object, where each array attribute has an additional
-    leading axis (e.g. for the time dimension) compared to each Geometry in
-    the input sequence.
-  """
-    if not geometries:
-        raise ValueError('No geometries provided.')
-    # Ensure that all geometries have same mesh and are of same type.
-    first_geo = geometries[0]
-    torax_mesh = first_geo.torax_mesh
-    geometry_type = first_geo.geometry_type
-    for geometry in geometries[1:]:
-        if geometry.torax_mesh != torax_mesh:
-            raise ValueError('All geometries must have the same mesh.')
-        if geometry.geometry_type != geometry_type:
-            raise ValueError(
-                'All geometries must have the same geometry type.')
-
-    stacked_data = {}
-    for field in dataclasses.fields(first_geo):
-        field_name = field.name
-        field_value = getattr(first_geo, field_name)
-        # Stack stackable fields. Save first geo's value for non-stackable fields.
-        if isinstance(field_value,
-                      (array_typing.Array, array_typing.FloatScalar)):
-            field_values = [getattr(geo, field_name) for geo in geometries]
-            stacked_data[field_name] = np.stack(field_values)
-        else:
-            stacked_data[field_name] = field_value
-    # Create a new object with the stacked data with the same class (i.e.
-    # could be child classes of Geometry)
-    return first_geo.__class__(**stacked_data)
-
-
 def update_geometries_with_Phibdot(
     *,
     dt: chex.Numeric,
