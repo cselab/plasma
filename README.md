@@ -19,6 +19,14 @@ run_torax --config=iterhybrid_rampup.py --quit
 
 # hacking
 
+commit id: e2d8dab8
+
+```
+git clone --depth 1 git@github.com:google-deepmind/torax.git
+git add torax -A
+rm -rf torax/.git
+```
+
 ```
 python -m coverage run run.py
 python -m coverage html
