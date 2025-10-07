@@ -3,7 +3,6 @@ from collections.abc import Sequence
 from collections.abc import Set
 from torax._src.config import build_runtime_params
 from torax._src.config import numerics as numerics_lib
-from torax._src.config import runtime_params_slice
 from torax._src.core_profiles import convertors
 from torax._src.core_profiles import getters
 from torax._src.core_profiles import initialization
