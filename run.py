@@ -109,14 +109,7 @@ class TimeStepCalculator(abc.ABC):
         jax_utils.jit,
         static_argnames=['self'],
     )
-    def next_dt(
-        self,
-        t,
-        runtime_params,
-        geo,
-        core_profiles,
-        core_transport,
-    ):
+    def next_dt(self, t, runtime_params, geo, core_profiles, core_transport):
         dt = self._next_dt(
             runtime_params,
             geo,
@@ -136,13 +129,7 @@ class TimeStepCalculator(abc.ABC):
         return dt
 
     @abc.abstractmethod
-    def _next_dt(
-        self,
-        runtime_params,
-        geo,
-        core_profiles,
-        core_transport,
-    ):
+    def _next_dt(self, runtime_params, geo, core_profiles, core_transport):
         """Returns the next time step duration."""
 
     @abc.abstractmethod
