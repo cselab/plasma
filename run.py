@@ -1,7 +1,6 @@
 from absl import logging
 from collections.abc import Sequence
 from collections.abc import Set
-from torax._src.config import build_runtime_params
 from torax._src.config import numerics as numerics_lib
 from torax._src.core_profiles import convertors
 from torax._src.core_profiles import getters
@@ -67,6 +66,109 @@ import torax
 import treelib
 import typing_extensions
 import xarray as xr
+import dataclasses
+
+import chex
+import jax
+from torax._src import jax_utils
+from torax._src.config import numerics as numerics_lib
+from torax._src.config import runtime_params_slice
+from torax._src.core_profiles import profile_conditions as profile_conditions_lib
+from torax._src.core_profiles.plasma_composition import plasma_composition as plasma_composition_lib
+from torax._src.geometry import geometry
+from torax._src.geometry import geometry_provider as geometry_provider_lib
+from torax._src.mhd import pydantic_model as mhd_pydantic_model
+from torax._src.neoclassical import pydantic_model as neoclassical_pydantic_model
+from torax._src.pedestal_model import pydantic_model as pedestal_pydantic_model
+from torax._src.solver import pydantic_model as solver_pydantic_model
+from torax._src.sources import pydantic_model as sources_pydantic_model
+from torax._src.time_step_calculator import pydantic_model as time_step_calculator_pydantic_model
+from torax._src.torax_pydantic import model_config
+from torax._src.transport_model import pydantic_model as transport_pydantic_model
+import typing_extensions
+
+
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(frozen=True)
+class RuntimeParamsProvider:
+    """Provides a RuntimeParamsSlice to use during time t of the sim.
+
+  The RuntimeParams may change from time step to time step, so this
+  class interpolates any time-dependent params in the input config to the values
+  they should be at time t.
+
+  NOTE: In order to maintain consistency between the RuntimeParams
+  and the geometry, `get_consistent_runtime_params_and_geometry`
+  should be used to get a slice of the RuntimeParams and a
+  corresponding geometry.
+  """
+
+    sources: sources_pydantic_model.Sources
+    numerics: numerics_lib.Numerics
+    profile_conditions: profile_conditions_lib.ProfileConditions
+    plasma_composition: plasma_composition_lib.PlasmaComposition
+    transport_model: transport_pydantic_model.TransportConfig
+    solver: solver_pydantic_model.SolverConfig
+    pedestal: pedestal_pydantic_model.PedestalConfig
+    mhd: mhd_pydantic_model.MHD
+    neoclassical: neoclassical_pydantic_model.Neoclassical
+    time_step_calculator: time_step_calculator_pydantic_model.TimeStepCalculator
+
+    @classmethod
+    def from_config(
+        cls,
+        config: model_config.ToraxConfig,
+    ) -> typing_extensions.Self:
+        """Constructs a RuntimeParamsProvider from a ToraxConfig."""
+        return cls(
+            sources=config.sources,
+            numerics=config.numerics,
+            profile_conditions=config.profile_conditions,
+            plasma_composition=config.plasma_composition,
+            transport_model=config.transport,
+            solver=config.solver,
+            pedestal=config.pedestal,
+            mhd=config.mhd,
+            neoclassical=config.neoclassical,
+            time_step_calculator=config.time_step_calculator,
+        )
+
+    @jax_utils.jit
+    def __call__(
+        self,
+        t: chex.Numeric,
+    ) -> runtime_params_slice.RuntimeParams:
+        """Returns a runtime_params_slice.RuntimeParams to use during time t of the sim."""
+        return runtime_params_slice.RuntimeParams(
+            transport=self.transport_model.build_runtime_params(t),
+            solver=self.solver.build_runtime_params,
+            sources={
+                source_name: source_config.build_runtime_params(t)
+                for source_name, source_config in dict(self.sources).items()
+                if source_config is not None
+            },
+            plasma_composition=self.plasma_composition.build_runtime_params(t),
+            profile_conditions=self.profile_conditions.build_runtime_params(t),
+            numerics=self.numerics.build_runtime_params(t),
+            neoclassical=self.neoclassical.build_runtime_params(),
+            pedestal=self.pedestal.build_runtime_params(t),
+            mhd=self.mhd.build_runtime_params(t),
+            time_step_calculator=self.time_step_calculator.
+            build_runtime_params(),
+        )
+
+
+def get_consistent_runtime_params_and_geometry(
+    *,
+    t: chex.Numeric,
+    runtime_params_provider: RuntimeParamsProvider,
+    geometry_provider: geometry_provider_lib.GeometryProvider,
+) -> tuple[runtime_params_slice.RuntimeParams, geometry.Geometry]:
+    """Returns the runtime params and geometry for a given time."""
+    geo = geometry_provider(t)
+    runtime_params = runtime_params_provider(t=t)
+    return runtime_params_slice.make_ip_consistent(runtime_params, geo)
+
 
 TIME_INVARIANT = model_base.TIME_INVARIANT
 JAX_STATIC = model_base.JAX_STATIC
@@ -784,12 +886,11 @@ class SimulationStepFn:
         input_state,
         previous_post_processed_outputs,
     ):
-        runtime_params_t, geo_t = (
-            build_runtime_params.get_consistent_runtime_params_and_geometry(
-                t=input_state.t,
-                runtime_params_provider=self._runtime_params_provider,
-                geometry_provider=self._geometry_provider,
-            ))
+        runtime_params_t, geo_t = (get_consistent_runtime_params_and_geometry(
+            t=input_state.t,
+            runtime_params_provider=self._runtime_params_provider,
+            geometry_provider=self._geometry_provider,
+        ))
         explicit_source_profiles = source_profile_builders.build_source_profiles(
             runtime_params=runtime_params_t,
             geo=geo_t,
@@ -999,7 +1100,7 @@ def _get_geo_and_runtime_params_at_t_plus_dt_and_phibdot(
     geometry_provider,
 ):
     runtime_params_t_plus_dt, geo_t_plus_dt = (
-        build_runtime_params.get_consistent_runtime_params_and_geometry(
+        get_consistent_runtime_params_and_geometry(
             t=t + dt,
             runtime_params_provider=runtime_params_provider,
             geometry_provider=geometry_provider,
@@ -1221,8 +1322,7 @@ interpolated_param_2d.set_grid(torax_config, mesh, mode='relaxed')
 geometry_provider = torax_config.geometry.build_provider
 physics_models = torax_config.build_physics_models()
 solver = torax_config.solver.build_solver(physics_models=physics_models, )
-runtime_params_provider = (
-    build_runtime_params.RuntimeParamsProvider.from_config(torax_config))
+runtime_params_provider = (RuntimeParamsProvider.from_config(torax_config))
 step_fn = SimulationStepFn(
     solver=solver,
     time_step_calculator=torax_config.time_step_calculator.
@@ -1232,7 +1332,7 @@ step_fn = SimulationStepFn(
 )
 
 runtime_params_for_init, geo_for_init = (
-    build_runtime_params.get_consistent_runtime_params_and_geometry(
+    get_consistent_runtime_params_and_geometry(
         t=torax_config.numerics.t_initial,
         runtime_params_provider=runtime_params_provider,
         geometry_provider=geometry_provider,
