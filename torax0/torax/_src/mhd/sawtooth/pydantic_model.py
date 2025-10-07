@@ -17,7 +17,6 @@ import chex
 import pydantic
 from torax._src.mhd.sawtooth import runtime_params as sawtooth_runtime_params
 from torax._src.mhd.sawtooth import sawtooth_models
-from torax._src.mhd.sawtooth import simple_redistribution
 from torax._src.mhd.sawtooth import simple_trigger
 from torax._src.torax_pydantic import torax_pydantic
 
@@ -33,10 +32,6 @@ class SawtoothConfig(torax_pydantic.BaseModelFrozen):
 
   trigger_model: simple_trigger.SimpleTriggerConfig = pydantic.Field(
       discriminator='model_name'
-  )
-
-  redistribution_model: simple_redistribution.SimpleRedistributionConfig = (
-      pydantic.Field(discriminator='model_name')
   )
 
   crash_step_duration: torax_pydantic.Second = 1e-3
