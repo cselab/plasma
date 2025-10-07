@@ -1,6 +1,7 @@
 from absl import logging
 from collections.abc import Sequence
 from collections.abc import Set
+from jax import numpy as jnp
 from torax._src.config import numerics as numerics_lib
 from torax._src.config import runtime_params_slice
 from torax._src.core_profiles import convertors
@@ -9,12 +10,14 @@ from torax._src.core_profiles import initialization
 from torax._src.core_profiles import profile_conditions as profile_conditions_lib
 from torax._src.core_profiles import updaters
 from torax._src.core_profiles.plasma_composition import plasma_composition as plasma_composition_lib
+from torax._src.geometry import geometry
 from torax._src.geometry import geometry as geometry_lib
 from torax._src.geometry import geometry_provider as geometry_provider_lib
 from torax._src.geometry import pydantic_model as geometry_pydantic_model
 from torax._src import array_typing
 from torax._src import jax_utils
 from torax._src import state
+from torax._src import state as state_module
 from torax._src import version
 from torax._src import xnp
 from torax._src.mhd import base as mhd_model_lib
@@ -36,6 +39,8 @@ from torax._src.sources import source_profile_builders
 from torax._src.sources import source_profiles
 from torax._src.sources import source_profiles as source_profiles_lib
 from torax._src.time_step_calculator import pydantic_model as time_step_calculator_pydantic_model
+from torax._src.time_step_calculator import runtime_params as time_runtime_params
+from torax._src.time_step_calculator import time_step_calculator
 from torax._src.torax_pydantic import file_restart as file_restart_pydantic_model
 from torax._src.torax_pydantic import interpolated_param_1d
 from torax._src.torax_pydantic import interpolated_param_2d
@@ -50,6 +55,7 @@ from typing_extensions import Self
 from typing import Any, Final, Mapping, Sequence, TypeAlias
 from typing import Any, Mapping
 from typing import TypeAlias
+import abc
 import chex
 import copy
 import dataclasses
@@ -68,26 +74,6 @@ import torax
 import treelib
 import typing_extensions
 import xarray as xr
-
-import dataclasses
-
-import jax
-import abc
-import functools
-
-import jax
-from jax import numpy as jnp
-from torax._src import jax_utils
-from torax._src import state
-from torax._src.config import runtime_params_slice
-from torax._src.geometry import geometry
-from torax._src.time_step_calculator import runtime_params as time_runtime_params
-import jax
-from jax import numpy as jnp
-from torax._src import state as state_module
-from torax._src.config import runtime_params_slice
-from torax._src.geometry import geometry
-from torax._src.time_step_calculator import time_step_calculator
 
 
 class g:
