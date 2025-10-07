@@ -17,6 +17,12 @@ run_torax --config=basic_config.py --quit
 run_torax --config=iterhybrid_rampup.py --quit
 ```
 
+# hacking
+
+```
+python -m coverage run run.py
+```
+
 # Refs
 
 Van Mulders, S., Felici, F., Sauter, O., Citrin, J., Ho, A., Marin,
