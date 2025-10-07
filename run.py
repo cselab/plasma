@@ -746,31 +746,6 @@ class SimulationStepFn:
         output_state, post_processed_outputs = _step()
         return output_state, post_processed_outputs
 
-    def _sawtooth_step(self, runtime_params_t, geo_t, explicit_source_profiles,
-                       input_state, previous_post_processed_outputs):
-        assert runtime_params_t.mhd.sawtooth is not None
-        dt_crash = runtime_params_t.mhd.sawtooth.crash_step_duration
-
-        runtime_params_t_plus_crash_dt, geo_t, geo_t_plus_crash_dt = (
-            _get_geo_and_runtime_params_at_t_plus_dt_and_phibdot(
-                input_state.t,
-                dt_crash,
-                self._runtime_params_provider,
-                geo_t,
-                self._geometry_provider,
-            ))
-        output_state, post_processed_outputs = _sawtooth_step(
-            sawtooth_solver=self._sawtooth_solver,
-            runtime_params_t=runtime_params_t,
-            runtime_params_t_plus_crash_dt=runtime_params_t_plus_crash_dt,
-            geo_t=geo_t,
-            geo_t_plus_crash_dt=geo_t_plus_crash_dt,
-            explicit_source_profiles=explicit_source_profiles,
-            input_state=input_state,
-            input_post_processed_outputs=previous_post_processed_outputs,
-        )
-        return output_state, post_processed_outputs
-
     def step(
         self,
         dt,
@@ -993,47 +968,6 @@ def _finalize_outputs(t, dt, x_new, solver_numeric_outputs, geometry_t_plus_dt,
         previous_post_processed_outputs=input_post_processed_outputs,
     )
     return output_state, post_processed_outputs
-
-
-@functools.partial(
-    jax_utils.jit,
-    static_argnames=[
-        'sawtooth_solver',
-    ],
-)
-def _sawtooth_step(*, sawtooth_solver, runtime_params_t,
-                   runtime_params_t_plus_crash_dt, geo_t, geo_t_plus_crash_dt,
-                   explicit_source_profiles, input_state,
-                   input_post_processed_outputs):
-    # Asserts needed for linter.
-    assert runtime_params_t.mhd.sawtooth is not None
-    assert sawtooth_solver is not None
-    dt_crash = runtime_params_t.mhd.sawtooth.crash_step_duration
-
-    # Prepare core_profiles_t_plus_crash_dt with new boundary conditions
-    # and prescribed profiles if present.
-    core_profiles_t_plus_crash_dt = updaters.provide_core_profiles_t_plus_dt(
-        dt=dt_crash,
-        runtime_params_t=runtime_params_t,
-        runtime_params_t_plus_dt=runtime_params_t_plus_crash_dt,
-        geo_t_plus_dt=geo_t_plus_crash_dt,
-        core_profiles_t=input_state.core_profiles,
-    )
-
-    (
-        x_candidate,
-        solver_numeric_outputs,
-    ) = sawtooth_solver(
-        t=input_state.t,
-        dt=dt_crash,
-        runtime_params_t=runtime_params_t,
-        runtime_params_t_plus_dt=runtime_params_t_plus_crash_dt,
-        geo_t=geo_t,
-        geo_t_plus_dt=geo_t_plus_crash_dt,
-        core_profiles_t=input_state.core_profiles,
-        core_profiles_t_plus_dt=core_profiles_t_plus_crash_dt,
-        explicit_source_profiles=explicit_source_profiles,
-    )
 
 
 def _get_geo_and_runtime_params_at_t_plus_dt_and_phibdot(
