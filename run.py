@@ -90,8 +90,6 @@ ValidatedDefault = functools.partial(pydantic.Field, validate_default=True)
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class PhysicsModels:
-    """A container for all physics models."""
-
     source_models: source_models_lib.SourceModels = dataclasses.field(
         metadata=dict(static=True))
     transport_model: transport_model_lib.TransportModel = dataclasses.field(
@@ -175,10 +173,6 @@ INNER_SOLVER_ITERATIONS = "inner_solver_iterations"
 # Boolean array indicating whether the state corresponds to a
 # post-sawtooth-crash state.
 SAWTOOTH_CRASH = "sawtooth_crash"
-
-# Excluded coordinates from geometry since they are at the top DataTree level.
-# Exclude q_correction_factor as it is not an interesting quantity to save.
-# TODO(b/338033916): consolidate on either rho or rho_cell naming for cell grid
 EXCLUDED_GEOMETRY_NAMES = frozenset({
     RHO_FACE,
     RHO_CELL,
@@ -194,16 +188,12 @@ def _extend_cell_grid_to_boundaries(
     cell_var: array_typing.FloatVectorCell,
     face_var: array_typing.FloatVectorFace,
 ) -> array_typing.FloatVectorCellPlusBoundaries:
-    """Merge face+cell grids into single [left_face, cells, right_face] grid."""
-
     left_value = np.expand_dims(face_var[:, 0], axis=-1)
     right_value = np.expand_dims(face_var[:, -1], axis=-1)
-
     return np.concatenate([left_value, cell_var, right_value], axis=-1)
 
 
 class StateHistory:
-    """A history of the state of the simulation and its error state."""
 
     def __init__(
         self,
@@ -216,9 +206,6 @@ class StateHistory:
         if (not torax_config.restart and not torax_config.profile_conditions.
                 use_v_loop_lcfs_boundary_condition
                 and len(state_history) >= 2):
-            # For the Ip BC case, set v_loop_lcfs[0] to the same value as
-            # v_loop_lcfs[1] due the v_loop_lcfs timeseries being
-            # underconstrained
             state_history[0].core_profiles = dataclasses.replace(
                 state_history[0].core_profiles,
                 v_loop_lcfs=state_history[1].core_profiles.v_loop_lcfs,
@@ -255,87 +242,54 @@ class StateHistory:
 
     @property
     def torax_config(self) -> model_config.ToraxConfig:
-        """Returns the ToraxConfig used to run the simulation."""
         return self._torax_config
 
     @property
     def sim_error(self) -> state.SimError:
-        """Returns the simulation error state."""
         return self._sim_error
 
     @property
     def times(self) -> array_typing.Array:
-        """Returns the time of the simulation."""
         return self._times
 
     @property
     def rho_cell_norm(self) -> array_typing.FloatVectorCell:
-        """Returns the normalized toroidal coordinate on the cell grid."""
         return self._rho_cell_norm
 
     @property
     def rho_face_norm(self) -> array_typing.FloatVectorFace:
-        """Returns the normalized toroidal coordinate on the face grid."""
         return self._rho_face_norm
 
     @property
     def rho_norm(self) -> array_typing.FloatVectorCellPlusBoundaries:
-        """Returns the rho on the cell grid with the left and right face boundaries."""
         return self._rho_norm
 
     @property
     def geometries(self) -> Sequence[geometry_lib.Geometry]:
-        """Returns the geometries of the simulation."""
         return self._geometries
 
     @property
     def core_profiles(self) -> Sequence[state.CoreProfiles]:
-        """Returns the core profiles."""
         return self._core_profiles
 
     @property
     def source_profiles(self) -> Sequence[source_profiles_lib.SourceProfiles]:
-        """Returns the source profiles for the simulation."""
         return self._core_sources
 
     @property
     def core_transport(self) -> Sequence[state.CoreTransport]:
-        """Returns the core transport for the simulation."""
         return self._transport
 
     @property
     def solver_numeric_outputs(self) -> Sequence[state.SolverNumericOutputs]:
-        """Returns the solver numeric outputs."""
         return self._solver_numeric_outputs
 
     @property
     def post_processed_outputs(
         self, ) -> Sequence[post_processing.PostProcessedOutputs]:
-        """Returns the post processed outputs for the simulation."""
         return self._post_processed_outputs
 
     def simulation_output_to_xr(self) -> xr.DataTree:
-        """Build an xr.DataTree of the simulation output.
-
-    Returns:
-      A xr.DataTree containing a single top level xr.Dataset and four child
-      datasets. The top level dataset contains the following variables:
-        - time: The time of the simulation.
-        - rho_norm: The normalized toroidal coordinate on the cell grid with the
-            left and right face boundaries added.
-        - rho_face_norm: The normalized toroidal coordinate on the face grid.
-        - rho_cell_norm: The normalized toroidal coordinate on the cell grid.
-        - config: The ToraxConfig used to run the simulation serialized to JSON.
-      The child datasets contain the following variables:
-        - numerics: Contains data variables for numeric quantities to do with
-            the simulation.
-        - profiles: Contains data variables for 1D profiles.
-        - scalars: Contains data variables for scalars.
-    """
-        # Cleanup structure by excluding QeiInfo from core_sources altogether.
-        # Add attribute to dataset variables with explanation of contents + units.
-
-        # Get coordinate variables for dimensions ("time", "rho_face", "rho_cell")
         time = xr.DataArray(self.times, dims=[TIME], name=TIME)
         rho_face_norm = xr.DataArray(self.rho_face_norm,
                                      dims=[RHO_FACE_NORM],
@@ -356,7 +310,6 @@ class StateHistory:
             RHO_NORM: rho_norm,
         }
 
-        # Update dict with flattened StateHistory dataclass containers
         all_dicts = [
             self._save_core_profiles(),
             self._save_core_transport(),
@@ -430,7 +383,6 @@ class StateHistory:
         name: str,
         data: jax.Array | None,
     ) -> xr.DataArray | None:
-        """Packs the data into an xr.DataArray."""
         if data is None:
             return None
 
@@ -471,13 +423,8 @@ class StateHistory:
         return xr.DataArray(data, dims=dims, name=name)
 
     def _save_core_profiles(self, ) -> dict[str, xr.DataArray | None]:
-        """Saves the stacked core profiles to a dictionary of xr.DataArrays."""
         xr_dict = {}
         stacked_core_profiles = self._stacked_core_profiles
-
-        # Map from CoreProfiles attribute name to the desired output name.
-        # Needed for attributes that are not 1:1 with the output name.
-        # Other attributes will use the same name as in CoreProfiles
         output_name_map = {
             "psidot": V_LOOP,
             "sigma": SIGMA_PARALLEL,
@@ -493,35 +440,21 @@ class StateHistory:
 
         for field in dataclasses.fields(stacked_core_profiles):
             attr_name = field.name
-
-            # Skip impurity_fractions since we have not yet converged on the public
-            # API for individual impurity density extensions.
             if attr_name == "impurity_fractions":
                 continue
 
             attr_value = getattr(stacked_core_profiles, attr_name)
 
             output_key = output_name_map.get(attr_name, attr_name)
-
-            # Skip _face attributes if their cell counterpart exists;
-            # they are handled when the cell attribute is processed.
             if attr_name.endswith("_face") and (attr_name.removesuffix("_face")
                                                 in core_profile_field_names):
                 continue
-
-            # Special handling for A_impurity for backward compatibility with V1
-            # API for default 'fractions' impurity mode where A_impurity was a scalar.
-            # TODO(b/434175938): Remove this once we move to V2
             if attr_name == "A_impurity":
-                # Check if A_impurity is constant across the radial dimension for all
-                # time steps. Need slicing (not indexing) to avoid a broadcasting error.
                 is_constant = np.all(attr_value == attr_value[..., 0:1],
                                      axis=-1)
                 if np.all(is_constant):
-                    # Save as a scalar time-series. Take the value at the first point.
                     data_to_save = attr_value[..., 0]
                 else:
-                    # Save as a profile.
                     face_value = getattr(stacked_core_profiles,
                                          "A_impurity_face")
                     data_to_save = _extend_cell_grid_to_boundaries(
@@ -531,12 +464,10 @@ class StateHistory:
                 continue
 
             if hasattr(attr_value, "cell_plus_boundaries"):
-                # Handles stacked CellVariable-like objects.
                 data_to_save = attr_value.cell_plus_boundaries()
             else:
                 face_attr_name = f"{attr_name}_face"
                 if face_attr_name in core_profile_field_names:
-                    # Combine cell and edge face values.
                     face_value = getattr(stacked_core_profiles, face_attr_name)
                     data_to_save = _extend_cell_grid_to_boundaries(
                         attr_value, face_value)
@@ -546,14 +477,12 @@ class StateHistory:
             xr_dict[output_key] = self._pack_into_data_array(
                 output_key, data_to_save)
 
-        # Handle derived quantities
         Ip_data = stacked_core_profiles.Ip_profile_face[..., -1]
         xr_dict[IP] = self._pack_into_data_array(IP, Ip_data)
 
         return xr_dict
 
     def _save_core_transport(self, ) -> dict[str, xr.DataArray | None]:
-        """Saves the core transport to a dict."""
         xr_dict = {}
         core_transport = self._stacked_core_transport
 
@@ -590,7 +519,6 @@ class StateHistory:
         return xr_dict
 
     def _save_core_sources(self, ) -> dict[str, xr.DataArray | None]:
-        """Saves the core sources to a dict."""
         xr_dict = {}
 
         xr_dict[qei_source_lib.QeiSource.SOURCE_NAME] = (
@@ -602,8 +530,6 @@ class StateHistory:
             self._stacked_core_sources.bootstrap_current.j_bootstrap,
             self._stacked_core_sources.bootstrap_current.j_bootstrap_face,
         )
-
-        # Add source profiles with suffixes indicating which profile they affect.
         for profile in self._stacked_core_sources.T_i:
             if profile == "fusion":
                 xr_dict["p_alpha_i"] = self._stacked_core_sources.T_i[profile]
@@ -629,19 +555,15 @@ class StateHistory:
         return xr_dict
 
     def _save_post_processed_outputs(self, ) -> dict[str, xr.DataArray | None]:
-        """Saves the post processed outputs to a dict."""
         xr_dict = {}
         for field in dataclasses.fields(self._stacked_post_processed_outputs):
             attr_name = field.name
-
-            # The impurity_radiation is structured differently and handled separately.
             if attr_name == "impurity_species":
                 continue
 
             attr_value = getattr(self._stacked_post_processed_outputs,
                                  attr_name)
             if hasattr(attr_value, "cell_plus_boundaries"):
-                # Handles stacked CellVariable-like objects.
                 data_to_save = attr_value.cell_plus_boundaries()
             else:
                 data_to_save = attr_value
@@ -663,11 +585,8 @@ class StateHistory:
         return xr_dict
 
     def _save_geometry(self, ) -> dict[str, xr.DataArray]:
-        """Save geometry to a dict. We skip over hires and non-array quantities."""
         xr_dict = {}
         geometry_attributes = dataclasses.asdict(self._stacked_geometry)
-
-        # Get the variables from dataclass fields.
         for field_name, data in geometry_attributes.items():
             if ("hires" in field_name or
                 (field_name.endswith("_face")
@@ -698,11 +617,8 @@ class StateHistory:
             )
             if data_array is not None:
                 xr_dict[field_name] = data_array
-
-        # Get variables from property methods
         geometry_properties = inspect.getmembers(type(self._stacked_geometry))
         property_names = set([name for name, _ in geometry_properties])
-
         for name, value in geometry_properties:
             # Skip over saving any variables that are named *_face.
             if (name.endswith("_face")
@@ -731,20 +647,11 @@ class StateHistory:
 
 @enum.unique
 class GeometryType(enum.IntEnum):
-    """Integer enum for geometry type.
-
-  This type can be used within JAX expressions to access the geometry type
-  without having to call isinstance.
-  """
-
     CIRCULAR = 0
     CHEASE = 1
     FBT = 2
     EQDSK = 3
     IMAS = 4
-
-
-# pylint: disable=invalid-name
 
 
 @jax.tree_util.register_dataclass
@@ -803,24 +710,6 @@ def update_geometries_with_Phibdot(
     geo_t: Geometry,
     geo_t_plus_dt: Geometry,
 ) -> tuple[Geometry, Geometry]:
-    """Update Phibdot in the geometry dataclasses used in the time interval.
-
-  Phibdot is used in calc_coeffs to calculate terms related to time-dependent
-  geometry. It should be set to be the same for geo_t and geo_t_plus_dt for
-  each given time interval. This means that geo_t_plus_dt.Phibdot will not
-  necessarily be the same as the geo_t.Phibdot at the next time step.
-
-  Args:
-    dt: Time step duration.
-    geo_t: The geometry of the torus during this time step of the simulation.
-    geo_t_plus_dt: The geometry of the torus during the next time step of the
-      simulation.
-
-  Returns:
-    Tuple containing:
-      - The geometry of the torus during this time step of the simulation.
-      - The geometry of the torus during the next time step of the simulation.
-  """
     Phibdot = (geo_t_plus_dt.Phi_b - geo_t.Phi_b) / dt
     geo_t = dataclasses.replace(geo_t, Phi_b_dot=Phibdot)
     geo_t_plus_dt = dataclasses.replace(geo_t_plus_dt, Phi_b_dot=Phibdot)
@@ -957,10 +846,6 @@ class SimulationStepFn:
                 runtime_params_provider=self._runtime_params_provider,
                 geometry_provider=self._geometry_provider,
             ))
-
-        # This only computes sources set to explicit in the
-        # SourceConfig. All implicit sources will have their profiles
-        # set to 0.
         explicit_source_profiles = source_profile_builders.build_source_profiles(
             runtime_params=runtime_params_t,
             geo=geo_t,
@@ -1003,15 +888,8 @@ class SimulationStepFn:
         def cond_fun(inputs):
             next_dt, output = inputs
             solver_outputs = output[2]
-
-            # Check for NaN in the next dt to avoid a recursive loop.
             is_nan_next_dt = xnp.isnan(next_dt)
-
-            # If the solver did not converge we need to make a new step.
             solver_did_not_converge = solver_outputs.solver_error_state == 1
-
-            # If t + dt  is exactly the final time we may need a smaller step than
-            # min_dt to exactly reach the final time.
             if runtime_params_t.numerics.exact_t_final:
                 at_exact_t_final = xnp.allclose(
                     input_state.t + next_dt,
@@ -1024,9 +902,6 @@ class SimulationStepFn:
 
             take_another_step = xnp.cond(
                 solver_did_not_converge,
-                # If the solver did not converge then we check if we are at the exact
-                # final time and should take a smaller step. If not we also check if
-                # the next dt is too small, if so we should end the step.
                 lambda: xnp.cond(at_exact_t_final, lambda: True, lambda:
                                  ~next_dt_too_small),
                 lambda: False,
@@ -1037,7 +912,6 @@ class SimulationStepFn:
         def body_fun(inputs):
             dt, output = inputs
             old_solver_outputs = output[2]
-
             runtime_params_t_plus_dt, geo_t_with_phibdot, geo_t_plus_dt = (
                 _get_geo_and_runtime_params_at_t_plus_dt_and_phibdot(
                     input_state.t,
@@ -1054,8 +928,6 @@ class SimulationStepFn:
                 geo_t_plus_dt=geo_t_plus_dt,
                 core_profiles_t=input_state.core_profiles,
             )
-            # The solver returned state is still "intermediate" since the CoreProfiles
-            # need to be updated by the evolved CellVariables in x_new
             x_new, solver_numeric_outputs = self._solver(
                 t=input_state.t,
                 dt=dt,
@@ -1096,8 +968,6 @@ class SimulationStepFn:
                         input_state.core_profiles, evolving_names),
                     initial_dt,
                     state.SolverNumericOutputs(
-                        # The solver has not converged yet as we have not performed
-                        # any steps yet.
                         solver_error_state=1,
                         outer_solver_iterations=0,
                         inner_solver_iterations=0,
