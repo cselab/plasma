@@ -38,7 +38,6 @@ from torax._src.torax_pydantic import file_restart as file_restart_pydantic_mode
 from torax._src.torax_pydantic import interpolated_param_1d
 from torax._src.torax_pydantic import interpolated_param_2d
 from torax._src.torax_pydantic import model_base
-from torax._src.torax_pydantic import model_config
 from torax._src.torax_pydantic import pydantic_types
 from torax._src.transport_model import pydantic_model as transport_model_pydantic_model
 from torax._src.transport_model import transport_coefficients_builder
@@ -83,7 +82,6 @@ from torax._src.pedestal_model import pydantic_model as pedestal_pydantic_model
 from torax._src.solver import pydantic_model as solver_pydantic_model
 from torax._src.sources import pydantic_model as sources_pydantic_model
 from torax._src.time_step_calculator import pydantic_model as time_step_calculator_pydantic_model
-from torax._src.torax_pydantic import model_config
 from torax._src.transport_model import pydantic_model as transport_pydantic_model
 import typing_extensions
 
@@ -115,11 +113,8 @@ class RuntimeParamsProvider:
     time_step_calculator: time_step_calculator_pydantic_model.TimeStepCalculator
 
     @classmethod
-    def from_config(
-        cls,
-        config: model_config.ToraxConfig,
+    def from_config(cls, config
     ) -> typing_extensions.Self:
-        """Constructs a RuntimeParamsProvider from a ToraxConfig."""
         return cls(
             sources=config.sources,
             numerics=config.numerics,
@@ -298,10 +293,9 @@ class StateHistory:
     def __init__(
         self,
         state_history,
-        post_processed_outputs_history: tuple[
-            post_processing.PostProcessedOutputs, ...],
-        sim_error: state.SimError,
-        torax_config: model_config.ToraxConfig,
+        post_processed_outputs_history,
+        sim_error,
+        torax_config
     ):
         if (not torax_config.restart and not torax_config.profile_conditions.
                 use_v_loop_lcfs_boundary_condition
@@ -341,7 +335,7 @@ class StateHistory:
         self._rho_norm = np.concatenate([[0.0], self.rho_cell_norm, [1.0]])
 
     @property
-    def torax_config(self) -> model_config.ToraxConfig:
+    def torax_config(self):
         return self._torax_config
 
     @property
