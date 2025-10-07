@@ -28,7 +28,6 @@ import os
 from torax._src import array_typing
 from torax._src import state
 from torax._src.geometry import geometry as geometry_lib
-from torax._src.orchestration import sim_state
 from torax._src.output_tools import impurity_radiation
 from torax._src.output_tools import post_processing
 from torax._src.sources import qei_source as qei_source_lib
@@ -210,7 +209,7 @@ class StateHistory:
 
   def __init__(
       self,
-      state_history: tuple[sim_state.ToraxSimState, ...],
+      state_history,
       post_processed_outputs_history: tuple[
           post_processing.PostProcessedOutputs, ...
       ],

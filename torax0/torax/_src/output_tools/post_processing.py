@@ -29,7 +29,6 @@ from torax._src import state
 from torax._src.config import runtime_params_slice
 from torax._src.fvm import cell_variable
 from torax._src.geometry import geometry
-from torax._src.orchestration import sim_state as sim_state_lib
 from torax._src.output_tools import impurity_radiation
 from torax._src.output_tools import safety_factor_fit
 from torax._src.physics import formulas
@@ -533,7 +532,7 @@ def _calculate_integrated_sources(
 
 @jax_utils.jit
 def make_post_processed_outputs(
-    sim_state: sim_state_lib.ToraxSimState,
+    sim_state,
     runtime_params: runtime_params_slice.RuntimeParams,
     previous_post_processed_outputs: PostProcessedOutputs | None = None,
 ) -> PostProcessedOutputs:
