@@ -35,7 +35,6 @@ from torax._src.sources import source_profile_builders
 from torax._src.sources import source_profiles
 from torax._src.sources import source_profiles as source_profiles_lib
 from torax._src.time_step_calculator import pydantic_model as time_step_calculator_pydantic_model
-from torax._src.time_step_calculator import time_step_calculator as ts
 from torax._src.torax_pydantic import file_restart as file_restart_pydantic_model
 from torax._src.torax_pydantic import interpolated_param_1d
 from torax._src.torax_pydantic import interpolated_param_2d
@@ -776,7 +775,7 @@ class SimulationStepFn:
         return self._solver
 
     @property
-    def time_step_calculator(self) -> ts.TimeStepCalculator:
+    def time_step_calculator(self):
         return self._time_step_calculator
 
     @xnp.jit
