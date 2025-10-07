@@ -20,8 +20,6 @@ import os
 # pylint: disable=g-importing-member
 import jax
 from torax._src import version
-from torax._src.config.config_loader import build_torax_config_from_file
-from torax._src.config.config_loader import import_module
 from torax._src.geometry.geometry import Geometry
 from torax._src.output_tools.output import StateHistory
 from torax._src.output_tools.post_processing import PostProcessedOutputs
