@@ -1130,17 +1130,6 @@ class ToraxConfig(BaseModelFrozen):
     def _check_psidot_and_evolve_current(self) -> typing_extensions.Self:
         return self
 
-    def update_fields(self, x: Mapping[str, Any]):
-        old_mesh = self.geometry.build_provider.torax_mesh
-        self._update_fields(x)
-        new_mesh = self.geometry.build_provider.torax_mesh
-        if old_mesh != new_mesh:
-            for model in self.submodels:
-                model.clear_cached_properties()
-            torax_pydantic.set_grid(self, new_mesh, mode='force')
-        else:
-            torax_pydantic.set_grid(self, new_mesh, mode='relaxed')
-
     @pydantic.model_validator(mode='after')
     def _set_grid(self) -> Self:
         mesh = self.geometry.build_provider.torax_mesh
