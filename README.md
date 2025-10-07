@@ -22,13 +22,13 @@ run_torax --config=iterhybrid_rampup.py --quit
 commit id: e2d8dab8
 
 ```
-git clone --depth 1 git@github.com:google-deepmind/torax.git
-git add torax -A
-rm -rf torax/.git
+git clone --depth 1 -b v1.1.1 git@github.com:google-deepmind/torax.git torax0
+rm -rf torax0/.git
+git add torax0 -A
 ```
 
 ```
-python3 -m pip install -e ./torax
+python3 -m pip install -e ./torax0
 python -m coverage run run.py
 python -m coverage html
 ```
