@@ -928,7 +928,6 @@ def check_for_errors(
         return post_processed_outputs.check_for_errors()
 
 
-@jax.tree_util.register_pytree_node_class
 class SimulationStepFn:
 
     def __init__(self, solver, time_step_calculator, runtime_params_provider,
