@@ -329,49 +329,6 @@ class ToraxSimState:
     def has_nan(self) -> bool:
         return any([np.any(np.isnan(x)) for x in jax.tree.leaves(self)])
 
-
-def _log_nans(inputs: ToraxSimState, ) -> None:
-    path_vals, _ = jax.tree.flatten_with_path(inputs)
-    nan_count = 0
-    for path, value in path_vals:
-        if np.any(np.isnan(value)):
-            logging.info("Found NaNs in sim_state%s",
-                         jax.tree_util.keystr(path))
-            nan_count += 1
-    if nan_count >= 10:
-        logging.info(
-            """\nA common cause of widespread NaNs is negative densities or
-        temperatures evolving during the solver step. This often arises through
-        physical reasons like radiation collapse, or unphysical configuration
-        such as impurity densities incompatible with physical quasineutrality.
-        Check the output file for near-zero temperatures or densities at the
-        last valid step.""")
-
-
-def _log_negative_profile_names(inputs: state.CoreProfiles) -> None:
-    path_vals, _ = jax.tree.flatten_with_path(inputs)
-    for path, value in path_vals:
-        if np.any(np.less(value, 0.0)):
-            logging.info("Found negative value in %s",
-                         jax.tree_util.keystr(path))
-
-
-def safe_load_dataset(filepath: str) -> xr.DataTree:
-    with open(filepath, "rb") as f:
-        with xr.open_datatree(f) as dt_open:
-            data_tree = dt_open.compute()
-    return data_tree
-
-
-def load_state_file(filepath: str, ) -> xr.DataTree:
-    """Loads a state file from a filepath."""
-    if os.path.exists(filepath):
-        data_tree = safe_load_dataset(filepath)
-        logging.info("Loading state file %s", filepath)
-        return data_tree
-    else:
-        raise ValueError(f"File {filepath} does not exist.")
-
 def get_initial_state_and_post_processed_outputs(
     t,
     runtime_params_provider,
