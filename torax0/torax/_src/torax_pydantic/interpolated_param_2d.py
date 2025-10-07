@@ -60,10 +60,6 @@ class Grid1D(model_base.BaseModelFrozen):
   def __eq__(self, other: typing_extensions.Self) -> bool:
     return self.nx == other.nx and self.dx == other.dx
 
-  def __hash__(self) -> int:
-    return hash((self.nx, self.dx))
-
-
 class TimeVaryingArray(model_base.BaseModelFrozen):
   """Base class for time interpolated array types.
 
