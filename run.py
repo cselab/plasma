@@ -9,7 +9,6 @@ from torax._src.core_profiles import initialization
 from torax._src.core_profiles import profile_conditions as profile_conditions_lib
 from torax._src.core_profiles import updaters
 from torax._src.core_profiles.plasma_composition import plasma_composition as plasma_composition_lib
-from torax._src.geometry import geometry
 from torax._src.geometry import geometry as geometry_lib
 from torax._src.geometry import geometry_provider as geometry_provider_lib
 from torax._src.geometry import pydantic_model as geometry_pydantic_model
@@ -127,11 +126,10 @@ class RuntimeParamsProvider:
 
 def get_consistent_runtime_params_and_geometry(
     *,
-    t: chex.Numeric,
-    runtime_params_provider: RuntimeParamsProvider,
-    geometry_provider: geometry_provider_lib.GeometryProvider,
-) -> tuple[runtime_params_slice.RuntimeParams, geometry.Geometry]:
-    """Returns the runtime params and geometry for a given time."""
+    t,
+    runtime_params_provider,
+    geometry_provider
+):
     geo = geometry_provider(t)
     runtime_params = runtime_params_provider(t=t)
     return runtime_params_slice.make_ip_consistent(runtime_params, geo)
