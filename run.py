@@ -78,45 +78,28 @@ class g:
     pass
 
 
-@jax.tree_util.register_dataclass
-@dataclasses.dataclass(frozen=True)
-class RuntimeParams:
-    tolerance: float
+def not_done(t, t_final):
+    return t < (t_final - g.tolerance)
 
 
-class ChiTimeStepCalculator:
-
-    def not_done(self, t, t_final):
-        return t < (t_final - g.tolerance)
-
-    @functools.partial(
-        jax_utils.jit,
-        static_argnames=['self'],
+def next_dt(t, runtime_params, geo, core_profiles, core_transport):
+    chi_max = core_transport.chi_max(geo)
+    basic_dt = (3.0 / 4.0) * (geo.drho_norm**2) / chi_max
+    dt = jnp.minimum(
+        runtime_params.numerics.chi_timestep_prefactor * basic_dt,
+        runtime_params.numerics.max_dt,
     )
-    def next_dt(self, t, runtime_params, geo, core_profiles, core_transport):
-        chi_max = core_transport.chi_max(geo)
-        basic_dt = (3.0 / 4.0) * (geo.drho_norm**2) / chi_max
-        dt = jnp.minimum(
-            runtime_params.numerics.chi_timestep_prefactor * basic_dt,
-            runtime_params.numerics.max_dt,
-        )
-        crosses_t_final = (t < runtime_params.numerics.t_final) * (
-            t + dt > runtime_params.numerics.t_final)
-        dt = jax.lax.select(
-            jnp.logical_and(
-                runtime_params.numerics.exact_t_final,
-                crosses_t_final,
-            ),
-            runtime_params.numerics.t_final - t,
-            dt,
-        )
-        return dt
-
-    def __eq__(self, other):
-        return isinstance(other, type(self))
-
-    def __hash__(self):
-        return hash(type(self))
+    crosses_t_final = (t < runtime_params.numerics.t_final) * (
+        t + dt > runtime_params.numerics.t_final)
+    dt = jax.lax.select(
+        jnp.logical_and(
+            runtime_params.numerics.exact_t_final,
+            crosses_t_final,
+        ),
+        runtime_params.numerics.t_final - t,
+        dt,
+    )
+    return dt
 
 
 @jax.tree_util.register_dataclass
@@ -450,7 +433,6 @@ class StateHistory:
             dataset=xr.Dataset(
                 data_vars=None,
                 coords=coords,
-                attrs={"config": self.torax_config.model_dump_json()},
             ),
         )
 
@@ -869,10 +851,8 @@ def check_for_errors(
 
 class SimulationStepFn:
 
-    def __init__(self, solver, time_step_calculator, runtime_params_provider,
-                 geometry_provider):
+    def __init__(self, solver, runtime_params_provider, geometry_provider):
         self._solver = solver
-        self._time_step_calculator = time_step_calculator
         self._geometry_provider = geometry_provider
         self._runtime_params_provider = runtime_params_provider
 
@@ -926,7 +906,7 @@ class SimulationStepFn:
         previous_post_processed_outputs,
     ):
         evolving_names = runtime_params_t.numerics.evolving_names
-        initial_dt = g.ts.next_dt(
+        initial_dt = next_dt(
             input_state.t,
             runtime_params_t,
             geo_t,
@@ -1320,7 +1300,6 @@ CONFIG = {
     },
 }
 
-g.ts = ChiTimeStepCalculator()
 g.tolerance = 1e-7
 
 torax_config = ToraxConfig.from_dict(CONFIG)
@@ -1333,7 +1312,6 @@ solver = torax_config.solver.build_solver(physics_models=physics_models, )
 runtime_params_provider = (RuntimeParamsProvider.from_config(torax_config))
 step_fn = SimulationStepFn(
     solver=solver,
-    time_step_calculator=ChiTimeStepCalculator(),
     geometry_provider=geometry_provider,
     runtime_params_provider=runtime_params_provider,
 )
@@ -1358,7 +1336,7 @@ state_history = [current_state]
 post_processing_history = [initial_post_processed_outputs]
 sim_error = state.SimError.NO_ERROR
 initial_runtime_params = runtime_params_provider(initial_state.t)
-while g.ts.not_done(current_state.t, runtime_params_provider.numerics.t_final):
+while not_done(current_state.t, runtime_params_provider.numerics.t_final):
     current_state, post_processed_outputs = step_fn(
         current_state,
         post_processing_history[-1],
@@ -1379,3 +1357,4 @@ state_history = StateHistory(
 
 data_tree = state_history.simulation_output_to_xr()
 data_tree.to_netcdf("run.nc")
+print(data_tree)
