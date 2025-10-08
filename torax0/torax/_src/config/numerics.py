@@ -66,27 +66,7 @@ class Numerics(torax_pydantic.BaseModelFrozen):
 
     @pydantic.model_validator(mode='after')
     def model_validation(self) -> Self:
-        if self.t_initial > self.t_final:
-            raise ValueError(
-                't_initial must be less than or equal to t_final. '
-                f't_initial: {self.t_initial}, t_final: {self.t_final}')
-        if self.min_dt > self.max_dt:
-            raise ValueError('max_dt must be greater than or equal to min_dt. '
-                             f'max_dt: {self.max_dt}, min_dt: {self.min_dt}')
         return self
-
-    @property
-    def evolving_names(self) -> tuple[str, ...]:
-        evolving_names = []
-        if self.evolve_ion_heat:
-            evolving_names.append('T_i')
-        if self.evolve_electron_heat:
-            evolving_names.append('T_e')
-        if self.evolve_current:
-            evolving_names.append('psi')
-        if self.evolve_density:
-            evolving_names.append('n_e')
-        return tuple(evolving_names)
 
     def build_runtime_params(self, t: chex.Numeric) -> RuntimeParams:
         return RuntimeParams(
