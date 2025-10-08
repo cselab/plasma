@@ -990,12 +990,11 @@ def get_updated_electron_density(
         profile_conditions_params.nbar * nGW,
         profile_conditions_params.nbar,
     )
-    nbar_from_n_e_face_inner = (
-        _trapz(n_e_face[:-1], geo.R_out_face[:-1]) / a_minor_out)
+    nbar_from_n_e_face_inner = (_trapz(n_e_face[:-1], geo.R_out_face[:-1]) /
+                                a_minor_out)
     dr_edge = geo.R_out_face[-1] - geo.R_out_face[-2]
     C = (target_nbar - 0.5 * n_e_face[-1] * dr_edge / a_minor_out) / (
-        nbar_from_n_e_face_inner +
-        0.5 * n_e_face[-2] * dr_edge / a_minor_out)
+        nbar_from_n_e_face_inner + 0.5 * n_e_face[-2] * dr_edge / a_minor_out)
     n_e_value = C * n_e_value
     n_e = cell_variable.CellVariable(
         value=n_e_value,
@@ -2889,13 +2888,10 @@ class StateHistory:
 
     def __init__(self, state_history, post_processed_outputs_history,
                  sim_error, torax_config):
-        if (not torax_config.restart and not torax_config.profile_conditions.
-                use_v_loop_lcfs_boundary_condition
-                and len(state_history) >= 2):
-            state_history[0].core_profiles = dataclasses.replace(
-                state_history[0].core_profiles,
-                v_loop_lcfs=state_history[1].core_profiles.v_loop_lcfs,
-            )
+        state_history[0].core_profiles = dataclasses.replace(
+            state_history[0].core_profiles,
+            v_loop_lcfs=state_history[1].core_profiles.v_loop_lcfs,
+        )
         self._sim_error = sim_error
         self._torax_config = torax_config
         self._post_processed_outputs = post_processed_outputs_history
@@ -3030,10 +3026,6 @@ class StateHistory:
                 coords=coords,
             ),
         )
-        if (self.torax_config.restart is not None
-                and self.torax_config.restart.stitch):
-            data_tree = stitch_state_files(self.torax_config.restart,
-                                           data_tree)
         return data_tree
 
     def _pack_into_data_array(
@@ -3654,7 +3646,6 @@ class ToraxConfig(BaseModelFrozen):
     transport: TransportConfig = pydantic.Field(discriminator='model_name')
     pedestal: pedestal_pydantic_model.PedestalConfig = pydantic.Field(
         discriminator='model_name')
-    restart: FileRestart | None = pydantic.Field(default=None)
 
     def build_physics_models(self):
         return PhysicsModels(
@@ -3663,6 +3654,7 @@ class ToraxConfig(BaseModelFrozen):
             transport_model=self.transport.build_transport_model(),
             neoclassical_models=self.neoclassical.build_models(),
         )
+
 
 CONFIG = {
     'plasma_composition': {

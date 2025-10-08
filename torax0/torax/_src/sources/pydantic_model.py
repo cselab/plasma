@@ -2,7 +2,6 @@ import copy
 from typing import Any
 import immutabledict
 import pydantic
-from torax._src.sources import base
 from torax._src.sources import fusion_heat_source as fusion_heat_source_lib
 from torax._src.sources import gas_puff_source as gas_puff_source_lib
 from torax._src.sources import generic_current_source as generic_current_source_lib
