@@ -31,7 +31,6 @@ from torax._src.pedestal_model import pedestal_model as pedestal_model_lib
 from torax._src.pedestal_model import pydantic_model as pedestal_pydantic_model
 from torax._src.physics import formulas
 from torax._src.solver import pydantic_model as solver_pydantic_model
-from torax._src.solver import solver as solver_lib
 from torax._src.sources import pydantic_model as sources_pydantic_model
 from torax._src.sources import qei_source as qei_source_lib
 from torax._src.sources import source_models as source_models_lib
@@ -782,7 +781,7 @@ class ToraxSimState:
 
 
 def _get_initial_state(runtime_params, geo, step_fn):
-    physics_models = step_fn.solver.physics_models
+    physics_models = g.solver.physics_models
     initial_core_profiles = initialization.initial_core_profiles(
         runtime_params,
         geo,
@@ -844,14 +843,9 @@ def check_for_errors(
 
 class SimulationStepFn:
 
-    def __init__(self, solver, runtime_params_provider, geometry_provider):
-        self._solver = solver
+    def __init__(self, runtime_params_provider, geometry_provider):
         self._geometry_provider = geometry_provider
         self._runtime_params_provider = runtime_params_provider
-
-    @property
-    def solver(self):
-        return self._solver
 
     @xnp.jit
     def __call__(
@@ -868,9 +862,8 @@ class SimulationStepFn:
             runtime_params=runtime_params_t,
             geo=geo_t,
             core_profiles=input_state.core_profiles,
-            source_models=self._solver.physics_models.source_models,
-            neoclassical_models=self._solver.physics_models.
-            neoclassical_models,
+            source_models=g.solver.physics_models.source_models,
+            neoclassical_models=g.solver.physics_models.neoclassical_models,
             explicit=True,
         )
 
@@ -946,7 +939,7 @@ class SimulationStepFn:
                 geo_t_plus_dt=geo_t_plus_dt,
                 core_profiles_t=input_state.core_profiles,
             )
-            x_new, solver_numeric_outputs = self._solver(
+            x_new, solver_numeric_outputs = g.solver(
                 t=input_state.t,
                 dt=dt,
                 runtime_params_t=runtime_params_t,
@@ -1007,7 +1000,7 @@ class SimulationStepFn:
             core_profiles_t=input_state.core_profiles,
             core_profiles_t_plus_dt=result[5],
             explicit_source_profiles=explicit_source_profiles,
-            physics_models=self._solver.physics_models,
+            physics_models=g.solver.physics_models,
             evolving_names=evolving_names,
             input_post_processed_outputs=previous_post_processed_outputs,
         )
@@ -1290,11 +1283,10 @@ mesh = torax_config.geometry.build_provider.torax_mesh
 interpolated_param_2d.set_grid(torax_config, mesh, mode='relaxed')
 
 geometry_provider = torax_config.geometry.build_provider
-physics_models = torax_config.build_physics_models()
-solver = torax_config.solver.build_solver(physics_models=physics_models, )
+g.physics_models = torax_config.build_physics_models()
+g.solver = torax_config.solver.build_solver(physics_models=g.physics_models)
 runtime_params_provider = (RuntimeParamsProvider.from_config(torax_config))
 step_fn = SimulationStepFn(
-    solver=solver,
     geometry_provider=geometry_provider,
     runtime_params_provider=runtime_params_provider,
 )
