@@ -425,65 +425,6 @@ def theta_method_block_residual(
   residual = lhs - rhs
   return residual
 
-
-@functools.partial(
-    jax_utils.jit,
-    static_argnames=[
-        'evolving_names',
-    ],
-)
-def theta_method_block_loss(
-    x_new_guess_vec: jax.Array,
-    dt: jax.Array,
-    runtime_params_t_plus_dt: runtime_params_slice.RuntimeParams,
-    geo_t_plus_dt: geometry.Geometry,
-    x_old: tuple[cell_variable.CellVariable, ...],
-    core_profiles_t_plus_dt: state.CoreProfiles,
-    explicit_source_profiles: source_profiles.SourceProfiles,
-    physics_models: physics_models_lib.PhysicsModels,
-    coeffs_old: Block1DCoeffs,
-    evolving_names: tuple[str, ...],
-) -> jax.Array:
-  """Loss for the optimizer method of nonlinear solution.
-
-  Args:
-    x_new_guess_vec: Flattened array of current guess of x_new for all evolving
-      core profiles.
-    dt: Time step duration.
-    runtime_params_t_plus_dt: Runtime parameters for time t + dt.
-    geo_t_plus_dt: geometry object at time t + dt.
-    x_old: The starting x defined as a tuple of CellVariables.
-    core_profiles_t_plus_dt: Core plasma profiles which contain all available
-      prescribed quantities at the end of the time step. This includes evolving
-      boundary conditions and prescribed time-dependent profiles that are not
-      being evolved by the PDE system.
-    explicit_source_profiles: pre-calculated sources implemented as explicit
-      sources in the PDE
-    physics_models: Physics models used for the calculations.
-    coeffs_old: The coefficients calculated at x_old.
-    evolving_names: The names of variables within the core profiles that should
-      evolve.
-
-  Returns:
-    loss: mean squared loss of theta method residual.
-  """
-
-  residual = theta_method_block_residual(
-      dt=dt,
-      runtime_params_t_plus_dt=runtime_params_t_plus_dt,
-      geo_t_plus_dt=geo_t_plus_dt,
-      x_old=x_old,
-      x_new_guess_vec=x_new_guess_vec,
-      core_profiles_t_plus_dt=core_profiles_t_plus_dt,
-      explicit_source_profiles=explicit_source_profiles,
-      physics_models=physics_models,
-      coeffs_old=coeffs_old,
-      evolving_names=evolving_names,
-  )
-  loss = jnp.mean(jnp.square(residual))
-  return loss
-
-
 @functools.partial(
     jax_utils.jit,
     static_argnames=[
