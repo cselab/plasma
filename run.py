@@ -21,7 +21,6 @@ from torax._src.config import numerics as numerics_lib
 from torax._src.config import runtime_params_slice
 from torax._src.core_profiles import profile_conditions
 from torax._src.core_profiles import profile_conditions as profile_conditions_lib
-from torax._src.core_profiles.plasma_composition import electron_density_ratios
 from torax._src.core_profiles.plasma_composition import electron_density_ratios_zeff
 from torax._src.core_profiles.plasma_composition import impurity_fractions
 from torax._src.core_profiles.plasma_composition import plasma_composition as plasma_composition_lib
@@ -1642,7 +1641,7 @@ def _get_ion_properties_from_fractions(
 
 def _get_ion_properties_from_n_e_ratios(
     impurity_symbols: tuple[str, ...],
-    impurity_params: electron_density_ratios.RuntimeParams,
+    impurity_params,
     T_e: cell_variable.CellVariable,
     Z_i: array_typing.FloatVectorCell,
     Z_i_face: array_typing.FloatVectorFace,

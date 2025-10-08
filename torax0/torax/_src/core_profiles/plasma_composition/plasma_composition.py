@@ -23,7 +23,6 @@ import jax
 import pydantic
 from torax._src import array_typing
 from torax._src.config import runtime_validation_utils
-from torax._src.core_profiles.plasma_composition import electron_density_ratios
 from torax._src.core_profiles.plasma_composition import electron_density_ratios_zeff
 from torax._src.core_profiles.plasma_composition import impurity_fractions
 from torax._src.core_profiles.plasma_composition import ion_mixture
@@ -47,7 +46,6 @@ class RuntimeParams:
   main_ion: ion_mixture.RuntimeParams
   impurity: (
       ion_mixture.RuntimeParams
-      | electron_density_ratios.RuntimeParams
       | electron_density_ratios_zeff.RuntimeParams
   )
   Z_eff: array_typing.FloatVectorCell
@@ -100,7 +98,6 @@ class PlasmaComposition(torax_pydantic.BaseModelFrozen):
 
   impurity: Annotated[
       impurity_fractions.ImpurityFractions
-      | electron_density_ratios.ElectronDensityRatios
       | electron_density_ratios_zeff.ElectronDensityRatiosZeff,
       pydantic.Field(discriminator='impurity_mode'),
   ]
@@ -171,20 +168,6 @@ class PlasmaComposition(torax_pydantic.BaseModelFrozen):
         'legacy': True,
     }
     return configurable_data
-
-  @pydantic.model_validator(mode='after')
-  def _check_zeff_usage(self) -> typing_extensions.Self:
-    """Warns user if Z_eff is provided but will be ignored."""
-    if (
-        isinstance(self.impurity, electron_density_ratios.ElectronDensityRatios)
-        and self.Z_eff.value != 1.0  # default value if input Z_eff is None
-    ):
-      logging.warning(
-          "Z_eff is provided but impurity_mode is '%s'. Z_eff will be an"
-          ' emergent quantity and the input value will be ignored.',
-          _IMPURITY_MODE_NE_RATIOS,
-      )
-    return self
 
   def tree_flatten(self):
     # Override the default tree_flatten to also save out the cached
