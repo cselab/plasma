@@ -56,25 +56,7 @@ class PlasmaComposition(torax_pydantic.BaseModelFrozen):
         configurable_data = copy.deepcopy(data)
         Z_impurity_override = configurable_data.get('Z_impurity_override')
         A_impurity_override = configurable_data.get('A_impurity_override')
-        if 'impurity' not in configurable_data:
-            configurable_data['impurity'] = {
-                'impurity_mode': _IMPURITY_MODE_FRACTIONS,
-                'Z_override': Z_impurity_override,
-                'A_override': A_impurity_override,
-                'legacy': True,
-            }
-            return configurable_data
         impurity_data = configurable_data['impurity']
-        if isinstance(impurity_data,
-                      dict) and 'impurity_mode' in impurity_data:
-            if Z_impurity_override is not None or A_impurity_override is not None:
-                logging.warning(
-                    'Z_impurity_override and/or A_impurity_override are set at the'
-                    ' plasma_composition level, but the new impurity API is being used'
-                    ' (impurity_mode is set). These top-level overrides are deprecated'
-                    ' and will be ignored. Use Z_override and A_override within the'
-                    ' impurity dictionary instead.')
-            return configurable_data
         configurable_data['impurity'] = {
             'impurity_mode': _IMPURITY_MODE_FRACTIONS,
             'species': impurity_data,
