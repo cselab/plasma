@@ -3598,20 +3598,10 @@ def _get_initial_state(runtime_params, geo, step_fn):
 
 
 def check_for_errors(
-    numerics: numerics_lib.Numerics,
+    numerics,
     output_state,
-    post_processed_outputs: PostProcessedOutputs,
-):
-    if numerics.adaptive_dt:
-        if output_state.solver_numeric_outputs.solver_error_state == 1:
-            if output_state.dt / numerics.dt_reduction_factor < numerics.min_dt:
-                return state.SimError.REACHED_MIN_DT
-    state_error = output_state.check_for_errors()
-    if state_error != state.SimError.NO_ERROR:
-        return state_error
-    else:
-        return post_processed_outputs.check_for_errors()
-
+    post_processed_outputs):
+    return post_processed_outputs.check_for_errors()
 
 class SimulationStepFn:
 
