@@ -20,17 +20,6 @@ class NeoclassicalTransport:
     V_neo_e: jax.Array
     V_neo_ware_e: jax.Array
 
-    @classmethod
-    def zeros(cls, geometry: geometry_lib.Geometry) -> 'NeoclassicalTransport':
-        return cls(
-            chi_neo_i=jnp.zeros_like(geometry.rho_face_norm),
-            chi_neo_e=jnp.zeros_like(geometry.rho_face_norm),
-            D_neo_e=jnp.zeros_like(geometry.rho_face_norm),
-            V_neo_e=jnp.zeros_like(geometry.rho_face_norm),
-            V_neo_ware_e=jnp.zeros_like(geometry.rho_face_norm),
-        )
-
-
 class NeoclassicalTransportModel(abc.ABC):
 
     def __call__(
