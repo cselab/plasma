@@ -3852,14 +3852,6 @@ class ToraxConfig(model_base.BaseModelFrozen):
     pedestal: pedestal_pydantic_model.PedestalConfig = pydantic.Field(
         discriminator='model_name')
 
-    def build_physics_models(self):
-        return PhysicsModels(
-            pedestal_model=self.pedestal.build_pedestal_model(),
-            source_models=self.sources.build_models(),
-            transport_model=self.transport.build_transport_model(),
-            neoclassical_models=self.neoclassical.build_models(),
-        )
-
 
 CONFIG = {
     'plasma_composition': {
@@ -3999,7 +3991,12 @@ torax_config = ToraxConfig.from_dict(CONFIG)
 mesh = torax_config.geometry.build_provider.torax_mesh
 interpolated_param_2d.set_grid(torax_config, mesh, mode='relaxed')
 geometry_provider = torax_config.geometry.build_provider
-g.physics_models = torax_config.build_physics_models()
+g.physics_models = PhysicsModels(
+    pedestal_model=torax_config.pedestal.build_pedestal_model(),
+    source_models=torax_config.sources.build_models(),
+    transport_model=torax_config.transport.build_transport_model(),
+    neoclassical_models=torax_config.neoclassical.build_models(),
+)
 g.solver = torax_config.solver.build_solver(physics_models=g.physics_models)
 runtime_params_provider = (RuntimeParamsProvider.from_config(torax_config))
 step_fn = SimulationStepFn(
