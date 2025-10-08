@@ -16,9 +16,7 @@ _IMPURITY_MODE_FRACTIONS: Final[str] = 'fractions'
 
 
 def _impurity_before_validator(value: Any) -> Any:
-    if isinstance(value, str):
-        return {value: 1.0}
-    return value
+     return {value: 1.0}
 
 
 def _impurity_after_validator(value):
