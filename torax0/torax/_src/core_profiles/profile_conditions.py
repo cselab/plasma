@@ -416,29 +416,3 @@ class ProfileConditions(torax_pydantic.BaseModelFrozen):
     runtime_params = {k: _get_value(v) for k, v in runtime_params.items()}
     return RuntimeParams(**runtime_params)
 
-
-def _get_first_failing_value_and_time_or_rho(
-    values: np.ndarray,
-    time_or_rho: np.ndarray,
-    comparator: Callable[[np.ndarray], np.ndarray],
-) -> tuple[float, float]:
-  """Returns the first failing value and time or rho for a given comparator.
-
-  If values came from a TimeVaryingScalar, then time_or_rho will be the time.
-  If values came from a TimeVaryingArray, then time_or_rho will be the rho.
-
-  Args:
-    values: The values to check.
-    time_or_rho: The time or rho associated with the values.
-    comparator: A function that takes an array of values and returns an array of
-      bools indicating whether each value passes the check.
-
-  Returns:
-    A tuple of (first_failing_value, time_or_rho)
-  """
-  fail_indices = np.where(comparator(values))[0]
-  if fail_indices.size == 0:
-    raise ValueError(
-        '_get_first_failing_time was called with no failing values.'
-    )
-  return values[fail_indices[0]], time_or_rho[fail_indices[0]]
