@@ -21,40 +21,15 @@ def _impurity_before_validator(value: Any) -> Any:
     return value
 
 
-def _impurity_after_validator(
-    value: Mapping[str, torax_pydantic.TimeVaryingArray],
-) -> Mapping[str, torax_pydantic.TimeVaryingArray]:
-    if not value:
-        raise ValueError('The species dictionary cannot be empty.')
+def _impurity_after_validator(value):
     first_key = next(iter(value))
     first_tva = value[first_key]
     reference_times = first_tva.value.keys()
-    for species_key, tva in value.items():
-        if tva.value.keys() != reference_times:
-            raise ValueError(
-                f'Inconsistent times for key "{species_key}". Expected'
-                f' {sorted(list(reference_times))}, got'
-                f' {sorted(list(tva.value.keys()))}')
     for t in reference_times:
         reference_rho_norm, _ = first_tva.value[t]
-        for species_key, tva in value.items():
-            current_rho_norm, _ = tva.value[t]
-            if not np.array_equal(current_rho_norm, reference_rho_norm):
-                raise ValueError(
-                    f'Inconsistent rho_norm for key "{species_key}" at time {t}.'
-                )
         values_at_t = [tva.value[t][1] for tva in value.values()]
         reference_shape = values_at_t[0].shape
-        for i, v_arr in enumerate(values_at_t):
-            if v_arr.shape != reference_shape:
-                species_key = list(value.keys())[i]
-                raise ValueError(
-                    f'Inconsistent value shape for key "{species_key}" at time {t}.'
-                    f' Expected {reference_shape}, got {v_arr.shape}.')
         sum_of_values = np.sum(np.stack(values_at_t, axis=0), axis=0)
-        if not np.allclose(sum_of_values, 1.0):
-            raise ValueError(
-                f'Values do not sum to 1 at time {t}. Sum is {sum_of_values}.')
     return value
 
 
@@ -89,15 +64,10 @@ class ImpurityFractions(torax_pydantic.BaseModelFrozen):
             [self.species[ion].get_value(t, grid_type='face') for ion in ions])
         Z_override = None if not self.Z_override else self.Z_override.get_value(
             t)
-        if not self.A_override:
-            As = jnp.array(
-                [constants.ION_PROPERTIES_DICT[ion].A for ion in ions])
-            A_avg = jnp.sum(As[..., jnp.newaxis] * fractions, axis=0)
-            A_avg_face = jnp.sum(As[..., jnp.newaxis] * fractions_face, axis=0)
-        else:
-            A_avg = jnp.full_like(fractions[0], self.A_override.get_value(t))
-            A_avg_face = jnp.full_like(fractions_face[0],
-                                       self.A_override.get_value(t))
+        As = jnp.array(
+            [constants.ION_PROPERTIES_DICT[ion].A for ion in ions])
+        A_avg = jnp.sum(As[..., jnp.newaxis] * fractions, axis=0)
+        A_avg_face = jnp.sum(As[..., jnp.newaxis] * fractions_face, axis=0)
         return RuntimeParams(
             fractions=fractions,
             fractions_face=fractions_face,

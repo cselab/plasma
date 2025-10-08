@@ -26,11 +26,3 @@ class SourceModels:
         hashes.append(hash(self.qei_source))
         return hash(tuple(hashes))
 
-    def __eq__(self, other) -> bool:
-        if set(self.standard_sources.keys()) == set(
-                other.standard_sources.keys()):
-            return (all(
-                self.standard_sources[name] == other.standard_sources[name]
-                for name in self.standard_sources.keys())
-                    and self.qei_source == other.qei_source)
-        return False
