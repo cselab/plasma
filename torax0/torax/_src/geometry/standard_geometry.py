@@ -9,6 +9,7 @@ from torax._src import constants
 from torax._src.geometry import geometry
 from torax._src.geometry import geometry_loader
 from torax._src.torax_pydantic import torax_pydantic
+from torax._src.torax_pydantic import interpolated_param_2d
 import typing_extensions
 
 _RHO_SMOOTHING_LIMIT = 0.1
@@ -266,7 +267,7 @@ def build_standard_geometry(
     j_total_face_axis = j_total_face_bulk[0]
     j_total = np.concatenate(
         [np.array([j_total_face_axis]), j_total_face_bulk])
-    mesh = torax_pydantic.Grid1D(nx=intermediate.n_rho)
+    mesh = interpolated_param_2d.Grid1D(nx=intermediate.n_rho)
     rho_b = rho_intermediate[-1]
     rho_face_norm = mesh.face_centers
     rho_norm = mesh.cell_centers

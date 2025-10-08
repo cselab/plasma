@@ -34,5 +34,3 @@ UnitIntervalTimeVaryingScalar = (
     interpolated_param_1d.UnitIntervalTimeVaryingScalar)
 PositiveTimeVaryingArray = interpolated_param_2d.PositiveTimeVaryingArray
 ValidatedDefault = functools.partial(pydantic.Field, validate_default=True)
-Grid1D = interpolated_param_2d.Grid1D
-set_grid = interpolated_param_2d.set_grid

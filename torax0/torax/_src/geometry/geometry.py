@@ -27,7 +27,7 @@ class GeometryType(enum.IntEnum):
 @dataclasses.dataclass(frozen=True)
 class Geometry:
     geometry_type: GeometryType
-    torax_mesh: torax_pydantic.Grid1D
+    torax_mesh: None
     Phi: array_typing.Array
     Phi_face: array_typing.Array
     R_major: array_typing.FloatScalar

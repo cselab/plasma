@@ -15,7 +15,7 @@ class GeometryProvider(Protocol):
         pass
 
     @property
-    def torax_mesh(self) -> torax_pydantic.Grid1D:
+    def torax_mesh(self):
         pass
 
 
@@ -29,5 +29,5 @@ class ConstantGeometryProvider(GeometryProvider):
         return self.geo
 
     @property
-    def torax_mesh(self) -> torax_pydantic.Grid1D:
+    def torax_mesh(self):
         return self.geo.torax_mesh
