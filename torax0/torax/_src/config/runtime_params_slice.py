@@ -51,6 +51,7 @@ from torax._src.pedestal_model import runtime_params as pedestal_model_params
 from torax._src.solver import runtime_params as solver_params
 from torax._src.sources import runtime_params as sources_params
 from torax._src.transport_model import runtime_params as transport_model_params
+from typing import Any
 
 # Many of the variables follow scientific or mathematical notation, so disable
 # pylint complaints.
@@ -79,7 +80,7 @@ class RuntimeParams:
   pedestal: pedestal_model_params.RuntimeParams
   plasma_composition: plasma_composition.RuntimeParams
   profile_conditions: profile_conditions.RuntimeParams
-  solver: solver_params.RuntimeParams
+  solver: Any
   sources: Mapping[str, sources_params.RuntimeParams]
   transport: transport_model_params.RuntimeParams
 

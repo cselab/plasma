@@ -109,6 +109,19 @@ from torax._src.geometry import geometry
 from torax._src.sources import source_profiles
 import typing_extensions
 
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(frozen=True)
+class RuntimeParams:
+  """Input params for the solver which can be used as compiled args."""
+  theta_implicit: float = dataclasses.field(metadata={'static': True})
+  use_predictor_corrector: bool = dataclasses.field(metadata={'static': True})
+  n_corrector_steps: int = dataclasses.field(metadata={'static': True})
+  convection_dirichlet_mode: str = dataclasses.field(metadata={'static': True})
+  convection_neumann_mode: str = dataclasses.field(metadata={'static': True})
+  use_pereverzev: bool = dataclasses.field(metadata={'static': True})
+  chi_pereverzev: float
+  D_pereverzev: float  # pylint: disable=invalid-name
+
 class Solver(abc.ABC):
   """Solves for a single time steps update to State.
 
@@ -434,7 +447,7 @@ class BaseSolver(torax_pydantic.BaseModelFrozen, abc.ABC):
 
     @property
     @abc.abstractmethod
-    def build_runtime_params(self) -> runtime_params.RuntimeParams:
+    def build_runtime_params(self):
         """Builds runtime params from the config."""
 
     @abc.abstractmethod
@@ -457,8 +470,8 @@ class LinearThetaMethod(BaseSolver):
         return x
 
     @functools.cached_property
-    def build_runtime_params(self) -> runtime_params.RuntimeParams:
-        return runtime_params.RuntimeParams(
+    def build_runtime_params(self):
+        return RuntimeParams(
             theta_implicit=self.theta_implicit,
             convection_dirichlet_mode=self.convection_dirichlet_mode,
             convection_neumann_mode=self.convection_neumann_mode,
