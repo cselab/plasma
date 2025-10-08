@@ -190,8 +190,6 @@ class Neoclassical0(torax_pydantic.BaseModelFrozen):
             configurable_data["transport"] = {"model_name": "zeros"}
         if "model_name" not in configurable_data["bootstrap_current"]:
             configurable_data["bootstrap_current"]["model_name"] = "sauter"
-        if "model_name" not in configurable_data["transport"]:
-            configurable_data["transport"]["model_name"] = "angioni_sauter"
         return configurable_data
 
     def build_runtime_params(self) -> runtime_params.RuntimeParams:
