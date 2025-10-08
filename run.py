@@ -9,7 +9,6 @@ from torax._src import math_utils
 from torax._src import physics_models as physics_models_lib
 from torax._src import state
 from torax._src import state as state_module
-from torax._src import version
 from torax._src import xnp
 from torax._src.config import numerics as numerics_lib
 from torax._src.config import runtime_params_slice

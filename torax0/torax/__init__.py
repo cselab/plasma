@@ -19,7 +19,6 @@ import os
 
 # pylint: disable=g-importing-member
 import jax
-from torax._src import version
 from torax._src.geometry.geometry import Geometry
 from torax._src.output_tools.post_processing import PostProcessedOutputs
 from torax._src.sources.source_profiles import SourceProfiles
@@ -34,9 +33,6 @@ os.environ['XLA_FLAGS'] = (
     os.environ.get('XLA_FLAGS', '')
     + ' --xla_backend_extra_options=xla_cpu_flatten_after_fusion'
 )
-
-__version__ = version.TORAX_VERSION
-__version_info__ = version.TORAX_VERSION_INFO
 
 __all__ = [
     'build_torax_config_from_file',
