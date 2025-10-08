@@ -3670,19 +3670,6 @@ class ToraxConfig(BaseModelFrozen):
         configurable_data = copy.deepcopy(data)
         return configurable_data
 
-    @pydantic.model_validator(mode='after')
-    def _check_fields(self) -> typing_extensions.Self:
-        using_nonlinear_transport_model = self.transport.model_name in [
-            'qualikiz',
-            'qlknn',
-            'CGM',
-        ]
-        using_linear_solver = isinstance(self.solver, LinearThetaMethod)
-        initial_guess_mode_is_linear = (False if using_linear_solver else
-                                        self.solver.initial_guess_mode
-                                        == enums.InitialGuessMode.LINEAR)
-        return self
-
 
 CONFIG = {
     'plasma_composition': {
