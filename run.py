@@ -2789,7 +2789,6 @@ def get_consistent_runtime_params_and_geometry(*, t, runtime_params_provider,
 
 TIME_INVARIANT = model_base.TIME_INVARIANT
 JAX_STATIC = model_base.JAX_STATIC
-BaseModelFrozen = model_base.BaseModelFrozen
 TimeVaryingScalar = interpolated_param_1d.TimeVaryingScalar
 TimeVaryingArray = interpolated_param_2d.TimeVaryingArray
 NonNegativeTimeVaryingArray = interpolated_param_2d.NonNegativeTimeVaryingArray
@@ -3631,7 +3630,7 @@ def _get_geo_and_runtime_params_at_t_plus_dt_and_phibdot(
     )
 
 
-class ToraxConfig(BaseModelFrozen):
+class ToraxConfig(model_base.BaseModelFrozen):
     profile_conditions: profile_conditions_lib.ProfileConditions
     numerics: numerics_lib.Numerics
     plasma_composition: plasma_composition_lib.PlasmaComposition
