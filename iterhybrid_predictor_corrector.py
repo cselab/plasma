@@ -3,40 +3,39 @@ CONFIG = {
         'main_ion': {
             'D': 0.5,
             'T': 0.5
-        },  
+        },
         'impurity': 'Ne',
-        'Z_eff': 1.6,  
+        'Z_eff': 1.6,
     },
     'profile_conditions': {
-        'Ip': 10.5e6,  
+        'Ip': 10.5e6,
         'T_i': {
             0.0: {
                 0.0: 15.0,
                 1.0: 0.2
             }
         },
-        'T_i_right_bc':
-        0.2,  
+        'T_i_right_bc': 0.2,
         'T_e': {
             0.0: {
                 0.0: 15.0,
                 1.0: 0.2
             }
         },
-        'T_e_right_bc': 0.2,  
-        'n_e_right_bc': 0.25e20,  
+        'T_e_right_bc': 0.2,
+        'n_e_right_bc': 0.25e20,
         'n_e_nbar_is_fGW': True,
         'normalize_n_e_to_nbar': True,
-        'nbar': 0.8,  
+        'nbar': 0.8,
         'n_e': {
             0: {
                 0.0: 1.5,
                 1.0: 1.0
             }
-        },  
+        },
     },
     'numerics': {
-        't_final': 5,  
+        't_final': 5,
         'resistivity_multiplier': 200,
         'evolve_ion_heat': True,
         'evolve_electron_heat': True,
@@ -50,9 +49,9 @@ CONFIG = {
         'geometry_type': 'chease',
         'geometry_file': 'ITER_hybrid_citrin_equil_cheasedata.mat2cols',
         'Ip_from_parameters': True,
-        'R_major': 6.2,  
-        'a_minor': 2.0,  
-        'B_0': 5.3,  
+        'R_major': 6.2,
+        'a_minor': 2.0,
+        'B_0': 5.3,
     },
     'neoclassical': {
         'bootstrap_current': {
@@ -93,10 +92,10 @@ CONFIG = {
     'pedestal': {
         'model_name': 'set_T_ped_n_ped',
         'set_pedestal': True,
-        'T_i_ped': 4.5,  
-        'T_e_ped': 4.5,  
-        'n_e_ped': 0.62e20,  
-        'rho_norm_ped_top': 0.9,  
+        'T_i_ped': 4.5,
+        'T_e_ped': 4.5,
+        'n_e_ped': 0.62e20,
+        'rho_norm_ped_top': 0.9,
     },
     'transport': {
         'model_name': 'qlknn',
@@ -105,20 +104,20 @@ CONFIG = {
         'V_e_inner': 0.0,
         'chi_i_inner': 1.0,
         'chi_e_inner': 1.0,
-        'rho_inner': 0.2,  
+        'rho_inner': 0.2,
         'apply_outer_patch': True,
         'D_e_outer': 0.1,
         'V_e_outer': 0.0,
         'chi_i_outer': 2.0,
         'chi_e_outer': 2.0,
-        'rho_outer': 0.9,  
-        'chi_min': 0.05,  
-        'chi_max': 100,  
-        'D_e_min': 0.05,  
+        'rho_outer': 0.9,
+        'chi_min': 0.05,
+        'chi_max': 100,
+        'D_e_min': 0.05,
         'DV_effective': True,
-        'include_ITG': True,  
-        'include_TEM': True,  
-        'include_ETG': True,  
+        'include_ITG': True,
+        'include_TEM': True,
+        'include_ETG': True,
         'avoid_big_negative_s': True,
         'An_min': 0.05,
         'ITG_flux_ratio_correction': 1,

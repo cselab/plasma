@@ -5,14 +5,19 @@ from matplotlib import pyplot as plt
 import numpy as np
 import xarray as xr
 from typing import Any
+
 jax.config.update('jax_enable_x64', True)
 _figure_counter = 1
+
+
 def get_figure_filename():
     global _figure_counter
     filename = f"{_figure_counter:03d}.png"
     _figure_counter += 1
     return filename
-_NBI_W_TO_MA = 1 / 16e6  
+
+
+_NBI_W_TO_MA = 1 / 16e6
 W_to_Ne_ratio = 0
 nbi_times = np.array([0, 99, 100])
 nbi_powers = np.array([0, 0, 33e6])
@@ -23,65 +28,97 @@ el_heat_fraction = 0.66
 eccd_power = {0: 0, 99: 0, 100: 20.0e6}
 CONFIG = {
     'plasma_composition': {
-        'main_ion': {'D': 0.5, 'T': 0.5},  
-        'impurity': {'Ne': 1 - W_to_Ne_ratio, 'W': W_to_Ne_ratio},
-        'Z_eff': {0.0: {0.0: 2.0, 1.0: 2.0}},  
+        'main_ion': {
+            'D': 0.5,
+            'T': 0.5
+        },
+        'impurity': {
+            'Ne': 1 - W_to_Ne_ratio,
+            'W': W_to_Ne_ratio
+        },
+        'Z_eff': {
+            0.0: {
+                0.0: 2.0,
+                1.0: 2.0
+            }
+        },
     },
     'profile_conditions': {
-        'Ip': {0: 3e6, 100: 12.5e6},  
-        'T_i': {0.0: {0.0: 6.0, 1.0: 0.2}}, 
-        'T_i_right_bc': 0.2, 
-        'T_e': {0.0: {0.0: 6.0, 1.0: 0.2}},  
-        'T_e_right_bc': 0.2,  
+        'Ip': {
+            0: 3e6,
+            100: 12.5e6
+        },
+        'T_i': {
+            0.0: {
+                0.0: 6.0,
+                1.0: 0.2
+            }
+        },
+        'T_i_right_bc': 0.2,
+        'T_e': {
+            0.0: {
+                0.0: 6.0,
+                1.0: 0.2
+            }
+        },
+        'T_e_right_bc': 0.2,
         'n_e_right_bc_is_fGW': True,
-        'n_e_right_bc': {0: 0.35, 100: 0.35}, 
-        'nbar': 0.85, 
-        'n_e': {0: {0.0: 1.3, 1.0: 1.0}},  
-        'normalize_n_e_to_nbar': True, 
-        'n_e_nbar_is_fGW': True, 
-        'initial_psi_from_j': True, 
-        'initial_j_is_total_current': True, 
-        'current_profile_nu': 2, 
+        'n_e_right_bc': {
+            0: 0.35,
+            100: 0.35
+        },
+        'nbar': 0.85,
+        'n_e': {
+            0: {
+                0.0: 1.3,
+                1.0: 1.0
+            }
+        },
+        'normalize_n_e_to_nbar': True,
+        'n_e_nbar_is_fGW': True,
+        'initial_psi_from_j': True,
+        'initial_j_is_total_current': True,
+        'current_profile_nu': 2,
     },
     'numerics': {
-        't_final': 150,  
-        'fixed_dt': 1, 
-        'evolve_ion_heat': True, 
-        'evolve_electron_heat': True, 
-        'evolve_current': True, 
-        'evolve_density': True, 
+        't_final': 150,
+        'fixed_dt': 1,
+        'evolve_ion_heat': True,
+        'evolve_electron_heat': True,
+        'evolve_current': True,
+        'evolve_density': True,
     },
     'geometry': {
         'geometry_type': 'chease',
         'geometry_file': 'ITER_hybrid_citrin_equil_cheasedata.mat2cols',
         'Ip_from_parameters': True,
-        'R_major': 6.2,  
-        'a_minor': 2.0,  
-        'B_0': 5.3,  
+        'R_major': 6.2,
+        'a_minor': 2.0,
+        'B_0': 5.3,
     },
     'sources': {
-        'ecrh': { 
-           'gaussian_width': 0.05,
-           'gaussian_location': 0.35,
-           'P_total': eccd_power,
-           },
-        'generic_heat': { 
-            'gaussian_location': r_nbi, 
-            'gaussian_width': w_nbi, 
-            'P_total': (nbi_times, nbi_powers), 
+        'ecrh': {
+            'gaussian_width': 0.05,
+            'gaussian_location': 0.35,
+            'P_total': eccd_power,
+        },
+        'generic_heat': {
+            'gaussian_location': r_nbi,
+            'gaussian_width': w_nbi,
+            'P_total': (nbi_times, nbi_powers),
             'electron_heat_fraction': el_heat_fraction,
         },
-        'generic_current': { 
-            'use_absolute_current': True, 
+        'generic_current': {
+            'use_absolute_current': True,
             'gaussian_width': w_nbi,
             'gaussian_location': r_nbi,
             'I_generic': (nbi_times, nbi_cd),
         },
-        'fusion': {}, 
-        'ei_exchange': {}, 
-        'ohmic': {}, 
-        'cyclotron_radiation': {}, 
-        'impurity_radiation': { 
+        'fusion': {},
+        'ei_exchange': {},
+        'ohmic': {},
+        'cyclotron_radiation': {},
+        'impurity_radiation': {
             'model_name': 'mavrin_fit',
             'radiation_multiplier': 0.0,
         },
@@ -94,43 +131,51 @@ CONFIG = {
     'pedestal': {
         'model_name': 'set_T_ped_n_ped',
         'set_pedestal': True,
-        'T_i_ped': {0: 0.5, 100: 0.5, 105: 3.0},
-        'T_e_ped': {0: 0.5, 100: 0.5, 105: 3.0},
+        'T_i_ped': {
+            0: 0.5,
+            100: 0.5,
+            105: 3.0
+        },
+        'T_e_ped': {
+            0: 0.5,
+            100: 0.5,
+            105: 3.0
+        },
         'n_e_ped_is_fGW': True,
-        'n_e_ped': 0.85, 
-        'rho_norm_ped_top': 0.95,  
+        'n_e_ped': 0.85,
+        'rho_norm_ped_top': 0.95,
     },
     'transport': {
-        'model_name': 'qlknn',  
+        'model_name': 'qlknn',
         'apply_inner_patch': True,
         'D_e_inner': 0.15,
         'V_e_inner': 0.0,
         'chi_i_inner': 0.3,
         'chi_e_inner': 0.3,
-        'rho_inner': 0.1,  
+        'rho_inner': 0.1,
         'apply_outer_patch': True,
         'D_e_outer': 0.1,
         'V_e_outer': 0.0,
         'chi_i_outer': 2.0,
         'chi_e_outer': 2.0,
-        'rho_outer': 0.95,  
-        'chi_min': 0.05,  
-        'chi_max': 100,  
-        'D_e_min': 0.05,  
-        'D_e_max': 50,  
-        'V_e_min': -10,  
-        'V_e_max': 10,  
+        'rho_outer': 0.95,
+        'chi_min': 0.05,
+        'chi_max': 100,
+        'D_e_min': 0.05,
+        'D_e_max': 50,
+        'V_e_min': -10,
+        'V_e_max': 10,
         'smoothing_width': 0.1,
         'DV_effective': True,
-        'include_ITG': True,  
-        'include_TEM': True,  
-        'include_ETG': True,  
+        'include_ITG': True,
+        'include_TEM': True,
+        'include_ETG': True,
         'avoid_big_negative_s': False,
     },
     'solver': {
-        'solver_type': 'linear', 
-        'use_predictor_corrector': True, 
-        'n_corrector_steps': 10, 
+        'solver_type': 'linear',
+        'use_predictor_corrector': True,
+        'n_corrector_steps': 10,
         'chi_pereverzev': 30,
         'D_pereverzev': 15,
         'use_pereverzev': True,
@@ -139,6 +184,8 @@ CONFIG = {
         'calculator_type': 'fixed',
     },
 }
+
+
 def detailed_plot_single_sim(dt: xr.DataTree, time: float | None = None):
     spr = dt.profiles.spr.sel(rho_norm=dt.rho_cell_norm)
     drho_norm = dt.scalars.drho_norm
@@ -375,7 +422,11 @@ def detailed_plot_single_sim(dt: xr.DataTree, time: float | None = None):
     plt.tight_layout()
     plt.savefig(get_figure_filename())
     plt.close()
+
+
 import seaborn as sns
+
+
 def compare_timetraces(datatrees: list[xr.DataTree],
                        labels: list[str] | None = None):
     if labels is not None and len(datatrees) != len(labels):
@@ -401,34 +452,33 @@ def compare_timetraces(datatrees: list[xr.DataTree],
                         dt.scalars.q_min,
                         color=color,
                         linestyle='--',
-                        label=f"{label} (q_min)")  
+                        label=f"{label} (q_min)")
         axes[0, 1].plot(dt.time,
                         dt.scalars.q95,
                         color=color,
                         linestyle='-',
-                        label=f"{label} (q_95)")  
+                        label=f"{label} (q_95)")
         axes[0, 2].plot(dt.time, dt.scalars.li3, color=color, label=label)
         axes[0, 3].plot(dt.time,
                         dt.scalars.v_loop_lcfs,
                         color=color,
                         label=label)
-        axes[1, 0].plot(
-            dt.time[10:], dt.scalars.Q_fusion[10:], color=color,
-            label=label)  
+        axes[1, 0].plot(dt.time[10:],
+                        dt.scalars.Q_fusion[10:],
+                        color=color,
+                        label=label)
         te_line_avg = np.mean(dt.profiles.T_e, axis=1)
         ti_line_avg = np.mean(dt.profiles.T_i, axis=1)
         axes[1, 1].plot(dt.time,
                         te_line_avg,
                         color=color,
                         linestyle='--',
-                        label=f"{label}" +
-                        r" $\langle T_e \rangle$")  
-        axes[1,
-             1].plot(dt.time,
-                     ti_line_avg,
-                     color=color,
-                     linestyle='-',
-                     label=f"{label}" + r" $\langle T_i \rangle$")  
+                        label=f"{label}" + r" $\langle T_e \rangle$")
+        axes[1, 1].plot(dt.time,
+                        ti_line_avg,
+                        color=color,
+                        linestyle='-',
+                        label=f"{label}" + r" $\langle T_i \rangle$")
         P_ext = dt.scalars.P_aux_total
         axes[1, 2].plot(dt.time, P_ext / 1e6, color=color, label=label)
         axes[1, 3].plot(dt.time,
@@ -438,7 +488,7 @@ def compare_timetraces(datatrees: list[xr.DataTree],
     axes[0, 0].set_xlabel(r"Time [s]")
     axes[0, 0].set_ylabel(r"Plasma current [MA]")
     axes[0, 0].set_title(r"$I_p$")
-    axes[0, 0].legend(fontsize=fsize - fontreduction)  
+    axes[0, 0].legend(fontsize=fsize - fontreduction)
     axes[0, 1].set_xlabel(r"Time [s]")
     axes[0, 1].set_ylabel(r"q")
     axes[0, 1].set_title(r"$q_{95}$ and $q_{min}$")
@@ -470,7 +520,11 @@ def compare_timetraces(datatrees: list[xr.DataTree],
     plt.tight_layout()
     plt.savefig(get_figure_filename())
     plt.close()
+
+
 import seaborn as sns
+
+
 def compare_profiles(datatrees: list[xr.DataTree],
                      times: list[float],
                      labels: list[str] | None = None):
@@ -491,7 +545,7 @@ def compare_profiles(datatrees: list[xr.DataTree],
         if labels is not None:
             label = labels[i] + f': t={time:.2f}'
         else:
-            label = f"Sim{i+1}: t={time:.2f}"  
+            label = f"Sim{i+1}: t={time:.2f}"
         color = colors[i]
         time_index = np.argmin(np.abs(dt.time.values - time))
         axes[0, 0].plot(dt.rho_norm,
@@ -547,6 +601,8 @@ def compare_profiles(datatrees: list[xr.DataTree],
     plt.tight_layout()
     plt.savefig(get_figure_filename())
     plt.close()
+
+
 def set_LH_transition_time(*, LH_transition_time: float) -> dict[str, Any]:
     config = copy.deepcopy(CONFIG)
     _validate_input(LH_transition_time, (20.0, 130.0))
@@ -577,6 +633,8 @@ def set_LH_transition_time(*, LH_transition_time: float) -> dict[str, Any]:
         LH_transition_time + 5: 3.0
     }
     return config
+
+
 def _validate_input(input_obj: Any, allowed_range: tuple):
     if not isinstance(input_obj, float) and not isinstance(input_obj, int):
         raise ValueError(f"Input must be a float or int for this exercise.")
@@ -585,6 +643,8 @@ def _validate_input(input_obj: Any, allowed_range: tuple):
             raise ValueError(
                 f"Input value must be between {allowed_range[0]} and {allowed_range[1]}."
             )
+
+
 def modify_config(*,
                   Ip=None,
                   nbi_power=None,
@@ -655,6 +715,8 @@ def modify_config(*,
             config['sources']['impurity_radiation'][
                 'radiation_multiplier'] = 0.0
     return config
+
+
 def _validate_input_dict(input_obj: Any, variable_name: str,
                          allowed_range: tuple, units: str):
     if not isinstance(input_obj, dict):
@@ -676,6 +738,8 @@ def _validate_input_dict(input_obj: Any, variable_name: str,
                 raise ValueError(
                     f'{variable_name} has suspiciously low non-zero input value {value}. Note that input units are W not MW'
                 )
+
+
 def _validate_input_float(input_obj: Any, variable_name: str,
                           allowed_range: tuple):
     if not isinstance(input_obj, float):
@@ -686,10 +750,14 @@ def _validate_input_float(input_obj: Any, variable_name: str,
             raise ValueError(
                 f"{variable_name} values must be between {allowed_range[0]} and {allowed_range[1]}."
             )
+
+
 def run_sim(config: dict[str, Any]) -> xr.DataTree:
     torax_config = torax.ToraxConfig.from_dict(config)
     data_tree, _ = torax.run_simulation(torax_config, log_timestep_info=False)
     return data_tree
+
+
 config0 = set_LH_transition_time(LH_transition_time=60)
 config1 = set_LH_transition_time(LH_transition_time=80)
 config2 = set_LH_transition_time(LH_transition_time=100)
@@ -706,28 +774,10 @@ compare_profiles([out0, out3],
                  labels=['t_LH = 60s', 't_LH = 120s'])
 detailed_plot_single_sim(out0, time=60)
 detailed_plot_single_sim(out3, time=120)
-nbi_power0 = {0: 0.0, 99: 0.0, 100: 33e6}  
-nbi_power1 = {
-    0: 0.0,
-    19: 0.0,
-    20: 16.5e6,
-    99: 16.5e6,
-    100: 33e6
-}  
-nbi_power2 = {
-    0: 0.0,
-    49: 0.0,
-    50: 16.5e6,
-    99: 16.5e6,
-    100: 33e6
-}  
-nbi_power3 = {
-    0: 0.0,
-    79: 0.0,
-    80: 16.5e6,
-    99: 16.5e6,
-    100: 33e6
-}  
+nbi_power0 = {0: 0.0, 99: 0.0, 100: 33e6}
+nbi_power1 = {0: 0.0, 19: 0.0, 20: 16.5e6, 99: 16.5e6, 100: 33e6}
+nbi_power2 = {0: 0.0, 49: 0.0, 50: 16.5e6, 99: 16.5e6, 100: 33e6}
+nbi_power3 = {0: 0.0, 79: 0.0, 80: 16.5e6, 99: 16.5e6, 100: 33e6}
 config0 = modify_config(nbi_power=nbi_power0)
 config1 = modify_config(nbi_power=nbi_power1)
 config2 = modify_config(nbi_power=nbi_power2)
@@ -867,7 +917,7 @@ config_overrides = {
         0: 3.0e6,
         80: 14.0e6,
         100: 11.5e6
-    },  
+    },
     'nbi_power': {
         0: 0.0,
         99: 0.0,
@@ -878,10 +928,10 @@ config_overrides = {
         99: 33.0e6,
         100: 33e6
     },
-    'off_axis_ec_location': 0.4,  
+    'off_axis_ec_location': 0.4,
 }
-config0 = modify_config()  
-config1 = modify_config(**config_overrides)  
+config0 = modify_config()
+config1 = modify_config(**config_overrides)
 out0 = run_sim(config0)
 out1 = run_sim(config1)
 labels = ['Non-optimized', 'Better-optimized']

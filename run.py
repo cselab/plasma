@@ -86,11 +86,15 @@ import numpy as np
 import pydantic
 import typing_extensions
 import xarray as xr
+
+
 class FileRestart(torax_pydantic.BaseModelFrozen):
     filename: pydantic.FilePath
     time: torax_pydantic.Second
     do_restart: bool
     stitch: bool
+
+
 class Neoclassical0(torax_pydantic.BaseModelFrozen):
     bootstrap_current: (bootstrap_current_zeros.ZerosModelConfig
                         | sauter_current.SauterModelConfig) = pydantic.Field(
@@ -100,6 +104,7 @@ class Neoclassical0(torax_pydantic.BaseModelFrozen):
             sauter_conductivity.SauterModelConfig()))
     transport: (transport_zeros.ZerosModelConfig) = pydantic.Field(
         discriminator="model_name")
+
     @pydantic.model_validator(mode="before")
     @classmethod
     def _defaults(cls, data: dict[str, Any]) -> dict[str, Any]:
@@ -113,33 +118,43 @@ class Neoclassical0(torax_pydantic.BaseModelFrozen):
         if "model_name" not in configurable_data["transport"]:
             configurable_data["transport"]["model_name"] = "angioni_sauter"
         return configurable_data
+
     def build_runtime_params(self) -> runtime_params.RuntimeParams:
         return runtime_params.RuntimeParams(
             bootstrap_current=self.bootstrap_current.build_runtime_params(),
             conductivity=self.conductivity.build_runtime_params(),
             transport=self.transport.build_runtime_params(),
         )
+
     def build_models(self) -> neoclassical_models.NeoclassicalModels:
         return neoclassical_models.NeoclassicalModels(
             conductivity=self.conductivity.build_model(),
             bootstrap_current=self.bootstrap_current.build_model(),
             transport=self.transport.build_model(),
         )
+
+
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass
 class MHDModels:
     sawtooth_models: sawtooth_models_lib.SawtoothModels | None = None
+
     def __eq__(self, other: 'MHDModels') -> bool:
         return self.sawtooth_models == other.sawtooth_models
+
     def __hash__(self) -> int:
         return hash((self.sawtooth_models, ))
+
+
 class MHD(torax_pydantic.BaseModelFrozen):
     sawtooth: sawtooth_pydantic_model.SawtoothConfig | None = pydantic.Field(
         default=None)
+
     def build_mhd_models(self):
         sawtooth_model = (None if self.sawtooth is None else
                           self.sawtooth.build_models())
         return MHDModels(sawtooth_models=sawtooth_model)
+
     def build_runtime_params(
             self, t: chex.Numeric) -> mhd_runtime_params.RuntimeParams:
         return mhd_runtime_params.RuntimeParams(
@@ -148,6 +163,8 @@ class MHD(torax_pydantic.BaseModelFrozen):
                 for mhd_model_name, mhd_model_config in self.__dict__.items()
                 if mhd_model_config is not None
             })
+
+
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class PhysicsModels:
@@ -160,10 +177,14 @@ class PhysicsModels:
     neoclassical_models: neoclassical_models_lib.NeoclassicalModels = (
         dataclasses.field(metadata=dict(static=True)))
     mhd_models: MHDModels = dataclasses.field(metadata=dict(static=True))
+
+
 T = TypeVar('T')
 LY_OBJECT_TYPE: TypeAlias = (str
                              | Mapping[str, torax_pydantic.NumpyArray | float])
 TIME_INVARIANT = torax_pydantic.TIME_INVARIANT
+
+
 class CheaseConfig(torax_pydantic.BaseModelFrozen):
     geometry_type: Annotated[Literal['chease'], TIME_INVARIANT] = 'chease'
     n_rho: Annotated[pydantic.PositiveInt, TIME_INVARIANT] = 25
@@ -174,23 +195,30 @@ class CheaseConfig(torax_pydantic.BaseModelFrozen):
     R_major: torax_pydantic.Meter = 6.2
     a_minor: torax_pydantic.Meter = 2.0
     B_0: torax_pydantic.Tesla = 5.3
+
     @pydantic.model_validator(mode='after')
     def _check_fields(self) -> typing_extensions.Self:
         if not self.R_major >= self.a_minor:
             raise ValueError('a_minor must be less than or equal to R_major.')
         return self
+
     def build_geometry(self) -> standard_geometry.StandardGeometry:
         return standard_geometry.build_standard_geometry(
             _apply_relevant_kwargs(
                 standard_geometry.StandardGeometryIntermediates.from_chease,
                 self.__dict__,
             ))
+
+
 class GeometryConfig(torax_pydantic.BaseModelFrozen):
     config: (CheaseConfig) = pydantic.Field(discriminator='geometry_type')
+
+
 class Geometry0(torax_pydantic.BaseModelFrozen):
     geometry_type: geometry.GeometryType
     geometry_configs: GeometryConfig | dict[torax_pydantic.Second,
                                             GeometryConfig]
+
     @pydantic.model_validator(mode='before')
     @classmethod
     def _conform_data(cls, data: dict[str, Any]) -> dict[str, Any]:
@@ -203,6 +231,7 @@ class Geometry0(torax_pydantic.BaseModelFrozen):
             return _conform_user_data(data)
         else:
             raise ValueError(f'Invalid value for geometry: {geometry_type}')
+
     @functools.cached_property
     def build_provider(self) -> geometry_provider.GeometryProvider:
         if isinstance(self.geometry_configs, dict):
@@ -217,7 +246,9 @@ class Geometry0(torax_pydantic.BaseModelFrozen):
         else:
             geometries = self.geometry_configs.config.build_geometry()
             provider = geometry_provider.ConstantGeometryProvider
-        return provider(geometries)  
+        return provider(geometries)
+
+
 def _conform_user_data(data: dict[str, Any]) -> dict[str, Any]:
     if 'LY_bundle_object' in data and 'geometry_configs' in data:
         raise ValueError(
@@ -231,6 +262,8 @@ def _conform_user_data(data: dict[str, Any]) -> dict[str, Any]:
     configs_time_dependent = data_copy.pop('geometry_configs', None)
     constructor_args['geometry_configs'] = {'config': data_copy}
     return constructor_args
+
+
 def _apply_relevant_kwargs(f: Callable[..., T], kwargs: Mapping[str,
                                                                 Any]) -> T:
     relevant_kwargs = [
@@ -238,6 +271,8 @@ def _apply_relevant_kwargs(f: Callable[..., T], kwargs: Mapping[str,
     ]
     kwargs = {k: kwargs[k] for k in relevant_kwargs}
     return f(**kwargs)
+
+
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class SafetyFactorFit:
@@ -249,23 +284,28 @@ class SafetyFactorFit:
     rho_q_3_2_second: array_typing.FloatScalar
     rho_q_2_1_second: array_typing.FloatScalar
     rho_q_3_1_second: array_typing.FloatScalar
+
+
 def _sliding_window_of_three(flat_array: jax.Array) -> jax.Array:
     window_size = 3
     starts = jnp.arange(len(flat_array) - window_size + 1)
     return jax.vmap(lambda start: jax.lax.dynamic_slice(
         flat_array, (start, ), (window_size, )))(starts)
+
+
 def _fit_polynomial_to_intervals_of_three(
         rho_norm: jax.Array,
         q_face: jax.Array) -> tuple[jax.Array, jax.Array, jax.Array]:
     q_face_intervals = _sliding_window_of_three(q_face, )
     rho_norm_intervals = _sliding_window_of_three(rho_norm, )
+
     @jax.vmap
     def batch_polyfit(q_face_interval: jax.Array,
                       rho_norm_interval: jax.Array) -> jax.Array:
         chex.assert_shape(q_face_interval, (3, ))
         chex.assert_shape(rho_norm_interval, (3, ))
         rho_norm_squared = rho_norm_interval**2
-        A = jnp.array([  
+        A = jnp.array([
             [rho_norm_squared[0], rho_norm_interval[0], 1],
             [rho_norm_squared[1], rho_norm_interval[1], 1],
             [rho_norm_squared[2], rho_norm_interval[2], 1],
@@ -274,11 +314,14 @@ def _fit_polynomial_to_intervals_of_three(
             [q_face_interval[0], q_face_interval[1], q_face_interval[2]])
         coeffs = jnp.linalg.solve(A, b)
         return coeffs
+
     return (
         batch_polyfit(q_face_intervals, rho_norm_intervals),
         rho_norm_intervals,
         q_face_intervals,
     )
+
+
 @jax.vmap
 def _minimum_location_value_in_interval(
         coeffs: jax.Array, rho_norm_interval: jax.Array,
@@ -310,6 +353,8 @@ def _minimum_location_value_in_interval(
         lambda: (extremum_location, extremum_value),
     )
     return overall_minimum_location, overall_minimum_value
+
+
 def _find_roots_quadratic(coeffs: jax.Array) -> jax.Array:
     a, b, c = coeffs[0], coeffs[1], coeffs[2]
     determinant = b**2 - 4.0 * a * c
@@ -325,6 +370,8 @@ def _find_roots_quadratic(coeffs: jax.Array) -> jax.Array:
         lambda: -jnp.inf,
     )
     return jnp.array([plus_root, minus_root])
+
+
 @functools.partial(jax.vmap, in_axes=(0, 0, None))
 def _root_in_interval(coeffs: jax.Array, interval: jax.Array,
                       q_surface: float) -> jax.Array:
@@ -334,6 +381,8 @@ def _root_in_interval(coeffs: jax.Array, interval: jax.Array,
     in_interval = jnp.greater(root_values, min_interval) & jnp.less(
         root_values, max_interval)
     return jnp.where(in_interval, root_values, -jnp.inf)
+
+
 @jax_utils.jit
 def find_min_q_and_q_surface_intercepts(rho_norm: jax.Array,
                                         q_face: jax.Array) -> SafetyFactorFit:
@@ -374,16 +423,22 @@ def find_min_q_and_q_surface_intercepts(rho_norm: jax.Array,
         rho_q_2_1_second=outermost_rho_q_2_1[1],
         rho_q_3_1_second=outermost_rho_q_3_1[1],
     )
+
+
 RADIATION_OUTPUT_NAME = "radiation_impurity_species"
 DENSITY_OUTPUT_NAME = "n_impurity_species"
 Z_OUTPUT_NAME = "Z_impurity_species"
 IMPURITY_DIM = "impurity_symbol"
+
+
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class ImpuritySpeciesOutput:
     radiation: array_typing.FloatVectorCell
     n_impurity: array_typing.FloatVectorCell
     Z_impurity: array_typing.FloatVectorCell
+
+
 def calculate_impurity_species_output(sim_state, runtime_params):
     impurity_species_output = {}
     mavrin_active = True
@@ -413,6 +468,8 @@ def calculate_impurity_species_output(sim_state, runtime_params):
         impurity_species_output[symbol] = ImpuritySpeciesOutput(
             radiation=radiation, n_impurity=n_imp, Z_impurity=Z_imp)
     return impurity_species_output
+
+
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True, eq=False)
 class PostProcessedOutputs:
@@ -498,8 +555,11 @@ class PostProcessedOutputs:
     beta_N: array_typing.FloatScalar
     S_total: array_typing.FloatScalar
     impurity_species: dict[str, ImpuritySpeciesOutput]
+
     def check_for_errors(self):
         return state.SimError.NO_ERROR
+
+
 ION_EL_HEAT_SOURCE_TRANSFORMATIONS = {
     'generic_heat': 'P_aux_generic',
     'fusion': 'P_alpha',
@@ -526,6 +586,8 @@ PARTICLE_SOURCE_TRANSFORMATIONS = {
     'pellet': 'S_pellet',
     'generic_particle': 'S_generic_particle',
 }
+
+
 def _get_integrated_source_value(
     source_profiles_dict: dict[str, array_typing.FloatVector],
     internal_source_name: str,
@@ -537,6 +599,8 @@ def _get_integrated_source_value(
         return integration_fn(source_profiles_dict[internal_source_name], geo)
     else:
         return jnp.array(0.0, dtype=jax_utils.get_dtype())
+
+
 def _calculate_integrated_sources(
     geo: geometry.Geometry,
     core_profiles: state.CoreProfiles,
@@ -609,6 +673,8 @@ def _calculate_integrated_sources(
     integrated['P_external_total'] = (integrated['P_external_injected'] +
                                       integrated['P_ohmic_e'])
     return integrated
+
+
 @jax_utils.jit
 def make_post_processed_outputs(
     sim_state,
@@ -646,11 +712,9 @@ def make_post_processed_outputs(
     P_LH_hi_dens, P_LH_min, P_LH, n_e_min_P_LH = (
         scaling_laws.calculate_plh_scaling_factor(sim_state.geometry,
                                                   sim_state.core_profiles))
-    Ploss = (
-        integrated_sources['P_alpha_total'] +
-        integrated_sources['P_aux_total'] + integrated_sources['P_ohmic_e'] +
-        constants.CONSTANTS.eps  
-    )
+    Ploss = (integrated_sources['P_alpha_total'] +
+             integrated_sources['P_aux_total'] +
+             integrated_sources['P_ohmic_e'] + constants.CONSTANTS.eps)
     if previous_post_processed_outputs is not None:
         dW_th_dt = (
             W_thermal_tot -
@@ -788,6 +852,8 @@ def make_post_processed_outputs(
         beta_N=beta_N,
         impurity_species=impurity_radiation_outputs,
     )
+
+
 def construct_xarray_for_radiation_output(
     impurity_radiation_outputs: dict[str, ImpuritySpeciesOutput],
     times: jax.Array,
@@ -842,6 +908,8 @@ def construct_xarray_for_radiation_output(
         name=Z_OUTPUT_NAME,
     )
     return xr_dict
+
+
 SCALING_FACTORS: Final[Mapping[str, float]] = immutabledict.immutabledict({
     'T_i':
     1.0,
@@ -853,6 +921,8 @@ SCALING_FACTORS: Final[Mapping[str, float]] = immutabledict.immutabledict({
     1.0,
 })
 _trapz = jax.scipy.integrate.trapezoid
+
+
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class Ions:
@@ -868,6 +938,8 @@ class Ions:
     A_impurity_face: array_typing.FloatVectorFace
     Z_eff: array_typing.FloatVectorCell
     Z_eff_face: array_typing.FloatVectorFace
+
+
 def get_updated_ion_temperature(
     profile_conditions_params: profile_conditions.RuntimeParams,
     geo: geometry.Geometry,
@@ -880,6 +952,8 @@ def get_updated_ion_temperature(
         dr=geo.drho_norm,
     )
     return T_i
+
+
 def get_updated_electron_temperature(
     profile_conditions_params: profile_conditions.RuntimeParams,
     geo: geometry.Geometry,
@@ -892,13 +966,14 @@ def get_updated_electron_temperature(
         dr=geo.drho_norm,
     )
     return T_e
+
+
 def get_updated_electron_density(
     profile_conditions_params: profile_conditions.RuntimeParams,
     geo: geometry.Geometry,
 ) -> cell_variable.CellVariable:
-    nGW = (
-        profile_conditions_params.Ip / 1e6  
-        / (jnp.pi * geo.a_minor**2) * 1e20)
+    nGW = (profile_conditions_params.Ip / 1e6 / (jnp.pi * geo.a_minor**2) *
+           1e20)
     n_e_value = jnp.where(
         profile_conditions_params.n_e_nbar_is_fGW,
         profile_conditions_params.n_e * nGW,
@@ -910,8 +985,7 @@ def get_updated_electron_density(
         profile_conditions_params.n_e_right_bc,
     )
     if profile_conditions_params.normalize_n_e_to_nbar:
-        face_left = n_e_value[
-            0]  
+        face_left = n_e_value[0]
         face_right = n_e_right_bc
         face_inner = (n_e_value[..., :-1] + n_e_value[..., 1:]) / 2.0
         n_e_face = jnp.concatenate(
@@ -942,6 +1016,8 @@ def get_updated_electron_density(
         right_face_constraint=n_e_right_bc,
     )
     return n_e
+
+
 @dataclasses.dataclass(frozen=True)
 class _IonProperties:
     A_impurity: array_typing.FloatVectorCell
@@ -952,6 +1028,8 @@ class _IonProperties:
     dilution_factor: array_typing.FloatVectorCell
     dilution_factor_edge: array_typing.FloatScalar
     impurity_fractions: array_typing.FloatVector
+
+
 def _get_ion_properties_from_fractions(
     impurity_symbols: tuple[str, ...],
     impurity_params: impurity_fractions.RuntimeParams,
@@ -997,6 +1075,8 @@ def _get_ion_properties_from_fractions(
         dilution_factor_edge=dilution_factor_edge,
         impurity_fractions=impurity_params.fractions,
     )
+
+
 def _get_ion_properties_from_n_e_ratios(
     impurity_symbols: tuple[str, ...],
     impurity_params,
@@ -1039,6 +1119,8 @@ def _get_ion_properties_from_n_e_ratios(
         dilution_factor_edge=dilution_factor_edge,
         impurity_fractions=impurity_params.fractions,
     )
+
+
 @jax_utils.jit
 def get_updated_ions(
     runtime_params: runtime_params_slice.RuntimeParams,
@@ -1143,6 +1225,8 @@ def get_updated_ions(
         Z_eff=ion_properties.Z_eff,
         Z_eff_face=Z_eff_face,
     )
+
+
 def _calculate_Z_eff(
     Z_i: array_typing.FloatVector,
     Z_impurity: array_typing.FloatVector,
@@ -1151,6 +1235,8 @@ def _calculate_Z_eff(
     n_e: array_typing.FloatVector,
 ) -> array_typing.FloatVector:
     return (Z_i**2 * n_i + Z_impurity**2 * n_impurity) / n_e
+
+
 def initial_core_profiles0(
     runtime_params: runtime_params_slice.RuntimeParams,
     geo: geometry.Geometry,
@@ -1206,6 +1292,8 @@ def initial_core_profiles0(
         source_models,
         neoclassical_models,
     )
+
+
 def _get_initial_psi_mode(
     runtime_params: runtime_params_slice.RuntimeParams,
     geo: geometry.Geometry,
@@ -1225,6 +1313,8 @@ def _get_initial_psi_mode(
             else:
                 psi_mode = profile_conditions_lib.InitialPsiMode.J
     return psi_mode
+
+
 def _init_psi_and_psi_derived(
     runtime_params: runtime_params_slice.RuntimeParams,
     geo: geometry.Geometry,
@@ -1270,7 +1360,7 @@ def _init_psi_and_psi_derived(
                     geo,
                 ))
             psi = cell_variable.CellVariable(
-                value=geo.psi_from_Ip,  
+                value=geo.psi_from_Ip,
                 right_face_grad_constraint=None
                 if runtime_params.profile_conditions.
                 use_v_loop_lcfs_boundary_condition else dpsi_drhonorm_edge,
@@ -1318,6 +1408,8 @@ def _init_psi_and_psi_derived(
         sources_are_calculated=sources_are_calculated,
     )
     return core_profiles
+
+
 def _calculate_all_psi_dependent_profiles(
     runtime_params: runtime_params_slice.RuntimeParams,
     geo: geometry.Geometry,
@@ -1382,6 +1474,8 @@ def _calculate_all_psi_dependent_profiles(
         sigma_face=conductivity.sigma_face,
     )
     return core_profiles
+
+
 def _get_bootstrap_and_standard_source_profiles(
     runtime_params: runtime_params_slice.RuntimeParams,
     geo: geometry.Geometry,
@@ -1405,6 +1499,8 @@ def _get_bootstrap_and_standard_source_profiles(
     source_profiles = dataclasses.replace(source_profiles,
                                           bootstrap_current=bootstrap_current)
     return source_profiles
+
+
 def core_profiles_to_solver_x_tuple(
     core_profiles: state.CoreProfiles,
     evolving_names: Tuple[str, ...],
@@ -1418,6 +1514,8 @@ def core_profiles_to_solver_x_tuple(
         )
         x_tuple_for_solver_list.append(solver_x_tuple_cv)
     return tuple(x_tuple_for_solver_list)
+
+
 def solver_x_tuple_to_core_profiles(
     x_new: tuple[cell_variable.CellVariable, ...],
     evolving_names: tuple[str, ...],
@@ -1432,6 +1530,8 @@ def solver_x_tuple_to_core_profiles(
         )
         updated_vars[var_name] = original_units_cv
     return dataclasses.replace(core_profiles, **updated_vars)
+
+
 def scale_cell_variable(
     cv: cell_variable.CellVariable,
     scaling_factor: float,
@@ -1454,9 +1554,13 @@ def scale_cell_variable(
         right_face_grad_constraint=scaled_right_face_grad_constraint,
         dr=cv.dr,
     )
+
+
 OptionalTupleMatrix: TypeAlias = tuple[tuple[jax.Array | None, ...],
                                        ...] | None
 AuxiliaryOutput: TypeAlias = Any
+
+
 def _calculate_psi_value_constraint_from_v_loop(
     dt: array_typing.FloatScalar,
     theta: array_typing.FloatScalar,
@@ -1467,6 +1571,8 @@ def _calculate_psi_value_constraint_from_v_loop(
     theta_weighted_v_loop_lcfs = (
         1 - theta) * v_loop_lcfs_t + theta * v_loop_lcfs_t_plus_dt
     return psi_lcfs_t + theta_weighted_v_loop_lcfs * dt
+
+
 @jax_utils.jit
 def get_prescribed_core_profile_values(
     runtime_params: runtime_params_slice.RuntimeParams,
@@ -1517,6 +1623,8 @@ def get_prescribed_core_profile_values(
         'Z_eff': ions.Z_eff,
         'Z_eff_face': ions.Z_eff_face,
     }
+
+
 @functools.partial(jax_utils.jit, static_argnames=['evolving_names'])
 def update_core_profiles_during_step(
     x_new: tuple[cell_variable.CellVariable, ...],
@@ -1550,6 +1658,8 @@ def update_core_profiles_during_step(
         q_face=psi_calculations.calc_q_face(geo, updated_core_profiles.psi),
         s_face=psi_calculations.calc_s_face(geo, updated_core_profiles.psi),
     )
+
+
 def update_core_and_source_profiles_after_step(
     dt: array_typing.FloatScalar,
     x_new: tuple[cell_variable.CellVariable, ...],
@@ -1570,14 +1680,14 @@ def update_core_and_source_profiles_after_step(
         updated_core_profiles_t_plus_dt.n_e,
         updated_core_profiles_t_plus_dt.T_e,
     )
-    v_loop_lcfs = (
-        runtime_params_t_plus_dt.profile_conditions.v_loop_lcfs  
-        if runtime_params_t_plus_dt.profile_conditions.
-        use_v_loop_lcfs_boundary_condition else _update_v_loop_lcfs_from_psi(
-            core_profiles_t.psi,
-            updated_core_profiles_t_plus_dt.psi,
-            dt,
-        ))
+    v_loop_lcfs = (runtime_params_t_plus_dt.profile_conditions.v_loop_lcfs
+                   if runtime_params_t_plus_dt.profile_conditions.
+                   use_v_loop_lcfs_boundary_condition else
+                   _update_v_loop_lcfs_from_psi(
+                       core_profiles_t.psi,
+                       updated_core_profiles_t_plus_dt.psi,
+                       dt,
+                   ))
     j_total, j_total_face, Ip_profile_face = psi_calculations.calc_j_total(
         geo,
         updated_core_profiles_t_plus_dt.psi,
@@ -1605,8 +1715,8 @@ def update_core_and_source_profiles_after_step(
         Z_eff=ions.Z_eff,
         Z_eff_face=ions.Z_eff_face,
         v_loop_lcfs=v_loop_lcfs,
-        sigma=core_profiles_t_plus_dt.sigma,  
-        sigma_face=core_profiles_t_plus_dt.sigma_face,  
+        sigma=core_profiles_t_plus_dt.sigma,
+        sigma_face=core_profiles_t_plus_dt.sigma_face,
         j_total=j_total,
         j_total_face=j_total_face,
         Ip_profile_face=Ip_profile_face,
@@ -1652,6 +1762,8 @@ def update_core_and_source_profiles_after_step(
         psidot=psidot,
     )
     return core_profiles_t_plus_dt, total_source_profiles
+
+
 def compute_boundary_conditions_for_t_plus_dt(
     dt: array_typing.FloatScalar,
     runtime_params_t: runtime_params_slice.RuntimeParams,
@@ -1720,28 +1832,28 @@ def compute_boundary_conditions_for_t_plus_dt(
         'psi':
         dict(
             right_face_grad_constraint=(
-                psi_calculations.calculate_psi_grad_constraint_from_Ip(  
+                psi_calculations.calculate_psi_grad_constraint_from_Ip(
                     Ip=profile_conditions_t_plus_dt.Ip,
                     geo=geo_t_plus_dt,
                 ) if not runtime_params_t.profile_conditions.
                 use_v_loop_lcfs_boundary_condition else None),
-            right_face_constraint=(
-                _calculate_psi_value_constraint_from_v_loop(  
-                    dt=dt,
-                    v_loop_lcfs_t=runtime_params_t.profile_conditions.
-                    v_loop_lcfs,
-                    v_loop_lcfs_t_plus_dt=profile_conditions_t_plus_dt.
-                    v_loop_lcfs,
-                    psi_lcfs_t=core_profiles_t.psi.right_face_constraint,
-                    theta=runtime_params_t.solver.theta_implicit,
-                ) if runtime_params_t.profile_conditions.
-                use_v_loop_lcfs_boundary_condition else None),
+            right_face_constraint=(_calculate_psi_value_constraint_from_v_loop(
+                dt=dt,
+                v_loop_lcfs_t=runtime_params_t.profile_conditions.v_loop_lcfs,
+                v_loop_lcfs_t_plus_dt=profile_conditions_t_plus_dt.v_loop_lcfs,
+                psi_lcfs_t=core_profiles_t.psi.right_face_constraint,
+                theta=runtime_params_t.solver.theta_implicit,
+            ) if runtime_params_t.profile_conditions.
+                                   use_v_loop_lcfs_boundary_condition else
+                                   None),
         ),
         'Z_i_edge':
         Z_i_edge,
         'Z_impurity_edge':
         Z_impurity_edge,
     }
+
+
 def provide_core_profiles_t_plus_dt(
     dt: jax.Array,
     runtime_params_t: runtime_params_slice.RuntimeParams,
@@ -1816,6 +1928,8 @@ def provide_core_profiles_t_plus_dt(
         Z_eff_face=updated_values['Z_eff_face'],
     )
     return core_profiles_t_plus_dt
+
+
 def _update_v_loop_lcfs_from_psi(
     psi_t: cell_variable.CellVariable,
     psi_t_plus_dt: cell_variable.CellVariable,
@@ -1825,6 +1939,8 @@ def _update_v_loop_lcfs_from_psi(
     psi_lcfs_t_plus_dt = psi_t_plus_dt.face_value()[-1]
     v_loop_lcfs_t_plus_dt = (psi_lcfs_t_plus_dt - psi_lcfs_t) / dt
     return v_loop_lcfs_t_plus_dt
+
+
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class Block1DCoeffs:
@@ -1835,13 +1951,20 @@ class Block1DCoeffs:
     source_mat_cell: OptionalTupleMatrix = None
     source_cell: tuple[jax.Array | None, ...] | None = None
     auxiliary_outputs: AuxiliaryOutput | None = None
+
+
 Block1DCoeffs: TypeAlias = Block1DCoeffs
 AuxiliaryOutput: TypeAlias = AuxiliaryOutput
+
+
 def cell_variable_tuple_to_vec(
     x_tuple: tuple[cell_variable.CellVariable, ...], ) -> jax.Array:
     x_vec = jnp.concatenate([x.value for x in x_tuple])
     return x_vec
+
+
 class CoeffsCallback:
+
     def __init__(
         self,
         physics_models: PhysicsModels,
@@ -1849,14 +1972,17 @@ class CoeffsCallback:
     ):
         self.physics_models = physics_models
         self.evolving_names = evolving_names
+
     def __hash__(self) -> int:
         return hash((
             self.physics_models,
             self.evolving_names,
         ))
+
     def __eq__(self, other: typing_extensions.Self) -> bool:
         return (self.physics_models == other.physics_models
                 and self.evolving_names == other.evolving_names)
+
     def __call__(
         self,
         runtime_params: runtime_params_slice.RuntimeParams,
@@ -1888,6 +2014,8 @@ class CoeffsCallback:
             use_pereverzev=use_pereverzev,
             explicit_call=explicit_call,
         )
+
+
 def _calculate_pereverzev_flux(
     runtime_params: runtime_params_slice.RuntimeParams,
     geo: geometry.Geometry,
@@ -1939,6 +2067,8 @@ def _calculate_pereverzev_flux(
         d_face_per_el,
         v_face_per_el,
     )
+
+
 def calc_coeffs(
     runtime_params: runtime_params_slice.RuntimeParams,
     geo: geometry.Geometry,
@@ -1965,6 +2095,8 @@ def calc_coeffs(
             evolving_names=evolving_names,
             use_pereverzev=use_pereverzev,
         )
+
+
 @functools.partial(
     jax_utils.jit,
     static_argnames=[
@@ -2164,6 +2296,8 @@ def _calc_coeffs_full(
         ),
     )
     return coeffs
+
+
 @functools.partial(
     jax_utils.jit,
     static_argnames=[
@@ -2188,6 +2322,8 @@ def _calc_coeffs_reduced(
     transient_in_cell = tuple(var_to_tic[var] for var in evolving_names)
     coeffs = Block1DCoeffs(transient_in_cell=transient_in_cell, )
     return coeffs
+
+
 def calc_c(
     x: tuple[cell_variable.CellVariable, ...],
     coeffs: Block1DCoeffs,
@@ -2245,15 +2381,19 @@ def calc_c(
                 source = source_mat_cell[i][j]
                 if source is not None:
                     c_mat[i][j] += jnp.diag(source)
+
     def add(left: jax.Array, right: jax.Array | None):
         if right is not None:
             return left + right
         return left
+
     if source_cell is not None:
         c = [add(c_i, source_i) for c_i, source_i in zip(c, source_cell)]
     c_mat = jnp.block(c_mat)
     c = jnp.block(c)
     return c_mat, c
+
+
 @functools.partial(
     jax_utils.jit,
     static_argnames=[
@@ -2309,7 +2449,11 @@ def theta_method_matrix_equation(
         rhs_mat = right_transient
         rhs_vec = jnp.zeros_like(x_new_guess_vec)
     return lhs_mat, lhs_vec, rhs_mat, rhs_vec
+
+
 MIN_DELTA: Final[float] = 1e-7
+
+
 @functools.partial(
     jax_utils.jit,
     static_argnames=[
@@ -2348,6 +2492,8 @@ def implicit_solve_block(
     ]
     out = tuple(out)
     return out
+
+
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class RuntimeParams:
@@ -2360,17 +2506,23 @@ class RuntimeParams:
     convection_neumann_mode: str = dataclasses.field(metadata={'static': True})
     use_pereverzev: bool = dataclasses.field(metadata={'static': True})
     chi_pereverzev: float
-    D_pereverzev: float  
+    D_pereverzev: float
+
+
 class Solver(abc.ABC):
+
     def __init__(
         self,
         physics_models: PhysicsModels,
     ):
         self.physics_models = physics_models
+
     def __hash__(self) -> int:
         return hash(self.physics_models)
+
     def __eq__(self, other: typing_extensions.Self) -> bool:
         return self.physics_models == other.physics_models
+
     @functools.partial(
         jax_utils.jit,
         static_argnames=[
@@ -2414,6 +2566,7 @@ class Solver(abc.ABC):
             x_new,
             solver_numeric_output,
         )
+
     def _x_new(
         self,
         dt: jax.Array,
@@ -2433,6 +2586,8 @@ class Solver(abc.ABC):
             f'{type(self)} must implement `_x_new` or '
             'implement a different `__call__` that does not'
             ' need `_x_new`.')
+
+
 @functools.partial(
     jax_utils.jit,
     static_argnames=[
@@ -2451,7 +2606,8 @@ def predictor_corrector_method(
     coeffs_callback: CoeffsCallback,
 ) -> tuple[cell_variable.CellVariable, ...]:
     solver_params = runtime_params_t_plus_dt.solver
-    def loop_body(i, x_new_guess):  
+
+    def loop_body(i, x_new_guess):
         coeffs_new = coeffs_callback(
             runtime_params_t_plus_dt,
             geo_t_plus_dt,
@@ -2471,6 +2627,7 @@ def predictor_corrector_method(
                 solver_params.convection_dirichlet_mode),
             convection_neumann_mode=(solver_params.convection_neumann_mode),
         )
+
     if solver_params.use_predictor_corrector:
         x_new = xnp.fori_loop(
             0,
@@ -2481,7 +2638,10 @@ def predictor_corrector_method(
     else:
         x_new = loop_body(0, x_new_guess)
     return x_new
+
+
 class LinearThetaMethod0(Solver):
+
     @functools.partial(
         jax_utils.jit,
         static_argnames=[
@@ -2540,12 +2700,14 @@ class LinearThetaMethod0(Solver):
         solver_numeric_outputs = state.SolverNumericOutputs(
             inner_solver_iterations=inner_solver_iterations,
             outer_solver_iterations=1,
-            solver_error_state=0,  
+            solver_error_state=0,
         )
         return (
             x_new,
             solver_numeric_outputs,
         )
+
+
 class BaseSolver(torax_pydantic.BaseModelFrozen, abc.ABC):
     theta_implicit: Annotated[torax_pydantic.UnitInterval,
                               torax_pydantic.JAX_STATIC] = 1.0
@@ -2560,25 +2722,31 @@ class BaseSolver(torax_pydantic.BaseModelFrozen, abc.ABC):
     use_pereverzev: Annotated[bool, torax_pydantic.JAX_STATIC] = False
     chi_pereverzev: pydantic.PositiveFloat = 30.0
     D_pereverzev: pydantic.NonNegativeFloat = 15.0
+
     @property
     @abc.abstractmethod
     def build_runtime_params(self):
         pass
+
     @abc.abstractmethod
     def build_solver(
         self,
         physics_models: PhysicsModels,
     ):
         pass
+
+
 class LinearThetaMethod(BaseSolver):
     solver_type: Annotated[Literal['linear'],
                            torax_pydantic.JAX_STATIC] = ('linear')
+
     @pydantic.model_validator(mode='before')
     @classmethod
     def scrub_log_iterations(cls, x: dict[str, Any]) -> dict[str, Any]:
         if 'log_iterations' in x:
             del x['log_iterations']
         return x
+
     @functools.cached_property
     def build_runtime_params(self):
         return RuntimeParams(
@@ -2591,11 +2759,14 @@ class LinearThetaMethod(BaseSolver):
             D_pereverzev=self.D_pereverzev,
             n_corrector_steps=self.n_corrector_steps,
         )
+
     def build_solver(
         self,
         physics_models: PhysicsModels,
     ):
         return LinearThetaMethod0(physics_models=physics_models, )
+
+
 class NewtonRaphsonThetaMethod(BaseSolver):
     solver_type: Annotated[Literal['newton_raphson'],
                            torax_pydantic.JAX_STATIC] = 'newton_raphson'
@@ -2608,11 +2779,19 @@ class NewtonRaphsonThetaMethod(BaseSolver):
     residual_coarse_tol: float = 1e-2
     delta_reduction_factor: float = 0.5
     tau_min: float = 0.01
+
+
 SolverConfig = (LinearThetaMethod | NewtonRaphsonThetaMethod)
+
+
 class g:
     pass
+
+
 def not_done(t, t_final):
     return t < (t_final - g.tolerance)
+
+
 def next_dt(t, runtime_params, geo, core_profiles, core_transport):
     chi_max = core_transport.chi_max(geo)
     basic_dt = (3.0 / 4.0) * (geo.drho_norm**2) / chi_max
@@ -2631,6 +2810,8 @@ def next_dt(t, runtime_params, geo, core_profiles, core_transport):
         dt,
     )
     return dt
+
+
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class RuntimeParamsProvider:
@@ -2643,6 +2824,7 @@ class RuntimeParamsProvider:
     pedestal: Any
     mhd: Any
     neoclassical: Any
+
     @classmethod
     def from_config(cls, config):
         return cls(
@@ -2656,6 +2838,7 @@ class RuntimeParamsProvider:
             mhd=config.mhd,
             neoclassical=config.neoclassical,
         )
+
     @jax_utils.jit
     def __call__(
         self,
@@ -2676,11 +2859,15 @@ class RuntimeParamsProvider:
             pedestal=self.pedestal.build_runtime_params(t),
             mhd=self.mhd.build_runtime_params(t),
         )
+
+
 def get_consistent_runtime_params_and_geometry(*, t, runtime_params_provider,
                                                geometry_provider):
     geo = geometry_provider(t)
     runtime_params = runtime_params_provider(t=t)
     return runtime_params_slice.make_ip_consistent(runtime_params, geo)
+
+
 TIME_INVARIANT = model_base.TIME_INVARIANT
 JAX_STATIC = model_base.JAX_STATIC
 BaseModelFrozen = model_base.BaseModelFrozen
@@ -2692,6 +2879,8 @@ UnitIntervalTimeVaryingScalar = (
     interpolated_param_1d.UnitIntervalTimeVaryingScalar)
 PositiveTimeVaryingArray = interpolated_param_2d.PositiveTimeVaryingArray
 ValidatedDefault = functools.partial(pydantic.Field, validate_default=True)
+
+
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class PhysicsModels:
@@ -2704,6 +2893,8 @@ class PhysicsModels:
     neoclassical_models: neoclassical_models_lib.NeoclassicalModels = (
         dataclasses.field(metadata=dict(static=True)))
     mhd_models: MHDModels = dataclasses.field(metadata=dict(static=True))
+
+
 TIME_INVARIANT: Final[str] = '_pydantic_time_invariant_field'
 JAX_STATIC: Final[str] = '_pydantic_jax_static_field'
 StaticKwargs: TypeAlias = dict[str, Any]
@@ -2764,6 +2955,8 @@ EXCLUDED_GEOMETRY_NAMES = frozenset({
     "rho_norm",
     "q_correction_factor",
 })
+
+
 def _extend_cell_grid_to_boundaries(
     cell_var: array_typing.FloatVectorCell,
     face_var: array_typing.FloatVectorFace,
@@ -2771,7 +2964,10 @@ def _extend_cell_grid_to_boundaries(
     left_value = np.expand_dims(face_var[:, 0], axis=-1)
     right_value = np.expand_dims(face_var[:, -1], axis=-1)
     return np.concatenate([left_value, cell_var, right_value], axis=-1)
+
+
 class StateHistory:
+
     def __init__(self, state_history, post_processed_outputs_history,
                  sim_error, torax_config):
         if (not torax_config.restart and not torax_config.profile_conditions.
@@ -2808,27 +3004,35 @@ class StateHistory:
         self._rho_cell_norm = state_history[0].geometry.rho_norm
         self._rho_face_norm = state_history[0].geometry.rho_face_norm
         self._rho_norm = np.concatenate([[0.0], self.rho_cell_norm, [1.0]])
+
     @property
     def torax_config(self):
         return self._torax_config
+
     @property
     def sim_error(self) -> state.SimError:
         return self._sim_error
+
     @property
     def times(self) -> array_typing.Array:
         return self._times
+
     @property
     def rho_cell_norm(self) -> array_typing.FloatVectorCell:
         return self._rho_cell_norm
+
     @property
     def rho_face_norm(self) -> array_typing.FloatVectorFace:
         return self._rho_face_norm
+
     @property
     def rho_norm(self) -> array_typing.FloatVectorCellPlusBoundaries:
         return self._rho_norm
+
     @property
     def geometries(self) -> Sequence[geometry_lib.Geometry]:
         return self._geometries
+
     def simulation_output_to_xr(self) -> xr.DataTree:
         time = xr.DataArray(self.times, dims=[TIME], name=TIME)
         rho_face_norm = xr.DataArray(self.rho_face_norm,
@@ -2887,13 +3091,13 @@ class StateHistory:
         profiles_dict = {
             k: v
             for k, v in flat_dict.items()
-            if v is not None and v.values.ndim > 1  
+            if v is not None and v.values.ndim > 1
         }
         profiles = xr.Dataset(profiles_dict)
         scalars_dict = {
             k: v
             for k, v in flat_dict.items()
-            if v is not None and v.values.ndim in [0, 1]  
+            if v is not None and v.values.ndim in [0, 1]
         }
         scalars = xr.Dataset(scalars_dict)
         data_tree = xr.DataTree(
@@ -2912,6 +3116,7 @@ class StateHistory:
             data_tree = stitch_state_files(self.torax_config.restart,
                                            data_tree)
         return data_tree
+
     def _pack_into_data_array(
         self,
         name: str,
@@ -2948,10 +3153,11 @@ class StateHistory:
                 logging.warning(
                     "Unsupported data shape for %s: %s. Skipping persisting.",
                     name,
-                    data.shape,  
+                    data.shape,
                 )
                 return None
         return xr.DataArray(data, dims=dims, name=name)
+
     def _save_core_profiles(self, ) -> dict[str, xr.DataArray | None]:
         xr_dict = {}
         stacked_core_profiles = self._stacked_core_profiles
@@ -2996,13 +3202,14 @@ class StateHistory:
                     face_value = getattr(stacked_core_profiles, face_attr_name)
                     data_to_save = _extend_cell_grid_to_boundaries(
                         attr_value, face_value)
-                else:  
+                else:
                     data_to_save = attr_value
             xr_dict[output_key] = self._pack_into_data_array(
                 output_key, data_to_save)
         Ip_data = stacked_core_profiles.Ip_profile_face[..., -1]
         xr_dict[IP] = self._pack_into_data_array(IP, Ip_data)
         return xr_dict
+
     def _save_core_transport(self, ) -> dict[str, xr.DataArray | None]:
         xr_dict = {}
         core_transport = self._stacked_core_transport
@@ -3023,6 +3230,7 @@ class StateHistory:
             for name, data in xr_dict.items()
         }
         return xr_dict
+
     def _save_core_sources(self, ) -> dict[str, xr.DataArray | None]:
         xr_dict = {}
         xr_dict[qei_source_lib.QeiSource.SOURCE_NAME] = (
@@ -3054,6 +3262,7 @@ class StateHistory:
             for name, data in xr_dict.items()
         }
         return xr_dict
+
     def _save_post_processed_outputs(self, ) -> dict[str, xr.DataArray | None]:
         xr_dict = {}
         for field in dataclasses.fields(self._stacked_post_processed_outputs):
@@ -3079,6 +3288,7 @@ class StateHistory:
             for key, value in radiation_outputs.items():
                 xr_dict[key] = value
         return xr_dict
+
     def _save_geometry(self, ) -> dict[str, xr.DataArray]:
         xr_dict = {}
         geometry_attributes = dataclasses.asdict(self._stacked_geometry)
@@ -3128,6 +3338,8 @@ class StateHistory:
                         name = name.removesuffix("_face")
                     xr_dict[name] = data_array
         return xr_dict
+
+
 @enum.unique
 class GeometryType(enum.IntEnum):
     CIRCULAR = 0
@@ -3135,6 +3347,8 @@ class GeometryType(enum.IntEnum):
     FBT = 2
     EQDSK = 3
     IMAS = 4
+
+
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class Geometry:
@@ -3183,6 +3397,8 @@ class Geometry:
     rho_hires: array_typing.Array
     Phi_b_dot: array_typing.FloatScalar
     _z_magnetic_axis: array_typing.FloatScalar | None
+
+
 def update_geometries_with_Phibdot(
     *,
     dt: chex.Numeric,
@@ -3193,6 +3409,8 @@ def update_geometries_with_Phibdot(
     geo_t = dataclasses.replace(geo_t, Phi_b_dot=Phibdot)
     geo_t_plus_dt = dataclasses.replace(geo_t_plus_dt, Phi_b_dot=Phibdot)
     return geo_t, geo_t_plus_dt
+
+
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass
 class ToraxSimState:
@@ -3203,10 +3421,14 @@ class ToraxSimState:
     core_sources: source_profiles.SourceProfiles
     geometry: Any
     solver_numeric_outputs: state.SolverNumericOutputs
+
     def check_for_errors(self) -> state.SimError:
         return state.SimError.NO_ERROR
+
     def has_nan(self) -> bool:
         return any([np.any(np.isnan(x)) for x in jax.tree.leaves(self)])
+
+
 def _get_initial_state(runtime_params, geo, step_fn):
     physics_models = g.solver.physics_models
     initial_core_profiles = initial_core_profiles0(
@@ -3248,6 +3470,8 @@ def _get_initial_state(runtime_params, geo, step_fn):
         ),
         geometry=geo,
     )
+
+
 def check_for_errors(
     numerics: numerics_lib.Numerics,
     output_state,
@@ -3262,10 +3486,14 @@ def check_for_errors(
         return state_error
     else:
         return post_processed_outputs.check_for_errors()
+
+
 class SimulationStepFn:
+
     def __init__(self, runtime_params_provider, geometry_provider):
         self._geometry_provider = geometry_provider
         self._runtime_params_provider = runtime_params_provider
+
     @xnp.jit
     def __call__(
         self,
@@ -3285,6 +3513,7 @@ class SimulationStepFn:
             neoclassical_models=g.solver.physics_models.neoclassical_models,
             explicit=True,
         )
+
         def _step():
             return self._adaptive_step(
                 runtime_params_t,
@@ -3293,8 +3522,10 @@ class SimulationStepFn:
                 input_state,
                 previous_post_processed_outputs,
             )
+
         output_state, post_processed_outputs = _step()
         return output_state, post_processed_outputs
+
     def _adaptive_step(
         self,
         runtime_params_t,
@@ -3311,6 +3542,7 @@ class SimulationStepFn:
             input_state.core_profiles,
             input_state.core_transport,
         )
+
         def cond_fun(inputs):
             next_dt, output = inputs
             solver_outputs = output[2]
@@ -3331,6 +3563,7 @@ class SimulationStepFn:
                 lambda: False,
             )
             return take_another_step & ~is_nan_next_dt
+
         def body_fun(inputs):
             dt, output = inputs
             old_solver_outputs = output[2]
@@ -3378,6 +3611,7 @@ class SimulationStepFn:
                 geo_t_plus_dt,
                 core_profiles_t_plus_dt,
             )
+
         _, result = xnp.while_loop(
             cond_fun,
             body_fun,
@@ -3414,6 +3648,8 @@ class SimulationStepFn:
             input_post_processed_outputs=previous_post_processed_outputs,
         )
         return output_state, post_processed_outputs
+
+
 @functools.partial(
     jax_utils.jit,
     static_argnames=[
@@ -3462,6 +3698,8 @@ def _finalize_outputs(t, dt, x_new, solver_numeric_outputs, geometry_t_plus_dt,
         previous_post_processed_outputs=input_post_processed_outputs,
     )
     return output_state, post_processed_outputs
+
+
 def _get_geo_and_runtime_params_at_t_plus_dt_and_phibdot(
     t,
     dt,
@@ -3486,15 +3724,15 @@ def _get_geo_and_runtime_params_at_t_plus_dt_and_phibdot(
         geo_t,
         geo_t_plus_dt,
     )
+
+
 class ToraxConfig(BaseModelFrozen):
     profile_conditions: profile_conditions_lib.ProfileConditions
     numerics: numerics_lib.Numerics
     plasma_composition: plasma_composition_lib.PlasmaComposition
     geometry: Geometry0
     sources: sources_pydantic_model.Sources
-    neoclassical: Neoclassical0 = (
-        Neoclassical0()  
-    )
+    neoclassical: Neoclassical0 = (Neoclassical0())
     solver: SolverConfig = pydantic.Field(discriminator='solver_type')
     transport: transport_model_pydantic_model.TransportConfig = pydantic.Field(
         discriminator='model_name')
@@ -3502,6 +3740,7 @@ class ToraxConfig(BaseModelFrozen):
         discriminator='model_name')
     mhd: MHD = MHD()
     restart: FileRestart | None = pydantic.Field(default=None)
+
     def build_physics_models(self):
         return PhysicsModels(
             pedestal_model=self.pedestal.build_pedestal_model(),
@@ -3510,11 +3749,13 @@ class ToraxConfig(BaseModelFrozen):
             neoclassical_models=self.neoclassical.build_models(),
             mhd_models=self.mhd.build_mhd_models(),
         )
+
     @pydantic.model_validator(mode='before')
     @classmethod
     def _defaults(cls, data: dict[str, Any]) -> dict[str, Any]:
         configurable_data = copy.deepcopy(data)
         return configurable_data
+
     @pydantic.model_validator(mode='after')
     def _check_fields(self) -> typing_extensions.Self:
         using_nonlinear_transport_model = self.transport.model_name in [
@@ -3527,10 +3768,13 @@ class ToraxConfig(BaseModelFrozen):
                                         self.solver.initial_guess_mode
                                         == enums.InitialGuessMode.LINEAR)
         return self
+
     @pydantic.computed_field
     @property
     def torax_version(self) -> str:
         return version.TORAX_VERSION
+
+
 CONFIG = {
     'plasma_composition': {
         'main_ion': {

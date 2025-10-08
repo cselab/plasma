@@ -1,7 +1,7 @@
 CONFIG = {
-    'profile_conditions': {},  
-    'plasma_composition': {},  
-    'numerics': {},  
+    'profile_conditions': {},
+    'plasma_composition': {},
+    'numerics': {},
     'geometry': {
         'geometry_type': 'circular',
     },

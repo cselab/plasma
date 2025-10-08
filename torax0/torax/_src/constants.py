@@ -4,25 +4,31 @@ import chex
 import immutabledict
 import jax
 from jax import numpy as jnp
+
+
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class IonProperties:
-  symbol: str
-  name: str
-  A: float
-  Z: float
+    symbol: str
+    name: str
+    A: float
+    Z: float
+
+
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class Constants:
-  keV_to_J: chex.Numeric
-  eV_to_J: chex.Numeric
-  m_amu: chex.Numeric
-  q_e: chex.Numeric
-  m_e: chex.Numeric
-  epsilon_0: chex.Numeric
-  mu_0: chex.Numeric
-  k_B: chex.Numeric
-  eps: chex.Numeric
+    keV_to_J: chex.Numeric
+    eV_to_J: chex.Numeric
+    m_amu: chex.Numeric
+    q_e: chex.Numeric
+    m_e: chex.Numeric
+    epsilon_0: chex.Numeric
+    mu_0: chex.Numeric
+    k_B: chex.Numeric
+    eps: chex.Numeric
+
+
 CONSTANTS: Final[Constants] = Constants(
     keV_to_J=1e3 * 1.602176634e-19,
     eV_to_J=1.602176634e-19,
@@ -52,6 +58,6 @@ ION_PROPERTIES: Final[tuple[IonProperties, ...]] = (
     IonProperties(symbol='W', name='Tungsten', A=183.84, Z=74.0),
 )
 ION_PROPERTIES_DICT: Final[Mapping[str, IonProperties]] = (
-    immutabledict.immutabledict({v.symbol: v for v in ION_PROPERTIES})
-)
+    immutabledict.immutabledict({v.symbol: v
+                                 for v in ION_PROPERTIES}))
 ION_SYMBOLS = frozenset(ION_PROPERTIES_DICT.keys())

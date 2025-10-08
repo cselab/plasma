@@ -6,6 +6,7 @@ from torax._src.torax_pydantic import interpolated_param_2d
 from torax._src.torax_pydantic import model_base
 from torax._src.torax_pydantic import pydantic_types
 from typing_extensions import Annotated
+
 TIME_INVARIANT = model_base.TIME_INVARIANT
 JAX_STATIC = model_base.JAX_STATIC
 CubicMeter: TypeAlias = pydantic.PositiveFloat
@@ -30,8 +31,7 @@ TimeVaryingArray = interpolated_param_2d.TimeVaryingArray
 NonNegativeTimeVaryingArray = interpolated_param_2d.NonNegativeTimeVaryingArray
 PositiveTimeVaryingScalar = interpolated_param_1d.PositiveTimeVaryingScalar
 UnitIntervalTimeVaryingScalar = (
-    interpolated_param_1d.UnitIntervalTimeVaryingScalar
-)
+    interpolated_param_1d.UnitIntervalTimeVaryingScalar)
 PositiveTimeVaryingArray = interpolated_param_2d.PositiveTimeVaryingArray
 ValidatedDefault = functools.partial(pydantic.Field, validate_default=True)
 Grid1D = interpolated_param_2d.Grid1D
