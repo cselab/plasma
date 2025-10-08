@@ -3,7 +3,7 @@ import chex
 import pydantic
 from torax._src.torax_pydantic import interpolated_param_1d
 from torax._src.torax_pydantic import torax_pydantic
-from torax._src.transport_model import runtime_params
+from torax._src.transport_model import runtime_params as runtime_params0
 from torax._src.transport_model import transport_model
 
 
@@ -45,9 +45,8 @@ class TransportBase(torax_pydantic.BaseModelFrozen, abc.ABC):
     smoothing_width: pydantic.NonNegativeFloat = 0.0
     smooth_everywhere: bool = False
 
-    def build_runtime_params(self,
-                             t: chex.Numeric) -> runtime_params.RuntimeParams:
-        return runtime_params.RuntimeParams(
+    def build_runtime_params(self, t):
+        return runtime_params0.RuntimeParams(
             chi_min=self.chi_min,
             chi_max=self.chi_max,
             D_e_min=self.D_e_min,
