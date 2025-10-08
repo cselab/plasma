@@ -24,7 +24,6 @@ from jax import numpy as jnp
 import jaxtyping as jt
 from torax._src import array_typing
 from torax._src import jax_utils
-from torax._src.geometry import geometry
 
 
 @enum.unique
@@ -62,8 +61,8 @@ def tridiag(
 @jax_utils.jit
 @array_typing.jaxtyped
 def cell_integration(
-    x: array_typing.FloatVectorCell, geo: geometry.Geometry
-) -> array_typing.FloatScalar:
+    x, geo
+):
   r"""Integrate a value `x` over the rhon grid.
 
   Cell variables in TORAX are defined as the average of the face values. This
@@ -87,35 +86,35 @@ def cell_integration(
 
 @array_typing.jaxtyped
 def area_integration(
-    value: array_typing.FloatVector,
-    geo: geometry.Geometry,
-) -> array_typing.FloatScalar:
+    value,
+    geo,
+):
   """Calculates integral of value using an area metric."""
   return cell_integration(value * geo.spr, geo)
 
 
 @array_typing.jaxtyped
 def volume_integration(
-    value: array_typing.FloatVector,
-    geo: geometry.Geometry,
-) -> array_typing.FloatScalar:
+    value,
+    geo,
+):
   """Calculates integral of value using a volume metric."""
   return cell_integration(value * geo.vpr, geo)
 
 
 @array_typing.jaxtyped
 def line_average(
-    value: array_typing.FloatVector,
-    geo: geometry.Geometry,
-) -> array_typing.FloatScalar:
+    value,
+    geo,
+):
   """Calculates line-averaged value from input profile."""
   return cell_integration(value, geo)
 
 
 @array_typing.jaxtyped
 def volume_average(
-    value: array_typing.FloatVector,
-    geo: geometry.Geometry,
-) -> array_typing.FloatScalar:
+    value,
+    geo,
+):
   """Calculates volume-averaged value from input profile."""
   return cell_integration(value * geo.vpr, geo) / geo.volume_face[-1]
