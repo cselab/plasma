@@ -162,40 +162,6 @@ class Solver(abc.ABC):
       tuple[cell_variable.CellVariable, ...],
       state.SolverNumericOutputs,
   ]:
-    """Applies a time step update.
-
-    Args:
-      t: Time.
-      dt: Time step duration.
-      runtime_params_t: Runtime parameters for time t (the start time of the
-        step). These runtime params can change from step to step without
-        triggering a recompilation.
-      runtime_params_t_plus_dt: Runtime parameters for time t + dt, used for
-        implicit calculations in the solver.
-      geo_t: Geometry of the torus at time t.
-      geo_t_plus_dt: Geometry of the torus at time t + dt.
-      core_profiles_t: Core plasma profiles at the beginning of the time step.
-      core_profiles_t_plus_dt: Core plasma profiles which contain all available
-        prescribed quantities at the end of the time step. This includes
-        evolving boundary conditions and prescribed time-dependent profiles that
-        are not being evolved by the PDE system.
-      explicit_source_profiles: Source profiles of all explicit sources (as
-        configured by the input params). All implicit source's profiles will be
-        set to 0 in this object. These explicit source profiles were calculated
-        either based on the original core profiles at the start of the time step
-        or were independent of the core profiles. Because they were calculated
-        outside the possibly-JAX-jitted solver logic, they can be calculated in
-        non-JAX-friendly ways.
-
-    Returns:
-      x_new: Tuple containing new cell-grid values of the evolving variables.
-      solver_numeric_output: Error and solver iteration info.
-    """
-
-    # This base class method can be completely overridden by a subclass, but
-    # most can make use of the boilerplate here and just implement `_x_new`.
-
-    # Don't call solver functions on an empty list
     if runtime_params_t.numerics.evolving_names:
       (
           x_new,
@@ -235,33 +201,6 @@ class Solver(abc.ABC):
       tuple[cell_variable.CellVariable, ...],
       state.SolverNumericOutputs,
   ]:
-    """Calculates new values of the changing variables.
-
-    Subclasses must either implement `_x_new` so that `Solver.__call__`
-    will work, or implement a different `__call__`.
-
-    Args:
-      dt: Time step duration.
-      runtime_params_t: Runtime parameters for time t (the start time of the
-        step). These runtime params can change from step to step without
-        triggering a recompilation.
-      runtime_params_t_plus_dt: Runtime parameters for time t + dt, used for
-        implicit calculations in the solver.
-      geo_t: Geometry of the torus for time t.
-      geo_t_plus_dt: Geometry of the torus for time t + dt.
-      core_profiles_t: Core plasma profiles at the beginning of the time step.
-      core_profiles_t_plus_dt: Core plasma profiles which contain all available
-        prescribed quantities at the end of the time step. This includes
-        evolving boundary conditions and prescribed time-dependent profiles that
-        are not being evolved by the PDE system.
-      explicit_source_profiles: see the docstring of __call__
-      evolving_names: The names of core_profiles variables that should evolve.
-
-    Returns:
-      x_new: The values of the evolving variables at time t + dt.
-      solver_numeric_output: Error and solver iteration info.
-    """
-
     raise NotImplementedError(
         f'{type(self)} must implement `_x_new` or '
         'implement a different `__call__` that does not'
@@ -286,34 +225,7 @@ def predictor_corrector_method(
     explicit_source_profiles: source_profiles.SourceProfiles,
     coeffs_callback: calc_coeffs.CoeffsCallback,
 ) -> tuple[cell_variable.CellVariable, ...]:
-  """Predictor-corrector method.
-
-  Args:
-    dt: current timestep
-    runtime_params_t_plus_dt: Runtime parameters corresponding to the next time
-      step, needed for the implicit PDE coefficients.
-    geo_t_plus_dt: Geometry at the next time step.
-    x_old: Tuple of CellVariables correspond to the evolving core profiles at
-      time t.
-    x_new_guess: Tuple of CellVariables corresponding to the initial guess for
-      the next time step.
-    core_profiles_t_plus_dt: Core profiles at the next time step.
-    coeffs_exp: Block1DCoeffs PDE coefficients at beginning of timestep.
-    explicit_source_profiles: Precomputed explicit source profiles. These
-      profiles were configured to always depend on state and parameters at time
-      t during the solver step. They can thus be inputs, since they are not
-      recalculated at time t+plus_dt with updated state during the solver
-      iterations. For sources that are implicit, their explicit profiles are set
-      to all zeros.
-    coeffs_callback: coefficient callback function.
-
-  Returns:
-    x_new: Solution of evolving core profile state variables
-  """
   solver_params = runtime_params_t_plus_dt.solver
-
-  # predictor-corrector loop. Will only be traversed once if not in
-  # predictor-corrector mode
   def loop_body(i, x_new_guess):  # pylint: disable=unused-argument
     coeffs_new = coeffs_callback(
         runtime_params_t_plus_dt,
