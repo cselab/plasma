@@ -3637,7 +3637,7 @@ class ToraxConfig(BaseModelFrozen):
     plasma_composition: plasma_composition_lib.PlasmaComposition
     geometry: Geometry0
     sources: sources_pydantic_model.Sources
-    neoclassical: Neoclassical0 = (Neoclassical0())
+    neoclassical: Neoclassical0 = Neoclassical0()
     solver: SolverConfig = pydantic.Field(discriminator='solver_type')
     transport: TransportConfig = pydantic.Field(discriminator='model_name')
     pedestal: pedestal_pydantic_model.PedestalConfig = pydantic.Field(
