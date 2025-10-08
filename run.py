@@ -38,7 +38,6 @@ from torax._src.output_tools import post_processing
 from torax._src.pedestal_model import pedestal_model as pedestal_model_lib
 from torax._src.pedestal_model import pydantic_model as pedestal_pydantic_model
 from torax._src.physics import formulas
-from torax._src.solver import runtime_params
 from torax._src.sources import pydantic_model as sources_pydantic_model
 from torax._src.sources import qei_source as qei_source_lib
 from torax._src.sources import source_models as source_models_lib

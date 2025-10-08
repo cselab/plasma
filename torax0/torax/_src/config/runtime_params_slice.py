@@ -48,7 +48,6 @@ from torax._src.geometry import standard_geometry
 from torax._src.mhd import runtime_params as mhd_runtime_params
 from torax._src.neoclassical import runtime_params as neoclassical_params
 from torax._src.pedestal_model import runtime_params as pedestal_model_params
-from torax._src.solver import runtime_params as solver_params
 from torax._src.sources import runtime_params as sources_params
 from torax._src.transport_model import runtime_params as transport_model_params
 from typing import Any
