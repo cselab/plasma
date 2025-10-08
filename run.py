@@ -73,93 +73,180 @@ from typing import Annotated, Any, Literal
 import pydantic
 from torax._src import physics_models as physics_models_lib
 from torax._src.fvm import enums
-from torax._src.solver import linear_theta_method
 from torax._src.solver import runtime_params
 from torax._src.solver import solver as solver_lib
 from torax._src.torax_pydantic import torax_pydantic
+import functools
+import jax
+from torax._src import jax_utils
+from torax._src import state
+from torax._src.config import runtime_params_slice
+from torax._src.core_profiles import convertors
+from torax._src.fvm import calc_coeffs
+from torax._src.fvm import cell_variable
+from torax._src.geometry import geometry
+from torax._src.solver import predictor_corrector_method
+from torax._src.solver import solver as solver_lib
+from torax._src.sources import source_profiles
+
+
+class LinearThetaMethod0(solver_lib.Solver):
+    """Time step update using theta method, linearized on coefficients at t."""
+
+    @functools.partial(
+        jax_utils.jit,
+        static_argnames=[
+            'self',
+            'evolving_names',
+        ],
+    )
+    def _x_new(
+        self,
+        dt: jax.Array,
+        runtime_params_t: runtime_params_slice.RuntimeParams,
+        runtime_params_t_plus_dt: runtime_params_slice.RuntimeParams,
+        geo_t: geometry.Geometry,
+        geo_t_plus_dt: geometry.Geometry,
+        core_profiles_t: state.CoreProfiles,
+        core_profiles_t_plus_dt: state.CoreProfiles,
+        explicit_source_profiles: source_profiles.SourceProfiles,
+        evolving_names: tuple[str, ...],
+    ) -> tuple[
+            tuple[cell_variable.CellVariable, ...],
+            state.SolverNumericOutputs,
+    ]:
+        """See Solver._x_new docstring."""
+
+        x_old = convertors.core_profiles_to_solver_x_tuple(
+            core_profiles_t, evolving_names)
+        x_new_guess = convertors.core_profiles_to_solver_x_tuple(
+            core_profiles_t_plus_dt, evolving_names)
+
+        coeffs_callback = calc_coeffs.CoeffsCallback(
+            physics_models=self.physics_models,
+            evolving_names=evolving_names,
+        )
+
+        # Compute the explicit coeffs based on the core profiles at time t and all
+        # runtime parameters at time t.
+        coeffs_exp = coeffs_callback(
+            runtime_params_t,
+            geo_t,
+            core_profiles_t,
+            x_old,
+            explicit_source_profiles=explicit_source_profiles,
+            allow_pereverzev=True,
+            explicit_call=True,
+        )
+
+        # Calculate x_new with the predictor corrector method. Reverts to a
+        # standard linear solve if
+        # runtime_params_slice.predictor_corrector=False.
+        # init_val is the initialization for the predictor_corrector loop.
+        x_new = predictor_corrector_method.predictor_corrector_method(
+            dt=dt,
+            runtime_params_t_plus_dt=runtime_params_t_plus_dt,
+            geo_t_plus_dt=geo_t_plus_dt,
+            x_old=x_old,
+            x_new_guess=x_new_guess,
+            core_profiles_t_plus_dt=core_profiles_t_plus_dt,
+            coeffs_exp=coeffs_exp,
+            coeffs_callback=coeffs_callback,
+            explicit_source_profiles=explicit_source_profiles,
+        )
+
+        if runtime_params_t_plus_dt.solver.use_predictor_corrector:
+            inner_solver_iterations = (
+                1 + runtime_params_t_plus_dt.solver.n_corrector_steps)
+        else:
+            inner_solver_iterations = 1
+
+        solver_numeric_outputs = state.SolverNumericOutputs(
+            inner_solver_iterations=inner_solver_iterations,
+            outer_solver_iterations=1,
+            solver_error_state=0,  # linear method always works
+        )
+
+        return (
+            x_new,
+            solver_numeric_outputs,
+        )
+
 
 class BaseSolver(torax_pydantic.BaseModelFrozen, abc.ABC):
-  theta_implicit: Annotated[
-      torax_pydantic.UnitInterval, torax_pydantic.JAX_STATIC
-  ] = 1.0
-  use_predictor_corrector: Annotated[bool, torax_pydantic.JAX_STATIC] = False
-  n_corrector_steps: Annotated[
-      pydantic.PositiveInt, torax_pydantic.JAX_STATIC
-  ] = 10
-  convection_dirichlet_mode: Annotated[
-      Literal['ghost', 'direct', 'semi-implicit'], torax_pydantic.JAX_STATIC
-  ] = 'ghost'
-  convection_neumann_mode: Annotated[
-      Literal['ghost', 'semi-implicit'], torax_pydantic.JAX_STATIC
-  ] = 'ghost'
-  use_pereverzev: Annotated[bool, torax_pydantic.JAX_STATIC] = False
-  chi_pereverzev: pydantic.PositiveFloat = 30.0
-  D_pereverzev: pydantic.NonNegativeFloat = 15.0
+    theta_implicit: Annotated[torax_pydantic.UnitInterval,
+                              torax_pydantic.JAX_STATIC] = 1.0
+    use_predictor_corrector: Annotated[bool, torax_pydantic.JAX_STATIC] = False
+    n_corrector_steps: Annotated[pydantic.PositiveInt,
+                                 torax_pydantic.JAX_STATIC] = 10
+    convection_dirichlet_mode: Annotated[Literal['ghost', 'direct',
+                                                 'semi-implicit'],
+                                         torax_pydantic.JAX_STATIC] = 'ghost'
+    convection_neumann_mode: Annotated[Literal['ghost', 'semi-implicit'],
+                                       torax_pydantic.JAX_STATIC] = 'ghost'
+    use_pereverzev: Annotated[bool, torax_pydantic.JAX_STATIC] = False
+    chi_pereverzev: pydantic.PositiveFloat = 30.0
+    D_pereverzev: pydantic.NonNegativeFloat = 15.0
 
-  @property
-  @abc.abstractmethod
-  def build_runtime_params(self) -> runtime_params.RuntimeParams:
-    """Builds runtime params from the config."""
+    @property
+    @abc.abstractmethod
+    def build_runtime_params(self) -> runtime_params.RuntimeParams:
+        """Builds runtime params from the config."""
 
-  @abc.abstractmethod
-  def build_solver(
-      self,
-      physics_models: physics_models_lib.PhysicsModels,
-  ) -> solver_lib.Solver:
-    """Builds a solver from the config."""
+    @abc.abstractmethod
+    def build_solver(
+        self,
+        physics_models: physics_models_lib.PhysicsModels,
+    ) -> solver_lib.Solver:
+        """Builds a solver from the config."""
 
 
 class LinearThetaMethod(BaseSolver):
-  solver_type: Annotated[Literal['linear'], torax_pydantic.JAX_STATIC] = (
-      'linear'
-  )
+    solver_type: Annotated[Literal['linear'],
+                           torax_pydantic.JAX_STATIC] = ('linear')
 
-  @pydantic.model_validator(mode='before')
-  @classmethod
-  def scrub_log_iterations(cls, x: dict[str, Any]) -> dict[str, Any]:
-    if 'log_iterations' in x:
-      del x['log_iterations']
-    return x
+    @pydantic.model_validator(mode='before')
+    @classmethod
+    def scrub_log_iterations(cls, x: dict[str, Any]) -> dict[str, Any]:
+        if 'log_iterations' in x:
+            del x['log_iterations']
+        return x
 
-  @functools.cached_property
-  def build_runtime_params(self) -> runtime_params.RuntimeParams:
-    return runtime_params.RuntimeParams(
-        theta_implicit=self.theta_implicit,
-        convection_dirichlet_mode=self.convection_dirichlet_mode,
-        convection_neumann_mode=self.convection_neumann_mode,
-        use_pereverzev=self.use_pereverzev,
-        use_predictor_corrector=self.use_predictor_corrector,
-        chi_pereverzev=self.chi_pereverzev,
-        D_pereverzev=self.D_pereverzev,
-        n_corrector_steps=self.n_corrector_steps,
-    )
+    @functools.cached_property
+    def build_runtime_params(self) -> runtime_params.RuntimeParams:
+        return runtime_params.RuntimeParams(
+            theta_implicit=self.theta_implicit,
+            convection_dirichlet_mode=self.convection_dirichlet_mode,
+            convection_neumann_mode=self.convection_neumann_mode,
+            use_pereverzev=self.use_pereverzev,
+            use_predictor_corrector=self.use_predictor_corrector,
+            chi_pereverzev=self.chi_pereverzev,
+            D_pereverzev=self.D_pereverzev,
+            n_corrector_steps=self.n_corrector_steps,
+        )
 
-  def build_solver(
-      self,
-      physics_models: physics_models_lib.PhysicsModels,
-  ) -> solver_lib.Solver:
-    return linear_theta_method.LinearThetaMethod(
-        physics_models=physics_models,
-    )
+    def build_solver(
+        self,
+        physics_models: physics_models_lib.PhysicsModels,
+    ) -> solver_lib.Solver:
+        return LinearThetaMethod0(physics_models=physics_models, )
 
 
 class NewtonRaphsonThetaMethod(BaseSolver):
-  solver_type: Annotated[
-      Literal['newton_raphson'], torax_pydantic.JAX_STATIC
-  ] = 'newton_raphson'
-  log_iterations: Annotated[bool, torax_pydantic.JAX_STATIC] = False
-  initial_guess_mode: Annotated[
-      enums.InitialGuessMode, torax_pydantic.JAX_STATIC
-  ] = enums.InitialGuessMode.LINEAR
-  n_max_iterations: pydantic.NonNegativeInt = 30
-  residual_tol: float = 1e-5
-  residual_coarse_tol: float = 1e-2
-  delta_reduction_factor: float = 0.5
-  tau_min: float = 0.01
+    solver_type: Annotated[Literal['newton_raphson'],
+                           torax_pydantic.JAX_STATIC] = 'newton_raphson'
+    log_iterations: Annotated[bool, torax_pydantic.JAX_STATIC] = False
+    initial_guess_mode: Annotated[
+        enums.InitialGuessMode,
+        torax_pydantic.JAX_STATIC] = enums.InitialGuessMode.LINEAR
+    n_max_iterations: pydantic.NonNegativeInt = 30
+    residual_tol: float = 1e-5
+    residual_coarse_tol: float = 1e-2
+    delta_reduction_factor: float = 0.5
+    tau_min: float = 0.01
 
-SolverConfig = (
-    LinearThetaMethod | NewtonRaphsonThetaMethod
-)
+
+SolverConfig = (LinearThetaMethod | NewtonRaphsonThetaMethod)
 
 
 class g:
@@ -1186,8 +1273,7 @@ class ToraxConfig(BaseModelFrozen):
     neoclassical: neoclassical_pydantic_model.Neoclassical = (
         neoclassical_pydantic_model.Neoclassical()  # pylint: disable=missing-kwoa
     )
-    solver: SolverConfig = pydantic.Field(
-        discriminator='solver_type')
+    solver: SolverConfig = pydantic.Field(discriminator='solver_type')
     transport: transport_model_pydantic_model.TransportConfig = pydantic.Field(
         discriminator='model_name')
     pedestal: pedestal_pydantic_model.PedestalConfig = pydantic.Field(
@@ -1218,8 +1304,7 @@ class ToraxConfig(BaseModelFrozen):
             'qlknn',
             'CGM',
         ]
-        using_linear_solver = isinstance(
-            self.solver, LinearThetaMethod)
+        using_linear_solver = isinstance(self.solver, LinearThetaMethod)
 
         # pylint: disable=g-long-ternary
         # pylint: disable=attribute-error
