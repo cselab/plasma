@@ -15,10 +15,8 @@
 
 import functools
 import os
-from typing import Any, Callable, ParamSpec, TypeAlias, TypeVar
+from typing import Any, ParamSpec, TypeAlias, TypeVar
 
-import chex
-import equinox as eqx
 import jax
 from jax import numpy as jnp
 import numpy as np

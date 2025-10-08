@@ -16,17 +16,13 @@
 
 import copy
 import dataclasses
-from typing import Annotated, Any, Literal, Sequence
+from typing import Annotated, Any, Literal
 
-from absl import logging
 import chex
-from fusion_surrogates.qlknn.models import registry
-import numpy as np
 import pydantic
 from torax._src.torax_pydantic import torax_pydantic
 from torax._src.transport_model import pydantic_model_base
 from torax._src.transport_model import qlknn_transport_model
-import typing_extensions
 
 # pylint: disable=invalid-name
 class QLKNNTransportModel(pydantic_model_base.TransportBase):

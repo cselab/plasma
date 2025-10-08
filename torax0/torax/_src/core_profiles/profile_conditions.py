@@ -15,15 +15,12 @@
 """Profile condition parameters used throughout TORAX simulations."""
 import dataclasses
 import enum
-from typing import Annotated, Callable, Final
+from typing import Annotated, Final
 
-import chex
 import jax
-import numpy as np
 import pydantic
 from torax._src import array_typing
 from torax._src.torax_pydantic import torax_pydantic
-from typing_extensions import Self
 
 # pylint: disable=invalid-name
 

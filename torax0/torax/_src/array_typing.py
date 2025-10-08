@@ -18,8 +18,6 @@ from typing import TypeAlias, TypeVar
 import jax
 import jaxtyping as jt
 import numpy as np
-from torax._src import jax_utils
-import typeguard
 
 T = TypeVar("T")
 

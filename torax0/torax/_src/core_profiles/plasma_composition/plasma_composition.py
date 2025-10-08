@@ -26,7 +26,6 @@ from torax._src.config import runtime_validation_utils
 from torax._src.core_profiles.plasma_composition import impurity_fractions
 from torax._src.core_profiles.plasma_composition import ion_mixture
 from torax._src.torax_pydantic import torax_pydantic
-import typing_extensions
 from typing_extensions import Final
 
 # pylint: disable=invalid-name

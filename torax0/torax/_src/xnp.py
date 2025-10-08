@@ -13,16 +13,12 @@
 # limitations under the License.
 """Polymorphic JAX/NumPy module."""
 
-import contextlib
-import functools
 import threading
 from typing import Any, Callable, TYPE_CHECKING, TypeVar
 
-from absl import logging as native_logging
 import jax
 import jax.numpy as jnp
 import numpy as np
-from torax._src import jax_utils
 
 # Export all symbols from jax.numpy API for type checkers (including editors).
 # pylint: disable=wildcard-import

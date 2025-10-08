@@ -26,10 +26,8 @@ from torax._src.sources import generic_ion_el_heat_source as generic_ion_el_heat
 from torax._src.sources import generic_particle_source as generic_particle_source_lib
 from torax._src.sources import pellet_source as pellet_source_lib
 from torax._src.sources import qei_source as qei_source_lib
-from torax._src.sources import runtime_params
 from torax._src.sources import source_models
 from torax._src.torax_pydantic import torax_pydantic
-from typing_extensions import Self
 
 
 class Sources(torax_pydantic.BaseModelFrozen):
