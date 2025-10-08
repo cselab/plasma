@@ -325,24 +325,7 @@ def _conform_user_data(data: dict[str, Any]) -> dict[str, Any]:
                             data['geometry_type'].upper())
     constructor_args = {'geometry_type': geometry_type}
     configs_time_dependent = data_copy.pop('geometry_configs', None)
-
-    if configs_time_dependent:
-        # geometry config has sequence of standalone geometry files.
-        if not isinstance(data['geometry_configs'], dict):
-            raise ValueError('geometry_configs must be a dict.')
-        constructor_args['geometry_configs'] = {}
-        for time, c_time_dependent in configs_time_dependent.items():
-            gc = GeometryConfig.from_dict(
-                {'config': c_time_dependent | data_copy})
-            constructor_args['geometry_configs'][time] = gc
-            if x := set(gc.config.time_invariant_fields()).intersection(
-                    c_time_dependent.keys()):
-                raise ValueError(
-                    'The following parameters cannot be set per geometry_config:'
-                    f' {", ".join(x)}')
-    else:
-        constructor_args['geometry_configs'] = {'config': data_copy}
-
+    constructor_args['geometry_configs'] = {'config': data_copy}
     return constructor_args
 
 
