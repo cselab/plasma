@@ -1,6 +1,9 @@
 from absl import logging
+from collections.abc import Callable
+from collections.abc import Mapping
 from collections.abc import Sequence
 from collections.abc import Set
+from imas import ids_toplevel
 from jax import numpy as jnp
 from torax._src import array_typing
 from torax._src import constants
@@ -24,22 +27,9 @@ from torax._src.fvm import diffusion_terms
 from torax._src.fvm import enums
 from torax._src.geometry import geometry
 from torax._src.geometry import geometry as geometry_lib
+from torax._src.geometry import geometry_provider
 from torax._src.geometry import geometry_provider as geometry_provider_lib
 from torax._src.geometry import standard_geometry
-from collections.abc import Callable
-from collections.abc import Mapping
-import functools
-import inspect
-import logging
-from typing import Annotated, Any, Literal, TypeAlias, TypeVar
-
-from imas import ids_toplevel
-import pydantic
-from torax._src.geometry import geometry
-from torax._src.geometry import geometry_provider
-from torax._src.geometry import standard_geometry
-from torax._src.torax_pydantic import torax_pydantic
-import typing_extensions
 from torax._src.mhd import base as mhd_model_lib
 from torax._src.mhd import pydantic_model as mhd_pydantic_model
 from torax._src.neoclassical import neoclassical_models as neoclassical_models_lib
@@ -72,6 +62,7 @@ from torax._src.transport_model import pydantic_model as transport_pydantic_mode
 from torax._src.transport_model import transport_coefficients_builder
 from torax._src.transport_model import transport_model as transport_model_lib
 from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, TypeAlias, TypeVar
 from typing import Any, Final, Mapping, Sequence, TypeAlias
 from typing import Callable
 from typing import Final
