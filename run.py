@@ -136,19 +136,19 @@ class ChiTimeStepCalculator:
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class RuntimeParamsProvider:
-    sources: sources_pydantic_model.Sources
-    numerics: numerics_lib.Numerics
-    profile_conditions: profile_conditions_lib.ProfileConditions
-    plasma_composition: plasma_composition_lib.PlasmaComposition
-    transport_model: transport_pydantic_model.TransportConfig
-    solver: solver_pydantic_model.SolverConfig
-    pedestal: pedestal_pydantic_model.PedestalConfig
-    mhd: mhd_pydantic_model.MHD
-    neoclassical: neoclassical_pydantic_model.Neoclassical
+    sources: Any
+    numerics: Any
+    profile_conditions: Any
+    plasma_composition: Any
+    transport_model: Any
+    solver: Any
+    pedestal: Any
+    mhd: Any
+    neoclassical: Any
     time_step_calculator: Any
 
     @classmethod
-    def from_config(cls, config) -> typing_extensions.Self:
+    def from_config(cls, config):
         return cls(
             sources=config.sources,
             numerics=config.numerics,
