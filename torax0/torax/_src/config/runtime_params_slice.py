@@ -6,7 +6,6 @@ from torax._src.core_profiles import profile_conditions
 from torax._src.core_profiles.plasma_composition import plasma_composition
 from torax._src.geometry import geometry
 from torax._src.geometry import standard_geometry
-from torax._src.mhd import runtime_params as mhd_runtime_params
 from torax._src.neoclassical import runtime_params as neoclassical_params
 from torax._src.pedestal_model import runtime_params as pedestal_model_params
 from torax._src.sources import runtime_params as sources_params
@@ -17,7 +16,6 @@ from typing import Any
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class RuntimeParams:
-    mhd: mhd_runtime_params.RuntimeParams
     neoclassical: neoclassical_params.RuntimeParams
     numerics: numerics.RuntimeParams
     pedestal: pedestal_model_params.RuntimeParams

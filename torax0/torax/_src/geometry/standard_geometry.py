@@ -8,7 +8,6 @@ from torax._src import array_typing
 from torax._src import constants
 from torax._src.geometry import geometry
 from torax._src.geometry import geometry_loader
-from torax._src.torax_pydantic import torax_pydantic
 from torax._src.torax_pydantic import interpolated_param_2d
 import typing_extensions
 

@@ -3,7 +3,6 @@ from typing import Protocol
 import chex
 import jax
 from torax._src.geometry import geometry
-from torax._src.torax_pydantic import torax_pydantic
 
 
 class GeometryProvider(Protocol):

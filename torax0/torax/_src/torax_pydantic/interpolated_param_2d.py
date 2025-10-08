@@ -9,7 +9,6 @@ from torax._src import interpolated_param
 from torax._src.torax_pydantic import model_base
 from torax._src.torax_pydantic import pydantic_types
 import typing_extensions
-import xarray as xr
 
 ValueType: TypeAlias = dict[
     float,

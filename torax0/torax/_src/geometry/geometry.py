@@ -6,7 +6,6 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 from torax._src import array_typing
-from torax._src.torax_pydantic import torax_pydantic
 
 
 def face_to_cell(

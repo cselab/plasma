@@ -23,7 +23,6 @@ from torax._src.geometry import geometry
 from torax._src.geometry import geometry as geometry_lib
 from torax._src.geometry import geometry_provider
 from torax._src.geometry import standard_geometry
-from torax._src.mhd import runtime_params as mhd_runtime_params
 from torax._src.neoclassical import neoclassical_models
 from torax._src.neoclassical import neoclassical_models as neoclassical_models_lib
 from torax._src.neoclassical import runtime_params
@@ -207,31 +206,6 @@ class Neoclassical0(torax_pydantic.BaseModelFrozen):
             transport=self.transport.build_model(),
         )
 
-
-@jax.tree_util.register_dataclass
-@dataclasses.dataclass
-class MHDModels:
-    def __eq__(self, other: 'MHDModels') -> bool:
-        return self.sawtooth_models == other.sawtooth_models
-
-    def __hash__(self) -> int:
-        return 1
-
-
-class MHD(torax_pydantic.BaseModelFrozen):
-    def build_mhd_models(self):
-        return MHDModels()
-
-    def build_runtime_params(
-            self, t: chex.Numeric) -> mhd_runtime_params.RuntimeParams:
-        return mhd_runtime_params.RuntimeParams(
-            **{
-                mhd_model_name: mhd_model_config.build_runtime_params(t)
-                for mhd_model_name, mhd_model_config in self.__dict__.items()
-                if mhd_model_config is not None
-            })
-
-
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class PhysicsModels:
@@ -243,7 +217,6 @@ class PhysicsModels:
         metadata=dict(static=True))
     neoclassical_models: neoclassical_models_lib.NeoclassicalModels = (
         dataclasses.field(metadata=dict(static=True)))
-    mhd_models: MHDModels = dataclasses.field(metadata=dict(static=True))
 
 
 T = TypeVar('T')
@@ -2794,7 +2767,6 @@ class RuntimeParamsProvider:
     transport_model: Any
     solver: Any
     pedestal: Any
-    mhd: Any
     neoclassical: Any
 
     @classmethod
@@ -2807,7 +2779,6 @@ class RuntimeParamsProvider:
             transport_model=config.transport,
             solver=config.solver,
             pedestal=config.pedestal,
-            mhd=config.mhd,
             neoclassical=config.neoclassical,
         )
 
@@ -2829,7 +2800,6 @@ class RuntimeParamsProvider:
             numerics=self.numerics.build_runtime_params(t),
             neoclassical=self.neoclassical.build_runtime_params(),
             pedestal=self.pedestal.build_runtime_params(t),
-            mhd=self.mhd.build_runtime_params(t),
         )
 
 
@@ -2864,8 +2834,6 @@ class PhysicsModels:
         metadata=dict(static=True))
     neoclassical_models: neoclassical_models_lib.NeoclassicalModels = (
         dataclasses.field(metadata=dict(static=True)))
-    mhd_models: MHDModels = dataclasses.field(metadata=dict(static=True))
-
 
 TIME_INVARIANT: Final[str] = '_pydantic_time_invariant_field'
 JAX_STATIC: Final[str] = '_pydantic_jax_static_field'
@@ -3710,7 +3678,6 @@ class ToraxConfig(BaseModelFrozen):
         discriminator='model_name')
     pedestal: pedestal_pydantic_model.PedestalConfig = pydantic.Field(
         discriminator='model_name')
-    mhd: MHD = MHD()
     restart: FileRestart | None = pydantic.Field(default=None)
 
     def build_physics_models(self):
@@ -3719,7 +3686,6 @@ class ToraxConfig(BaseModelFrozen):
             source_models=self.sources.build_models(),
             transport_model=self.transport.build_transport_model(),
             neoclassical_models=self.neoclassical.build_models(),
-            mhd_models=self.mhd.build_mhd_models(),
         )
 
     @pydantic.model_validator(mode='before')
