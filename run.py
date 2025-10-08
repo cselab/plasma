@@ -3028,11 +3028,7 @@ class StateHistory:
         )
         return data_tree
 
-    def _pack_into_data_array(
-        self,
-        name: str,
-        data: jax.Array | None,
-    ) -> xr.DataArray | None:
+    def _pack_into_data_array(self, name, data):
         if data is None:
             return None
         is_face_var = lambda x: x.ndim == 2 and x.shape == (
