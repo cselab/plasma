@@ -53,8 +53,6 @@ from torax._src.transport_model import transport_model as transport_model_lib
 from typing_extensions import Annotated
 from typing_extensions import Self
 from typing import Any, Final, Mapping, Sequence, TypeAlias
-from typing import Any, Mapping
-from typing import TypeAlias
 import abc
 import chex
 import copy
