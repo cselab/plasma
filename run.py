@@ -88,19 +88,19 @@ class RuntimeParams:
 
 class ChiTimeStepCalculator:
 
-    def not_done(self, t, t_final, time_calculator_params):
-        return t < (t_final - time_calculator_params.tolerance)
+    def not_done(self, t, t_final):
+        return t < (t_final - g.tolerance)
 
     @functools.partial(
         jax_utils.jit,
         static_argnames=['self'],
     )
     def next_dt(self, t, runtime_params, geo, core_profiles, core_transport):
-        dt = self._next_dt(
-            runtime_params,
-            geo,
-            core_profiles,
-            core_transport,
+        chi_max = core_transport.chi_max(geo)
+        basic_dt = (3.0 / 4.0) * (geo.drho_norm**2) / chi_max
+        dt = jnp.minimum(
+            runtime_params.numerics.chi_timestep_prefactor * basic_dt,
+            runtime_params.numerics.max_dt,
         )
         crosses_t_final = (t < runtime_params.numerics.t_final) * (
             t + dt > runtime_params.numerics.t_final)
@@ -112,18 +112,6 @@ class ChiTimeStepCalculator:
             runtime_params.numerics.t_final - t,
             dt,
         )
-        return dt
-
-    def _next_dt(self, runtime_params, geo, core_profiles, core_transport):
-        chi_max = core_transport.chi_max(geo)
-
-        basic_dt = (3.0 / 4.0) * (geo.drho_norm**2) / chi_max
-
-        dt = jnp.minimum(
-            runtime_params.numerics.chi_timestep_prefactor * basic_dt,
-            runtime_params.numerics.max_dt,
-        )
-
         return dt
 
     def __eq__(self, other):
@@ -1333,7 +1321,10 @@ CONFIG = {
         'calculator_type': 'chi',
     },
 }
+
 g.ts = ChiTimeStepCalculator()
+g.tolerance = 1e-7
+
 torax_config = ToraxConfig.from_dict(CONFIG)
 mesh = torax_config.geometry.build_provider.torax_mesh
 interpolated_param_2d.set_grid(torax_config, mesh, mode='relaxed')
@@ -1369,12 +1360,7 @@ state_history = [current_state]
 post_processing_history = [initial_post_processed_outputs]
 sim_error = state.SimError.NO_ERROR
 initial_runtime_params = runtime_params_provider(initial_state.t)
-time_step_calculator_params = initial_runtime_params.time_step_calculator
-while g.ts.not_done(
-        current_state.t,
-        runtime_params_provider.numerics.t_final,
-        time_step_calculator_params,
-):
+while g.ts.not_done(current_state.t, runtime_params_provider.numerics.t_final):
     current_state, post_processed_outputs = step_fn(
         current_state,
         post_processing_history[-1],
