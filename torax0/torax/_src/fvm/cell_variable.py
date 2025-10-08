@@ -110,23 +110,6 @@ class CellVariable:
         face = self.face_value()
         return jnp.diff(face) / jnp.expand_dims(self.dr, axis=-1)
 
-    def __str__(self) -> str:
-        output_string = f'CellVariable(value={self.value}'
-        if self.left_face_constraint is not None:
-            output_string += f', left_face_constraint={self.left_face_constraint}'
-        if self.right_face_constraint is not None:
-            output_string += f', right_face_constraint={self.right_face_constraint}'
-        if self.left_face_grad_constraint is not None:
-            output_string += (
-                f', left_face_grad_constraint={self.left_face_grad_constraint}'
-            )
-        if self.right_face_grad_constraint is not None:
-            output_string += (
-                f', right_face_grad_constraint={self.right_face_grad_constraint}'
-            )
-        output_string += ')'
-        return output_string
-
     def cell_plus_boundaries(self) -> jt.Float[jax.Array, 't* cell+2']:
         right_value = self._right_face_value()
         left_value = self._left_face_value()
