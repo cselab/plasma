@@ -40,63 +40,15 @@ BooleanNumeric = Any  # A bool, or a Boolean array.
 
 # Create thread-local storage.
 thread_context = threading.local()
-
-
-@contextlib.contextmanager
-def _jit_context():
-  """A context manager that sets a thread-local flag to indicate JAX context."""
-  original_is_jax = getattr(thread_context, 'is_jax', None)
-  thread_context.is_jax = True
-  try:
-    yield
-  finally:
-    if original_is_jax is None:
-      del thread_context.is_jax
-    else:
-      thread_context.is_jax = original_is_jax
-
-
 def jit(*args, **kwargs):
-  """JAX jit wrapper that sets the thread-local flag to indicate JAX context."""
   func = args[0]
-
-  @functools.wraps(func)
-  def wrapped_func(*func_args, **func_kwargs):
-    with _jit_context():
-      return func(*func_args, **func_kwargs)
-
-  # if TORAX_EXPERIMENTAL_COMPILE is not set use default `False` and do not JIT.
-  if jax_utils.env_bool('TORAX_EXPERIMENTAL_COMPILE', False):
-    return jax.jit(wrapped_func, *args[1:], **kwargs)
-  else:
-    return func
-
+  return func
 
 def py_while(
     cond_fun: Callable[list[T], BooleanNumeric],
     body_fun: Callable[list[T], T],
     init_val: T,
 ) -> T:
-  """Pure Python implementation of jax.lax.while_loop.
-
-  This gives us a way to write code that could easily be changed to be
-  Jax-compatible in the future (if we want to compute its gradient or
-  compile it, etc.) without having to pay the high compile time cost
-  of jax.lax.while_loop.
-
-  Args:
-    cond_fun: function of type ``a -> Bool``.
-    body_fun: function of type ``a -> a``.
-    init_val: value of type ``a``, a type that can be a scalar, array, or any
-      pytree (nested Python tuple/list/dict) thereof, representing the initial
-      loop carry value.
-
-  Returns:
-    The output from the final iteration of body_fun, of type ``a``.
-
-  .. _Haskell-like type signature: https://wiki.haskell.org/Type_signature
-  """
-
   val = init_val
   while cond_fun(val):
     val = body_fun(val)
@@ -196,35 +148,7 @@ def fori_loop(
   else:
     return py_fori_loop(lower, upper, body_fun, init_val)
 
-
-def logging(msg: Any, *args: Any, **kwargs: Any):
-  """Logging wrapper that works under xnp.jit.
-
-  This function makes use of jax.debug.print when running under xnp.jit,
-  otherwise it uses native logging.
-
-  Note, jax.debug.print makes use of jax.debug.callback behind the scenes which:
-  - does not guarantee execution.
-  https://docs.jax.dev/en/latest/external-callbacks.html#flavors-of-callback
-  - will cause cache misses when using the persistent cache.
-  https://docs.jax.dev/en/latest/persistent_compilation_cache.html#pitfalls
-
-  Therefore advise using for debug logging only if running under xnp.jit.
-
-  Args:
-    msg: message to log.
-    *args: arguments to be passed to the logging function.
-    **kwargs: keyword arguments to be passed to the logging function.
-  """
-  is_jax = getattr(thread_context, 'is_jax', False)
-  if is_jax:
-    jax.debug.print(msg, *args, **kwargs)
-  else:
-    native_logging.info(msg, *args, **kwargs)
-
-
 def _get_current_lib():
-  """Determines whether to use JAX or NumPy."""
   is_jax = getattr(thread_context, 'is_jax', False)
   if is_jax:
     return jnp
@@ -233,16 +157,6 @@ def _get_current_lib():
 
 
 def __getattr__(name):  # pylint: disable=invalid-name
-  """Returns the corresponding function from the current library (jnp or np)."""
   current_lib = _get_current_lib()
-  try:
-    return getattr(current_lib, name)
-  except AttributeError as exc:
-    raise AttributeError(f"Module 'xnp' has no attribute '{name}'") from exc
+  return getattr(current_lib, name)
 
-
-def __dir__():  # pylint: disable=invalid-name
-  """Provides a list of potential attributes for code completion."""
-  common_attributes = set(dir(jnp)) | set(dir(np))
-
-  return sorted(list(common_attributes))
