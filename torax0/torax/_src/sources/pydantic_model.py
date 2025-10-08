@@ -19,7 +19,6 @@ from typing import Any
 import immutabledict
 import pydantic
 from torax._src.sources import base
-from torax._src.sources import electron_cyclotron_source as electron_cyclotron_source_lib
 from torax._src.sources import fusion_heat_source as fusion_heat_source_lib
 from torax._src.sources import gas_puff_source as gas_puff_source_lib
 from torax._src.sources import generic_current_source as generic_current_source_lib
@@ -34,12 +33,6 @@ from typing_extensions import Self
 
 
 class Sources(torax_pydantic.BaseModelFrozen):
-  """Config for source models.
-
-  The `from_dict` method of constructing this class supports the config
-  described in: https://torax.readthedocs.io/en/latest/configuration.html
-  """
-
   ei_exchange: qei_source_lib.QeiSourceConfig = torax_pydantic.ValidatedDefault(
       {'mode': 'ZERO'}
   )
@@ -49,12 +42,6 @@ class Sources(torax_pydantic.BaseModelFrozen):
   ) = pydantic.Field(
       discriminator='model_name',
       default=None,
-  )
-  ecrh: electron_cyclotron_source_lib.ElectronCyclotronSourceConfig | None = (
-      pydantic.Field(
-          discriminator='model_name',
-          default=None,
-      )
   )
   fusion: fusion_heat_source_lib.FusionHeatSourceConfig | None = pydantic.Field(
       discriminator='model_name',
