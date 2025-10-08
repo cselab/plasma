@@ -1,3 +1,9 @@
+import chex
+import pydantic
+from torax._src.mhd import base
+from torax._src.mhd import runtime_params as mhd_runtime_params
+from torax._src.mhd.sawtooth import pydantic_model as sawtooth_pydantic_model
+from torax._src.torax_pydantic import torax_pydantic
 from absl import logging
 from collections.abc import Callable
 from collections.abc import Mapping
@@ -30,7 +36,6 @@ from torax._src.geometry import geometry_provider
 from torax._src.geometry import geometry_provider as geometry_provider_lib
 from torax._src.geometry import standard_geometry
 from torax._src.mhd import base as mhd_model_lib
-from torax._src.mhd import pydantic_model as mhd_pydantic_model
 from torax._src.neoclassical import neoclassical_models
 from torax._src.neoclassical import neoclassical_models as neoclassical_models_lib
 from torax._src.neoclassical import runtime_params
@@ -98,85 +103,109 @@ import treelib
 import typing_extensions
 import xarray as xr
 
+
 class Neoclassical0(torax_pydantic.BaseModelFrozen):
-  """Config for neoclassical models."""
+    """Config for neoclassical models."""
 
-  bootstrap_current: (
-      bootstrap_current_zeros.ZerosModelConfig
-      | sauter_current.SauterModelConfig
-  ) = pydantic.Field(discriminator="model_name")
-  conductivity: sauter_conductivity.SauterModelConfig = (
-      torax_pydantic.ValidatedDefault(sauter_conductivity.SauterModelConfig())
-  )
-  transport: (
-      transport_zeros.ZerosModelConfig
-  ) = pydantic.Field(discriminator="model_name")
+    bootstrap_current: (bootstrap_current_zeros.ZerosModelConfig
+                        | sauter_current.SauterModelConfig) = pydantic.Field(
+                            discriminator="model_name")
+    conductivity: sauter_conductivity.SauterModelConfig = (
+        torax_pydantic.ValidatedDefault(
+            sauter_conductivity.SauterModelConfig()))
+    transport: (transport_zeros.ZerosModelConfig) = pydantic.Field(
+        discriminator="model_name")
 
-  @pydantic.model_validator(mode="before")
-  @classmethod
-  def _defaults(cls, data: dict[str, Any]) -> dict[str, Any]:
-    configurable_data = copy.deepcopy(data)
-    # Set zero models if model not in config dict.
-    if "bootstrap_current" not in configurable_data:
-      configurable_data["bootstrap_current"] = {"model_name": "zeros"}
-    if "transport" not in configurable_data:
-      configurable_data["transport"] = {"model_name": "zeros"}
-    # Set default model names.
-    if "model_name" not in configurable_data["bootstrap_current"]:
-      configurable_data["bootstrap_current"]["model_name"] = "sauter"
-    if "model_name" not in configurable_data["transport"]:
-      configurable_data["transport"]["model_name"] = "angioni_sauter"
+    @pydantic.model_validator(mode="before")
+    @classmethod
+    def _defaults(cls, data: dict[str, Any]) -> dict[str, Any]:
+        configurable_data = copy.deepcopy(data)
+        # Set zero models if model not in config dict.
+        if "bootstrap_current" not in configurable_data:
+            configurable_data["bootstrap_current"] = {"model_name": "zeros"}
+        if "transport" not in configurable_data:
+            configurable_data["transport"] = {"model_name": "zeros"}
+        # Set default model names.
+        if "model_name" not in configurable_data["bootstrap_current"]:
+            configurable_data["bootstrap_current"]["model_name"] = "sauter"
+        if "model_name" not in configurable_data["transport"]:
+            configurable_data["transport"]["model_name"] = "angioni_sauter"
 
-    return configurable_data
+        return configurable_data
 
-  def build_runtime_params(self) -> runtime_params.RuntimeParams:
-    return runtime_params.RuntimeParams(
-        bootstrap_current=self.bootstrap_current.build_runtime_params(),
-        conductivity=self.conductivity.build_runtime_params(),
-        transport=self.transport.build_runtime_params(),
-    )
+    def build_runtime_params(self) -> runtime_params.RuntimeParams:
+        return runtime_params.RuntimeParams(
+            bootstrap_current=self.bootstrap_current.build_runtime_params(),
+            conductivity=self.conductivity.build_runtime_params(),
+            transport=self.transport.build_runtime_params(),
+        )
 
-  def build_models(self) -> neoclassical_models.NeoclassicalModels:
-    return neoclassical_models.NeoclassicalModels(
-        conductivity=self.conductivity.build_model(),
-        bootstrap_current=self.bootstrap_current.build_model(),
-        transport=self.transport.build_model(),
-    )
+    def build_models(self) -> neoclassical_models.NeoclassicalModels:
+        return neoclassical_models.NeoclassicalModels(
+            conductivity=self.conductivity.build_model(),
+            bootstrap_current=self.bootstrap_current.build_model(),
+            transport=self.transport.build_model(),
+        )
+
+
+class MHD(torax_pydantic.BaseModelFrozen):
+    """Config for MHD models.
+
+  Attributes:
+    sawtooth: Config for sawtooth models.
+  """
+
+    sawtooth: sawtooth_pydantic_model.SawtoothConfig | None = pydantic.Field(
+        default=None)
+
+    def build_mhd_models(self) -> base.MHDModels:
+        """Builds and returns a container with instantiated MHD model objects."""
+        sawtooth_model = (None if self.sawtooth is None else
+                          self.sawtooth.build_models())
+        return base.MHDModels(sawtooth_models=sawtooth_model)
+
+    def build_runtime_params(
+            self, t: chex.Numeric) -> mhd_runtime_params.RuntimeParams:
+        """Builds and returns a container with runtime params for MHD models."""
+
+        return mhd_runtime_params.RuntimeParams(
+            **{
+                mhd_model_name: mhd_model_config.build_runtime_params(t)
+                for mhd_model_name, mhd_model_config in self.__dict__.items()
+                if mhd_model_config is not None
+            })
 
 
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class PhysicsModels:
-  """A container for all physics models."""
+    """A container for all physics models."""
 
-  source_models: source_models_lib.SourceModels = dataclasses.field(
-      metadata=dict(static=True)
-  )
-  transport_model: transport_model_lib.TransportModel = dataclasses.field(
-      metadata=dict(static=True)
-  )
-  pedestal_model: pedestal_model_lib.PedestalModel = dataclasses.field(
-      metadata=dict(static=True)
-  )
-  neoclassical_models: neoclassical_models_lib.NeoclassicalModels = (
-      dataclasses.field(metadata=dict(static=True))
-  )
-  mhd_models: mhd_model_lib.MHDModels = dataclasses.field(
-      metadata=dict(static=True)
-  )
+    source_models: source_models_lib.SourceModels = dataclasses.field(
+        metadata=dict(static=True))
+    transport_model: transport_model_lib.TransportModel = dataclasses.field(
+        metadata=dict(static=True))
+    pedestal_model: pedestal_model_lib.PedestalModel = dataclasses.field(
+        metadata=dict(static=True))
+    neoclassical_models: neoclassical_models_lib.NeoclassicalModels = (
+        dataclasses.field(metadata=dict(static=True)))
+    mhd_models: mhd_model_lib.MHDModels = dataclasses.field(metadata=dict(
+        static=True))
+
 
 # Using invalid-name because we are using the same naming convention as the
 # external physics implementations
 # pylint: disable=invalid-name
 T = TypeVar('T')
 
-LY_OBJECT_TYPE: TypeAlias = (
-    str | Mapping[str, torax_pydantic.NumpyArray | float]
-)
+LY_OBJECT_TYPE: TypeAlias = (str
+                             | Mapping[str, torax_pydantic.NumpyArray | float])
 
 TIME_INVARIANT = torax_pydantic.TIME_INVARIANT
+
+
 class CheaseConfig(torax_pydantic.BaseModelFrozen):
-  """Pydantic model for the CHEASE geometry.
+    """Pydantic model for the CHEASE geometry.
 
   Attributes:
     geometry_type: Always set to 'chease'.
@@ -193,42 +222,39 @@ class CheaseConfig(torax_pydantic.BaseModelFrozen):
     B_0: Vacuum toroidal magnetic field on axis [T].
   """
 
-  geometry_type: Annotated[Literal['chease'], TIME_INVARIANT] = 'chease'
-  n_rho: Annotated[pydantic.PositiveInt, TIME_INVARIANT] = 25
-  hires_factor: pydantic.PositiveInt = 4
-  geometry_directory: Annotated[str | None, TIME_INVARIANT] = None
-  Ip_from_parameters: Annotated[bool, TIME_INVARIANT] = True
-  geometry_file: str = 'ITER_hybrid_citrin_equil_cheasedata.mat2cols'
-  R_major: torax_pydantic.Meter = 6.2
-  a_minor: torax_pydantic.Meter = 2.0
-  B_0: torax_pydantic.Tesla = 5.3
+    geometry_type: Annotated[Literal['chease'], TIME_INVARIANT] = 'chease'
+    n_rho: Annotated[pydantic.PositiveInt, TIME_INVARIANT] = 25
+    hires_factor: pydantic.PositiveInt = 4
+    geometry_directory: Annotated[str | None, TIME_INVARIANT] = None
+    Ip_from_parameters: Annotated[bool, TIME_INVARIANT] = True
+    geometry_file: str = 'ITER_hybrid_citrin_equil_cheasedata.mat2cols'
+    R_major: torax_pydantic.Meter = 6.2
+    a_minor: torax_pydantic.Meter = 2.0
+    B_0: torax_pydantic.Tesla = 5.3
 
-  @pydantic.model_validator(mode='after')
-  def _check_fields(self) -> typing_extensions.Self:
-    if not self.R_major >= self.a_minor:
-      raise ValueError('a_minor must be less than or equal to R_major.')
-    return self
+    @pydantic.model_validator(mode='after')
+    def _check_fields(self) -> typing_extensions.Self:
+        if not self.R_major >= self.a_minor:
+            raise ValueError('a_minor must be less than or equal to R_major.')
+        return self
 
-  def build_geometry(self) -> standard_geometry.StandardGeometry:
+    def build_geometry(self) -> standard_geometry.StandardGeometry:
 
-    return standard_geometry.build_standard_geometry(
-        _apply_relevant_kwargs(
-            standard_geometry.StandardGeometryIntermediates.from_chease,
-            self.__dict__,
-        )
-    )
+        return standard_geometry.build_standard_geometry(
+            _apply_relevant_kwargs(
+                standard_geometry.StandardGeometryIntermediates.from_chease,
+                self.__dict__,
+            ))
 
 
 class GeometryConfig(torax_pydantic.BaseModelFrozen):
-  """Pydantic model for a single geometry config."""
+    """Pydantic model for a single geometry config."""
 
-  config: (
-      CheaseConfig
-  ) = pydantic.Field(discriminator='geometry_type')
+    config: (CheaseConfig) = pydantic.Field(discriminator='geometry_type')
 
 
 class Geometry0(torax_pydantic.BaseModelFrozen):
-  """Pydantic model for a geometry.
+    """Pydantic model for a geometry.
 
   This object can be constructed via `Geometry.from_dict(config)`, where
   `config` is a dict described in
@@ -240,94 +266,97 @@ class Geometry0(torax_pydantic.BaseModelFrozen):
       `GeometryConfig` objects, where the keys are times in seconds.
   """
 
-  geometry_type: geometry.GeometryType
-  geometry_configs: GeometryConfig | dict[torax_pydantic.Second, GeometryConfig]
+    geometry_type: geometry.GeometryType
+    geometry_configs: GeometryConfig | dict[torax_pydantic.Second,
+                                            GeometryConfig]
 
-  @pydantic.model_validator(mode='before')
-  @classmethod
-  def _conform_data(cls, data: dict[str, Any]) -> dict[str, Any]:
+    @pydantic.model_validator(mode='before')
+    @classmethod
+    def _conform_data(cls, data: dict[str, Any]) -> dict[str, Any]:
 
-    if 'geometry_type' not in data:
-      raise ValueError('geometry_type must be set in the input config.')
+        if 'geometry_type' not in data:
+            raise ValueError('geometry_type must be set in the input config.')
 
-    geometry_type = data['geometry_type']
-    # The geometry type can be an int if loading from JSON.
-    if isinstance(geometry_type, geometry.GeometryType | int):
-      return data
-    # Parse the user config dict.
-    elif isinstance(geometry_type, str):
-      return _conform_user_data(data)
-    else:
-      raise ValueError(f'Invalid value for geometry: {geometry_type}')
+        geometry_type = data['geometry_type']
+        # The geometry type can be an int if loading from JSON.
+        if isinstance(geometry_type, geometry.GeometryType | int):
+            return data
+        # Parse the user config dict.
+        elif isinstance(geometry_type, str):
+            return _conform_user_data(data)
+        else:
+            raise ValueError(f'Invalid value for geometry: {geometry_type}')
 
-  @functools.cached_property
-  def build_provider(self) -> geometry_provider.GeometryProvider:
-    # TODO(b/398191165): Remove this branch once the FBT bundle logic is
-    # redesigned.
-    if isinstance(self.geometry_configs, dict):
-      geometries = {
-          time: config.config.build_geometry()
-          for time, config in self.geometry_configs.items()
-      }
-      provider = (
-          geometry_provider.TimeDependentGeometryProvider.create_provider
-          if self.geometry_type == geometry.GeometryType.CIRCULAR
-          else standard_geometry.StandardGeometryProvider.create_provider
-      )
-    else:
-      geometries = self.geometry_configs.config.build_geometry()
-      provider = geometry_provider.ConstantGeometryProvider
+    @functools.cached_property
+    def build_provider(self) -> geometry_provider.GeometryProvider:
+        # TODO(b/398191165): Remove this branch once the FBT bundle logic is
+        # redesigned.
+        if isinstance(self.geometry_configs, dict):
+            geometries = {
+                time: config.config.build_geometry()
+                for time, config in self.geometry_configs.items()
+            }
+            provider = (
+                geometry_provider.TimeDependentGeometryProvider.create_provider
+                if self.geometry_type == geometry.GeometryType.CIRCULAR else
+                standard_geometry.StandardGeometryProvider.create_provider)
+        else:
+            geometries = self.geometry_configs.config.build_geometry()
+            provider = geometry_provider.ConstantGeometryProvider
 
-    return provider(geometries)  # pytype: disable=attribute-error
+        return provider(geometries)  # pytype: disable=attribute-error
 
 
 def _conform_user_data(data: dict[str, Any]) -> dict[str, Any]:
-  """Conform the user geometry dict to the pydantic model."""
+    """Conform the user geometry dict to the pydantic model."""
 
-  if 'LY_bundle_object' in data and 'geometry_configs' in data:
-    raise ValueError(
-        'Cannot use both `LY_bundle_object` and `geometry_configs` together.'
-    )
-
-  data_copy = data.copy()
-  # Useful to avoid failing if users mistakenly give the wrong case.
-  data_copy['geometry_type'] = data['geometry_type'].lower()
-  geometry_type = getattr(geometry.GeometryType, data['geometry_type'].upper())
-  constructor_args = {'geometry_type': geometry_type}
-  configs_time_dependent = data_copy.pop('geometry_configs', None)
-
-  if configs_time_dependent:
-    # geometry config has sequence of standalone geometry files.
-    if not isinstance(data['geometry_configs'], dict):
-      raise ValueError('geometry_configs must be a dict.')
-    constructor_args['geometry_configs'] = {}
-    for time, c_time_dependent in configs_time_dependent.items():
-      gc = GeometryConfig.from_dict({'config': c_time_dependent | data_copy})
-      constructor_args['geometry_configs'][time] = gc
-      if x := set(gc.config.time_invariant_fields()).intersection(
-          c_time_dependent.keys()
-      ):
+    if 'LY_bundle_object' in data and 'geometry_configs' in data:
         raise ValueError(
-            'The following parameters cannot be set per geometry_config:'
-            f' {", ".join(x)}'
+            'Cannot use both `LY_bundle_object` and `geometry_configs` together.'
         )
-  else:
-    constructor_args['geometry_configs'] = {'config': data_copy}
 
-  return constructor_args
+    data_copy = data.copy()
+    # Useful to avoid failing if users mistakenly give the wrong case.
+    data_copy['geometry_type'] = data['geometry_type'].lower()
+    geometry_type = getattr(geometry.GeometryType,
+                            data['geometry_type'].upper())
+    constructor_args = {'geometry_type': geometry_type}
+    configs_time_dependent = data_copy.pop('geometry_configs', None)
+
+    if configs_time_dependent:
+        # geometry config has sequence of standalone geometry files.
+        if not isinstance(data['geometry_configs'], dict):
+            raise ValueError('geometry_configs must be a dict.')
+        constructor_args['geometry_configs'] = {}
+        for time, c_time_dependent in configs_time_dependent.items():
+            gc = GeometryConfig.from_dict(
+                {'config': c_time_dependent | data_copy})
+            constructor_args['geometry_configs'][time] = gc
+            if x := set(gc.config.time_invariant_fields()).intersection(
+                    c_time_dependent.keys()):
+                raise ValueError(
+                    'The following parameters cannot be set per geometry_config:'
+                    f' {", ".join(x)}')
+    else:
+        constructor_args['geometry_configs'] = {'config': data_copy}
+
+    return constructor_args
 
 
-def _apply_relevant_kwargs(f: Callable[..., T], kwargs: Mapping[str, Any]) -> T:
-  """Apply only the kwargs actually used by the function."""
-  relevant_kwargs = [i.name for i in inspect.signature(f).parameters.values()]
-  kwargs = {k: kwargs[k] for k in relevant_kwargs}
-  return f(**kwargs)
+def _apply_relevant_kwargs(f: Callable[..., T], kwargs: Mapping[str,
+                                                                Any]) -> T:
+    """Apply only the kwargs actually used by the function."""
+    relevant_kwargs = [
+        i.name for i in inspect.signature(f).parameters.values()
+    ]
+    kwargs = {k: kwargs[k] for k in relevant_kwargs}
+    return f(**kwargs)
 
 
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class SafetyFactorFit:
-  """Collection of outputs calculated after each simulation step.
+    """Collection of outputs calculated after each simulation step.
 
   Attributes:
     rho_q_min: rho_norm at the minimum q.
@@ -346,132 +375,124 @@ class SafetyFactorFit:
       plane.
   """
 
-  rho_q_min: array_typing.FloatScalar
-  q_min: array_typing.FloatScalar
-  rho_q_3_2_first: array_typing.FloatScalar
-  rho_q_2_1_first: array_typing.FloatScalar
-  rho_q_3_1_first: array_typing.FloatScalar
-  rho_q_3_2_second: array_typing.FloatScalar
-  rho_q_2_1_second: array_typing.FloatScalar
-  rho_q_3_1_second: array_typing.FloatScalar
+    rho_q_min: array_typing.FloatScalar
+    q_min: array_typing.FloatScalar
+    rho_q_3_2_first: array_typing.FloatScalar
+    rho_q_2_1_first: array_typing.FloatScalar
+    rho_q_3_1_first: array_typing.FloatScalar
+    rho_q_3_2_second: array_typing.FloatScalar
+    rho_q_2_1_second: array_typing.FloatScalar
+    rho_q_3_1_second: array_typing.FloatScalar
 
 
 def _sliding_window_of_three(flat_array: jax.Array) -> jax.Array:
-  """Sliding window equivalent to numpy.lib.stride_tricks.sliding_window."""
-  window_size = 3
-  starts = jnp.arange(len(flat_array) - window_size + 1)
-  return jax.vmap(
-      lambda start: jax.lax.dynamic_slice(flat_array, (start,), (window_size,))
-  )(starts)
+    """Sliding window equivalent to numpy.lib.stride_tricks.sliding_window."""
+    window_size = 3
+    starts = jnp.arange(len(flat_array) - window_size + 1)
+    return jax.vmap(lambda start: jax.lax.dynamic_slice(
+        flat_array, (start, ), (window_size, )))(starts)
 
 
 def _fit_polynomial_to_intervals_of_three(
-    rho_norm: jax.Array, q_face: jax.Array
-) -> tuple[jax.Array, jax.Array, jax.Array]:
-  """Fit polynomial to every set of three points in given arrays."""
-  q_face_intervals = _sliding_window_of_three(
-      q_face,
-  )
-  rho_norm_intervals = _sliding_window_of_three(
-      rho_norm,
-  )
+        rho_norm: jax.Array,
+        q_face: jax.Array) -> tuple[jax.Array, jax.Array, jax.Array]:
+    """Fit polynomial to every set of three points in given arrays."""
+    q_face_intervals = _sliding_window_of_three(q_face, )
+    rho_norm_intervals = _sliding_window_of_three(rho_norm, )
 
-  @jax.vmap
-  def batch_polyfit(
-      q_face_interval: jax.Array, rho_norm_interval: jax.Array
-  ) -> jax.Array:
-    """Solve Ax=b to get coefficients for a quadratic polynomial."""
-    chex.assert_shape(q_face_interval, (3,))
-    chex.assert_shape(rho_norm_interval, (3,))
-    rho_norm_squared = rho_norm_interval**2
-    A = jnp.array([  # pylint: disable=invalid-name
-        [rho_norm_squared[0], rho_norm_interval[0], 1],
-        [rho_norm_squared[1], rho_norm_interval[1], 1],
-        [rho_norm_squared[2], rho_norm_interval[2], 1],
-    ])
-    b = jnp.array([q_face_interval[0], q_face_interval[1], q_face_interval[2]])
-    coeffs = jnp.linalg.solve(A, b)
-    return coeffs
+    @jax.vmap
+    def batch_polyfit(q_face_interval: jax.Array,
+                      rho_norm_interval: jax.Array) -> jax.Array:
+        """Solve Ax=b to get coefficients for a quadratic polynomial."""
+        chex.assert_shape(q_face_interval, (3, ))
+        chex.assert_shape(rho_norm_interval, (3, ))
+        rho_norm_squared = rho_norm_interval**2
+        A = jnp.array([  # pylint: disable=invalid-name
+            [rho_norm_squared[0], rho_norm_interval[0], 1],
+            [rho_norm_squared[1], rho_norm_interval[1], 1],
+            [rho_norm_squared[2], rho_norm_interval[2], 1],
+        ])
+        b = jnp.array(
+            [q_face_interval[0], q_face_interval[1], q_face_interval[2]])
+        coeffs = jnp.linalg.solve(A, b)
+        return coeffs
 
-  return (
-      batch_polyfit(q_face_intervals, rho_norm_intervals),
-      rho_norm_intervals,
-      q_face_intervals,
-  )
+    return (
+        batch_polyfit(q_face_intervals, rho_norm_intervals),
+        rho_norm_intervals,
+        q_face_intervals,
+    )
 
 
 @jax.vmap
 def _minimum_location_value_in_interval(
-    coeffs: jax.Array, rho_norm_interval: jax.Array, q_interval: jax.Array
-) -> tuple[jax.Array, jax.Array]:
-  """Returns the minimum value and location of the fit quadratic in the interval."""
-  min_interval, max_interval = rho_norm_interval[0], rho_norm_interval[1]
-  q_min_interval, q_max_interval = (
-      q_interval[0],
-      q_interval[1],
-  )
-  a, b = coeffs[0], coeffs[1]
-  extremum_location = -b / (2 * a)
-  extremum_in_interval = jnp.greater(
-      extremum_location, min_interval
-  ) & jnp.less(extremum_location, max_interval)
-  extremum_value = jax.lax.cond(
-      extremum_in_interval,
-      lambda x: jnp.polyval(coeffs, x),
-      lambda x: jnp.inf,
-      extremum_location,
-  )
+        coeffs: jax.Array, rho_norm_interval: jax.Array,
+        q_interval: jax.Array) -> tuple[jax.Array, jax.Array]:
+    """Returns the minimum value and location of the fit quadratic in the interval."""
+    min_interval, max_interval = rho_norm_interval[0], rho_norm_interval[1]
+    q_min_interval, q_max_interval = (
+        q_interval[0],
+        q_interval[1],
+    )
+    a, b = coeffs[0], coeffs[1]
+    extremum_location = -b / (2 * a)
+    extremum_in_interval = jnp.greater(extremum_location,
+                                       min_interval) & jnp.less(
+                                           extremum_location, max_interval)
+    extremum_value = jax.lax.cond(
+        extremum_in_interval,
+        lambda x: jnp.polyval(coeffs, x),
+        lambda x: jnp.inf,
+        extremum_location,
+    )
 
-  interval_minimum_location, interval_minimum_value = jax.lax.cond(
-      jnp.less(q_min_interval, q_max_interval),
-      lambda: (min_interval, q_min_interval),
-      lambda: (max_interval, q_max_interval),
-  )
-  overall_minimum_location, overall_minimum_value = jax.lax.cond(
-      jnp.less(interval_minimum_value, extremum_value),
-      lambda: (interval_minimum_location, interval_minimum_value),
-      lambda: (extremum_location, extremum_value),
-  )
-  return overall_minimum_location, overall_minimum_value
+    interval_minimum_location, interval_minimum_value = jax.lax.cond(
+        jnp.less(q_min_interval, q_max_interval),
+        lambda: (min_interval, q_min_interval),
+        lambda: (max_interval, q_max_interval),
+    )
+    overall_minimum_location, overall_minimum_value = jax.lax.cond(
+        jnp.less(interval_minimum_value, extremum_value),
+        lambda: (interval_minimum_location, interval_minimum_value),
+        lambda: (extremum_location, extremum_value),
+    )
+    return overall_minimum_location, overall_minimum_value
 
 
 def _find_roots_quadratic(coeffs: jax.Array) -> jax.Array:
-  """Finds the roots of a quadratic equation."""
-  a, b, c = coeffs[0], coeffs[1], coeffs[2]
-  determinant = b**2 - 4.0 * a * c
-  roots_exist = jnp.greater(determinant, 0)
-  plus_root = jax.lax.cond(
-      roots_exist,
-      lambda: (-b + jnp.sqrt(determinant)) / (2.0 * a),
-      lambda: -jnp.inf,
-  )
-  minus_root = jax.lax.cond(
-      roots_exist,
-      lambda: (-b - jnp.sqrt(determinant)) / (2.0 * a),
-      lambda: -jnp.inf,
-  )
-  return jnp.array([plus_root, minus_root])
+    """Finds the roots of a quadratic equation."""
+    a, b, c = coeffs[0], coeffs[1], coeffs[2]
+    determinant = b**2 - 4.0 * a * c
+    roots_exist = jnp.greater(determinant, 0)
+    plus_root = jax.lax.cond(
+        roots_exist,
+        lambda: (-b + jnp.sqrt(determinant)) / (2.0 * a),
+        lambda: -jnp.inf,
+    )
+    minus_root = jax.lax.cond(
+        roots_exist,
+        lambda: (-b - jnp.sqrt(determinant)) / (2.0 * a),
+        lambda: -jnp.inf,
+    )
+    return jnp.array([plus_root, minus_root])
 
 
 @functools.partial(jax.vmap, in_axes=(0, 0, None))
-def _root_in_interval(
-    coeffs: jax.Array, interval: jax.Array, q_surface: float
-) -> jax.Array:
-  """Finds roots of quadratic(coeffs)=q_surface in the interval."""
-  intercept_coeffs = coeffs - jnp.array([0.0, 0.0, q_surface])
-  min_interval, max_interval = interval[0], interval[1]
-  root_values = _find_roots_quadratic(intercept_coeffs)
-  in_interval = jnp.greater(root_values, min_interval) & jnp.less(
-      root_values, max_interval
-  )
-  return jnp.where(in_interval, root_values, -jnp.inf)
+def _root_in_interval(coeffs: jax.Array, interval: jax.Array,
+                      q_surface: float) -> jax.Array:
+    """Finds roots of quadratic(coeffs)=q_surface in the interval."""
+    intercept_coeffs = coeffs - jnp.array([0.0, 0.0, q_surface])
+    min_interval, max_interval = interval[0], interval[1]
+    root_values = _find_roots_quadratic(intercept_coeffs)
+    in_interval = jnp.greater(root_values, min_interval) & jnp.less(
+        root_values, max_interval)
+    return jnp.where(in_interval, root_values, -jnp.inf)
 
 
 @jax_utils.jit
-def find_min_q_and_q_surface_intercepts(
-    rho_norm: jax.Array, q_face: jax.Array
-) -> SafetyFactorFit:
-  """Finds the minimum q and the q surface intercepts.
+def find_min_q_and_q_surface_intercepts(rho_norm: jax.Array,
+                                        q_face: jax.Array) -> SafetyFactorFit:
+    """Finds the minimum q and the q surface intercepts.
 
   This method divides the input arrays into groups of three points, fits a
   quadratic to each interval containing three points. It then uses the fit
@@ -501,69 +522,68 @@ def find_min_q_and_q_surface_intercepts(
     q=3/1 plane. If fewer than two intercepts are found, entries will be set to
     -inf.
   """
-  if len(q_face) != len(rho_norm):
-    raise ValueError(
-        f'Input arrays must have the same length. {len(q_face)} !='
-        f' {len(rho_norm)}'
+    if len(q_face) != len(rho_norm):
+        raise ValueError(
+            f'Input arrays must have the same length. {len(q_face)} !='
+            f' {len(rho_norm)}')
+    if len(q_face) < 4:
+        raise ValueError('Input arrays must have at least four points.')
+    # Sort in case input is not sorted.
+    sorted_indices = jnp.argsort(rho_norm)
+    rho_norm = rho_norm[sorted_indices]
+    q_face = q_face[sorted_indices]
+    # Fit polynomial to every set of three points in given arrays.
+    poly_coeffs, rho_norm_3, q_face_3 = _fit_polynomial_to_intervals_of_three(
+        rho_norm, q_face)
+    # To bridge across the entire span of rho_norm, and avoid overlapping
+    # interval domains, we define the first group from points (0, 2), and all
+    # subsequent groups from (i+1, i+2), from i=1 until i=len(rho_norm)-1.
+    first_rho_norm = jnp.expand_dims(jnp.array([rho_norm[0], rho_norm[2]]),
+                                     axis=0)
+    first_q_face = jnp.expand_dims(jnp.array([q_face[0], q_face[2]]), axis=0)
+    rho_norms = jnp.concat([first_rho_norm, rho_norm_3[1:, 1:]], axis=0)
+    q_faces = jnp.concat([first_q_face, q_face_3[1:, 1:]], axis=0)
+
+    # Find the minimum q value and its location for each interval.
+    rho_q_min_intervals, q_min_intervals = _minimum_location_value_in_interval(
+        poly_coeffs, rho_norms, q_faces)
+    # Find the minimum q value and its location out of all intervals.
+    arg_q_min = jnp.argmin(q_min_intervals)
+    rho_q_min = rho_q_min_intervals[arg_q_min]
+    q_min = q_min_intervals[arg_q_min]
+
+    # Find the outermost rho_norm values that intercept the q=3/2, q=2/1, and
+    # q=3/1 planes. If none are found, fill from the left with -jnp.inf.
+    rho_q_3_2 = _root_in_interval(poly_coeffs, rho_norms, 1.5).flatten()
+    outermost_rho_q_3_2 = rho_q_3_2[jnp.argsort(rho_q_3_2)[-2:]]
+    rho_q_2_1 = _root_in_interval(poly_coeffs, rho_norms, 2.0).flatten()
+    outermost_rho_q_2_1 = rho_q_2_1[jnp.argsort(rho_q_2_1)[-2:]]
+    rho_q_3_1 = _root_in_interval(poly_coeffs, rho_norms, 3.0).flatten()
+    outermost_rho_q_3_1 = rho_q_3_1[jnp.argsort(rho_q_3_1)[-2:]]
+
+    return SafetyFactorFit(
+        rho_q_min=rho_q_min,
+        q_min=q_min,
+        rho_q_3_2_first=outermost_rho_q_3_2[0],
+        rho_q_2_1_first=outermost_rho_q_2_1[0],
+        rho_q_3_1_first=outermost_rho_q_3_1[0],
+        rho_q_3_2_second=outermost_rho_q_3_2[1],
+        rho_q_2_1_second=outermost_rho_q_2_1[1],
+        rho_q_3_1_second=outermost_rho_q_3_1[1],
     )
-  if len(q_face) < 4:
-    raise ValueError('Input arrays must have at least four points.')
-  # Sort in case input is not sorted.
-  sorted_indices = jnp.argsort(rho_norm)
-  rho_norm = rho_norm[sorted_indices]
-  q_face = q_face[sorted_indices]
-  # Fit polynomial to every set of three points in given arrays.
-  poly_coeffs, rho_norm_3, q_face_3 = _fit_polynomial_to_intervals_of_three(
-      rho_norm, q_face
-  )
-  # To bridge across the entire span of rho_norm, and avoid overlapping
-  # interval domains, we define the first group from points (0, 2), and all
-  # subsequent groups from (i+1, i+2), from i=1 until i=len(rho_norm)-1.
-  first_rho_norm = jnp.expand_dims(
-      jnp.array([rho_norm[0], rho_norm[2]]), axis=0
-  )
-  first_q_face = jnp.expand_dims(jnp.array([q_face[0], q_face[2]]), axis=0)
-  rho_norms = jnp.concat([first_rho_norm, rho_norm_3[1:, 1:]], axis=0)
-  q_faces = jnp.concat([first_q_face, q_face_3[1:, 1:]], axis=0)
 
-  # Find the minimum q value and its location for each interval.
-  rho_q_min_intervals, q_min_intervals = _minimum_location_value_in_interval(
-      poly_coeffs, rho_norms, q_faces
-  )
-  # Find the minimum q value and its location out of all intervals.
-  arg_q_min = jnp.argmin(q_min_intervals)
-  rho_q_min = rho_q_min_intervals[arg_q_min]
-  q_min = q_min_intervals[arg_q_min]
-
-  # Find the outermost rho_norm values that intercept the q=3/2, q=2/1, and
-  # q=3/1 planes. If none are found, fill from the left with -jnp.inf.
-  rho_q_3_2 = _root_in_interval(poly_coeffs, rho_norms, 1.5).flatten()
-  outermost_rho_q_3_2 = rho_q_3_2[jnp.argsort(rho_q_3_2)[-2:]]
-  rho_q_2_1 = _root_in_interval(poly_coeffs, rho_norms, 2.0).flatten()
-  outermost_rho_q_2_1 = rho_q_2_1[jnp.argsort(rho_q_2_1)[-2:]]
-  rho_q_3_1 = _root_in_interval(poly_coeffs, rho_norms, 3.0).flatten()
-  outermost_rho_q_3_1 = rho_q_3_1[jnp.argsort(rho_q_3_1)[-2:]]
-
-  return SafetyFactorFit(
-      rho_q_min=rho_q_min,
-      q_min=q_min,
-      rho_q_3_2_first=outermost_rho_q_3_2[0],
-      rho_q_2_1_first=outermost_rho_q_2_1[0],
-      rho_q_3_1_first=outermost_rho_q_3_1[0],
-      rho_q_3_2_second=outermost_rho_q_3_2[1],
-      rho_q_2_1_second=outermost_rho_q_2_1[1],
-      rho_q_3_1_second=outermost_rho_q_3_1[1],
-  )
 
 RADIATION_OUTPUT_NAME = "radiation_impurity_species"
 DENSITY_OUTPUT_NAME = "n_impurity_species"
 Z_OUTPUT_NAME = "Z_impurity_species"
 IMPURITY_DIM = "impurity_symbol"
+
+
 # pylint: disable=invalid-name
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class ImpuritySpeciesOutput:
-  """Impurity radiation output for a single species.
+    """Impurity radiation output for a single species.
 
   Attributes:
     radiation: The impurity radiation for the species [Wm^-3].
@@ -571,16 +591,16 @@ class ImpuritySpeciesOutput:
     Z_impurity: The impurity average charge state.
   """
 
-  radiation: array_typing.FloatVectorCell
-  n_impurity: array_typing.FloatVectorCell
-  Z_impurity: array_typing.FloatVectorCell
+    radiation: array_typing.FloatVectorCell
+    n_impurity: array_typing.FloatVectorCell
+    Z_impurity: array_typing.FloatVectorCell
 
 
 def calculate_impurity_species_output(
     sim_state,
     runtime_params: runtime_params_slice.RuntimeParams,
 ) -> dict[str, ImpuritySpeciesOutput]:
-  """Calculates the output for each impurity species.
+    """Calculates the output for each impurity species.
 
   Args:
     sim_state: The current state of the simulation.
@@ -591,69 +611,57 @@ def calculate_impurity_species_output(
     If the mavrin impurity radiation heat sink is not enabled then we output
     zeros for the radiation output.
   """
-  impurity_species_output: dict[str, ImpuritySpeciesOutput] = {}
-  mavrin_active = True
-  # If the impurity radiation heat sink is not enabled, return empty dictionary.
-  if (
-      impurity_radiation_heat_sink.ImpurityRadiationHeatSink.SOURCE_NAME
-      not in runtime_params.sources
-  ):
-    mavrin_active = False
-  else:
-    runtime_params_impurity = runtime_params.sources[
-        impurity_radiation_heat_sink.ImpurityRadiationHeatSink.SOURCE_NAME
-    ]
-    # If the impurity radiation heat sink is not the mavrin model and in model
-    # based mode, return empty dictionary.
-    if not (
-        isinstance(
-            runtime_params_impurity, impurity_radiation_mavrin_fit.RuntimeParams
-        )
-        and runtime_params_impurity.mode
-        == source_runtime_params_lib.Mode.MODEL_BASED
-    ):
-      mavrin_active = False
-
-  impurity_fractions = sim_state.core_profiles.impurity_fractions
-  impurity_names = runtime_params.plasma_composition.impurity_names
-  charge_state_info = charge_states.get_average_charge_state(
-      ion_symbols=impurity_names,
-      T_e=sim_state.core_profiles.T_e.value,
-      fractions=jnp.stack(
-          [impurity_fractions[symbol] for symbol in impurity_names]
-      ),
-      Z_override=runtime_params.plasma_composition.impurity.Z_override,
-  )
-
-  for i, symbol in enumerate(impurity_names):
-    core_profiles = sim_state.core_profiles
-    impurity_density_scaling = (
-        core_profiles.Z_impurity / charge_state_info.Z_avg
-    )
-    n_imp = (
-        impurity_fractions[symbol]
-        * core_profiles.n_impurity.value
-        * impurity_density_scaling
-    )
-    Z_imp = charge_state_info.Z_per_species[i]
-    if mavrin_active:
-      lz = impurity_radiation_mavrin_fit.calculate_impurity_radiation_single_species(
-          core_profiles.T_e.value, symbol
-      )
-      radiation = n_imp * core_profiles.n_e.value * lz
+    impurity_species_output: dict[str, ImpuritySpeciesOutput] = {}
+    mavrin_active = True
+    # If the impurity radiation heat sink is not enabled, return empty dictionary.
+    if (impurity_radiation_heat_sink.ImpurityRadiationHeatSink.SOURCE_NAME
+            not in runtime_params.sources):
+        mavrin_active = False
     else:
-      radiation = jnp.zeros_like(n_imp)
-    impurity_species_output[symbol] = ImpuritySpeciesOutput(
-        radiation=radiation, n_impurity=n_imp, Z_impurity=Z_imp
+        runtime_params_impurity = runtime_params.sources[
+            impurity_radiation_heat_sink.ImpurityRadiationHeatSink.SOURCE_NAME]
+        # If the impurity radiation heat sink is not the mavrin model and in model
+        # based mode, return empty dictionary.
+        if not (isinstance(runtime_params_impurity,
+                           impurity_radiation_mavrin_fit.RuntimeParams)
+                and runtime_params_impurity.mode
+                == source_runtime_params_lib.Mode.MODEL_BASED):
+            mavrin_active = False
+
+    impurity_fractions = sim_state.core_profiles.impurity_fractions
+    impurity_names = runtime_params.plasma_composition.impurity_names
+    charge_state_info = charge_states.get_average_charge_state(
+        ion_symbols=impurity_names,
+        T_e=sim_state.core_profiles.T_e.value,
+        fractions=jnp.stack(
+            [impurity_fractions[symbol] for symbol in impurity_names]),
+        Z_override=runtime_params.plasma_composition.impurity.Z_override,
     )
 
-  return impurity_species_output
+    for i, symbol in enumerate(impurity_names):
+        core_profiles = sim_state.core_profiles
+        impurity_density_scaling = (core_profiles.Z_impurity /
+                                    charge_state_info.Z_avg)
+        n_imp = (impurity_fractions[symbol] * core_profiles.n_impurity.value *
+                 impurity_density_scaling)
+        Z_imp = charge_state_info.Z_per_species[i]
+        if mavrin_active:
+            lz = impurity_radiation_mavrin_fit.calculate_impurity_radiation_single_species(
+                core_profiles.T_e.value, symbol)
+            radiation = n_imp * core_profiles.n_e.value * lz
+        else:
+            radiation = jnp.zeros_like(n_imp)
+        impurity_species_output[symbol] = ImpuritySpeciesOutput(
+            radiation=radiation, n_impurity=n_imp, Z_impurity=Z_imp)
+
+    return impurity_species_output
+
 
 # pylint: disable=invalid-name
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True, eq=False)
 class PostProcessedOutputs:
-  """Collection of outputs calculated after each simulation step.
+    """Collection of outputs calculated after each simulation step.
 
   These variables are not used internally, but are useful as outputs or
   intermediate observations for overarching workflows.
@@ -768,207 +776,210 @@ class PostProcessedOutputs:
     impurity_species: Dictionary of outputs for each impurity species.
   """
 
-  pressure_thermal_i: cell_variable.CellVariable
-  pressure_thermal_e: cell_variable.CellVariable
-  pressure_thermal_total: cell_variable.CellVariable
-  pprime: array_typing.FloatVector
-  # pylint: disable=invalid-name
-  W_thermal_i: array_typing.FloatScalar
-  W_thermal_e: array_typing.FloatScalar
-  W_thermal_total: array_typing.FloatScalar
-  tau_E: array_typing.FloatScalar
-  H89P: array_typing.FloatScalar
-  H98: array_typing.FloatScalar
-  H97L: array_typing.FloatScalar
-  H20: array_typing.FloatScalar
-  FFprime: array_typing.FloatVector
-  psi_norm: array_typing.FloatVector
-  # Integrated heat sources
-  P_SOL_i: array_typing.FloatScalar
-  P_SOL_e: array_typing.FloatScalar
-  P_SOL_total: array_typing.FloatScalar
-  P_aux_i: array_typing.FloatScalar
-  P_aux_e: array_typing.FloatScalar
-  P_aux_total: array_typing.FloatScalar
-  P_external_injected: array_typing.FloatScalar
-  P_external_total: array_typing.FloatScalar
-  P_ei_exchange_i: array_typing.FloatScalar
-  P_ei_exchange_e: array_typing.FloatScalar
-  P_aux_generic_i: array_typing.FloatScalar
-  P_aux_generic_e: array_typing.FloatScalar
-  P_aux_generic_total: array_typing.FloatScalar
-  P_alpha_i: array_typing.FloatScalar
-  P_alpha_e: array_typing.FloatScalar
-  P_alpha_total: array_typing.FloatScalar
-  P_ohmic_e: array_typing.FloatScalar
-  P_bremsstrahlung_e: array_typing.FloatScalar
-  P_cyclotron_e: array_typing.FloatScalar
-  P_ecrh_e: array_typing.FloatScalar
-  P_radiation_e: array_typing.FloatScalar
-  I_ecrh: array_typing.FloatScalar
-  I_aux_generic: array_typing.FloatScalar
-  P_fusion: array_typing.FloatScalar
-  Q_fusion: array_typing.FloatScalar
-  P_icrh_e: array_typing.FloatScalar
-  P_icrh_i: array_typing.FloatScalar
-  P_icrh_total: array_typing.FloatScalar
-  P_LH_high_density: array_typing.FloatScalar
-  P_LH_min: array_typing.FloatScalar
-  P_LH: array_typing.FloatScalar
-  n_e_min_P_LH: array_typing.FloatScalar
-  E_fusion: array_typing.FloatScalar
-  E_aux_total: array_typing.FloatScalar
-  E_ohmic_e: array_typing.FloatScalar
-  E_external_injected: array_typing.FloatScalar
-  E_external_total: array_typing.FloatScalar
-  T_e_volume_avg: array_typing.FloatScalar
-  T_i_volume_avg: array_typing.FloatScalar
-  n_e_volume_avg: array_typing.FloatScalar
-  n_i_volume_avg: array_typing.FloatScalar
-  n_e_line_avg: array_typing.FloatScalar
-  n_i_line_avg: array_typing.FloatScalar
-  fgw_n_e_volume_avg: array_typing.FloatScalar
-  fgw_n_e_line_avg: array_typing.FloatScalar
-  q95: array_typing.FloatScalar
-  W_pol: array_typing.FloatScalar
-  li3: array_typing.FloatScalar
-  dW_thermal_dt: array_typing.FloatScalar
-  rho_q_min: array_typing.FloatScalar
-  q_min: array_typing.FloatScalar
-  rho_q_3_2_first: array_typing.FloatScalar
-  rho_q_3_2_second: array_typing.FloatScalar
-  rho_q_2_1_first: array_typing.FloatScalar
-  rho_q_2_1_second: array_typing.FloatScalar
-  rho_q_3_1_first: array_typing.FloatScalar
-  rho_q_3_1_second: array_typing.FloatScalar
-  I_bootstrap: array_typing.FloatScalar
-  j_external: array_typing.FloatVector
-  j_ohmic: array_typing.FloatVector
-  S_gas_puff: array_typing.FloatScalar
-  S_pellet: array_typing.FloatScalar
-  S_generic_particle: array_typing.FloatScalar
-  beta_tor: array_typing.FloatScalar
-  beta_pol: array_typing.FloatScalar
-  beta_N: array_typing.FloatScalar
-  S_total: array_typing.FloatScalar
-  impurity_species: dict[str, ImpuritySpeciesOutput]
-  # pylint: enable=invalid-name
+    pressure_thermal_i: cell_variable.CellVariable
+    pressure_thermal_e: cell_variable.CellVariable
+    pressure_thermal_total: cell_variable.CellVariable
+    pprime: array_typing.FloatVector
+    # pylint: disable=invalid-name
+    W_thermal_i: array_typing.FloatScalar
+    W_thermal_e: array_typing.FloatScalar
+    W_thermal_total: array_typing.FloatScalar
+    tau_E: array_typing.FloatScalar
+    H89P: array_typing.FloatScalar
+    H98: array_typing.FloatScalar
+    H97L: array_typing.FloatScalar
+    H20: array_typing.FloatScalar
+    FFprime: array_typing.FloatVector
+    psi_norm: array_typing.FloatVector
+    # Integrated heat sources
+    P_SOL_i: array_typing.FloatScalar
+    P_SOL_e: array_typing.FloatScalar
+    P_SOL_total: array_typing.FloatScalar
+    P_aux_i: array_typing.FloatScalar
+    P_aux_e: array_typing.FloatScalar
+    P_aux_total: array_typing.FloatScalar
+    P_external_injected: array_typing.FloatScalar
+    P_external_total: array_typing.FloatScalar
+    P_ei_exchange_i: array_typing.FloatScalar
+    P_ei_exchange_e: array_typing.FloatScalar
+    P_aux_generic_i: array_typing.FloatScalar
+    P_aux_generic_e: array_typing.FloatScalar
+    P_aux_generic_total: array_typing.FloatScalar
+    P_alpha_i: array_typing.FloatScalar
+    P_alpha_e: array_typing.FloatScalar
+    P_alpha_total: array_typing.FloatScalar
+    P_ohmic_e: array_typing.FloatScalar
+    P_bremsstrahlung_e: array_typing.FloatScalar
+    P_cyclotron_e: array_typing.FloatScalar
+    P_ecrh_e: array_typing.FloatScalar
+    P_radiation_e: array_typing.FloatScalar
+    I_ecrh: array_typing.FloatScalar
+    I_aux_generic: array_typing.FloatScalar
+    P_fusion: array_typing.FloatScalar
+    Q_fusion: array_typing.FloatScalar
+    P_icrh_e: array_typing.FloatScalar
+    P_icrh_i: array_typing.FloatScalar
+    P_icrh_total: array_typing.FloatScalar
+    P_LH_high_density: array_typing.FloatScalar
+    P_LH_min: array_typing.FloatScalar
+    P_LH: array_typing.FloatScalar
+    n_e_min_P_LH: array_typing.FloatScalar
+    E_fusion: array_typing.FloatScalar
+    E_aux_total: array_typing.FloatScalar
+    E_ohmic_e: array_typing.FloatScalar
+    E_external_injected: array_typing.FloatScalar
+    E_external_total: array_typing.FloatScalar
+    T_e_volume_avg: array_typing.FloatScalar
+    T_i_volume_avg: array_typing.FloatScalar
+    n_e_volume_avg: array_typing.FloatScalar
+    n_i_volume_avg: array_typing.FloatScalar
+    n_e_line_avg: array_typing.FloatScalar
+    n_i_line_avg: array_typing.FloatScalar
+    fgw_n_e_volume_avg: array_typing.FloatScalar
+    fgw_n_e_line_avg: array_typing.FloatScalar
+    q95: array_typing.FloatScalar
+    W_pol: array_typing.FloatScalar
+    li3: array_typing.FloatScalar
+    dW_thermal_dt: array_typing.FloatScalar
+    rho_q_min: array_typing.FloatScalar
+    q_min: array_typing.FloatScalar
+    rho_q_3_2_first: array_typing.FloatScalar
+    rho_q_3_2_second: array_typing.FloatScalar
+    rho_q_2_1_first: array_typing.FloatScalar
+    rho_q_2_1_second: array_typing.FloatScalar
+    rho_q_3_1_first: array_typing.FloatScalar
+    rho_q_3_1_second: array_typing.FloatScalar
+    I_bootstrap: array_typing.FloatScalar
+    j_external: array_typing.FloatVector
+    j_ohmic: array_typing.FloatVector
+    S_gas_puff: array_typing.FloatScalar
+    S_pellet: array_typing.FloatScalar
+    S_generic_particle: array_typing.FloatScalar
+    beta_tor: array_typing.FloatScalar
+    beta_pol: array_typing.FloatScalar
+    beta_N: array_typing.FloatScalar
+    S_total: array_typing.FloatScalar
+    impurity_species: dict[str, ImpuritySpeciesOutput]
+    # pylint: enable=invalid-name
 
-  @classmethod
-  def zeros(cls, geo: geometry.Geometry) -> typing_extensions.Self:
-    """Returns a PostProcessedOutputs with all zeros, used for initializing."""
-    return cls(
-        pressure_thermal_i=cell_variable.CellVariable(
-            value=jnp.zeros_like(geo.rho_norm),
-            dr=jnp.array(geo.drho_norm),
-            right_face_constraint=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-            right_face_grad_constraint=None,
-        ),
-        pressure_thermal_e=cell_variable.CellVariable(
-            value=jnp.zeros_like(geo.rho_norm),
-            dr=jnp.array(geo.drho_norm),
-            right_face_constraint=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-            right_face_grad_constraint=None,
-        ),
-        pressure_thermal_total=cell_variable.CellVariable(
-            value=jnp.zeros_like(geo.rho_norm),
-            dr=jnp.array(geo.drho_norm),
-            right_face_constraint=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-            right_face_grad_constraint=None,
-        ),
-        pprime=jnp.zeros(geo.rho_face.shape),
-        W_thermal_i=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        W_thermal_e=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        W_thermal_total=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        tau_E=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        H89P=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        H98=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        H97L=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        H20=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        FFprime=jnp.zeros(geo.rho_face.shape),
-        psi_norm=jnp.zeros(geo.rho_face.shape),
-        P_SOL_i=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        P_SOL_e=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        P_SOL_total=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        P_aux_i=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        P_aux_e=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        P_aux_total=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        P_external_injected=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        P_external_total=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        P_ei_exchange_i=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        P_ei_exchange_e=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        P_aux_generic_i=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        P_aux_generic_e=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        P_aux_generic_total=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        P_alpha_i=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        P_alpha_e=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        P_alpha_total=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        P_ohmic_e=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        P_bremsstrahlung_e=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        P_cyclotron_e=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        P_ecrh_e=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        P_radiation_e=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        I_ecrh=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        I_aux_generic=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        P_fusion=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        Q_fusion=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        P_icrh_i=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        P_icrh_e=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        P_icrh_total=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        P_LH_high_density=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        P_LH_min=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        P_LH=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        n_e_min_P_LH=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        E_fusion=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        E_aux_total=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        E_ohmic_e=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        E_external_injected=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        E_external_total=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        T_e_volume_avg=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        T_i_volume_avg=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        n_e_volume_avg=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        n_i_volume_avg=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        n_e_line_avg=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        n_i_line_avg=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        fgw_n_e_volume_avg=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        fgw_n_e_line_avg=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        q95=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        W_pol=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        li3=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        dW_thermal_dt=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        rho_q_min=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        q_min=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        rho_q_3_2_first=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        rho_q_2_1_first=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        rho_q_3_1_first=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        rho_q_3_2_second=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        rho_q_2_1_second=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        rho_q_3_1_second=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        I_bootstrap=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        j_external=jnp.zeros(geo.rho_face.shape),
-        j_ohmic=jnp.zeros(geo.rho_face.shape),
-        S_gas_puff=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        S_pellet=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        S_generic_particle=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        beta_tor=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        beta_pol=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        beta_N=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        S_total=jnp.array(0.0, dtype=jax_utils.get_dtype()),
-        impurity_species={},
-    )
+    @classmethod
+    def zeros(cls, geo: geometry.Geometry) -> typing_extensions.Self:
+        """Returns a PostProcessedOutputs with all zeros, used for initializing."""
+        return cls(
+            pressure_thermal_i=cell_variable.CellVariable(
+                value=jnp.zeros_like(geo.rho_norm),
+                dr=jnp.array(geo.drho_norm),
+                right_face_constraint=jnp.array(0.0,
+                                                dtype=jax_utils.get_dtype()),
+                right_face_grad_constraint=None,
+            ),
+            pressure_thermal_e=cell_variable.CellVariable(
+                value=jnp.zeros_like(geo.rho_norm),
+                dr=jnp.array(geo.drho_norm),
+                right_face_constraint=jnp.array(0.0,
+                                                dtype=jax_utils.get_dtype()),
+                right_face_grad_constraint=None,
+            ),
+            pressure_thermal_total=cell_variable.CellVariable(
+                value=jnp.zeros_like(geo.rho_norm),
+                dr=jnp.array(geo.drho_norm),
+                right_face_constraint=jnp.array(0.0,
+                                                dtype=jax_utils.get_dtype()),
+                right_face_grad_constraint=None,
+            ),
+            pprime=jnp.zeros(geo.rho_face.shape),
+            W_thermal_i=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            W_thermal_e=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            W_thermal_total=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            tau_E=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            H89P=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            H98=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            H97L=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            H20=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            FFprime=jnp.zeros(geo.rho_face.shape),
+            psi_norm=jnp.zeros(geo.rho_face.shape),
+            P_SOL_i=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            P_SOL_e=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            P_SOL_total=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            P_aux_i=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            P_aux_e=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            P_aux_total=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            P_external_injected=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            P_external_total=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            P_ei_exchange_i=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            P_ei_exchange_e=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            P_aux_generic_i=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            P_aux_generic_e=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            P_aux_generic_total=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            P_alpha_i=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            P_alpha_e=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            P_alpha_total=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            P_ohmic_e=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            P_bremsstrahlung_e=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            P_cyclotron_e=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            P_ecrh_e=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            P_radiation_e=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            I_ecrh=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            I_aux_generic=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            P_fusion=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            Q_fusion=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            P_icrh_i=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            P_icrh_e=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            P_icrh_total=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            P_LH_high_density=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            P_LH_min=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            P_LH=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            n_e_min_P_LH=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            E_fusion=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            E_aux_total=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            E_ohmic_e=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            E_external_injected=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            E_external_total=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            T_e_volume_avg=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            T_i_volume_avg=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            n_e_volume_avg=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            n_i_volume_avg=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            n_e_line_avg=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            n_i_line_avg=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            fgw_n_e_volume_avg=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            fgw_n_e_line_avg=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            q95=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            W_pol=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            li3=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            dW_thermal_dt=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            rho_q_min=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            q_min=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            rho_q_3_2_first=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            rho_q_2_1_first=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            rho_q_3_1_first=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            rho_q_3_2_second=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            rho_q_2_1_second=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            rho_q_3_1_second=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            I_bootstrap=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            j_external=jnp.zeros(geo.rho_face.shape),
+            j_ohmic=jnp.zeros(geo.rho_face.shape),
+            S_gas_puff=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            S_pellet=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            S_generic_particle=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            beta_tor=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            beta_pol=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            beta_N=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            S_total=jnp.array(0.0, dtype=jax_utils.get_dtype()),
+            impurity_species={},
+        )
 
-  def check_for_errors(self):
-    if any([np.any(np.isnan(x)) for x in jax.tree.leaves(self)]):
-      path_vals, _ = jax.tree.flatten_with_path(self)
-      for path, value in path_vals:
-        if np.any(np.isnan(value)):
-          logging.info(
-              'Found NaNs in post_processed_outputs%s',
-              jax.tree_util.keystr(path),
-          )
-      return state.SimError.NAN_DETECTED
-    else:
-      return state.SimError.NO_ERROR
+    def check_for_errors(self):
+        if any([np.any(np.isnan(x)) for x in jax.tree.leaves(self)]):
+            path_vals, _ = jax.tree.flatten_with_path(self)
+            for path, value in path_vals:
+                if np.any(np.isnan(value)):
+                    logging.info(
+                        'Found NaNs in post_processed_outputs%s',
+                        jax.tree_util.keystr(path),
+                    )
+            return state.SimError.NAN_DETECTED
+        else:
+            return state.SimError.NO_ERROR
 
 
 # TODO(b/376010694): use the various SOURCE_NAMES for the keys.
@@ -1004,15 +1015,14 @@ def _get_integrated_source_value(
     source_profiles_dict: dict[str, array_typing.FloatVector],
     internal_source_name: str,
     geo: geometry.Geometry,
-    integration_fn: Callable[
-        [array_typing.FloatVector, geometry.Geometry], jax.Array
-    ],
+    integration_fn: Callable[[array_typing.FloatVector, geometry.Geometry],
+                             jax.Array],
 ) -> jax.Array:
-  """Integrates a source profile if it exists, otherwise returns 0.0."""
-  if internal_source_name in source_profiles_dict:
-    return integration_fn(source_profiles_dict[internal_source_name], geo)
-  else:
-    return jnp.array(0.0, dtype=jax_utils.get_dtype())
+    """Integrates a source profile if it exists, otherwise returns 0.0."""
+    if internal_source_name in source_profiles_dict:
+        return integration_fn(source_profiles_dict[internal_source_name], geo)
+    else:
+        return jnp.array(0.0, dtype=jax_utils.get_dtype())
 
 
 def _calculate_integrated_sources(
@@ -1021,7 +1031,7 @@ def _calculate_integrated_sources(
     core_sources: source_profiles.SourceProfiles,
     runtime_params: runtime_params_slice.RuntimeParams,
 ) -> dict[str, jax.Array]:
-  """Calculates total integrated internal and external source power and current.
+    """Calculates total integrated internal and external source power and current.
 
   Args:
     geo: Magnetic geometry
@@ -1038,107 +1048,96 @@ def _calculate_integrated_sources(
     quantities included in the returned dict. The corresponding
     `PostProcessedOutputs` attributes remain at their initialized zero values.
   """
-  integrated = {}
+    integrated = {}
 
-  # Initialize total alpha power to zero. Needed for Q calculation.
-  integrated['P_alpha_total'] = jnp.array(0.0, dtype=jax_utils.get_dtype())
+    # Initialize total alpha power to zero. Needed for Q calculation.
+    integrated['P_alpha_total'] = jnp.array(0.0, dtype=jax_utils.get_dtype())
 
-  # Initialize total particle sources to zero.
-  integrated['S_total'] = jnp.array(0.0, dtype=jax_utils.get_dtype())
+    # Initialize total particle sources to zero.
+    integrated['S_total'] = jnp.array(0.0, dtype=jax_utils.get_dtype())
 
-  # electron-ion heat exchange always exists, and is not in
-  # core_sources.profiles, so we calculate it here.
-  qei = core_sources.qei.qei_coef * (
-      core_profiles.T_e.value - core_profiles.T_i.value
-  )
-  integrated['P_ei_exchange_i'] = math_utils.volume_integration(qei, geo)
-  integrated['P_ei_exchange_e'] = -integrated['P_ei_exchange_i']
+    # electron-ion heat exchange always exists, and is not in
+    # core_sources.profiles, so we calculate it here.
+    qei = core_sources.qei.qei_coef * (core_profiles.T_e.value -
+                                       core_profiles.T_i.value)
+    integrated['P_ei_exchange_i'] = math_utils.volume_integration(qei, geo)
+    integrated['P_ei_exchange_e'] = -integrated['P_ei_exchange_i']
 
-  # Initialize total electron and ion powers
-  # TODO(b/380848256): P_sol is now correct for stationary state. However,
-  # for generality need to add dWth/dt to the equation (time dependence of
-  # stored energy).
-  integrated['P_SOL_i'] = integrated['P_ei_exchange_i']
-  integrated['P_SOL_e'] = integrated['P_ei_exchange_e']
-  integrated['P_aux_i'] = jnp.array(0.0, dtype=jax_utils.get_dtype())
-  integrated['P_aux_e'] = jnp.array(0.0, dtype=jax_utils.get_dtype())
-  integrated['P_external_injected'] = jnp.array(
-      0.0, dtype=jax_utils.get_dtype()
-  )
+    # Initialize total electron and ion powers
+    # TODO(b/380848256): P_sol is now correct for stationary state. However,
+    # for generality need to add dWth/dt to the equation (time dependence of
+    # stored energy).
+    integrated['P_SOL_i'] = integrated['P_ei_exchange_i']
+    integrated['P_SOL_e'] = integrated['P_ei_exchange_e']
+    integrated['P_aux_i'] = jnp.array(0.0, dtype=jax_utils.get_dtype())
+    integrated['P_aux_e'] = jnp.array(0.0, dtype=jax_utils.get_dtype())
+    integrated['P_external_injected'] = jnp.array(0.0,
+                                                  dtype=jax_utils.get_dtype())
 
-  # Calculate integrated sources with convenient names, transformed from
-  # TORAX internal names.
-  for key, value in ION_EL_HEAT_SOURCE_TRANSFORMATIONS.items():
-    is_in_T_i = key in core_sources.T_i
-    is_in_T_e = key in core_sources.T_e
-    if is_in_T_i != is_in_T_e:
-      raise ValueError(
-          f"Source '{key}' is expected to be defined for both ion and electron"
-          ' channels (in core_sources.T_i and core_sources.T_e respectively).'
-          f' Found in T_i: {is_in_T_i}, Found in T_e: {is_in_T_e}.'
-      )
-    integrated[f'{value}_i'] = _get_integrated_source_value(
-        core_sources.T_i, key, geo, math_utils.volume_integration
-    )
-    integrated[f'{value}_e'] = _get_integrated_source_value(
-        core_sources.T_e, key, geo, math_utils.volume_integration
-    )
-    integrated[f'{value}_total'] = (
-        integrated[f'{value}_i'] + integrated[f'{value}_e']
-    )
-    integrated['P_SOL_i'] += integrated[f'{value}_i']
-    integrated['P_SOL_e'] += integrated[f'{value}_e']
-    if key in EXTERNAL_HEATING_SOURCES:
-      integrated['P_aux_i'] += integrated[f'{value}_i']
-      integrated['P_aux_e'] += integrated[f'{value}_e']
+    # Calculate integrated sources with convenient names, transformed from
+    # TORAX internal names.
+    for key, value in ION_EL_HEAT_SOURCE_TRANSFORMATIONS.items():
+        is_in_T_i = key in core_sources.T_i
+        is_in_T_e = key in core_sources.T_e
+        if is_in_T_i != is_in_T_e:
+            raise ValueError(
+                f"Source '{key}' is expected to be defined for both ion and electron"
+                ' channels (in core_sources.T_i and core_sources.T_e respectively).'
+                f' Found in T_i: {is_in_T_i}, Found in T_e: {is_in_T_e}.')
+        integrated[f'{value}_i'] = _get_integrated_source_value(
+            core_sources.T_i, key, geo, math_utils.volume_integration)
+        integrated[f'{value}_e'] = _get_integrated_source_value(
+            core_sources.T_e, key, geo, math_utils.volume_integration)
+        integrated[f'{value}_total'] = (integrated[f'{value}_i'] +
+                                        integrated[f'{value}_e'])
+        integrated['P_SOL_i'] += integrated[f'{value}_i']
+        integrated['P_SOL_e'] += integrated[f'{value}_e']
+        if key in EXTERNAL_HEATING_SOURCES:
+            integrated['P_aux_i'] += integrated[f'{value}_i']
+            integrated['P_aux_e'] += integrated[f'{value}_e']
 
-      # Track injected power for heating sources that have absorption_fraction
-      # These are only for sources like ICRH or NBI that are
-      # ion_el_heat_sources.
-      source_params = runtime_params.sources.get(key)
-      if source_params is not None and hasattr(
-          source_params, 'absorption_fraction'
-      ):
-        total_absorbed = integrated[f'{value}_total']
-        injected_power = total_absorbed / source_params.absorption_fraction
-        integrated['P_external_injected'] += injected_power
-      else:
-        integrated['P_external_injected'] += integrated[f'{value}_total']
+            # Track injected power for heating sources that have absorption_fraction
+            # These are only for sources like ICRH or NBI that are
+            # ion_el_heat_sources.
+            source_params = runtime_params.sources.get(key)
+            if source_params is not None and hasattr(source_params,
+                                                     'absorption_fraction'):
+                total_absorbed = integrated[f'{value}_total']
+                injected_power = total_absorbed / source_params.absorption_fraction
+                integrated['P_external_injected'] += injected_power
+            else:
+                integrated['P_external_injected'] += integrated[
+                    f'{value}_total']
 
-  for key, value in EL_HEAT_SOURCE_TRANSFORMATIONS.items():
-    if key in core_sources.T_e and key in core_sources.T_i:
-      raise ValueError(
-          f"Source '{key}' was expected to only be an electron heat source (in"
-          ' core_sources.T_e), but it was also found in ion heat sources'
-          ' (core_sources.T_i).'
-      )
-    integrated[f'{value}'] = _get_integrated_source_value(
-        core_sources.T_e, key, geo, math_utils.volume_integration
-    )
-    integrated['P_SOL_e'] += integrated[f'{value}']
-    if key in EXTERNAL_HEATING_SOURCES:
-      integrated['P_aux_e'] += integrated[f'{value}']
-      integrated['P_external_injected'] += integrated[f'{value}']
+    for key, value in EL_HEAT_SOURCE_TRANSFORMATIONS.items():
+        if key in core_sources.T_e and key in core_sources.T_i:
+            raise ValueError(
+                f"Source '{key}' was expected to only be an electron heat source (in"
+                ' core_sources.T_e), but it was also found in ion heat sources'
+                ' (core_sources.T_i).')
+        integrated[f'{value}'] = _get_integrated_source_value(
+            core_sources.T_e, key, geo, math_utils.volume_integration)
+        integrated['P_SOL_e'] += integrated[f'{value}']
+        if key in EXTERNAL_HEATING_SOURCES:
+            integrated['P_aux_e'] += integrated[f'{value}']
+            integrated['P_external_injected'] += integrated[f'{value}']
 
-  for key, value in CURRENT_SOURCE_TRANSFORMATIONS.items():
-    integrated[f'{value}'] = _get_integrated_source_value(
-        core_sources.psi, key, geo, math_utils.area_integration
-    )
+    for key, value in CURRENT_SOURCE_TRANSFORMATIONS.items():
+        integrated[f'{value}'] = _get_integrated_source_value(
+            core_sources.psi, key, geo, math_utils.area_integration)
 
-  for key, value in PARTICLE_SOURCE_TRANSFORMATIONS.items():
-    integrated[f'{value}'] = _get_integrated_source_value(
-        core_sources.n_e, key, geo, math_utils.volume_integration
-    )
-    integrated['S_total'] += integrated[f'{value}']
+    for key, value in PARTICLE_SOURCE_TRANSFORMATIONS.items():
+        integrated[f'{value}'] = _get_integrated_source_value(
+            core_sources.n_e, key, geo, math_utils.volume_integration)
+        integrated['S_total'] += integrated[f'{value}']
 
-  integrated['P_SOL_total'] = integrated['P_SOL_i'] + integrated['P_SOL_e']
-  integrated['P_aux_total'] = integrated['P_aux_i'] + integrated['P_aux_e']
-  integrated['P_fusion'] = 5 * integrated['P_alpha_total']
-  integrated['P_external_total'] = (
-      integrated['P_external_injected'] + integrated['P_ohmic_e']
-  )
+    integrated['P_SOL_total'] = integrated['P_SOL_i'] + integrated['P_SOL_e']
+    integrated['P_aux_total'] = integrated['P_aux_i'] + integrated['P_aux_e']
+    integrated['P_fusion'] = 5 * integrated['P_alpha_total']
+    integrated['P_external_total'] = (integrated['P_external_injected'] +
+                                      integrated['P_ohmic_e'])
 
-  return integrated
+    return integrated
 
 
 @jax_utils.jit
@@ -1147,7 +1146,7 @@ def make_post_processed_outputs(
     runtime_params: runtime_params_slice.RuntimeParams,
     previous_post_processed_outputs: PostProcessedOutputs | None = None,
 ) -> PostProcessedOutputs:
-  """Calculates post-processed outputs based on the latest state.
+    """Calculates post-processed outputs based on the latest state.
 
   Args:
     sim_state: The state to add outputs to.
@@ -1163,266 +1162,214 @@ def make_post_processed_outputs(
   Returns:
     post_processed_outputs: The post_processed_outputs for the given state.
   """
-  # TODO(b/444380540): Remove once aux outputs from sources are exposed.
-  impurity_radiation_outputs = (
-      calculate_impurity_species_output(
-          sim_state, runtime_params
-      )
-  )
+    # TODO(b/444380540): Remove once aux outputs from sources are exposed.
+    impurity_radiation_outputs = (calculate_impurity_species_output(
+        sim_state, runtime_params))
 
-  (
-      pressure_thermal_el,
-      pressure_thermal_ion,
-      pressure_thermal_tot,
-  ) = formulas.calculate_pressure(sim_state.core_profiles)
-  pprime_face = formulas.calc_pprime(sim_state.core_profiles)
-  # pylint: disable=invalid-name
-  W_thermal_el, W_thermal_ion, W_thermal_tot = (
-      formulas.calculate_stored_thermal_energy(
-          pressure_thermal_el,
-          pressure_thermal_ion,
-          pressure_thermal_tot,
-          sim_state.geometry,
-      )
-  )
-  FFprime_face = formulas.calc_FFprime(
-      sim_state.core_profiles, sim_state.geometry
-  )
-  # Calculate normalized poloidal flux.
-  psi_face = sim_state.core_profiles.psi.face_value()
-  psi_norm_face = (psi_face - psi_face[0]) / (psi_face[-1] - psi_face[0])
-  integrated_sources = _calculate_integrated_sources(
-      sim_state.geometry,
-      sim_state.core_profiles,
-      sim_state.core_sources,
-      runtime_params,
-  )
-  # Calculate fusion gain with a zero division guard.
-  Q_fusion = (
-      integrated_sources['P_fusion']
-      / (integrated_sources['P_external_total']
-         + constants.CONSTANTS.eps))
-
-  P_LH_hi_dens, P_LH_min, P_LH, n_e_min_P_LH = (
-      scaling_laws.calculate_plh_scaling_factor(
-          sim_state.geometry, sim_state.core_profiles
-      )
-  )
-
-  # Thermal energy confinement time is the stored energy divided by the total
-  # input power into the plasma.
-
-  # Ploss term here does not include the reduction of radiated power. Most
-  # analysis of confinement times from databases have not included this term.
-  # Therefore highly radiative scenarios can lead to skewed results.
-
-  Ploss = (
-      integrated_sources['P_alpha_total']
-      + integrated_sources['P_aux_total']
-      + integrated_sources['P_ohmic_e']
-      + constants.CONSTANTS.eps  # Division guard.
-  )
-
-  if previous_post_processed_outputs is not None:
-    dW_th_dt = (
-        W_thermal_tot - previous_post_processed_outputs.W_thermal_total
-    ) / sim_state.dt
-  else:
-    dW_th_dt = 0.0
-
-  tauE = W_thermal_tot / Ploss
-
-  tauH89P = scaling_laws.calculate_scaling_law_confinement_time(
-      sim_state.geometry, sim_state.core_profiles, Ploss, 'H89P'
-  )
-  tauH98 = scaling_laws.calculate_scaling_law_confinement_time(
-      sim_state.geometry, sim_state.core_profiles, Ploss, 'H98'
-  )
-  tauH97L = scaling_laws.calculate_scaling_law_confinement_time(
-      sim_state.geometry, sim_state.core_profiles, Ploss, 'H97L'
-  )
-  tauH20 = scaling_laws.calculate_scaling_law_confinement_time(
-      sim_state.geometry, sim_state.core_profiles, Ploss, 'H20'
-  )
-
-  H89P = tauE / tauH89P
-  H98 = tauE / tauH98
-  H97L = tauE / tauH97L
-  H20 = tauE / tauH20
-
-  # Calculate total external (injected) and fusion (generated) energies based on
-  # interval average.
-  if previous_post_processed_outputs is not None:
-    # Factor 5 due to including neutron energy: E_fusion = 5.0 * E_alpha
-    E_fusion = (
-        previous_post_processed_outputs.E_fusion
-        + sim_state.dt
-        * (
-            integrated_sources['P_fusion']
-            + previous_post_processed_outputs.P_fusion
-        )
-        / 2.0
+    (
+        pressure_thermal_el,
+        pressure_thermal_ion,
+        pressure_thermal_tot,
+    ) = formulas.calculate_pressure(sim_state.core_profiles)
+    pprime_face = formulas.calc_pprime(sim_state.core_profiles)
+    # pylint: disable=invalid-name
+    W_thermal_el, W_thermal_ion, W_thermal_tot = (
+        formulas.calculate_stored_thermal_energy(
+            pressure_thermal_el,
+            pressure_thermal_ion,
+            pressure_thermal_tot,
+            sim_state.geometry,
+        ))
+    FFprime_face = formulas.calc_FFprime(sim_state.core_profiles,
+                                         sim_state.geometry)
+    # Calculate normalized poloidal flux.
+    psi_face = sim_state.core_profiles.psi.face_value()
+    psi_norm_face = (psi_face - psi_face[0]) / (psi_face[-1] - psi_face[0])
+    integrated_sources = _calculate_integrated_sources(
+        sim_state.geometry,
+        sim_state.core_profiles,
+        sim_state.core_sources,
+        runtime_params,
     )
-    E_aux_total = (
-        previous_post_processed_outputs.E_aux_total
-        + sim_state.dt
-        * (
-            integrated_sources['P_aux_total']
-            + previous_post_processed_outputs.P_aux_total
-        )
-        / 2.0
+    # Calculate fusion gain with a zero division guard.
+    Q_fusion = (
+        integrated_sources['P_fusion'] /
+        (integrated_sources['P_external_total'] + constants.CONSTANTS.eps))
+
+    P_LH_hi_dens, P_LH_min, P_LH, n_e_min_P_LH = (
+        scaling_laws.calculate_plh_scaling_factor(sim_state.geometry,
+                                                  sim_state.core_profiles))
+
+    # Thermal energy confinement time is the stored energy divided by the total
+    # input power into the plasma.
+
+    # Ploss term here does not include the reduction of radiated power. Most
+    # analysis of confinement times from databases have not included this term.
+    # Therefore highly radiative scenarios can lead to skewed results.
+
+    Ploss = (
+        integrated_sources['P_alpha_total'] +
+        integrated_sources['P_aux_total'] + integrated_sources['P_ohmic_e'] +
+        constants.CONSTANTS.eps  # Division guard.
     )
-    E_ohmic_e = (
-        previous_post_processed_outputs.E_ohmic_e
-        + sim_state.dt
-        * (
-            integrated_sources['P_ohmic_e']
-            + previous_post_processed_outputs.P_ohmic_e
-        )
-        / 2.0
+
+    if previous_post_processed_outputs is not None:
+        dW_th_dt = (
+            W_thermal_tot -
+            previous_post_processed_outputs.W_thermal_total) / sim_state.dt
+    else:
+        dW_th_dt = 0.0
+
+    tauE = W_thermal_tot / Ploss
+
+    tauH89P = scaling_laws.calculate_scaling_law_confinement_time(
+        sim_state.geometry, sim_state.core_profiles, Ploss, 'H89P')
+    tauH98 = scaling_laws.calculate_scaling_law_confinement_time(
+        sim_state.geometry, sim_state.core_profiles, Ploss, 'H98')
+    tauH97L = scaling_laws.calculate_scaling_law_confinement_time(
+        sim_state.geometry, sim_state.core_profiles, Ploss, 'H97L')
+    tauH20 = scaling_laws.calculate_scaling_law_confinement_time(
+        sim_state.geometry, sim_state.core_profiles, Ploss, 'H20')
+
+    H89P = tauE / tauH89P
+    H98 = tauE / tauH98
+    H97L = tauE / tauH97L
+    H20 = tauE / tauH20
+
+    # Calculate total external (injected) and fusion (generated) energies based on
+    # interval average.
+    if previous_post_processed_outputs is not None:
+        # Factor 5 due to including neutron energy: E_fusion = 5.0 * E_alpha
+        E_fusion = (previous_post_processed_outputs.E_fusion + sim_state.dt *
+                    (integrated_sources['P_fusion'] +
+                     previous_post_processed_outputs.P_fusion) / 2.0)
+        E_aux_total = (previous_post_processed_outputs.E_aux_total +
+                       sim_state.dt *
+                       (integrated_sources['P_aux_total'] +
+                        previous_post_processed_outputs.P_aux_total) / 2.0)
+        E_ohmic_e = (previous_post_processed_outputs.E_ohmic_e + sim_state.dt *
+                     (integrated_sources['P_ohmic_e'] +
+                      previous_post_processed_outputs.P_ohmic_e) / 2.0)
+        E_external_injected = (
+            previous_post_processed_outputs.E_external_injected +
+            sim_state.dt *
+            (integrated_sources['P_external_injected'] +
+             previous_post_processed_outputs.P_external_injected) / 2.0)
+        E_external_total = (
+            previous_post_processed_outputs.E_external_total + sim_state.dt *
+            (integrated_sources['P_external_total'] +
+             previous_post_processed_outputs.P_external_total) / 2.0)
+    else:
+        # Used during initiailization. Note for restarted simulations this should
+        # be overwritten by the previous_post_processed_outputs.
+        E_fusion = 0.0
+        E_aux_total = 0.0
+        E_ohmic_e = 0.0
+        E_external_injected = 0.0
+        E_external_total = 0.0
+
+    # Calculate q at 95% of the normalized poloidal flux
+    q95 = psi_calculations.calc_q95(psi_norm_face,
+                                    sim_state.core_profiles.q_face)
+
+    # Calculate te and ti volume average [keV]
+    te_volume_avg = math_utils.volume_average(
+        sim_state.core_profiles.T_e.value, sim_state.geometry)
+    ti_volume_avg = math_utils.volume_average(
+        sim_state.core_profiles.T_i.value, sim_state.geometry)
+
+    # Calculate n_e and n_i (main ion) volume and line averages in m^-3
+    n_e_volume_avg = math_utils.volume_average(
+        sim_state.core_profiles.n_e.value, sim_state.geometry)
+    n_i_volume_avg = math_utils.volume_average(
+        sim_state.core_profiles.n_i.value, sim_state.geometry)
+    n_e_line_avg = math_utils.line_average(sim_state.core_profiles.n_e.value,
+                                           sim_state.geometry)
+    n_i_line_avg = math_utils.line_average(sim_state.core_profiles.n_i.value,
+                                           sim_state.geometry)
+    fgw_n_e_volume_avg = formulas.calculate_greenwald_fraction(
+        n_e_volume_avg, sim_state.core_profiles, sim_state.geometry)
+    fgw_n_e_line_avg = formulas.calculate_greenwald_fraction(
+        n_e_line_avg, sim_state.core_profiles, sim_state.geometry)
+    Wpol = psi_calculations.calc_Wpol(sim_state.geometry,
+                                      sim_state.core_profiles.psi)
+    li3 = psi_calculations.calc_li3(
+        sim_state.geometry.R_major,
+        Wpol,
+        sim_state.core_profiles.Ip_profile_face[-1],
     )
-    E_external_injected = (
-        previous_post_processed_outputs.E_external_injected
-        + sim_state.dt
-        * (
-            integrated_sources['P_external_injected']
-            + previous_post_processed_outputs.P_external_injected
-        )
-        / 2.0
+
+    safety_factor_fit_outputs = (find_min_q_and_q_surface_intercepts(
+        sim_state.geometry.rho_face_norm,
+        sim_state.core_profiles.q_face,
+    ))
+
+    I_bootstrap = math_utils.area_integration(
+        sim_state.core_sources.bootstrap_current.j_bootstrap,
+        sim_state.geometry)
+
+    j_external = sum(sim_state.core_sources.psi.values())
+    psi_current = (j_external +
+                   sim_state.core_sources.bootstrap_current.j_bootstrap)
+    j_ohmic = sim_state.core_profiles.j_total - psi_current
+
+    beta_tor, beta_pol, beta_N = formulas.calculate_betas(
+        sim_state.core_profiles, sim_state.geometry)
+
+    return PostProcessedOutputs(
+        pressure_thermal_i=pressure_thermal_ion,
+        pressure_thermal_e=pressure_thermal_el,
+        pressure_thermal_total=pressure_thermal_tot,
+        pprime=pprime_face,
+        W_thermal_i=W_thermal_ion,
+        W_thermal_e=W_thermal_el,
+        W_thermal_total=W_thermal_tot,
+        tau_E=tauE,
+        H89P=H89P,
+        H98=H98,
+        H97L=H97L,
+        H20=H20,
+        FFprime=FFprime_face,
+        psi_norm=psi_norm_face,
+        **integrated_sources,
+        Q_fusion=Q_fusion,
+        P_LH=P_LH,
+        P_LH_min=P_LH_min,
+        P_LH_high_density=P_LH_hi_dens,
+        n_e_min_P_LH=n_e_min_P_LH,
+        E_fusion=E_fusion,
+        E_aux_total=E_aux_total,
+        E_ohmic_e=E_ohmic_e,
+        E_external_injected=E_external_injected,
+        E_external_total=E_external_total,
+        T_e_volume_avg=te_volume_avg,
+        T_i_volume_avg=ti_volume_avg,
+        n_e_volume_avg=n_e_volume_avg,
+        n_i_volume_avg=n_i_volume_avg,
+        n_e_line_avg=n_e_line_avg,
+        n_i_line_avg=n_i_line_avg,
+        fgw_n_e_volume_avg=fgw_n_e_volume_avg,
+        fgw_n_e_line_avg=fgw_n_e_line_avg,
+        q95=q95,
+        W_pol=Wpol,
+        li3=li3,
+        dW_thermal_dt=dW_th_dt,
+        rho_q_min=safety_factor_fit_outputs.rho_q_min,
+        q_min=safety_factor_fit_outputs.q_min,
+        rho_q_3_2_first=safety_factor_fit_outputs.rho_q_3_2_first,
+        rho_q_2_1_first=safety_factor_fit_outputs.rho_q_2_1_first,
+        rho_q_3_1_first=safety_factor_fit_outputs.rho_q_3_1_first,
+        rho_q_3_2_second=safety_factor_fit_outputs.rho_q_3_2_second,
+        rho_q_2_1_second=safety_factor_fit_outputs.rho_q_2_1_second,
+        rho_q_3_1_second=safety_factor_fit_outputs.rho_q_3_1_second,
+        I_bootstrap=I_bootstrap,
+        j_external=j_external,
+        j_ohmic=j_ohmic,
+        beta_tor=beta_tor,
+        beta_pol=beta_pol,
+        beta_N=beta_N,
+        impurity_species=impurity_radiation_outputs,
     )
-    E_external_total = (
-        previous_post_processed_outputs.E_external_total
-        + sim_state.dt
-        * (
-            integrated_sources['P_external_total']
-            + previous_post_processed_outputs.P_external_total
-        )
-        / 2.0
-    )
-  else:
-    # Used during initiailization. Note for restarted simulations this should
-    # be overwritten by the previous_post_processed_outputs.
-    E_fusion = 0.0
-    E_aux_total = 0.0
-    E_ohmic_e = 0.0
-    E_external_injected = 0.0
-    E_external_total = 0.0
-
-  # Calculate q at 95% of the normalized poloidal flux
-  q95 = psi_calculations.calc_q95(psi_norm_face, sim_state.core_profiles.q_face)
-
-  # Calculate te and ti volume average [keV]
-  te_volume_avg = math_utils.volume_average(
-      sim_state.core_profiles.T_e.value, sim_state.geometry
-  )
-  ti_volume_avg = math_utils.volume_average(
-      sim_state.core_profiles.T_i.value, sim_state.geometry
-  )
-
-  # Calculate n_e and n_i (main ion) volume and line averages in m^-3
-  n_e_volume_avg = math_utils.volume_average(
-      sim_state.core_profiles.n_e.value, sim_state.geometry
-  )
-  n_i_volume_avg = math_utils.volume_average(
-      sim_state.core_profiles.n_i.value, sim_state.geometry
-  )
-  n_e_line_avg = math_utils.line_average(
-      sim_state.core_profiles.n_e.value, sim_state.geometry
-  )
-  n_i_line_avg = math_utils.line_average(
-      sim_state.core_profiles.n_i.value, sim_state.geometry
-  )
-  fgw_n_e_volume_avg = formulas.calculate_greenwald_fraction(
-      n_e_volume_avg, sim_state.core_profiles, sim_state.geometry
-  )
-  fgw_n_e_line_avg = formulas.calculate_greenwald_fraction(
-      n_e_line_avg, sim_state.core_profiles, sim_state.geometry
-  )
-  Wpol = psi_calculations.calc_Wpol(
-      sim_state.geometry, sim_state.core_profiles.psi
-  )
-  li3 = psi_calculations.calc_li3(
-      sim_state.geometry.R_major,
-      Wpol,
-      sim_state.core_profiles.Ip_profile_face[-1],
-  )
-
-  safety_factor_fit_outputs = (
-      find_min_q_and_q_surface_intercepts(
-          sim_state.geometry.rho_face_norm,
-          sim_state.core_profiles.q_face,
-      )
-  )
-
-  I_bootstrap = math_utils.area_integration(
-      sim_state.core_sources.bootstrap_current.j_bootstrap, sim_state.geometry
-  )
-
-  j_external = sum(sim_state.core_sources.psi.values())
-  psi_current = (
-      j_external + sim_state.core_sources.bootstrap_current.j_bootstrap
-  )
-  j_ohmic = sim_state.core_profiles.j_total - psi_current
-
-  beta_tor, beta_pol, beta_N = formulas.calculate_betas(
-      sim_state.core_profiles, sim_state.geometry
-  )
-
-  return PostProcessedOutputs(
-      pressure_thermal_i=pressure_thermal_ion,
-      pressure_thermal_e=pressure_thermal_el,
-      pressure_thermal_total=pressure_thermal_tot,
-      pprime=pprime_face,
-      W_thermal_i=W_thermal_ion,
-      W_thermal_e=W_thermal_el,
-      W_thermal_total=W_thermal_tot,
-      tau_E=tauE,
-      H89P=H89P,
-      H98=H98,
-      H97L=H97L,
-      H20=H20,
-      FFprime=FFprime_face,
-      psi_norm=psi_norm_face,
-      **integrated_sources,
-      Q_fusion=Q_fusion,
-      P_LH=P_LH,
-      P_LH_min=P_LH_min,
-      P_LH_high_density=P_LH_hi_dens,
-      n_e_min_P_LH=n_e_min_P_LH,
-      E_fusion=E_fusion,
-      E_aux_total=E_aux_total,
-      E_ohmic_e=E_ohmic_e,
-      E_external_injected=E_external_injected,
-      E_external_total=E_external_total,
-      T_e_volume_avg=te_volume_avg,
-      T_i_volume_avg=ti_volume_avg,
-      n_e_volume_avg=n_e_volume_avg,
-      n_i_volume_avg=n_i_volume_avg,
-      n_e_line_avg=n_e_line_avg,
-      n_i_line_avg=n_i_line_avg,
-      fgw_n_e_volume_avg=fgw_n_e_volume_avg,
-      fgw_n_e_line_avg=fgw_n_e_line_avg,
-      q95=q95,
-      W_pol=Wpol,
-      li3=li3,
-      dW_thermal_dt=dW_th_dt,
-      rho_q_min=safety_factor_fit_outputs.rho_q_min,
-      q_min=safety_factor_fit_outputs.q_min,
-      rho_q_3_2_first=safety_factor_fit_outputs.rho_q_3_2_first,
-      rho_q_2_1_first=safety_factor_fit_outputs.rho_q_2_1_first,
-      rho_q_3_1_first=safety_factor_fit_outputs.rho_q_3_1_first,
-      rho_q_3_2_second=safety_factor_fit_outputs.rho_q_3_2_second,
-      rho_q_2_1_second=safety_factor_fit_outputs.rho_q_2_1_second,
-      rho_q_3_1_second=safety_factor_fit_outputs.rho_q_3_1_second,
-      I_bootstrap=I_bootstrap,
-      j_external=j_external,
-      j_ohmic=j_ohmic,
-      beta_tor=beta_tor,
-      beta_pol=beta_pol,
-      beta_N=beta_N,
-      impurity_species=impurity_radiation_outputs,
-  )
-
 
 
 def construct_xarray_for_radiation_output(
@@ -1432,208 +1379,208 @@ def construct_xarray_for_radiation_output(
     time_coord: str,
     rho_cell_norm_coord: str,
 ) -> dict[str, xr.DataArray]:
-  """Constructs an xarray dictionary for impurity radiation output."""
+    """Constructs an xarray dictionary for impurity radiation output."""
 
-  radiation_data = []
-  n_impurity_data = []
-  Z_impurity_data = []
-  impurity_symbols = []
-  xr_dict = {}
+    radiation_data = []
+    n_impurity_data = []
+    Z_impurity_data = []
+    impurity_symbols = []
+    xr_dict = {}
 
-  for impurity_symbol in impurity_radiation_outputs:
-    radiation_data.append(impurity_radiation_outputs[impurity_symbol].radiation)
-    n_impurity_data.append(
-        impurity_radiation_outputs[impurity_symbol].n_impurity
+    for impurity_symbol in impurity_radiation_outputs:
+        radiation_data.append(
+            impurity_radiation_outputs[impurity_symbol].radiation)
+        n_impurity_data.append(
+            impurity_radiation_outputs[impurity_symbol].n_impurity)
+        Z_impurity_data.append(
+            impurity_radiation_outputs[impurity_symbol].Z_impurity)
+        impurity_symbols.append(impurity_symbol)
+    radiation_data = np.stack(radiation_data, axis=0)
+    n_impurity_data = np.stack(n_impurity_data, axis=0)
+    Z_impurity_data = np.stack(Z_impurity_data, axis=0)
+    xr_dict[RADIATION_OUTPUT_NAME] = xr.DataArray(
+        radiation_data,
+        dims=[IMPURITY_DIM, time_coord, rho_cell_norm_coord],
+        coords={
+            IMPURITY_DIM: impurity_symbols,
+            time_coord: times,
+            rho_cell_norm_coord: rho_cell_norm,
+        },
+        name=RADIATION_OUTPUT_NAME,
     )
-    Z_impurity_data.append(
-        impurity_radiation_outputs[impurity_symbol].Z_impurity
+    xr_dict[DENSITY_OUTPUT_NAME] = xr.DataArray(
+        n_impurity_data,
+        dims=[IMPURITY_DIM, time_coord, rho_cell_norm_coord],
+        coords={
+            IMPURITY_DIM: impurity_symbols,
+            time_coord: times,
+            rho_cell_norm_coord: rho_cell_norm,
+        },
+        name=DENSITY_OUTPUT_NAME,
     )
-    impurity_symbols.append(impurity_symbol)
-  radiation_data = np.stack(radiation_data, axis=0)
-  n_impurity_data = np.stack(n_impurity_data, axis=0)
-  Z_impurity_data = np.stack(Z_impurity_data, axis=0)
-  xr_dict[RADIATION_OUTPUT_NAME] = xr.DataArray(
-      radiation_data,
-      dims=[IMPURITY_DIM, time_coord, rho_cell_norm_coord],
-      coords={
-          IMPURITY_DIM: impurity_symbols,
-          time_coord: times,
-          rho_cell_norm_coord: rho_cell_norm,
-      },
-      name=RADIATION_OUTPUT_NAME,
-  )
-  xr_dict[DENSITY_OUTPUT_NAME] = xr.DataArray(
-      n_impurity_data,
-      dims=[IMPURITY_DIM, time_coord, rho_cell_norm_coord],
-      coords={
-          IMPURITY_DIM: impurity_symbols,
-          time_coord: times,
-          rho_cell_norm_coord: rho_cell_norm,
-      },
-      name=DENSITY_OUTPUT_NAME,
-  )
-  xr_dict[Z_OUTPUT_NAME] = xr.DataArray(
-      Z_impurity_data,
-      dims=[IMPURITY_DIM, time_coord, rho_cell_norm_coord],
-      coords={
-          IMPURITY_DIM: impurity_symbols,
-          time_coord: times,
-          rho_cell_norm_coord: rho_cell_norm,
-      },
-      name=Z_OUTPUT_NAME,
-  )
-  return xr_dict
+    xr_dict[Z_OUTPUT_NAME] = xr.DataArray(
+        Z_impurity_data,
+        dims=[IMPURITY_DIM, time_coord, rho_cell_norm_coord],
+        coords={
+            IMPURITY_DIM: impurity_symbols,
+            time_coord: times,
+            rho_cell_norm_coord: rho_cell_norm,
+        },
+        name=Z_OUTPUT_NAME,
+    )
+    return xr_dict
 
 
 SCALING_FACTORS: Final[Mapping[str, float]] = immutabledict.immutabledict({
-    'T_i': 1.0,
-    'T_e': 1.0,
-    'n_e': 1e20,
-    'psi': 1.0,
+    'T_i':
+    1.0,
+    'T_e':
+    1.0,
+    'n_e':
+    1e20,
+    'psi':
+    1.0,
 })
 
 _trapz = jax.scipy.integrate.trapezoid
+
 
 # pylint: disable=invalid-name
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class Ions:
-  """Helper container for holding ion attributes."""
+    """Helper container for holding ion attributes."""
 
-  n_i: cell_variable.CellVariable
-  n_impurity: cell_variable.CellVariable
-  impurity_fractions: Mapping[str, array_typing.FloatVectorCell]
-  Z_i: array_typing.FloatVectorCell
-  Z_i_face: array_typing.FloatVectorFace
-  Z_impurity: array_typing.FloatVectorCell
-  Z_impurity_face: array_typing.FloatVectorFace
-  A_i: array_typing.FloatScalar
-  A_impurity: array_typing.FloatVectorCell
-  A_impurity_face: array_typing.FloatVectorFace
-  Z_eff: array_typing.FloatVectorCell
-  Z_eff_face: array_typing.FloatVectorFace
+    n_i: cell_variable.CellVariable
+    n_impurity: cell_variable.CellVariable
+    impurity_fractions: Mapping[str, array_typing.FloatVectorCell]
+    Z_i: array_typing.FloatVectorCell
+    Z_i_face: array_typing.FloatVectorFace
+    Z_impurity: array_typing.FloatVectorCell
+    Z_impurity_face: array_typing.FloatVectorFace
+    A_i: array_typing.FloatScalar
+    A_impurity: array_typing.FloatVectorCell
+    A_impurity_face: array_typing.FloatVectorFace
+    Z_eff: array_typing.FloatVectorCell
+    Z_eff_face: array_typing.FloatVectorFace
 
 
 def get_updated_ion_temperature(
     profile_conditions_params: profile_conditions.RuntimeParams,
     geo: geometry.Geometry,
 ) -> cell_variable.CellVariable:
-  """Gets initial and/or prescribed ion temperature profiles."""
-  T_i = cell_variable.CellVariable(
-      value=profile_conditions_params.T_i,
-      left_face_grad_constraint=jnp.zeros(()),
-      right_face_grad_constraint=None,
-      right_face_constraint=profile_conditions_params.T_i_right_bc,
-      dr=geo.drho_norm,
-  )
-  return T_i
+    """Gets initial and/or prescribed ion temperature profiles."""
+    T_i = cell_variable.CellVariable(
+        value=profile_conditions_params.T_i,
+        left_face_grad_constraint=jnp.zeros(()),
+        right_face_grad_constraint=None,
+        right_face_constraint=profile_conditions_params.T_i_right_bc,
+        dr=geo.drho_norm,
+    )
+    return T_i
 
 
 def get_updated_electron_temperature(
     profile_conditions_params: profile_conditions.RuntimeParams,
     geo: geometry.Geometry,
 ) -> cell_variable.CellVariable:
-  """Gets initial and/or prescribed electron temperature profiles."""
-  T_e = cell_variable.CellVariable(
-      value=profile_conditions_params.T_e,
-      left_face_grad_constraint=jnp.zeros(()),
-      right_face_grad_constraint=None,
-      right_face_constraint=profile_conditions_params.T_e_right_bc,
-      dr=geo.drho_norm,
-  )
-  return T_e
+    """Gets initial and/or prescribed electron temperature profiles."""
+    T_e = cell_variable.CellVariable(
+        value=profile_conditions_params.T_e,
+        left_face_grad_constraint=jnp.zeros(()),
+        right_face_grad_constraint=None,
+        right_face_constraint=profile_conditions_params.T_e_right_bc,
+        dr=geo.drho_norm,
+    )
+    return T_e
 
 
 def get_updated_electron_density(
     profile_conditions_params: profile_conditions.RuntimeParams,
     geo: geometry.Geometry,
 ) -> cell_variable.CellVariable:
-  """Gets initial and/or prescribed electron density profiles."""
+    """Gets initial and/or prescribed electron density profiles."""
 
-  # Greenwald density in m^-3.
-  # Ip in MA. a_minor in m.
-  nGW = (
-      profile_conditions_params.Ip
-      / 1e6  # Convert to MA.
-      / (jnp.pi * geo.a_minor**2)
-      * 1e20
-  )
-  n_e_value = jnp.where(
-      profile_conditions_params.n_e_nbar_is_fGW,
-      profile_conditions_params.n_e * nGW,
-      profile_conditions_params.n_e,
-  )
-  # Calculate n_e_right_bc.
-  n_e_right_bc = jnp.where(
-      profile_conditions_params.n_e_right_bc_is_fGW,
-      profile_conditions_params.n_e_right_bc * nGW,
-      profile_conditions_params.n_e_right_bc,
-  )
-
-  if profile_conditions_params.normalize_n_e_to_nbar:
-    face_left = n_e_value[0]  # Zero gradient boundary condition at left face.
-    face_right = n_e_right_bc
-    face_inner = (n_e_value[..., :-1] + n_e_value[..., 1:]) / 2.0
-    n_e_face = jnp.concatenate(
-        [face_left[None], face_inner, face_right[None]],
-    )
-    # Find normalization factor such that desired line-averaged n_e is set.
-    # Line-averaged electron density (nbar) is poorly defined. In general, the
-    # definition is machine-dependent and even shot-dependent since it depends
-    # on the usage of a specific interferometry chord. Furthermore, even if we
-    # knew the specific chord used, its calculation would depend on magnetic
-    # geometry information beyond what is available in StandardGeometry.
-    # In lieu of a better solution, we use line-averaged electron density
-    # defined on the outer midplane.
-    a_minor_out = geo.R_out_face[-1] - geo.R_out_face[0]
-    # find target nbar in absolute units
-    target_nbar = jnp.where(
+    # Greenwald density in m^-3.
+    # Ip in MA. a_minor in m.
+    nGW = (
+        profile_conditions_params.Ip / 1e6  # Convert to MA.
+        / (jnp.pi * geo.a_minor**2) * 1e20)
+    n_e_value = jnp.where(
         profile_conditions_params.n_e_nbar_is_fGW,
-        profile_conditions_params.nbar * nGW,
-        profile_conditions_params.nbar,
+        profile_conditions_params.n_e * nGW,
+        profile_conditions_params.n_e,
     )
-    if not profile_conditions_params.n_e_right_bc_is_absolute:
-      # In this case, n_e_right_bc is taken from n_e and we also normalize it.
-      C = target_nbar / (_trapz(n_e_face, geo.R_out_face) / a_minor_out)
-      n_e_right_bc = C * n_e_right_bc
+    # Calculate n_e_right_bc.
+    n_e_right_bc = jnp.where(
+        profile_conditions_params.n_e_right_bc_is_fGW,
+        profile_conditions_params.n_e_right_bc * nGW,
+        profile_conditions_params.n_e_right_bc,
+    )
+
+    if profile_conditions_params.normalize_n_e_to_nbar:
+        face_left = n_e_value[
+            0]  # Zero gradient boundary condition at left face.
+        face_right = n_e_right_bc
+        face_inner = (n_e_value[..., :-1] + n_e_value[..., 1:]) / 2.0
+        n_e_face = jnp.concatenate(
+            [face_left[None], face_inner, face_right[None]], )
+        # Find normalization factor such that desired line-averaged n_e is set.
+        # Line-averaged electron density (nbar) is poorly defined. In general, the
+        # definition is machine-dependent and even shot-dependent since it depends
+        # on the usage of a specific interferometry chord. Furthermore, even if we
+        # knew the specific chord used, its calculation would depend on magnetic
+        # geometry information beyond what is available in StandardGeometry.
+        # In lieu of a better solution, we use line-averaged electron density
+        # defined on the outer midplane.
+        a_minor_out = geo.R_out_face[-1] - geo.R_out_face[0]
+        # find target nbar in absolute units
+        target_nbar = jnp.where(
+            profile_conditions_params.n_e_nbar_is_fGW,
+            profile_conditions_params.nbar * nGW,
+            profile_conditions_params.nbar,
+        )
+        if not profile_conditions_params.n_e_right_bc_is_absolute:
+            # In this case, n_e_right_bc is taken from n_e and we also normalize it.
+            C = target_nbar / (_trapz(n_e_face, geo.R_out_face) / a_minor_out)
+            n_e_right_bc = C * n_e_right_bc
+        else:
+            # If n_e_right_bc is absolute, subtract off contribution from outer
+            # face to get C we need to multiply the inner values with.
+            nbar_from_n_e_face_inner = (
+                _trapz(n_e_face[:-1], geo.R_out_face[:-1]) / a_minor_out)
+
+            dr_edge = geo.R_out_face[-1] - geo.R_out_face[-2]
+
+            C = (target_nbar - 0.5 * n_e_face[-1] * dr_edge / a_minor_out) / (
+                nbar_from_n_e_face_inner +
+                0.5 * n_e_face[-2] * dr_edge / a_minor_out)
     else:
-      # If n_e_right_bc is absolute, subtract off contribution from outer
-      # face to get C we need to multiply the inner values with.
-      nbar_from_n_e_face_inner = (
-          _trapz(n_e_face[:-1], geo.R_out_face[:-1]) / a_minor_out
-      )
+        C = 1
 
-      dr_edge = geo.R_out_face[-1] - geo.R_out_face[-2]
+    n_e_value = C * n_e_value
 
-      C = (target_nbar - 0.5 * n_e_face[-1] * dr_edge / a_minor_out) / (
-          nbar_from_n_e_face_inner + 0.5 * n_e_face[-2] * dr_edge / a_minor_out
-      )
-  else:
-    C = 1
-
-  n_e_value = C * n_e_value
-
-  n_e = cell_variable.CellVariable(
-      value=n_e_value,
-      dr=geo.drho_norm,
-      right_face_grad_constraint=None,
-      right_face_constraint=n_e_right_bc,
-  )
-  return n_e
+    n_e = cell_variable.CellVariable(
+        value=n_e_value,
+        dr=geo.drho_norm,
+        right_face_grad_constraint=None,
+        right_face_constraint=n_e_right_bc,
+    )
+    return n_e
 
 
 @dataclasses.dataclass(frozen=True)
 class _IonProperties:
-  """Helper container for holding ion calculation outputs."""
+    """Helper container for holding ion calculation outputs."""
 
-  A_impurity: array_typing.FloatVectorCell
-  A_impurity_face: array_typing.FloatVectorFace
-  Z_impurity: array_typing.FloatVectorCell
-  Z_impurity_face: array_typing.FloatVectorFace
-  Z_eff: array_typing.FloatVectorCell
-  dilution_factor: array_typing.FloatVectorCell
-  dilution_factor_edge: array_typing.FloatScalar
-  impurity_fractions: array_typing.FloatVector
+    A_impurity: array_typing.FloatVectorCell
+    A_impurity_face: array_typing.FloatVectorFace
+    Z_impurity: array_typing.FloatVectorCell
+    Z_impurity_face: array_typing.FloatVectorFace
+    Z_eff: array_typing.FloatVectorCell
+    dilution_factor: array_typing.FloatVectorCell
+    dilution_factor_edge: array_typing.FloatScalar
+    impurity_fractions: array_typing.FloatVector
 
 
 def _get_ion_properties_from_fractions(
@@ -1645,46 +1592,46 @@ def _get_ion_properties_from_fractions(
     Z_eff_from_config: array_typing.FloatVectorCell,
     Z_eff_face_from_config: array_typing.FloatVectorFace,
 ) -> _IonProperties:
-  """Calculates ion properties when impurity content is defined by fractions."""
+    """Calculates ion properties when impurity content is defined by fractions."""
 
-  Z_impurity = charge_states.get_average_charge_state(
-      ion_symbols=impurity_symbols,
-      T_e=T_e.value,
-      fractions=impurity_params.fractions,
-      Z_override=impurity_params.Z_override,
-  ).Z_mixture
-  Z_impurity_face = charge_states.get_average_charge_state(
-      ion_symbols=impurity_symbols,
-      T_e=T_e.face_value(),
-      fractions=impurity_params.fractions_face,
-      Z_override=impurity_params.Z_override,
-  ).Z_mixture
+    Z_impurity = charge_states.get_average_charge_state(
+        ion_symbols=impurity_symbols,
+        T_e=T_e.value,
+        fractions=impurity_params.fractions,
+        Z_override=impurity_params.Z_override,
+    ).Z_mixture
+    Z_impurity_face = charge_states.get_average_charge_state(
+        ion_symbols=impurity_symbols,
+        T_e=T_e.face_value(),
+        fractions=impurity_params.fractions_face,
+        Z_override=impurity_params.Z_override,
+    ).Z_mixture
 
-  Z_eff = Z_eff_from_config
-  Z_eff_edge = Z_eff_face_from_config[-1]
+    Z_eff = Z_eff_from_config
+    Z_eff_edge = Z_eff_face_from_config[-1]
 
-  dilution_factor = jnp.where(
-      Z_eff == 1.0,
-      1.0,
-      formulas.calculate_main_ion_dilution_factor(Z_i, Z_impurity, Z_eff),
-  )
-  dilution_factor_edge = jnp.where(
-      Z_eff_edge == 1.0,
-      1.0,
-      formulas.calculate_main_ion_dilution_factor(
-          Z_i_face[-1], Z_impurity_face[-1], Z_eff_edge
-      ),
-  )
-  return _IonProperties(
-      A_impurity=impurity_params.A_avg,
-      A_impurity_face=impurity_params.A_avg_face,
-      Z_impurity=Z_impurity,
-      Z_impurity_face=Z_impurity_face,
-      Z_eff=Z_eff,
-      dilution_factor=dilution_factor,
-      dilution_factor_edge=dilution_factor_edge,
-      impurity_fractions=impurity_params.fractions,
-  )
+    dilution_factor = jnp.where(
+        Z_eff == 1.0,
+        1.0,
+        formulas.calculate_main_ion_dilution_factor(Z_i, Z_impurity, Z_eff),
+    )
+    dilution_factor_edge = jnp.where(
+        Z_eff_edge == 1.0,
+        1.0,
+        formulas.calculate_main_ion_dilution_factor(Z_i_face[-1],
+                                                    Z_impurity_face[-1],
+                                                    Z_eff_edge),
+    )
+    return _IonProperties(
+        A_impurity=impurity_params.A_avg,
+        A_impurity_face=impurity_params.A_avg_face,
+        Z_impurity=Z_impurity,
+        Z_impurity_face=Z_impurity_face,
+        Z_eff=Z_eff,
+        dilution_factor=dilution_factor,
+        dilution_factor_edge=dilution_factor_edge,
+        impurity_fractions=impurity_params.fractions,
+    )
 
 
 def _get_ion_properties_from_n_e_ratios(
@@ -1694,51 +1641,42 @@ def _get_ion_properties_from_n_e_ratios(
     Z_i: array_typing.FloatVectorCell,
     Z_i_face: array_typing.FloatVectorFace,
 ) -> _IonProperties:
-  """Calculates ion properties when impurity content is defined by n_e ratios."""
-  average_charge_state = charge_states.get_average_charge_state(
-      ion_symbols=impurity_symbols,
-      T_e=T_e.value,
-      fractions=impurity_params.fractions,
-      Z_override=impurity_params.Z_override,
-  )
-  average_charge_state_face = charge_states.get_average_charge_state(
-      ion_symbols=impurity_symbols,
-      T_e=T_e.face_value(),
-      fractions=impurity_params.fractions_face,
-      Z_override=impurity_params.Z_override,
-  )
-  Z_impurity = average_charge_state.Z_mixture
-  Z_impurity_face = average_charge_state_face.Z_mixture
-  dilution_factor = (
-      1
-      - jnp.sum(
-          average_charge_state.Z_per_species * impurity_params.n_e_ratios,
-          axis=0,
-      )
-      / Z_i
-  )
-  dilution_factor_edge = (
-      1
-      - jnp.sum(
-          average_charge_state_face.Z_per_species[:, -1]
-          * impurity_params.n_e_ratios_face[:, -1],
-      )
-      / Z_i_face[-1]
-  )
-  Z_eff = dilution_factor * Z_i**2 + jnp.sum(
-      average_charge_state.Z_per_species**2 * impurity_params.n_e_ratios,
-      axis=0,
-  )
-  return _IonProperties(
-      A_impurity=impurity_params.A_avg,
-      A_impurity_face=impurity_params.A_avg_face,
-      Z_impurity=Z_impurity,
-      Z_impurity_face=Z_impurity_face,
-      Z_eff=Z_eff,
-      dilution_factor=dilution_factor,
-      dilution_factor_edge=dilution_factor_edge,
-      impurity_fractions=impurity_params.fractions,
-  )
+    """Calculates ion properties when impurity content is defined by n_e ratios."""
+    average_charge_state = charge_states.get_average_charge_state(
+        ion_symbols=impurity_symbols,
+        T_e=T_e.value,
+        fractions=impurity_params.fractions,
+        Z_override=impurity_params.Z_override,
+    )
+    average_charge_state_face = charge_states.get_average_charge_state(
+        ion_symbols=impurity_symbols,
+        T_e=T_e.face_value(),
+        fractions=impurity_params.fractions_face,
+        Z_override=impurity_params.Z_override,
+    )
+    Z_impurity = average_charge_state.Z_mixture
+    Z_impurity_face = average_charge_state_face.Z_mixture
+    dilution_factor = (1 - jnp.sum(
+        average_charge_state.Z_per_species * impurity_params.n_e_ratios,
+        axis=0,
+    ) / Z_i)
+    dilution_factor_edge = (1 - jnp.sum(
+        average_charge_state_face.Z_per_species[:, -1] *
+        impurity_params.n_e_ratios_face[:, -1], ) / Z_i_face[-1])
+    Z_eff = dilution_factor * Z_i**2 + jnp.sum(
+        average_charge_state.Z_per_species**2 * impurity_params.n_e_ratios,
+        axis=0,
+    )
+    return _IonProperties(
+        A_impurity=impurity_params.A_avg,
+        A_impurity_face=impurity_params.A_avg_face,
+        Z_impurity=Z_impurity,
+        Z_impurity_face=Z_impurity_face,
+        Z_eff=Z_eff,
+        dilution_factor=dilution_factor,
+        dilution_factor_edge=dilution_factor_edge,
+        impurity_fractions=impurity_params.fractions,
+    )
 
 
 # TODO(b/440666091): Refactor this function by breaking it down to several
@@ -1751,7 +1689,7 @@ def _get_ion_properties_from_n_e_ratios_Z_eff(
     Z_eff_from_config: array_typing.FloatVectorCell,
     Z_eff_face_from_config: array_typing.FloatVectorFace,
 ) -> _IonProperties:
-  """Calculates ion properties when one impurity is constrained by Z_eff.
+    """Calculates ion properties when one impurity is constrained by Z_eff.
 
   We solve for the unknown impurity species n_e_ratio and the main ion
   n_e_ratio (dilution factor) from quasi-neutrality and Z_eff equations:
@@ -1778,138 +1716,124 @@ def _get_ion_properties_from_n_e_ratios_Z_eff(
   Returns:
     _IonProperties container with calculated ion properties.
   """
-  # --- Vectorized charge state calculation ---
-  # This is JIT-compatible because impurity_symbols is a static tuple, so the
-  # list comprehension is unrolled during compilation.
-  impurity_symbols = tuple(impurity_params.n_e_ratios.keys())
-  Z_per_species = jnp.stack([
-      charge_states.calculate_average_charge_state_single_species(
-          T_e.value, symbol
-      )
-      for symbol in impurity_symbols
-  ])
-  Z_per_species_face = jnp.stack([
-      charge_states.calculate_average_charge_state_single_species(
-          T_e.face_value(), symbol
-      )
-      for symbol in impurity_symbols
-  ])
+    # --- Vectorized charge state calculation ---
+    # This is JIT-compatible because impurity_symbols is a static tuple, so the
+    # list comprehension is unrolled during compilation.
+    impurity_symbols = tuple(impurity_params.n_e_ratios.keys())
+    Z_per_species = jnp.stack([
+        charge_states.calculate_average_charge_state_single_species(
+            T_e.value, symbol) for symbol in impurity_symbols
+    ])
+    Z_per_species_face = jnp.stack([
+        charge_states.calculate_average_charge_state_single_species(
+            T_e.face_value(), symbol) for symbol in impurity_symbols
+    ])
 
-  unknown_species_index = impurity_symbols.index(
-      impurity_params.unknown_species
-  )
-  Z_unknown = Z_per_species[unknown_species_index]
-  Z_unknown_face = Z_per_species_face[unknown_species_index]
+    unknown_species_index = impurity_symbols.index(
+        impurity_params.unknown_species)
+    Z_unknown = Z_per_species[unknown_species_index]
+    Z_unknown_face = Z_per_species_face[unknown_species_index]
 
-  # Create arrays of known ratios, with 0 for the unknown species.
-  n_e_ratios_known = jnp.array([
-      impurity_params.n_e_ratios[symbol]
-      if symbol != impurity_params.unknown_species
-      else jnp.zeros_like(T_e.value)
-      for symbol in impurity_symbols
-  ])
-  n_e_ratios_known_face = jnp.array([
-      impurity_params.n_e_ratios_face[symbol]
-      if symbol != impurity_params.unknown_species
-      else jnp.zeros_like(T_e.face_value())
-      for symbol in impurity_symbols
-  ])
+    # Create arrays of known ratios, with 0 for the unknown species.
+    n_e_ratios_known = jnp.array([
+        impurity_params.n_e_ratios[symbol] if symbol
+        != impurity_params.unknown_species else jnp.zeros_like(T_e.value)
+        for symbol in impurity_symbols
+    ])
+    n_e_ratios_known_face = jnp.array([
+        impurity_params.n_e_ratios_face[symbol]
+        if symbol != impurity_params.unknown_species else jnp.zeros_like(
+            T_e.face_value()) for symbol in impurity_symbols
+    ])
 
-  sum_Z_n_ratio = jnp.sum(n_e_ratios_known * Z_per_species, axis=0)
-  sum_Z2_n_ratio = jnp.sum(n_e_ratios_known * Z_per_species**2, axis=0)
-  sum_Z_n_ratio_face = jnp.sum(
-      n_e_ratios_known_face * Z_per_species_face, axis=0
-  )
-  sum_Z2_n_ratio_face = jnp.sum(
-      n_e_ratios_known_face * Z_per_species_face**2, axis=0
-  )
+    sum_Z_n_ratio = jnp.sum(n_e_ratios_known * Z_per_species, axis=0)
+    sum_Z2_n_ratio = jnp.sum(n_e_ratios_known * Z_per_species**2, axis=0)
+    sum_Z_n_ratio_face = jnp.sum(n_e_ratios_known_face * Z_per_species_face,
+                                 axis=0)
+    sum_Z2_n_ratio_face = jnp.sum(n_e_ratios_known_face *
+                                  Z_per_species_face**2,
+                                  axis=0)
 
-  # Solve the 2x2 system for dilution and the unknown n_e_ratio on both grids
+    # Solve the 2x2 system for dilution and the unknown n_e_ratio on both grids
 
-  # x * Z_i + y * Z_unknown = - sum(Z_known * n_known / n_e)
-  # x * Z_i**2 + y * Z_unknown**2 = Z_eff - sum(Z_known**2 * n_known / n_e)
+    # x * Z_i + y * Z_unknown = - sum(Z_known * n_known / n_e)
+    # x * Z_i**2 + y * Z_unknown**2 = Z_eff - sum(Z_known**2 * n_known / n_e)
 
-  def _solve_system(a1, a2, b1, b2, c1, c2):
-    """Solves a 2x2 system of the form a1*x + b1*y = c1, a2*x + b2*y = c2."""
-    det_A = a1 * b2 - a2 * b1
-    # Add a small epsilon to avoid division by zero if det_A is zero
-    det_A = jnp.where(
-        jnp.abs(det_A) < constants.CONSTANTS.eps, constants.CONSTANTS.eps, det_A
+    def _solve_system(a1, a2, b1, b2, c1, c2):
+        """Solves a 2x2 system of the form a1*x + b1*y = c1, a2*x + b2*y = c2."""
+        det_A = a1 * b2 - a2 * b1
+        # Add a small epsilon to avoid division by zero if det_A is zero
+        det_A = jnp.where(
+            jnp.abs(det_A) < constants.CONSTANTS.eps, constants.CONSTANTS.eps,
+            det_A)
+        # Use Cramer's rule to solve the system
+        x = (b2 * c1 - b1 * c2) / det_A
+        y = (a1 * c2 - a2 * c1) / det_A
+        return x, y
+
+    dilution_factor, r_unknown = _solve_system(
+        a1=Z_i,
+        b1=Z_unknown,
+        a2=Z_i**2,
+        b2=Z_unknown**2,
+        c1=1.0 - sum_Z_n_ratio,
+        c2=Z_eff_from_config - sum_Z2_n_ratio,
     )
-    # Use Cramer's rule to solve the system
-    x = (b2 * c1 - b1 * c2) / det_A
-    y = (a1 * c2 - a2 * c1) / det_A
-    return x, y
-
-  dilution_factor, r_unknown = _solve_system(
-      a1=Z_i,
-      b1=Z_unknown,
-      a2=Z_i**2,
-      b2=Z_unknown**2,
-      c1=1.0 - sum_Z_n_ratio,
-      c2=Z_eff_from_config - sum_Z2_n_ratio,
-  )
-  dilution_factor_face, r_unknown_face = _solve_system(
-      a1=Z_i_face,
-      b1=Z_unknown_face,
-      a2=Z_i_face**2,
-      b2=Z_unknown_face**2,
-      c1=1.0 - sum_Z_n_ratio_face,
-      c2=Z_eff_face_from_config - sum_Z2_n_ratio_face,
-  )
-
-  # Now update the row for the unknown species with its calculated profile
-  n_e_ratios_all_species = n_e_ratios_known.at[
-      unknown_species_index, :
-  ].set(r_unknown)
-  n_e_ratios_all_species_face = n_e_ratios_known_face.at[
-      unknown_species_index, :
-  ].set(r_unknown_face)
-
-  fractions = electron_density_ratios.calculate_fractions_from_ratios(
-      n_e_ratios_all_species
-  )
-  fractions_face = electron_density_ratios.calculate_fractions_from_ratios(
-      n_e_ratios_all_species_face
-  )
-
-  # Build the final ion mixture and calculate properties
-
-  if not impurity_params.A_override:
-    As = jnp.array(
-        [constants.ION_PROPERTIES_DICT[s].A for s in impurity_symbols]
-    )
-    A_avg = jnp.einsum("i,i...->...", As, fractions)
-    A_avg_face = jnp.einsum("i,i...->...", As, fractions_face)
-  else:
-    A_avg = jnp.ones_like(T_e.value) * impurity_params.A_override
-    A_avg_face = (
-        jnp.ones_like(T_e.face_value()) * impurity_params.A_override_face
+    dilution_factor_face, r_unknown_face = _solve_system(
+        a1=Z_i_face,
+        b1=Z_unknown_face,
+        a2=Z_i_face**2,
+        b2=Z_unknown_face**2,
+        c1=1.0 - sum_Z_n_ratio_face,
+        c2=Z_eff_face_from_config - sum_Z2_n_ratio_face,
     )
 
-  Z_impurity = charge_states.get_average_charge_state(
-      ion_symbols=impurity_symbols,
-      T_e=T_e.value,
-      fractions=fractions,
-      Z_override=impurity_params.Z_override,
-  ).Z_mixture
-  Z_impurity_face = charge_states.get_average_charge_state(
-      ion_symbols=impurity_symbols,
-      T_e=T_e.face_value(),
-      fractions=fractions_face,
-      Z_override=impurity_params.Z_override,
-  ).Z_mixture
+    # Now update the row for the unknown species with its calculated profile
+    n_e_ratios_all_species = n_e_ratios_known.at[unknown_species_index, :].set(
+        r_unknown)
+    n_e_ratios_all_species_face = n_e_ratios_known_face.at[
+        unknown_species_index, :].set(r_unknown_face)
 
-  return _IonProperties(
-      A_impurity=A_avg,
-      A_impurity_face=A_avg_face,
-      Z_impurity=Z_impurity,
-      Z_impurity_face=Z_impurity_face,
-      Z_eff=Z_eff_from_config,
-      dilution_factor=dilution_factor,
-      dilution_factor_edge=dilution_factor_face[-1],
-      impurity_fractions=fractions,
-  )
+    fractions = electron_density_ratios.calculate_fractions_from_ratios(
+        n_e_ratios_all_species)
+    fractions_face = electron_density_ratios.calculate_fractions_from_ratios(
+        n_e_ratios_all_species_face)
+
+    # Build the final ion mixture and calculate properties
+
+    if not impurity_params.A_override:
+        As = jnp.array(
+            [constants.ION_PROPERTIES_DICT[s].A for s in impurity_symbols])
+        A_avg = jnp.einsum("i,i...->...", As, fractions)
+        A_avg_face = jnp.einsum("i,i...->...", As, fractions_face)
+    else:
+        A_avg = jnp.ones_like(T_e.value) * impurity_params.A_override
+        A_avg_face = (jnp.ones_like(T_e.face_value()) *
+                      impurity_params.A_override_face)
+
+    Z_impurity = charge_states.get_average_charge_state(
+        ion_symbols=impurity_symbols,
+        T_e=T_e.value,
+        fractions=fractions,
+        Z_override=impurity_params.Z_override,
+    ).Z_mixture
+    Z_impurity_face = charge_states.get_average_charge_state(
+        ion_symbols=impurity_symbols,
+        T_e=T_e.face_value(),
+        fractions=fractions_face,
+        Z_override=impurity_params.Z_override,
+    ).Z_mixture
+
+    return _IonProperties(
+        A_impurity=A_avg,
+        A_impurity_face=A_avg_face,
+        Z_impurity=Z_impurity,
+        Z_impurity_face=Z_impurity_face,
+        Z_eff=Z_eff_from_config,
+        dilution_factor=dilution_factor,
+        dilution_factor_edge=dilution_factor_face[-1],
+        impurity_fractions=fractions,
+    )
 
 
 # jitted since also used outside the solver
@@ -1920,7 +1844,7 @@ def get_updated_ions(
     n_e: cell_variable.CellVariable,
     T_e: cell_variable.CellVariable,
 ) -> Ions:
-  """Updated ion density, charge state, and mass based on state and config.
+    """Updated ion density, charge state, and mass based on state and config.
 
   Main ion and impurities are each treated as a single effective ion, but could
   be comparised of multiple species within an IonMixture. The main ion and
@@ -1954,119 +1878,121 @@ def get_updated_ions(
       A_impurity_face: Average atomic number of impurities on face grid [amu].
   """
 
-  Z_i = charge_states.get_average_charge_state(
-      ion_symbols=runtime_params.plasma_composition.main_ion_names,
-      T_e=T_e.value,
-      fractions=runtime_params.plasma_composition.main_ion.fractions,
-      Z_override=runtime_params.plasma_composition.main_ion.Z_override,
-  ).Z_mixture
-  Z_i_face = charge_states.get_average_charge_state(
-      ion_symbols=runtime_params.plasma_composition.main_ion_names,
-      T_e=T_e.face_value(),
-      fractions=runtime_params.plasma_composition.main_ion.fractions,
-      Z_override=runtime_params.plasma_composition.main_ion.Z_override,
-  ).Z_mixture
+    Z_i = charge_states.get_average_charge_state(
+        ion_symbols=runtime_params.plasma_composition.main_ion_names,
+        T_e=T_e.value,
+        fractions=runtime_params.plasma_composition.main_ion.fractions,
+        Z_override=runtime_params.plasma_composition.main_ion.Z_override,
+    ).Z_mixture
+    Z_i_face = charge_states.get_average_charge_state(
+        ion_symbols=runtime_params.plasma_composition.main_ion_names,
+        T_e=T_e.face_value(),
+        fractions=runtime_params.plasma_composition.main_ion.fractions,
+        Z_override=runtime_params.plasma_composition.main_ion.Z_override,
+    ).Z_mixture
 
-  impurity_params = runtime_params.plasma_composition.impurity
+    impurity_params = runtime_params.plasma_composition.impurity
 
-  match impurity_params:
-    case impurity_fractions.RuntimeParams():
-      ion_properties = _get_ion_properties_from_fractions(
-          runtime_params.plasma_composition.impurity_names,
-          impurity_params,
-          T_e,
-          Z_i,
-          Z_i_face,
-          runtime_params.plasma_composition.Z_eff,
-          runtime_params.plasma_composition.Z_eff_face,
-      )
+    match impurity_params:
+        case impurity_fractions.RuntimeParams():
+            ion_properties = _get_ion_properties_from_fractions(
+                runtime_params.plasma_composition.impurity_names,
+                impurity_params,
+                T_e,
+                Z_i,
+                Z_i_face,
+                runtime_params.plasma_composition.Z_eff,
+                runtime_params.plasma_composition.Z_eff_face,
+            )
 
-    case electron_density_ratios.RuntimeParams():
-      ion_properties = _get_ion_properties_from_n_e_ratios(
-          runtime_params.plasma_composition.impurity_names,
-          impurity_params,
-          T_e,
-          Z_i,
-          Z_i_face,
-      )
-    case electron_density_ratios_zeff.RuntimeParams():
-      ion_properties = _get_ion_properties_from_n_e_ratios_Z_eff(
-          impurity_params,
-          T_e,
-          Z_i,
-          Z_i_face,
-          runtime_params.plasma_composition.Z_eff,
-          runtime_params.plasma_composition.Z_eff_face,
-      )
-    case _:
-      # Not expected to be reached but needed to avoid linter errors.
-      raise ValueError("Unknown impurity mode.")
+        case electron_density_ratios.RuntimeParams():
+            ion_properties = _get_ion_properties_from_n_e_ratios(
+                runtime_params.plasma_composition.impurity_names,
+                impurity_params,
+                T_e,
+                Z_i,
+                Z_i_face,
+            )
+        case electron_density_ratios_zeff.RuntimeParams():
+            ion_properties = _get_ion_properties_from_n_e_ratios_Z_eff(
+                impurity_params,
+                T_e,
+                Z_i,
+                Z_i_face,
+                runtime_params.plasma_composition.Z_eff,
+                runtime_params.plasma_composition.Z_eff_face,
+            )
+        case _:
+            # Not expected to be reached but needed to avoid linter errors.
+            raise ValueError("Unknown impurity mode.")
 
-  n_i = cell_variable.CellVariable(
-      value=n_e.value * ion_properties.dilution_factor,
-      dr=geo.drho_norm,
-      right_face_grad_constraint=None,
-      right_face_constraint=n_e.right_face_constraint
-      * ion_properties.dilution_factor_edge,
-  )
+    n_i = cell_variable.CellVariable(
+        value=n_e.value * ion_properties.dilution_factor,
+        dr=geo.drho_norm,
+        right_face_grad_constraint=None,
+        right_face_constraint=n_e.right_face_constraint *
+        ion_properties.dilution_factor_edge,
+    )
 
-  n_impurity_value = jnp.where(
-      ion_properties.dilution_factor == 1.0,
-      0.0,
-      (n_e.value - n_i.value * Z_i) / ion_properties.Z_impurity,
-  )
+    n_impurity_value = jnp.where(
+        ion_properties.dilution_factor == 1.0,
+        0.0,
+        (n_e.value - n_i.value * Z_i) / ion_properties.Z_impurity,
+    )
 
-  n_impurity_right_face_constraint = jnp.where(
-      ion_properties.dilution_factor_edge == 1.0,
-      0.0,
-      (n_e.right_face_constraint - n_i.right_face_constraint * Z_i_face[-1])
-      / ion_properties.Z_impurity_face[-1],
-  )
+    n_impurity_right_face_constraint = jnp.where(
+        ion_properties.dilution_factor_edge == 1.0,
+        0.0,
+        (n_e.right_face_constraint - n_i.right_face_constraint * Z_i_face[-1])
+        / ion_properties.Z_impurity_face[-1],
+    )
 
-  n_impurity = cell_variable.CellVariable(
-      value=n_impurity_value,
-      dr=geo.drho_norm,
-      right_face_grad_constraint=None,
-      right_face_constraint=n_impurity_right_face_constraint,
-  )
+    n_impurity = cell_variable.CellVariable(
+        value=n_impurity_value,
+        dr=geo.drho_norm,
+        right_face_grad_constraint=None,
+        right_face_constraint=n_impurity_right_face_constraint,
+    )
 
-  # Z_eff from plasma composition is imposed and can be passed to CoreProfiles.
-  # However, we must recalculate Z_eff_face from the updated densities and
-  # charge states since linearly interpolated Z_eff (which is what plasma
-  # composition Z_eff_face is) would not be physically consistent.
-  Z_eff_face = _calculate_Z_eff(
-      Z_i_face,
-      ion_properties.Z_impurity_face,
-      n_i.face_value(),
-      n_impurity.face_value(),
-      n_e.face_value(),
-  )
+    # Z_eff from plasma composition is imposed and can be passed to CoreProfiles.
+    # However, we must recalculate Z_eff_face from the updated densities and
+    # charge states since linearly interpolated Z_eff (which is what plasma
+    # composition Z_eff_face is) would not be physically consistent.
+    Z_eff_face = _calculate_Z_eff(
+        Z_i_face,
+        ion_properties.Z_impurity_face,
+        n_i.face_value(),
+        n_impurity.face_value(),
+        n_e.face_value(),
+    )
 
-  # Convert array of fractions to a mapping from symbol to fraction profile.
-  # Ensure that output is always a full radial profile for consistency across
-  # all impurity modes.
-  impurity_fractions_dict = {}
-  for i, symbol in enumerate(runtime_params.plasma_composition.impurity_names):
-    fraction = ion_properties.impurity_fractions[i]
-    if fraction.ndim == 0:
-      impurity_fractions_dict[symbol] = jnp.full_like(n_e.value, fraction)
-    else:
-      impurity_fractions_dict[symbol] = fraction
+    # Convert array of fractions to a mapping from symbol to fraction profile.
+    # Ensure that output is always a full radial profile for consistency across
+    # all impurity modes.
+    impurity_fractions_dict = {}
+    for i, symbol in enumerate(
+            runtime_params.plasma_composition.impurity_names):
+        fraction = ion_properties.impurity_fractions[i]
+        if fraction.ndim == 0:
+            impurity_fractions_dict[symbol] = jnp.full_like(
+                n_e.value, fraction)
+        else:
+            impurity_fractions_dict[symbol] = fraction
 
-  return Ions(
-      n_i=n_i,
-      n_impurity=n_impurity,
-      impurity_fractions=impurity_fractions_dict,
-      Z_i=Z_i,
-      Z_i_face=Z_i_face,
-      Z_impurity=ion_properties.Z_impurity,
-      Z_impurity_face=ion_properties.Z_impurity_face,
-      A_i=runtime_params.plasma_composition.main_ion.A_avg,
-      A_impurity=ion_properties.A_impurity,
-      A_impurity_face=ion_properties.A_impurity_face,
-      Z_eff=ion_properties.Z_eff,
-      Z_eff_face=Z_eff_face,
-  )
+    return Ions(
+        n_i=n_i,
+        n_impurity=n_impurity,
+        impurity_fractions=impurity_fractions_dict,
+        Z_i=Z_i,
+        Z_i_face=Z_i_face,
+        Z_impurity=ion_properties.Z_impurity,
+        Z_impurity_face=ion_properties.Z_impurity_face,
+        A_i=runtime_params.plasma_composition.main_ion.A_avg,
+        A_impurity=ion_properties.A_impurity,
+        A_impurity_face=ion_properties.A_impurity_face,
+        Z_eff=ion_properties.Z_eff,
+        Z_eff_face=Z_eff_face,
+    )
 
 
 def _calculate_Z_eff(
@@ -2076,8 +2002,9 @@ def _calculate_Z_eff(
     n_impurity: array_typing.FloatVector,
     n_e: array_typing.FloatVector,
 ) -> array_typing.FloatVector:
-  """Calculates Z_eff based on single effective impurity and main_ion."""
-  return (Z_i**2 * n_i + Z_impurity**2 * n_impurity) / n_e
+    """Calculates Z_eff based on single effective impurity and main_ion."""
+    return (Z_i**2 * n_i + Z_impurity**2 * n_impurity) / n_e
+
 
 def initial_core_profiles0(
     runtime_params: runtime_params_slice.RuntimeParams,
@@ -2085,7 +2012,7 @@ def initial_core_profiles0(
     source_models: source_models_lib.SourceModels,
     neoclassical_models: neoclassical_models_lib.NeoclassicalModels,
 ) -> state.CoreProfiles:
-  """Calculates the initial core profiles.
+    """Calculates the initial core profiles.
 
   Args:
     runtime_params: Runtime parameters at t=t_initial.
@@ -2096,74 +2023,67 @@ def initial_core_profiles0(
   Returns:
     Initial core profiles.
   """
-  T_i = get_updated_ion_temperature(
-      runtime_params.profile_conditions, geo
-  )
-  T_e = get_updated_electron_temperature(
-      runtime_params.profile_conditions, geo
-  )
-  n_e = get_updated_electron_density(
-      runtime_params.profile_conditions, geo
-  )
-  ions = get_updated_ions(runtime_params, geo, n_e, T_e)
+    T_i = get_updated_ion_temperature(runtime_params.profile_conditions, geo)
+    T_e = get_updated_electron_temperature(runtime_params.profile_conditions,
+                                           geo)
+    n_e = get_updated_electron_density(runtime_params.profile_conditions, geo)
+    ions = get_updated_ions(runtime_params, geo, n_e, T_e)
 
-  # Set v_loop_lcfs. Two branches:
-  # 1. Set the v_loop_lcfs from profile_conditions if using the v_loop BC option
-  # 2. Initialize v_loop_lcfs to 0 if using the Ip boundary condition for psi.
-  # In case 2, v_loop_lcfs will be updated every timestep based on the psi_lcfs
-  # values across the time interval. Since there is is one more time value than
-  # time intervals, the v_loop_lcfs time-series is underconstrained. Therefore,
-  # we set v_loop_lcfs[0] to v_loop_lcfs[1] when creating the outputs.
-  v_loop_lcfs = (
-      np.array(runtime_params.profile_conditions.v_loop_lcfs)
-      if runtime_params.profile_conditions.use_v_loop_lcfs_boundary_condition
-      else np.array(0.0, dtype=jax_utils.get_dtype())
-  )
+    # Set v_loop_lcfs. Two branches:
+    # 1. Set the v_loop_lcfs from profile_conditions if using the v_loop BC option
+    # 2. Initialize v_loop_lcfs to 0 if using the Ip boundary condition for psi.
+    # In case 2, v_loop_lcfs will be updated every timestep based on the psi_lcfs
+    # values across the time interval. Since there is is one more time value than
+    # time intervals, the v_loop_lcfs time-series is underconstrained. Therefore,
+    # we set v_loop_lcfs[0] to v_loop_lcfs[1] when creating the outputs.
+    v_loop_lcfs = (
+        np.array(runtime_params.profile_conditions.v_loop_lcfs)
+        if runtime_params.profile_conditions.use_v_loop_lcfs_boundary_condition
+        else np.array(0.0, dtype=jax_utils.get_dtype()))
 
-  # Initialise psi and derived quantities to zero before they are calculated.
-  psidot = cell_variable.CellVariable(
-      value=np.zeros_like(geo.rho),
-      dr=geo.drho_norm,
-  )
-  psi = cell_variable.CellVariable(
-      value=np.zeros_like(geo.rho), dr=geo.drho_norm
-  )
+    # Initialise psi and derived quantities to zero before they are calculated.
+    psidot = cell_variable.CellVariable(
+        value=np.zeros_like(geo.rho),
+        dr=geo.drho_norm,
+    )
+    psi = cell_variable.CellVariable(value=np.zeros_like(geo.rho),
+                                     dr=geo.drho_norm)
 
-  core_profiles = state.CoreProfiles(
-      T_i=T_i,
-      T_e=T_e,
-      n_e=n_e,
-      n_i=ions.n_i,
-      Z_i=ions.Z_i,
-      Z_i_face=ions.Z_i_face,
-      A_i=ions.A_i,
-      n_impurity=ions.n_impurity,
-      impurity_fractions=ions.impurity_fractions,
-      Z_impurity=ions.Z_impurity,
-      Z_impurity_face=ions.Z_impurity_face,
-      A_impurity=ions.A_impurity,
-      A_impurity_face=ions.A_impurity_face,
-      Z_eff=ions.Z_eff,
-      Z_eff_face=ions.Z_eff_face,
-      psi=psi,
-      psidot=psidot,
-      q_face=np.zeros_like(geo.rho_face),
-      s_face=np.zeros_like(geo.rho_face),
-      v_loop_lcfs=v_loop_lcfs,
-      sigma=np.zeros_like(geo.rho),
-      sigma_face=np.zeros_like(geo.rho_face),
-      j_total=np.zeros_like(geo.rho),
-      j_total_face=np.zeros_like(geo.rho_face),
-      Ip_profile_face=np.zeros_like(geo.rho_face),
-  )
+    core_profiles = state.CoreProfiles(
+        T_i=T_i,
+        T_e=T_e,
+        n_e=n_e,
+        n_i=ions.n_i,
+        Z_i=ions.Z_i,
+        Z_i_face=ions.Z_i_face,
+        A_i=ions.A_i,
+        n_impurity=ions.n_impurity,
+        impurity_fractions=ions.impurity_fractions,
+        Z_impurity=ions.Z_impurity,
+        Z_impurity_face=ions.Z_impurity_face,
+        A_impurity=ions.A_impurity,
+        A_impurity_face=ions.A_impurity_face,
+        Z_eff=ions.Z_eff,
+        Z_eff_face=ions.Z_eff_face,
+        psi=psi,
+        psidot=psidot,
+        q_face=np.zeros_like(geo.rho_face),
+        s_face=np.zeros_like(geo.rho_face),
+        v_loop_lcfs=v_loop_lcfs,
+        sigma=np.zeros_like(geo.rho),
+        sigma_face=np.zeros_like(geo.rho_face),
+        j_total=np.zeros_like(geo.rho),
+        j_total_face=np.zeros_like(geo.rho_face),
+        Ip_profile_face=np.zeros_like(geo.rho_face),
+    )
 
-  return _init_psi_and_psi_derived(
-      runtime_params,
-      geo,
-      core_profiles,
-      source_models,
-      neoclassical_models,
-  )
+    return _init_psi_and_psi_derived(
+        runtime_params,
+        geo,
+        core_profiles,
+        source_models,
+        neoclassical_models,
+    )
 
 
 def update_psi_from_j(
@@ -2172,7 +2092,7 @@ def update_psi_from_j(
     j_total_hires: jax.Array,
     use_v_loop_lcfs_boundary_condition: bool = False,
 ) -> cell_variable.CellVariable:
-  """Calculates poloidal flux (psi) consistent with plasma current.
+    """Calculates poloidal flux (psi) consistent with plasma current.
 
   For increased accuracy of psi, a hi-res grid is used, due to the double
     integration. Presently used only for initialization. Therefore Ip is
@@ -2188,61 +2108,60 @@ def update_psi_from_j(
   Returns:
     psi: Poloidal flux cell variable.
   """
-  y = j_total_hires * geo.spr_hires
-  assert y.ndim == 1
-  assert geo.rho_hires.ndim == 1
-  Ip_profile = math_utils.cumulative_trapezoid(
-      y=y, x=geo.rho_hires_norm, initial=0.0
-  )
-  scale = jnp.concatenate((
-      jnp.zeros((1,)),
-      (16 * jnp.pi**3 * constants.CONSTANTS.mu_0 * geo.Phi_b)
-      / (geo.F_hires[1:] * geo.g2g3_over_rhon_hires[1:]),
-  ))
-  # dpsi_dr on hires cell grid
-  dpsi_drhon_hires = scale * Ip_profile
+    y = j_total_hires * geo.spr_hires
+    assert y.ndim == 1
+    assert geo.rho_hires.ndim == 1
+    Ip_profile = math_utils.cumulative_trapezoid(y=y,
+                                                 x=geo.rho_hires_norm,
+                                                 initial=0.0)
+    scale = jnp.concatenate((
+        jnp.zeros((1, )),
+        (16 * jnp.pi**3 * constants.CONSTANTS.mu_0 * geo.Phi_b) /
+        (geo.F_hires[1:] * geo.g2g3_over_rhon_hires[1:]),
+    ))
+    # dpsi_dr on hires cell grid
+    dpsi_drhon_hires = scale * Ip_profile
 
-  # psi on hires cell grid
-  psi_hires = math_utils.cumulative_trapezoid(
-      y=dpsi_drhon_hires, x=geo.rho_hires_norm, initial=0.0
-  )
+    # psi on hires cell grid
+    psi_hires = math_utils.cumulative_trapezoid(y=dpsi_drhon_hires,
+                                                x=geo.rho_hires_norm,
+                                                initial=0.0)
 
-  psi_value = jnp.interp(geo.rho_norm, geo.rho_hires_norm, psi_hires)
+    psi_value = jnp.interp(geo.rho_norm, geo.rho_hires_norm, psi_hires)
 
-  # Set the BCs for psi to ensure the correct Ip
-  dpsi_drhonorm_edge = psi_calculations.calculate_psi_grad_constraint_from_Ip(
-      Ip,
-      geo,
-  )
-
-  if use_v_loop_lcfs_boundary_condition:
-    # For v_loop_lcfs, we will prescribe a rate of change of psi at the LCFS
-    # For the first timestep, we need an initial value for psi at the LCFS, so
-    # we set it to match the desired plasma current.
-    right_face_grad_constraint = None
-    right_face_constraint = (
-        psi_value[-1] + dpsi_drhonorm_edge * geo.drho_norm / 2
+    # Set the BCs for psi to ensure the correct Ip
+    dpsi_drhonorm_edge = psi_calculations.calculate_psi_grad_constraint_from_Ip(
+        Ip,
+        geo,
     )
-  else:
-    # Use the dpsi/drho calculated above as the right face gradient constraint
-    right_face_grad_constraint = dpsi_drhonorm_edge
-    right_face_constraint = None
 
-  psi = cell_variable.CellVariable(
-      value=psi_value,
-      dr=geo.drho_norm,
-      right_face_grad_constraint=right_face_grad_constraint,
-      right_face_constraint=right_face_constraint,
-  )
+    if use_v_loop_lcfs_boundary_condition:
+        # For v_loop_lcfs, we will prescribe a rate of change of psi at the LCFS
+        # For the first timestep, we need an initial value for psi at the LCFS, so
+        # we set it to match the desired plasma current.
+        right_face_grad_constraint = None
+        right_face_constraint = (psi_value[-1] +
+                                 dpsi_drhonorm_edge * geo.drho_norm / 2)
+    else:
+        # Use the dpsi/drho calculated above as the right face gradient constraint
+        right_face_grad_constraint = dpsi_drhonorm_edge
+        right_face_constraint = None
 
-  return psi
+    psi = cell_variable.CellVariable(
+        value=psi_value,
+        dr=geo.drho_norm,
+        right_face_grad_constraint=right_face_grad_constraint,
+        right_face_constraint=right_face_constraint,
+    )
+
+    return psi
 
 
 def _get_initial_psi_mode(
     runtime_params: runtime_params_slice.RuntimeParams,
     geo: geometry.Geometry,
 ) -> profile_conditions_lib.InitialPsiMode:
-  """Returns the initial psi mode based on the runtime parameters.
+    """Returns the initial psi mode based on the runtime parameters.
 
   This allows us to support the legacy behavior of initial_psi_from_j, which
   is only available when using the standard geometry and initial psi is not
@@ -2256,24 +2175,21 @@ def _get_initial_psi_mode(
   Returns:
     How to calculate the initial psi value.
   """
-  psi_mode = runtime_params.profile_conditions.initial_psi_mode
-  if psi_mode == profile_conditions_lib.InitialPsiMode.PROFILE_CONDITIONS:
-    if runtime_params.profile_conditions.psi is None:
-      logging.warning(
-          'Falling back to legacy behavior as `profile_conditions.psi` is '
-          'None. Future versions of TORAX will require `psi` to be provided '
-          'if `initial_psi_mode` is PROFILE_CONDITIONS. Use '
-          '`initial_psi_mode` to initialize psi from `j` or `geometry` and '
-          'avoid this warning.'
-      )
-      if (
-          isinstance(geo, standard_geometry.StandardGeometry)
-          and not runtime_params.profile_conditions.initial_psi_from_j
-      ):
-        psi_mode = profile_conditions_lib.InitialPsiMode.GEOMETRY
-      else:
-        psi_mode = profile_conditions_lib.InitialPsiMode.J
-  return psi_mode
+    psi_mode = runtime_params.profile_conditions.initial_psi_mode
+    if psi_mode == profile_conditions_lib.InitialPsiMode.PROFILE_CONDITIONS:
+        if runtime_params.profile_conditions.psi is None:
+            logging.warning(
+                'Falling back to legacy behavior as `profile_conditions.psi` is '
+                'None. Future versions of TORAX will require `psi` to be provided '
+                'if `initial_psi_mode` is PROFILE_CONDITIONS. Use '
+                '`initial_psi_mode` to initialize psi from `j` or `geometry` and '
+                'avoid this warning.')
+            if (isinstance(geo, standard_geometry.StandardGeometry) and
+                    not runtime_params.profile_conditions.initial_psi_from_j):
+                psi_mode = profile_conditions_lib.InitialPsiMode.GEOMETRY
+            else:
+                psi_mode = profile_conditions_lib.InitialPsiMode.J
+    return psi_mode
 
 
 def _init_psi_and_psi_derived(
@@ -2283,7 +2199,7 @@ def _init_psi_and_psi_derived(
     source_models: source_models_lib.SourceModels,
     neoclassical_models: neoclassical_models_lib.NeoclassicalModels,
 ) -> state.CoreProfiles:
-  """Initialises psi and currents in core profiles.
+    """Initialises psi and currents in core profiles.
 
   There are three modes of doing this that are supported:
     1. Retrieving psi from the profile conditions.
@@ -2303,139 +2219,135 @@ def _init_psi_and_psi_derived(
     Refined core profiles.
   """
 
-  # Flag to track if sources have been calculated during psi initialization.
-  sources_are_calculated = False
+    # Flag to track if sources have been calculated during psi initialization.
+    sources_are_calculated = False
 
-  # Initialize psi source profiles and bootstrap current to all zeros.
-  source_profiles = source_profile_builders.build_all_zero_profiles(geo)
+    # Initialize psi source profiles and bootstrap current to all zeros.
+    source_profiles = source_profile_builders.build_all_zero_profiles(geo)
 
-  initial_psi_mode = _get_initial_psi_mode(runtime_params, geo)
+    initial_psi_mode = _get_initial_psi_mode(runtime_params, geo)
 
-  match initial_psi_mode:
+    match initial_psi_mode:
     # Case 1: retrieving psi from the profile conditions, using the prescribed
     # profile and Ip
-    case profile_conditions_lib.InitialPsiMode.PROFILE_CONDITIONS:
-      if runtime_params.profile_conditions.psi is None:
-        raise ValueError(
-            'psi is None, but initial_psi_mode is PROFILE_CONDITIONS.'
-        )
-      # Calculate the dpsi/drho necessary to achieve the given Ip
-      dpsi_drhonorm_edge = (
-          psi_calculations.calculate_psi_grad_constraint_from_Ip(
-              runtime_params.profile_conditions.Ip,
-              geo,
-          )
-      )
+        case profile_conditions_lib.InitialPsiMode.PROFILE_CONDITIONS:
+            if runtime_params.profile_conditions.psi is None:
+                raise ValueError(
+                    'psi is None, but initial_psi_mode is PROFILE_CONDITIONS.')
+            # Calculate the dpsi/drho necessary to achieve the given Ip
+            dpsi_drhonorm_edge = (
+                psi_calculations.calculate_psi_grad_constraint_from_Ip(
+                    runtime_params.profile_conditions.Ip,
+                    geo,
+                ))
 
-      # Set the BCs to ensure the correct Ip
-      if runtime_params.profile_conditions.use_v_loop_lcfs_boundary_condition:
-        # Extrapolate the value of psi at the LCFS from the dpsi/drho constraint
-        # to achieve the desired Ip
-        right_face_grad_constraint = None
-        right_face_constraint = (
-            runtime_params.profile_conditions.psi[-1]
-            + dpsi_drhonorm_edge * geo.drho_norm / 2
-        )
-      else:
-        # Use the dpsi/drho calculated above as the right face gradient
-        # constraint
-        right_face_grad_constraint = dpsi_drhonorm_edge
-        right_face_constraint = None
+            # Set the BCs to ensure the correct Ip
+            if runtime_params.profile_conditions.use_v_loop_lcfs_boundary_condition:
+                # Extrapolate the value of psi at the LCFS from the dpsi/drho constraint
+                # to achieve the desired Ip
+                right_face_grad_constraint = None
+                right_face_constraint = (
+                    runtime_params.profile_conditions.psi[-1] +
+                    dpsi_drhonorm_edge * geo.drho_norm / 2)
+            else:
+                # Use the dpsi/drho calculated above as the right face gradient
+                # constraint
+                right_face_grad_constraint = dpsi_drhonorm_edge
+                right_face_constraint = None
 
-      psi = cell_variable.CellVariable(
-          value=runtime_params.profile_conditions.psi,
-          right_face_grad_constraint=right_face_grad_constraint,
-          right_face_constraint=right_face_constraint,
-          dr=geo.drho_norm,
-      )
+            psi = cell_variable.CellVariable(
+                value=runtime_params.profile_conditions.psi,
+                right_face_grad_constraint=right_face_grad_constraint,
+                right_face_constraint=right_face_constraint,
+                dr=geo.drho_norm,
+            )
 
-    # Case 2: retrieving psi from the standard geometry input.
-    case profile_conditions_lib.InitialPsiMode.GEOMETRY:
-      if not isinstance(geo, standard_geometry.StandardGeometry):
-        raise ValueError(
-            'GEOMETRY initial_psi_source is only supported for standard'
-            ' geometry.'
-        )
-      # psi is already provided from a numerical equilibrium, so no need to
-      # first calculate currents.
-      dpsi_drhonorm_edge = (
-          psi_calculations.calculate_psi_grad_constraint_from_Ip(
-              runtime_params.profile_conditions.Ip,
-              geo,
-          )
-      )
-      # Use the psi from the equilibrium as the right face constraint
-      # This has already been made consistent with the desired Ip
-      # by make_ip_consistent
-      psi = cell_variable.CellVariable(
-          value=geo.psi_from_Ip,  # Use psi from equilibrium
-          right_face_grad_constraint=None
-          if runtime_params.profile_conditions.use_v_loop_lcfs_boundary_condition
-          else dpsi_drhonorm_edge,
-          right_face_constraint=geo.psi_from_Ip_face[-1]
-          if runtime_params.profile_conditions.use_v_loop_lcfs_boundary_condition
-          else None,
-          dr=geo.drho_norm,
-      )
+        # Case 2: retrieving psi from the standard geometry input.
+        case profile_conditions_lib.InitialPsiMode.GEOMETRY:
+            if not isinstance(geo, standard_geometry.StandardGeometry):
+                raise ValueError(
+                    'GEOMETRY initial_psi_source is only supported for standard'
+                    ' geometry.')
+            # psi is already provided from a numerical equilibrium, so no need to
+            # first calculate currents.
+            dpsi_drhonorm_edge = (
+                psi_calculations.calculate_psi_grad_constraint_from_Ip(
+                    runtime_params.profile_conditions.Ip,
+                    geo,
+                ))
+            # Use the psi from the equilibrium as the right face constraint
+            # This has already been made consistent with the desired Ip
+            # by make_ip_consistent
+            psi = cell_variable.CellVariable(
+                value=geo.psi_from_Ip,  # Use psi from equilibrium
+                right_face_grad_constraint=None
+                if runtime_params.profile_conditions.
+                use_v_loop_lcfs_boundary_condition else dpsi_drhonorm_edge,
+                right_face_constraint=geo.psi_from_Ip_face[-1]
+                if runtime_params.profile_conditions.
+                use_v_loop_lcfs_boundary_condition else None,
+                dr=geo.drho_norm,
+            )
 
-    # Case 3: calculating j according to nu formula and psi from j.
-    case profile_conditions_lib.InitialPsiMode.J:
-      # calculate j and psi from the nu formula
-      j_total_hires = _get_j_total_hires_with_no_external_sources(
-          runtime_params, geo
-      )
-      psi = update_psi_from_j(
-          runtime_params.profile_conditions.Ip,
-          geo,
-          j_total_hires,
-          use_v_loop_lcfs_boundary_condition=runtime_params.profile_conditions.use_v_loop_lcfs_boundary_condition,
-      )
-      if not (runtime_params.profile_conditions.initial_j_is_total_current):
-        # In this branch we require non-inductive currents to determine j_total.
-        # The nu formula only provides the Ohmic component of the current.
-        # However calculating non-inductive currents requires a non-zero psi.
-        # We thus iterate between psi and source calculations, using j_total
-        # and psi calculated purely with the nu formula as an initial guess
+        # Case 3: calculating j according to nu formula and psi from j.
+        case profile_conditions_lib.InitialPsiMode.J:
+            # calculate j and psi from the nu formula
+            j_total_hires = _get_j_total_hires_with_no_external_sources(
+                runtime_params, geo)
+            psi = update_psi_from_j(
+                runtime_params.profile_conditions.Ip,
+                geo,
+                j_total_hires,
+                use_v_loop_lcfs_boundary_condition=runtime_params.
+                profile_conditions.use_v_loop_lcfs_boundary_condition,
+            )
+            if not (runtime_params.profile_conditions.
+                    initial_j_is_total_current):
+                # In this branch we require non-inductive currents to determine j_total.
+                # The nu formula only provides the Ohmic component of the current.
+                # However calculating non-inductive currents requires a non-zero psi.
+                # We thus iterate between psi and source calculations, using j_total
+                # and psi calculated purely with the nu formula as an initial guess
 
-        # Initialize iterations
-        core_profiles_initial = dataclasses.replace(
-            core_profiles,
-            psi=psi,
-            q_face=psi_calculations.calc_q_face(geo, psi),
-            s_face=psi_calculations.calc_s_face(geo, psi),
-        )
+                # Initialize iterations
+                core_profiles_initial = dataclasses.replace(
+                    core_profiles,
+                    psi=psi,
+                    q_face=psi_calculations.calc_q_face(geo, psi),
+                    s_face=psi_calculations.calc_s_face(geo, psi),
+                )
 
-        # TODO(b/440385263): add tunable iteration number or convergence
-        # criteria, and modify python for loop to jax fori loop for the general
-        # case.
+                # TODO(b/440385263): add tunable iteration number or convergence
+                # criteria, and modify python for loop to jax fori loop for the general
+                # case.
 
-        # Iterate with non-inductive current source calculations. Stop after 2.
-        psi, source_profiles = _iterate_psi_and_sources(
-            runtime_params=runtime_params,
-            geo=geo,
-            core_profiles=core_profiles_initial,
-            neoclassical_models=neoclassical_models,
-            source_models=source_models,
-            source_profiles=source_profiles,
-            iterations=2,
-        )
+                # Iterate with non-inductive current source calculations. Stop after 2.
+                psi, source_profiles = _iterate_psi_and_sources(
+                    runtime_params=runtime_params,
+                    geo=geo,
+                    core_profiles=core_profiles_initial,
+                    neoclassical_models=neoclassical_models,
+                    source_models=source_models,
+                    source_profiles=source_profiles,
+                    iterations=2,
+                )
 
-        # Mark that sources have been calculated to avoid redundant work.
-        sources_are_calculated = True
+                # Mark that sources have been calculated to avoid redundant work.
+                sources_are_calculated = True
 
-  # Conclude with completing core_profiles with all psi-dependent profiles.
-  core_profiles = _calculate_all_psi_dependent_profiles(
-      runtime_params=runtime_params,
-      geo=geo,
-      psi=psi,
-      core_profiles=core_profiles,
-      source_profiles=source_profiles,
-      source_models=source_models,
-      neoclassical_models=neoclassical_models,
-      sources_are_calculated=sources_are_calculated,
-  )
+    # Conclude with completing core_profiles with all psi-dependent profiles.
+    core_profiles = _calculate_all_psi_dependent_profiles(
+        runtime_params=runtime_params,
+        geo=geo,
+        psi=psi,
+        core_profiles=core_profiles,
+        source_profiles=source_profiles,
+        source_models=source_models,
+        neoclassical_models=neoclassical_models,
+        sources_are_calculated=sources_are_calculated,
+    )
 
-  return core_profiles
+    return core_profiles
 
 
 def _calculate_all_psi_dependent_profiles(
@@ -2448,79 +2360,76 @@ def _calculate_all_psi_dependent_profiles(
     neoclassical_models: neoclassical_models_lib.NeoclassicalModels,
     sources_are_calculated: bool,
 ) -> state.CoreProfiles:
-  """Supplements core profiles with all other profiles that depend on psi."""
-  j_total, j_total_face, Ip_profile_face = psi_calculations.calc_j_total(
-      geo, psi
-  )
+    """Supplements core profiles with all other profiles that depend on psi."""
+    j_total, j_total_face, Ip_profile_face = psi_calculations.calc_j_total(
+        geo, psi)
 
-  core_profiles = dataclasses.replace(
-      core_profiles,
-      psi=psi,
-      q_face=psi_calculations.calc_q_face(geo, psi),
-      s_face=psi_calculations.calc_s_face(geo, psi),
-      j_total=j_total,
-      j_total_face=j_total_face,
-      Ip_profile_face=Ip_profile_face,
-  )
-  # Calculate conductivity once we have a consistent set of core profiles
-  conductivity = neoclassical_models.conductivity.calculate_conductivity(
-      geo,
-      core_profiles,
-  )
-
-  # Calculate sources if they have not already been calculated.
-  if not sources_are_calculated:
-    source_profiles = _get_bootstrap_and_standard_source_profiles(
-        runtime_params,
+    core_profiles = dataclasses.replace(
+        core_profiles,
+        psi=psi,
+        q_face=psi_calculations.calc_q_face(geo, psi),
+        s_face=psi_calculations.calc_s_face(geo, psi),
+        j_total=j_total,
+        j_total_face=j_total_face,
+        Ip_profile_face=Ip_profile_face,
+    )
+    # Calculate conductivity once we have a consistent set of core profiles
+    conductivity = neoclassical_models.conductivity.calculate_conductivity(
         geo,
         core_profiles,
-        neoclassical_models,
-        source_models,
-        source_profiles,
     )
 
-  # psidot calculated here with phibdot=0 in geo, since this is initial
-  # conditions and we don't yet have information on geo_t_plus_dt for the
-  # phibdot calculation.
+    # Calculate sources if they have not already been calculated.
+    if not sources_are_calculated:
+        source_profiles = _get_bootstrap_and_standard_source_profiles(
+            runtime_params,
+            geo,
+            core_profiles,
+            neoclassical_models,
+            source_models,
+            source_profiles,
+        )
 
-  if (
-      not runtime_params.numerics.evolve_current
-      and runtime_params.profile_conditions.psidot is not None
-  ):
-    # If psidot is prescribed and psi does not evolve, use prescribed value
-    psidot_value = runtime_params.profile_conditions.psidot
-  else:
-    # Otherwise, calculate psidot from psi sources.
-    psi_sources = source_profiles.total_psi_sources(geo)
-    psidot_value = psi_calculations.calculate_psidot_from_psi_sources(
-        psi_sources=psi_sources,
+    # psidot calculated here with phibdot=0 in geo, since this is initial
+    # conditions and we don't yet have information on geo_t_plus_dt for the
+    # phibdot calculation.
+
+    if (not runtime_params.numerics.evolve_current
+            and runtime_params.profile_conditions.psidot is not None):
+        # If psidot is prescribed and psi does not evolve, use prescribed value
+        psidot_value = runtime_params.profile_conditions.psidot
+    else:
+        # Otherwise, calculate psidot from psi sources.
+        psi_sources = source_profiles.total_psi_sources(geo)
+        psidot_value = psi_calculations.calculate_psidot_from_psi_sources(
+            psi_sources=psi_sources,
+            sigma=conductivity.sigma,
+            resistivity_multiplier=runtime_params.numerics.
+            resistivity_multiplier,
+            psi=psi,
+            geo=geo,
+        )
+
+    # psidot boundary condition. If v_loop_lcfs is not prescribed then we set it
+    # to the last calculated psidot for the initialisation since we have no
+    # other information.
+    v_loop_lcfs = (
+        runtime_params.profile_conditions.v_loop_lcfs
+        if runtime_params.profile_conditions.use_v_loop_lcfs_boundary_condition
+        else psidot_value[-1])
+    psidot = dataclasses.replace(
+        core_profiles.psidot,
+        value=psidot_value,
+        right_face_constraint=v_loop_lcfs,
+        right_face_grad_constraint=None,
+    )
+    core_profiles = dataclasses.replace(
+        core_profiles,
+        psidot=psidot,
         sigma=conductivity.sigma,
-        resistivity_multiplier=runtime_params.numerics.resistivity_multiplier,
-        psi=psi,
-        geo=geo,
+        sigma_face=conductivity.sigma_face,
     )
-
-  # psidot boundary condition. If v_loop_lcfs is not prescribed then we set it
-  # to the last calculated psidot for the initialisation since we have no
-  # other information.
-  v_loop_lcfs = (
-      runtime_params.profile_conditions.v_loop_lcfs
-      if runtime_params.profile_conditions.use_v_loop_lcfs_boundary_condition
-      else psidot_value[-1]
-  )
-  psidot = dataclasses.replace(
-      core_profiles.psidot,
-      value=psidot_value,
-      right_face_constraint=v_loop_lcfs,
-      right_face_grad_constraint=None,
-  )
-  core_profiles = dataclasses.replace(
-      core_profiles,
-      psidot=psidot,
-      sigma=conductivity.sigma,
-      sigma_face=conductivity.sigma_face,
-  )
-  return core_profiles
+    return core_profiles
 
 
 def _get_bootstrap_and_standard_source_profiles(
@@ -2531,32 +2440,29 @@ def _get_bootstrap_and_standard_source_profiles(
     source_models: source_models_lib.SourceModels,
     source_profiles: source_profiles_lib.SourceProfiles,
 ) -> source_profiles_lib.SourceProfiles:
-  """Calculates bootstrap current and updates source profiles."""
-  source_profile_builders.build_standard_source_profiles(
-      runtime_params=runtime_params,
-      geo=geo,
-      core_profiles=core_profiles,
-      source_models=source_models,
-      psi_only=True,
-      calculate_anyway=True,
-      calculated_source_profiles=source_profiles,
-  )
-  bootstrap_current = (
-      neoclassical_models.bootstrap_current.calculate_bootstrap_current(
-          runtime_params, geo, core_profiles
-      )
-  )
-  source_profiles = dataclasses.replace(
-      source_profiles, bootstrap_current=bootstrap_current
-  )
-  return source_profiles
+    """Calculates bootstrap current and updates source profiles."""
+    source_profile_builders.build_standard_source_profiles(
+        runtime_params=runtime_params,
+        geo=geo,
+        core_profiles=core_profiles,
+        source_models=source_models,
+        psi_only=True,
+        calculate_anyway=True,
+        calculated_source_profiles=source_profiles,
+    )
+    bootstrap_current = (
+        neoclassical_models.bootstrap_current.calculate_bootstrap_current(
+            runtime_params, geo, core_profiles))
+    source_profiles = dataclasses.replace(source_profiles,
+                                          bootstrap_current=bootstrap_current)
+    return source_profiles
 
 
 def core_profiles_to_solver_x_tuple(
     core_profiles: state.CoreProfiles,
     evolving_names: Tuple[str, ...],
 ) -> Tuple[cell_variable.CellVariable, ...]:
-  """Converts evolving parts of CoreProfiles to the 'x' tuple for the solver.
+    """Converts evolving parts of CoreProfiles to the 'x' tuple for the solver.
 
   State variables in the solver are scaled for solver numerical conditioning.
   i.e., the solver methods find the zero of a residual, minimizes a loss, and/or
@@ -2575,18 +2481,18 @@ def core_profiles_to_solver_x_tuple(
     A tuple of CellVariable objects, one for each name in evolving_names,
     with density values appropriately scaled for the solver.
   """
-  x_tuple_for_solver_list = []
+    x_tuple_for_solver_list = []
 
-  for name in evolving_names:
-    original_units_cv = getattr(core_profiles, name)
-    # Scale for solver (divide by scaling factor)
-    solver_x_tuple_cv = scale_cell_variable(
-        cv=original_units_cv,
-        scaling_factor=1 / SCALING_FACTORS[name],
-    )
-    x_tuple_for_solver_list.append(solver_x_tuple_cv)
+    for name in evolving_names:
+        original_units_cv = getattr(core_profiles, name)
+        # Scale for solver (divide by scaling factor)
+        solver_x_tuple_cv = scale_cell_variable(
+            cv=original_units_cv,
+            scaling_factor=1 / SCALING_FACTORS[name],
+        )
+        x_tuple_for_solver_list.append(solver_x_tuple_cv)
 
-  return tuple(x_tuple_for_solver_list)
+    return tuple(x_tuple_for_solver_list)
 
 
 def solver_x_tuple_to_core_profiles(
@@ -2594,7 +2500,7 @@ def solver_x_tuple_to_core_profiles(
     evolving_names: tuple[str, ...],
     core_profiles: state.CoreProfiles,
 ) -> state.CoreProfiles:
-  """Gets updated cell variables for evolving state variables in core_profiles.
+    """Gets updated cell variables for evolving state variables in core_profiles.
 
   If a variable is in `evolving_names`, its new value is taken from `x_new`.
   Otherwise, the existing value from `core_profiles` is kept.
@@ -2610,25 +2516,25 @@ def solver_x_tuple_to_core_profiles(
   Returns:
     An updated CoreProfiles object with the new values.
   """
-  updated_vars = {}
+    updated_vars = {}
 
-  for i, var_name in enumerate(evolving_names):
-    solver_x_tuple_cv = x_new[i]
-    # Unscale from solver (multiply by scaling factor)
-    original_units_cv = scale_cell_variable(
-        cv=solver_x_tuple_cv,
-        scaling_factor=SCALING_FACTORS[var_name],
-    )
-    updated_vars[var_name] = original_units_cv
+    for i, var_name in enumerate(evolving_names):
+        solver_x_tuple_cv = x_new[i]
+        # Unscale from solver (multiply by scaling factor)
+        original_units_cv = scale_cell_variable(
+            cv=solver_x_tuple_cv,
+            scaling_factor=SCALING_FACTORS[var_name],
+        )
+        updated_vars[var_name] = original_units_cv
 
-  return dataclasses.replace(core_profiles, **updated_vars)
+    return dataclasses.replace(core_profiles, **updated_vars)
 
 
 def scale_cell_variable(
     cv: cell_variable.CellVariable,
     scaling_factor: float,
 ) -> cell_variable.CellVariable:
-  """Scales or unscales a CellVariable's relevant fields.
+    """Scales or unscales a CellVariable's relevant fields.
 
   Args:
     cv: The CellVariable to scale.
@@ -2637,32 +2543,29 @@ def scale_cell_variable(
   Returns:
     A new CellVariable with scaled or unscaled values.
   """
-  operation = lambda x, factor: x * factor if x is not None else None
+    operation = lambda x, factor: x * factor if x is not None else None
 
-  scaled_value = operation(cv.value, scaling_factor)
+    scaled_value = operation(cv.value, scaling_factor)
 
-  # Only scale constraints if they are not None
-  scaled_left_face_constraint = operation(
-      cv.left_face_constraint, scaling_factor
-  )
-  scaled_left_face_grad_constraint = operation(
-      cv.left_face_grad_constraint, scaling_factor
-  )
-  scaled_right_face_constraint = operation(
-      cv.right_face_constraint, scaling_factor
-  )
-  scaled_right_face_grad_constraint = operation(
-      cv.right_face_grad_constraint, scaling_factor
-  )
+    # Only scale constraints if they are not None
+    scaled_left_face_constraint = operation(cv.left_face_constraint,
+                                            scaling_factor)
+    scaled_left_face_grad_constraint = operation(cv.left_face_grad_constraint,
+                                                 scaling_factor)
+    scaled_right_face_constraint = operation(cv.right_face_constraint,
+                                             scaling_factor)
+    scaled_right_face_grad_constraint = operation(
+        cv.right_face_grad_constraint, scaling_factor)
 
-  return cell_variable.CellVariable(
-      value=scaled_value,
-      left_face_constraint=scaled_left_face_constraint,
-      left_face_grad_constraint=scaled_left_face_grad_constraint,
-      right_face_constraint=scaled_right_face_constraint,
-      right_face_grad_constraint=scaled_right_face_grad_constraint,
-      dr=cv.dr,
-  )
+    return cell_variable.CellVariable(
+        value=scaled_value,
+        left_face_constraint=scaled_left_face_constraint,
+        left_face_grad_constraint=scaled_left_face_grad_constraint,
+        right_face_constraint=scaled_right_face_constraint,
+        right_face_grad_constraint=scaled_right_face_grad_constraint,
+        dr=cv.dr,
+    )
+
 
 # An optional argument, consisting of a 2D matrix of nested tuples, with each
 # leaf being either None or a JAX Array. Used to define block matrices.
@@ -2671,12 +2574,11 @@ def scale_cell_variable(
 # ((a, b), (c, d)) where a, b, c, d are each jax.Array
 #
 # ((a, None), (None, d)) : represents a diagonal block matrix
-OptionalTupleMatrix: TypeAlias = tuple[tuple[jax.Array | None, ...], ...] | None
-
+OptionalTupleMatrix: TypeAlias = tuple[tuple[jax.Array | None, ...],
+                                       ...] | None
 
 # Alias for better readability.
 AuxiliaryOutput: TypeAlias = Any
-
 
 # pylint: disable=invalid-name
 
@@ -2688,11 +2590,10 @@ def _calculate_psi_value_constraint_from_v_loop(
     v_loop_lcfs_t_plus_dt: array_typing.FloatScalar,
     psi_lcfs_t: array_typing.FloatScalar,
 ) -> jax.Array:
-  """Calculates the value constraint on the poloidal flux for the next time step from loop voltage."""
-  theta_weighted_v_loop_lcfs = (
-      1 - theta
-  ) * v_loop_lcfs_t + theta * v_loop_lcfs_t_plus_dt
-  return psi_lcfs_t + theta_weighted_v_loop_lcfs * dt
+    """Calculates the value constraint on the poloidal flux for the next time step from loop voltage."""
+    theta_weighted_v_loop_lcfs = (
+        1 - theta) * v_loop_lcfs_t + theta * v_loop_lcfs_t_plus_dt
+    return psi_lcfs_t + theta_weighted_v_loop_lcfs * dt
 
 
 @jax_utils.jit
@@ -2701,7 +2602,7 @@ def get_prescribed_core_profile_values(
     geo: geometry.Geometry,
     core_profiles: state.CoreProfiles,
 ) -> dict[str, array_typing.FloatVector]:
-  """Updates core profiles which are not being evolved by PDE.
+    """Updates core profiles which are not being evolved by PDE.
 
   Uses same functions as for profile initialization.
 
@@ -2713,56 +2614,53 @@ def get_prescribed_core_profile_values(
   Returns:
     Updated core profiles values on the cell grid.
   """
-  # If profiles are not evolved, they can still potential be time-evolving,
-  # depending on the runtime params. If so, they are updated below.
-  if not runtime_params.numerics.evolve_ion_heat:
-    T_i = get_updated_ion_temperature(
-        runtime_params.profile_conditions, geo
-    ).value
-  else:
-    T_i = core_profiles.T_i.value
-  if not runtime_params.numerics.evolve_electron_heat:
-    T_e_cell_variable = get_updated_electron_temperature(
-        runtime_params.profile_conditions, geo
+    # If profiles are not evolved, they can still potential be time-evolving,
+    # depending on the runtime params. If so, they are updated below.
+    if not runtime_params.numerics.evolve_ion_heat:
+        T_i = get_updated_ion_temperature(runtime_params.profile_conditions,
+                                          geo).value
+    else:
+        T_i = core_profiles.T_i.value
+    if not runtime_params.numerics.evolve_electron_heat:
+        T_e_cell_variable = get_updated_electron_temperature(
+            runtime_params.profile_conditions, geo)
+        T_e = T_e_cell_variable.value
+    else:
+        T_e_cell_variable = core_profiles.T_e
+        T_e = T_e_cell_variable.value
+    if not runtime_params.numerics.evolve_density:
+        n_e_cell_variable = get_updated_electron_density(
+            runtime_params.profile_conditions, geo)
+    else:
+        n_e_cell_variable = core_profiles.n_e
+    ions = get_updated_ions(
+        runtime_params,
+        geo,
+        n_e_cell_variable,
+        T_e_cell_variable,
     )
-    T_e = T_e_cell_variable.value
-  else:
-    T_e_cell_variable = core_profiles.T_e
-    T_e = T_e_cell_variable.value
-  if not runtime_params.numerics.evolve_density:
-    n_e_cell_variable = get_updated_electron_density(
-        runtime_params.profile_conditions, geo
-    )
-  else:
-    n_e_cell_variable = core_profiles.n_e
-  ions = get_updated_ions(
-      runtime_params,
-      geo,
-      n_e_cell_variable,
-      T_e_cell_variable,
-  )
-  n_e = n_e_cell_variable.value
-  n_i = ions.n_i.value
-  n_impurity = ions.n_impurity.value
-  impurity_fractions = ions.impurity_fractions
+    n_e = n_e_cell_variable.value
+    n_i = ions.n_i.value
+    n_impurity = ions.n_impurity.value
+    impurity_fractions = ions.impurity_fractions
 
-  return {
-      'T_i': T_i,
-      'T_e': T_e,
-      'n_e': n_e,
-      'n_i': n_i,
-      'n_impurity': n_impurity,
-      'impurity_fractions': impurity_fractions,
-      'Z_i': ions.Z_i,
-      'Z_i_face': ions.Z_i_face,
-      'Z_impurity': ions.Z_impurity,
-      'Z_impurity_face': ions.Z_impurity_face,
-      'A_i': ions.A_i,
-      'A_impurity': ions.A_impurity,
-      'A_impurity_face': ions.A_impurity_face,
-      'Z_eff': ions.Z_eff,
-      'Z_eff_face': ions.Z_eff_face,
-  }
+    return {
+        'T_i': T_i,
+        'T_e': T_e,
+        'n_e': n_e,
+        'n_i': n_i,
+        'n_impurity': n_impurity,
+        'impurity_fractions': impurity_fractions,
+        'Z_i': ions.Z_i,
+        'Z_i_face': ions.Z_i_face,
+        'Z_impurity': ions.Z_impurity,
+        'Z_impurity_face': ions.Z_impurity_face,
+        'A_i': ions.A_i,
+        'A_impurity': ions.A_impurity,
+        'A_impurity_face': ions.A_impurity_face,
+        'Z_eff': ions.Z_eff,
+        'Z_eff_face': ions.Z_eff_face,
+    }
 
 
 @functools.partial(jax_utils.jit, static_argnames=['evolving_names'])
@@ -2773,7 +2671,7 @@ def update_core_profiles_during_step(
     core_profiles: state.CoreProfiles,
     evolving_names: tuple[str, ...],
 ) -> state.CoreProfiles:
-  """Returns the new core profiles after updating the evolving variables.
+    """Returns the new core profiles after updating the evolving variables.
 
   Intended for use during iterative solves in the step function. Only updates
   the core profiles which are being evolved by the PDE and directly derivable
@@ -2788,34 +2686,33 @@ def update_core_profiles_during_step(
     evolving_names: The names of the evolving variables.
   """
 
-  updated_core_profiles = solver_x_tuple_to_core_profiles(
-      x_new, evolving_names, core_profiles
-  )
+    updated_core_profiles = solver_x_tuple_to_core_profiles(
+        x_new, evolving_names, core_profiles)
 
-  ions = get_updated_ions(
-      runtime_params,
-      geo,
-      updated_core_profiles.n_e,
-      updated_core_profiles.T_e,
-  )
+    ions = get_updated_ions(
+        runtime_params,
+        geo,
+        updated_core_profiles.n_e,
+        updated_core_profiles.T_e,
+    )
 
-  return dataclasses.replace(
-      updated_core_profiles,
-      n_i=ions.n_i,
-      n_impurity=ions.n_impurity,
-      impurity_fractions=ions.impurity_fractions,
-      Z_i=ions.Z_i,
-      Z_i_face=ions.Z_i_face,
-      Z_impurity=ions.Z_impurity,
-      Z_impurity_face=ions.Z_impurity_face,
-      A_i=ions.A_i,
-      A_impurity=ions.A_impurity,
-      A_impurity_face=ions.A_impurity_face,
-      Z_eff=ions.Z_eff,
-      Z_eff_face=ions.Z_eff_face,
-      q_face=psi_calculations.calc_q_face(geo, updated_core_profiles.psi),
-      s_face=psi_calculations.calc_s_face(geo, updated_core_profiles.psi),
-  )
+    return dataclasses.replace(
+        updated_core_profiles,
+        n_i=ions.n_i,
+        n_impurity=ions.n_impurity,
+        impurity_fractions=ions.impurity_fractions,
+        Z_i=ions.Z_i,
+        Z_i_face=ions.Z_i_face,
+        Z_impurity=ions.Z_impurity,
+        Z_impurity_face=ions.Z_impurity_face,
+        A_i=ions.A_i,
+        A_impurity=ions.A_impurity,
+        A_impurity_face=ions.A_impurity_face,
+        Z_eff=ions.Z_eff,
+        Z_eff_face=ions.Z_eff_face,
+        q_face=psi_calculations.calc_q_face(geo, updated_core_profiles.psi),
+        s_face=psi_calculations.calc_s_face(geo, updated_core_profiles.psi),
+    )
 
 
 def update_core_and_source_profiles_after_step(
@@ -2830,7 +2727,7 @@ def update_core_and_source_profiles_after_step(
     neoclassical_models: neoclassical_models_lib.NeoclassicalModels,
     evolving_names: tuple[str, ...],
 ) -> tuple[state.CoreProfiles, source_profiles_lib.SourceProfiles]:
-  """Returns a core profiles and source profiles after the solver has finished.
+    """Returns a core profiles and source profiles after the solver has finished.
 
   Updates the evolved variables and derived variables like q_face, psidot, etc.
 
@@ -2852,119 +2749,110 @@ def update_core_and_source_profiles_after_step(
     A tuple of the new core profiles and the source profiles.
   """
 
-  updated_core_profiles_t_plus_dt = solver_x_tuple_to_core_profiles(
-      x_new, evolving_names, core_profiles_t_plus_dt
-  )
+    updated_core_profiles_t_plus_dt = solver_x_tuple_to_core_profiles(
+        x_new, evolving_names, core_profiles_t_plus_dt)
 
-  ions = get_updated_ions(
-      runtime_params_t_plus_dt,
-      geo,
-      updated_core_profiles_t_plus_dt.n_e,
-      updated_core_profiles_t_plus_dt.T_e,
-  )
-
-  v_loop_lcfs = (
-      runtime_params_t_plus_dt.profile_conditions.v_loop_lcfs  # pylint: disable=g-long-ternary
-      if runtime_params_t_plus_dt.profile_conditions.use_v_loop_lcfs_boundary_condition
-      else _update_v_loop_lcfs_from_psi(
-          core_profiles_t.psi,
-          updated_core_profiles_t_plus_dt.psi,
-          dt,
-      )
-  )
-
-  j_total, j_total_face, Ip_profile_face = psi_calculations.calc_j_total(
-      geo,
-      updated_core_profiles_t_plus_dt.psi,
-  )
-
-  # A wholly new core profiles object is defined as a guard against neglecting
-  # to update one of the attributes if doing dataclasses.replace
-  intermediate_core_profiles = state.CoreProfiles(
-      T_i=updated_core_profiles_t_plus_dt.T_i,
-      T_e=updated_core_profiles_t_plus_dt.T_e,
-      psi=updated_core_profiles_t_plus_dt.psi,
-      n_e=updated_core_profiles_t_plus_dt.n_e,
-      n_i=ions.n_i,
-      n_impurity=ions.n_impurity,
-      impurity_fractions=ions.impurity_fractions,
-      Z_i=ions.Z_i,
-      Z_i_face=ions.Z_i_face,
-      Z_impurity=ions.Z_impurity,
-      Z_impurity_face=ions.Z_impurity_face,
-      psidot=core_profiles_t_plus_dt.psidot,
-      q_face=psi_calculations.calc_q_face(
-          geo, updated_core_profiles_t_plus_dt.psi
-      ),
-      s_face=psi_calculations.calc_s_face(
-          geo, updated_core_profiles_t_plus_dt.psi
-      ),
-      A_i=ions.A_i,
-      A_impurity=ions.A_impurity,
-      A_impurity_face=ions.A_impurity_face,
-      Z_eff=ions.Z_eff,
-      Z_eff_face=ions.Z_eff_face,
-      v_loop_lcfs=v_loop_lcfs,
-      sigma=core_profiles_t_plus_dt.sigma,  # Not yet updated
-      sigma_face=core_profiles_t_plus_dt.sigma_face,  # Not yet updated
-      j_total=j_total,
-      j_total_face=j_total_face,
-      Ip_profile_face=Ip_profile_face,
-  )
-
-  conductivity = neoclassical_models.conductivity.calculate_conductivity(
-      geo, intermediate_core_profiles
-  )
-
-  intermediate_core_profiles = dataclasses.replace(
-      intermediate_core_profiles,
-      sigma=conductivity.sigma,
-      sigma_face=conductivity.sigma_face,
-  )
-
-  # build_source_profiles calculates the union with explicit + implicit
-  total_source_profiles = source_profile_builders.build_source_profiles(
-      runtime_params=runtime_params_t_plus_dt,
-      geo=geo,
-      source_models=source_models,
-      neoclassical_models=neoclassical_models,
-      core_profiles=intermediate_core_profiles,
-      explicit=False,
-      explicit_source_profiles=explicit_source_profiles,
-      conductivity=conductivity,
-  )
-
-  if (
-      not runtime_params_t_plus_dt.numerics.evolve_current
-      and runtime_params_t_plus_dt.profile_conditions.psidot
-      is not None
-  ):
-    # If psidot is prescribed and current does not evolve, use prescribed value
-    psidot_value = (
-        runtime_params_t_plus_dt.profile_conditions.psidot
+    ions = get_updated_ions(
+        runtime_params_t_plus_dt,
+        geo,
+        updated_core_profiles_t_plus_dt.n_e,
+        updated_core_profiles_t_plus_dt.T_e,
     )
-  else:
-    # Otherwise, calculate psidot from psi sources.
-    psi_sources = total_source_profiles.total_psi_sources(geo)
-    psidot_value = psi_calculations.calculate_psidot_from_psi_sources(
-        psi_sources=psi_sources,
-        sigma=intermediate_core_profiles.sigma,
-        resistivity_multiplier=runtime_params_t_plus_dt.numerics.resistivity_multiplier,
-        psi=intermediate_core_profiles.psi,
+
+    v_loop_lcfs = (
+        runtime_params_t_plus_dt.profile_conditions.v_loop_lcfs  # pylint: disable=g-long-ternary
+        if runtime_params_t_plus_dt.profile_conditions.
+        use_v_loop_lcfs_boundary_condition else _update_v_loop_lcfs_from_psi(
+            core_profiles_t.psi,
+            updated_core_profiles_t_plus_dt.psi,
+            dt,
+        ))
+
+    j_total, j_total_face, Ip_profile_face = psi_calculations.calc_j_total(
+        geo,
+        updated_core_profiles_t_plus_dt.psi,
+    )
+
+    # A wholly new core profiles object is defined as a guard against neglecting
+    # to update one of the attributes if doing dataclasses.replace
+    intermediate_core_profiles = state.CoreProfiles(
+        T_i=updated_core_profiles_t_plus_dt.T_i,
+        T_e=updated_core_profiles_t_plus_dt.T_e,
+        psi=updated_core_profiles_t_plus_dt.psi,
+        n_e=updated_core_profiles_t_plus_dt.n_e,
+        n_i=ions.n_i,
+        n_impurity=ions.n_impurity,
+        impurity_fractions=ions.impurity_fractions,
+        Z_i=ions.Z_i,
+        Z_i_face=ions.Z_i_face,
+        Z_impurity=ions.Z_impurity,
+        Z_impurity_face=ions.Z_impurity_face,
+        psidot=core_profiles_t_plus_dt.psidot,
+        q_face=psi_calculations.calc_q_face(
+            geo, updated_core_profiles_t_plus_dt.psi),
+        s_face=psi_calculations.calc_s_face(
+            geo, updated_core_profiles_t_plus_dt.psi),
+        A_i=ions.A_i,
+        A_impurity=ions.A_impurity,
+        A_impurity_face=ions.A_impurity_face,
+        Z_eff=ions.Z_eff,
+        Z_eff_face=ions.Z_eff_face,
+        v_loop_lcfs=v_loop_lcfs,
+        sigma=core_profiles_t_plus_dt.sigma,  # Not yet updated
+        sigma_face=core_profiles_t_plus_dt.sigma_face,  # Not yet updated
+        j_total=j_total,
+        j_total_face=j_total_face,
+        Ip_profile_face=Ip_profile_face,
+    )
+
+    conductivity = neoclassical_models.conductivity.calculate_conductivity(
+        geo, intermediate_core_profiles)
+
+    intermediate_core_profiles = dataclasses.replace(
+        intermediate_core_profiles,
+        sigma=conductivity.sigma,
+        sigma_face=conductivity.sigma_face,
+    )
+
+    # build_source_profiles calculates the union with explicit + implicit
+    total_source_profiles = source_profile_builders.build_source_profiles(
+        runtime_params=runtime_params_t_plus_dt,
         geo=geo,
+        source_models=source_models,
+        neoclassical_models=neoclassical_models,
+        core_profiles=intermediate_core_profiles,
+        explicit=False,
+        explicit_source_profiles=explicit_source_profiles,
+        conductivity=conductivity,
     )
-  psidot = dataclasses.replace(
-      core_profiles_t_plus_dt.psidot,
-      value=psidot_value,
-      right_face_constraint=v_loop_lcfs,
-      right_face_grad_constraint=None,
-  )
 
-  core_profiles_t_plus_dt = dataclasses.replace(
-      intermediate_core_profiles,
-      psidot=psidot,
-  )
-  return core_profiles_t_plus_dt, total_source_profiles
+    if (not runtime_params_t_plus_dt.numerics.evolve_current and
+            runtime_params_t_plus_dt.profile_conditions.psidot is not None):
+        # If psidot is prescribed and current does not evolve, use prescribed value
+        psidot_value = (runtime_params_t_plus_dt.profile_conditions.psidot)
+    else:
+        # Otherwise, calculate psidot from psi sources.
+        psi_sources = total_source_profiles.total_psi_sources(geo)
+        psidot_value = psi_calculations.calculate_psidot_from_psi_sources(
+            psi_sources=psi_sources,
+            sigma=intermediate_core_profiles.sigma,
+            resistivity_multiplier=runtime_params_t_plus_dt.numerics.
+            resistivity_multiplier,
+            psi=intermediate_core_profiles.psi,
+            geo=geo,
+        )
+    psidot = dataclasses.replace(
+        core_profiles_t_plus_dt.psidot,
+        value=psidot_value,
+        right_face_constraint=v_loop_lcfs,
+        right_face_grad_constraint=None,
+    )
+
+    core_profiles_t_plus_dt = dataclasses.replace(
+        intermediate_core_profiles,
+        psidot=psidot,
+    )
+    return core_profiles_t_plus_dt, total_source_profiles
 
 
 def compute_boundary_conditions_for_t_plus_dt(
@@ -2974,7 +2862,7 @@ def compute_boundary_conditions_for_t_plus_dt(
     geo_t_plus_dt: geometry.Geometry,
     core_profiles_t: state.CoreProfiles,
 ) -> dict[str, dict[str, jax.Array | None]]:
-  """Computes boundary conditions for the next timestep and returns updates to State.
+    """Computes boundary conditions for the next timestep and returns updates to State.
 
   Args:
     dt: Size of the next timestep
@@ -2992,94 +2880,97 @@ def compute_boundary_conditions_for_t_plus_dt(
     each CellVariable in the state. This dict can in theory recursively replace
     values in a State object.
   """
-  profile_conditions_t_plus_dt = (
-      runtime_params_t_plus_dt.profile_conditions
-  )
-  # TODO(b/390143606): Separate out the boundary condition calculation from the
-  # core profile calculation.
-  n_e = get_updated_electron_density(
-      profile_conditions_t_plus_dt, geo_t_plus_dt
-  )
-  n_e_right_bc = n_e.right_face_constraint
+    profile_conditions_t_plus_dt = (
+        runtime_params_t_plus_dt.profile_conditions)
+    # TODO(b/390143606): Separate out the boundary condition calculation from the
+    # core profile calculation.
+    n_e = get_updated_electron_density(profile_conditions_t_plus_dt,
+                                       geo_t_plus_dt)
+    n_e_right_bc = n_e.right_face_constraint
 
-  # Used for edge calculations and input arguments have correct edge BCs.
-  ions_edge = get_updated_ions(
-      runtime_params_t_plus_dt,
-      geo_t_plus_dt,
-      dataclasses.replace(
-          core_profiles_t.n_e,
-          right_face_constraint=profile_conditions_t_plus_dt.n_e_right_bc,
-      ),
-      dataclasses.replace(
-          core_profiles_t.T_e,
-          right_face_constraint=profile_conditions_t_plus_dt.T_e_right_bc,
-      ),
-  )
+    # Used for edge calculations and input arguments have correct edge BCs.
+    ions_edge = get_updated_ions(
+        runtime_params_t_plus_dt,
+        geo_t_plus_dt,
+        dataclasses.replace(
+            core_profiles_t.n_e,
+            right_face_constraint=profile_conditions_t_plus_dt.n_e_right_bc,
+        ),
+        dataclasses.replace(
+            core_profiles_t.T_e,
+            right_face_constraint=profile_conditions_t_plus_dt.T_e_right_bc,
+        ),
+    )
 
-  Z_i_edge = ions_edge.Z_i_face[-1]
-  Z_impurity_edge = ions_edge.Z_impurity_face[-1]
+    Z_i_edge = ions_edge.Z_i_face[-1]
+    Z_impurity_edge = ions_edge.Z_impurity_face[-1]
 
-  dilution_factor_edge = formulas.calculate_main_ion_dilution_factor(
-      Z_i_edge,
-      Z_impurity_edge,
-      runtime_params_t_plus_dt.plasma_composition.Z_eff_face[-1],
-  )
+    dilution_factor_edge = formulas.calculate_main_ion_dilution_factor(
+        Z_i_edge,
+        Z_impurity_edge,
+        runtime_params_t_plus_dt.plasma_composition.Z_eff_face[-1],
+    )
 
-  n_i_bound_right = n_e_right_bc * dilution_factor_edge
-  n_impurity_bound_right = (
-      n_e_right_bc - n_i_bound_right * Z_i_edge
-  ) / Z_impurity_edge
+    n_i_bound_right = n_e_right_bc * dilution_factor_edge
+    n_impurity_bound_right = (n_e_right_bc -
+                              n_i_bound_right * Z_i_edge) / Z_impurity_edge
 
-  return {
-      'T_i': dict(
-          left_face_grad_constraint=jnp.zeros(()),
-          right_face_grad_constraint=None,
-          right_face_constraint=profile_conditions_t_plus_dt.T_i_right_bc,
-      ),
-      'T_e': dict(
-          left_face_grad_constraint=jnp.zeros(()),
-          right_face_grad_constraint=None,
-          right_face_constraint=profile_conditions_t_plus_dt.T_e_right_bc,
-      ),
-      'n_e': dict(
-          left_face_grad_constraint=jnp.zeros(()),
-          right_face_grad_constraint=None,
-          right_face_constraint=jnp.array(n_e_right_bc),
-      ),
-      'n_i': dict(
-          left_face_grad_constraint=jnp.zeros(()),
-          right_face_grad_constraint=None,
-          right_face_constraint=jnp.array(n_i_bound_right),
-      ),
-      'n_impurity': dict(
-          left_face_grad_constraint=jnp.zeros(()),
-          right_face_grad_constraint=None,
-          right_face_constraint=jnp.array(n_impurity_bound_right),
-      ),
-      'psi': dict(
-          right_face_grad_constraint=(
-              psi_calculations.calculate_psi_grad_constraint_from_Ip(  # pylint: disable=g-long-ternary
-                  Ip=profile_conditions_t_plus_dt.Ip,
-                  geo=geo_t_plus_dt,
-              )
-              if not runtime_params_t.profile_conditions.use_v_loop_lcfs_boundary_condition
-              else None
-          ),
-          right_face_constraint=(
-              _calculate_psi_value_constraint_from_v_loop(  # pylint: disable=g-long-ternary
-                  dt=dt,
-                  v_loop_lcfs_t=runtime_params_t.profile_conditions.v_loop_lcfs,
-                  v_loop_lcfs_t_plus_dt=profile_conditions_t_plus_dt.v_loop_lcfs,
-                  psi_lcfs_t=core_profiles_t.psi.right_face_constraint,
-                  theta=runtime_params_t.solver.theta_implicit,
-              )
-              if runtime_params_t.profile_conditions.use_v_loop_lcfs_boundary_condition
-              else None
-          ),
-      ),
-      'Z_i_edge': Z_i_edge,
-      'Z_impurity_edge': Z_impurity_edge,
-  }
+    return {
+        'T_i':
+        dict(
+            left_face_grad_constraint=jnp.zeros(()),
+            right_face_grad_constraint=None,
+            right_face_constraint=profile_conditions_t_plus_dt.T_i_right_bc,
+        ),
+        'T_e':
+        dict(
+            left_face_grad_constraint=jnp.zeros(()),
+            right_face_grad_constraint=None,
+            right_face_constraint=profile_conditions_t_plus_dt.T_e_right_bc,
+        ),
+        'n_e':
+        dict(
+            left_face_grad_constraint=jnp.zeros(()),
+            right_face_grad_constraint=None,
+            right_face_constraint=jnp.array(n_e_right_bc),
+        ),
+        'n_i':
+        dict(
+            left_face_grad_constraint=jnp.zeros(()),
+            right_face_grad_constraint=None,
+            right_face_constraint=jnp.array(n_i_bound_right),
+        ),
+        'n_impurity':
+        dict(
+            left_face_grad_constraint=jnp.zeros(()),
+            right_face_grad_constraint=None,
+            right_face_constraint=jnp.array(n_impurity_bound_right),
+        ),
+        'psi':
+        dict(
+            right_face_grad_constraint=(
+                psi_calculations.calculate_psi_grad_constraint_from_Ip(  # pylint: disable=g-long-ternary
+                    Ip=profile_conditions_t_plus_dt.Ip,
+                    geo=geo_t_plus_dt,
+                ) if not runtime_params_t.profile_conditions.
+                use_v_loop_lcfs_boundary_condition else None),
+            right_face_constraint=(
+                _calculate_psi_value_constraint_from_v_loop(  # pylint: disable=g-long-ternary
+                    dt=dt,
+                    v_loop_lcfs_t=runtime_params_t.profile_conditions.
+                    v_loop_lcfs,
+                    v_loop_lcfs_t_plus_dt=profile_conditions_t_plus_dt.
+                    v_loop_lcfs,
+                    psi_lcfs_t=core_profiles_t.psi.right_face_constraint,
+                    theta=runtime_params_t.solver.theta_implicit,
+                ) if runtime_params_t.profile_conditions.
+                use_v_loop_lcfs_boundary_condition else None),
+        ),
+        'Z_i_edge':
+        Z_i_edge,
+        'Z_impurity_edge':
+        Z_impurity_edge,
+    }
 
 
 def provide_core_profiles_t_plus_dt(
@@ -3089,84 +2980,79 @@ def provide_core_profiles_t_plus_dt(
     geo_t_plus_dt: geometry.Geometry,
     core_profiles_t: state.CoreProfiles,
 ) -> state.CoreProfiles:
-  """Provides state at t_plus_dt with new boundary conditions and prescribed profiles."""
-  updated_boundary_conditions = compute_boundary_conditions_for_t_plus_dt(
-      dt=dt,
-      runtime_params_t=runtime_params_t,
-      runtime_params_t_plus_dt=runtime_params_t_plus_dt,
-      geo_t_plus_dt=geo_t_plus_dt,
-      core_profiles_t=core_profiles_t,
-  )
-  updated_values = get_prescribed_core_profile_values(
-      runtime_params=runtime_params_t_plus_dt,
-      geo=geo_t_plus_dt,
-      core_profiles=core_profiles_t,
-  )
-  T_i = dataclasses.replace(
-      core_profiles_t.T_i,
-      value=updated_values['T_i'],
-      **updated_boundary_conditions['T_i'],
-  )
-  T_e = dataclasses.replace(
-      core_profiles_t.T_e,
-      value=updated_values['T_e'],
-      **updated_boundary_conditions['T_e'],
-  )
-  psi = dataclasses.replace(
-      core_profiles_t.psi, **updated_boundary_conditions['psi']
-  )
-  n_e = dataclasses.replace(
-      core_profiles_t.n_e,
-      value=updated_values['n_e'],
-      **updated_boundary_conditions['n_e'],
-  )
-  n_i = dataclasses.replace(
-      core_profiles_t.n_i,
-      value=updated_values['n_i'],
-      **updated_boundary_conditions['n_i'],
-  )
-  n_impurity = dataclasses.replace(
-      core_profiles_t.n_impurity,
-      value=updated_values['n_impurity'],
-      **updated_boundary_conditions['n_impurity'],
-  )
+    """Provides state at t_plus_dt with new boundary conditions and prescribed profiles."""
+    updated_boundary_conditions = compute_boundary_conditions_for_t_plus_dt(
+        dt=dt,
+        runtime_params_t=runtime_params_t,
+        runtime_params_t_plus_dt=runtime_params_t_plus_dt,
+        geo_t_plus_dt=geo_t_plus_dt,
+        core_profiles_t=core_profiles_t,
+    )
+    updated_values = get_prescribed_core_profile_values(
+        runtime_params=runtime_params_t_plus_dt,
+        geo=geo_t_plus_dt,
+        core_profiles=core_profiles_t,
+    )
+    T_i = dataclasses.replace(
+        core_profiles_t.T_i,
+        value=updated_values['T_i'],
+        **updated_boundary_conditions['T_i'],
+    )
+    T_e = dataclasses.replace(
+        core_profiles_t.T_e,
+        value=updated_values['T_e'],
+        **updated_boundary_conditions['T_e'],
+    )
+    psi = dataclasses.replace(core_profiles_t.psi,
+                              **updated_boundary_conditions['psi'])
+    n_e = dataclasses.replace(
+        core_profiles_t.n_e,
+        value=updated_values['n_e'],
+        **updated_boundary_conditions['n_e'],
+    )
+    n_i = dataclasses.replace(
+        core_profiles_t.n_i,
+        value=updated_values['n_i'],
+        **updated_boundary_conditions['n_i'],
+    )
+    n_impurity = dataclasses.replace(
+        core_profiles_t.n_impurity,
+        value=updated_values['n_impurity'],
+        **updated_boundary_conditions['n_impurity'],
+    )
 
-  # pylint: disable=invalid-name
-  # Update Z_face with boundary condition Z, needed for cases where T_e
-  # is evolving and updated_prescribed_core_profiles is a no-op.
-  Z_i_face = jnp.concatenate(
-      [
-          updated_values['Z_i_face'][:-1],
-          jnp.array([updated_boundary_conditions['Z_i_edge']]),
-      ],
-  )
-  Z_impurity_face = jnp.concatenate(
-      [
-          updated_values['Z_impurity_face'][:-1],
-          jnp.array([updated_boundary_conditions['Z_impurity_edge']]),
-      ],
-  )
-  # pylint: enable=invalid-name
-  core_profiles_t_plus_dt = dataclasses.replace(
-      core_profiles_t,
-      T_i=T_i,
-      T_e=T_e,
-      psi=psi,
-      n_e=n_e,
-      n_i=n_i,
-      n_impurity=n_impurity,
-      impurity_fractions=updated_values['impurity_fractions'],
-      Z_i=updated_values['Z_i'],
-      Z_i_face=Z_i_face,
-      Z_impurity=updated_values['Z_impurity'],
-      Z_impurity_face=Z_impurity_face,
-      A_i=updated_values['A_i'],
-      A_impurity=updated_values['A_impurity'],
-      A_impurity_face=updated_values['A_impurity_face'],
-      Z_eff=updated_values['Z_eff'],
-      Z_eff_face=updated_values['Z_eff_face'],
-  )
-  return core_profiles_t_plus_dt
+    # pylint: disable=invalid-name
+    # Update Z_face with boundary condition Z, needed for cases where T_e
+    # is evolving and updated_prescribed_core_profiles is a no-op.
+    Z_i_face = jnp.concatenate([
+        updated_values['Z_i_face'][:-1],
+        jnp.array([updated_boundary_conditions['Z_i_edge']]),
+    ], )
+    Z_impurity_face = jnp.concatenate([
+        updated_values['Z_impurity_face'][:-1],
+        jnp.array([updated_boundary_conditions['Z_impurity_edge']]),
+    ], )
+    # pylint: enable=invalid-name
+    core_profiles_t_plus_dt = dataclasses.replace(
+        core_profiles_t,
+        T_i=T_i,
+        T_e=T_e,
+        psi=psi,
+        n_e=n_e,
+        n_i=n_i,
+        n_impurity=n_impurity,
+        impurity_fractions=updated_values['impurity_fractions'],
+        Z_i=updated_values['Z_i'],
+        Z_i_face=Z_i_face,
+        Z_impurity=updated_values['Z_impurity'],
+        Z_impurity_face=Z_impurity_face,
+        A_i=updated_values['A_i'],
+        A_impurity=updated_values['A_impurity'],
+        A_impurity_face=updated_values['A_impurity_face'],
+        Z_eff=updated_values['Z_eff'],
+        Z_eff_face=updated_values['Z_eff_face'],
+    )
+    return core_profiles_t_plus_dt
 
 
 # TODO(b/406173731): Find robust solution for underdetermination and solve this
@@ -3176,7 +3062,7 @@ def _update_v_loop_lcfs_from_psi(
     psi_t_plus_dt: cell_variable.CellVariable,
     dt: array_typing.FloatScalar,
 ) -> jax.Array:
-  """Updates the v_loop_lcfs for the next timestep.
+    """Updates the v_loop_lcfs for the next timestep.
 
   For the Ip boundary condition case, the v_loop_lcfs formula is in principle
   calculated from:
@@ -3197,17 +3083,17 @@ def _update_v_loop_lcfs_from_psi(
   Returns:
     The updated v_loop_lcfs for the next timestep.
   """
-  psi_lcfs_t = psi_t.face_value()[-1]
-  psi_lcfs_t_plus_dt = psi_t_plus_dt.face_value()[-1]
-  v_loop_lcfs_t_plus_dt = (psi_lcfs_t_plus_dt - psi_lcfs_t) / dt
-  return v_loop_lcfs_t_plus_dt
+    psi_lcfs_t = psi_t.face_value()[-1]
+    psi_lcfs_t_plus_dt = psi_t_plus_dt.face_value()[-1]
+    v_loop_lcfs_t_plus_dt = (psi_lcfs_t_plus_dt - psi_lcfs_t) / dt
+    return v_loop_lcfs_t_plus_dt
 
 
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class Block1DCoeffs:
-  # pyformat: disable  # pyformat removes line breaks needed for readability
-  """The coefficients of coupled 1D fluid dynamics PDEs.
+    # pyformat: disable  # pyformat removes line breaks needed for readability
+    """The coefficients of coupled 1D fluid dynamics PDEs.
 
   The differential equation is:
   transient_out_coeff partial x transient_in_coeff / partial t = F
@@ -3251,21 +3137,22 @@ class Block1DCoeffs:
       or information useful for inspecting the computation inside the callback
       which calculated these coeffs.
   """
-  transient_in_cell: tuple[jax.Array, ...]
-  transient_out_cell: tuple[jax.Array, ...] | None = None
-  d_face: tuple[jax.Array, ...] | None = None
-  v_face: tuple[jax.Array, ...] | None = None
-  source_mat_cell: OptionalTupleMatrix = None
-  source_cell: tuple[jax.Array | None, ...] | None = None
-  auxiliary_outputs: AuxiliaryOutput | None = None
+    transient_in_cell: tuple[jax.Array, ...]
+    transient_out_cell: tuple[jax.Array, ...] | None = None
+    d_face: tuple[jax.Array, ...] | None = None
+    v_face: tuple[jax.Array, ...] | None = None
+    source_mat_cell: OptionalTupleMatrix = None
+    source_cell: tuple[jax.Array | None, ...] | None = None
+    auxiliary_outputs: AuxiliaryOutput | None = None
+
 
 Block1DCoeffs: TypeAlias = Block1DCoeffs
 AuxiliaryOutput: TypeAlias = AuxiliaryOutput
 
+
 def cell_variable_tuple_to_vec(
-    x_tuple: tuple[cell_variable.CellVariable, ...],
-) -> jax.Array:
-  """Converts a tuple of CellVariables to a flat array.
+    x_tuple: tuple[cell_variable.CellVariable, ...], ) -> jax.Array:
+    """Converts a tuple of CellVariables to a flat array.
 
   Args:
     x_tuple: A tuple of CellVariables.
@@ -3273,8 +3160,8 @@ def cell_variable_tuple_to_vec(
   Returns:
     A flat array of evolving state variables.
   """
-  x_vec = jnp.concatenate([x.value for x in x_tuple])
-  return x_vec
+    x_vec = jnp.concatenate([x.value for x in x_tuple])
+    return x_vec
 
 
 def vec_to_cell_variable_tuple(
@@ -3282,7 +3169,7 @@ def vec_to_cell_variable_tuple(
     core_profiles: state.CoreProfiles,
     evolving_names: tuple[str, ...],
 ) -> tuple[cell_variable.CellVariable, ...]:
-  """Converts a flat array of core profile state vars to CellVariable tuple.
+    """Converts a flat array of core profile state vars to CellVariable tuple.
 
   Requires an input CoreProfiles to provide boundary condition information.
 
@@ -3296,66 +3183,63 @@ def vec_to_cell_variable_tuple(
   Returns:
     A tuple of updated CellVariables.
   """
-  x_split = jnp.split(x_vec, len(evolving_names))
+    x_split = jnp.split(x_vec, len(evolving_names))
 
-  # First scale the core profiles to match the scaling in x_split, then
-  # update the values in the scaled core profiles with new values from x_split.
-  scaled_evolving_cp_list = [
-      scale_cell_variable(
-          getattr(core_profiles, name),
-          scaling_factor=1 / SCALING_FACTORS[name],
-      )
-      for name in evolving_names
-  ]
+    # First scale the core profiles to match the scaling in x_split, then
+    # update the values in the scaled core profiles with new values from x_split.
+    scaled_evolving_cp_list = [
+        scale_cell_variable(
+            getattr(core_profiles, name),
+            scaling_factor=1 / SCALING_FACTORS[name],
+        ) for name in evolving_names
+    ]
 
-  x_out = [
-      dataclasses.replace(
-          scaled_evolving_cp,
-          value=value,
-      )
-      for scaled_evolving_cp, value in zip(scaled_evolving_cp_list, x_split)
-  ]
+    x_out = [
+        dataclasses.replace(
+            scaled_evolving_cp,
+            value=value,
+        )
+        for scaled_evolving_cp, value in zip(scaled_evolving_cp_list, x_split)
+    ]
 
-  return tuple(x_out)
+    return tuple(x_out)
 
 
 # pylint: disable=invalid-name
 class CoeffsCallback:
-  """Calculates Block1DCoeffs for a state."""
+    """Calculates Block1DCoeffs for a state."""
 
-  def __init__(
-      self,
-      physics_models: PhysicsModels,
-      evolving_names: tuple[str, ...],
-  ):
-    self.physics_models = physics_models
-    self.evolving_names = evolving_names
+    def __init__(
+        self,
+        physics_models: PhysicsModels,
+        evolving_names: tuple[str, ...],
+    ):
+        self.physics_models = physics_models
+        self.evolving_names = evolving_names
 
-  def __hash__(self) -> int:
-    return hash((
-        self.physics_models,
-        self.evolving_names,
-    ))
+    def __hash__(self) -> int:
+        return hash((
+            self.physics_models,
+            self.evolving_names,
+        ))
 
-  def __eq__(self, other: typing_extensions.Self) -> bool:
-    return (
-        self.physics_models == other.physics_models
-        and self.evolving_names == other.evolving_names
-    )
+    def __eq__(self, other: typing_extensions.Self) -> bool:
+        return (self.physics_models == other.physics_models
+                and self.evolving_names == other.evolving_names)
 
-  def __call__(
-      self,
-      runtime_params: runtime_params_slice.RuntimeParams,
-      geo: geometry.Geometry,
-      core_profiles: state.CoreProfiles,
-      x: tuple[cell_variable.CellVariable, ...],
-      explicit_source_profiles: source_profiles_lib.SourceProfiles,
-      allow_pereverzev: bool = False,
-      # Checks if reduced calc_coeffs for explicit terms when theta_implicit=1
-      # should be called
-      explicit_call: bool = False,
-  ):
-    """Returns coefficients given a state x.
+    def __call__(
+        self,
+        runtime_params: runtime_params_slice.RuntimeParams,
+        geo: geometry.Geometry,
+        core_profiles: state.CoreProfiles,
+        x: tuple[cell_variable.CellVariable, ...],
+        explicit_source_profiles: source_profiles_lib.SourceProfiles,
+        allow_pereverzev: bool = False,
+        # Checks if reduced calc_coeffs for explicit terms when theta_implicit=1
+        # should be called
+        explicit_call: bool = False,
+    ):
+        """Returns coefficients given a state x.
 
     Used to calculate the coefficients for the implicit or explicit components
     of the PDE system.
@@ -3388,29 +3272,29 @@ class CoeffsCallback:
       coeffs: The diffusion, convection, etc. coefficients for this state.
     """
 
-    # Update core_profiles with the subset of new values of evolving variables
-    core_profiles = update_core_profiles_during_step(
-        x,
-        runtime_params,
-        geo,
-        core_profiles,
-        self.evolving_names,
-    )
-    if allow_pereverzev:
-      use_pereverzev = runtime_params.solver.use_pereverzev
-    else:
-      use_pereverzev = False
+        # Update core_profiles with the subset of new values of evolving variables
+        core_profiles = update_core_profiles_during_step(
+            x,
+            runtime_params,
+            geo,
+            core_profiles,
+            self.evolving_names,
+        )
+        if allow_pereverzev:
+            use_pereverzev = runtime_params.solver.use_pereverzev
+        else:
+            use_pereverzev = False
 
-    return calc_coeffs(
-        runtime_params=runtime_params,
-        geo=geo,
-        core_profiles=core_profiles,
-        explicit_source_profiles=explicit_source_profiles,
-        physics_models=self.physics_models,
-        evolving_names=self.evolving_names,
-        use_pereverzev=use_pereverzev,
-        explicit_call=explicit_call,
-    )
+        return calc_coeffs(
+            runtime_params=runtime_params,
+            geo=geo,
+            core_profiles=core_profiles,
+            explicit_source_profiles=explicit_source_profiles,
+            physics_models=self.physics_models,
+            evolving_names=self.evolving_names,
+            use_pereverzev=use_pereverzev,
+            explicit_call=explicit_call,
+        )
 
 
 def _calculate_pereverzev_flux(
@@ -3419,84 +3303,66 @@ def _calculate_pereverzev_flux(
     core_profiles: state.CoreProfiles,
     pedestal_model_output: pedestal_model_lib.PedestalModelOutput,
 ) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
-  """Adds Pereverzev-Corrigan flux to diffusion terms."""
+    """Adds Pereverzev-Corrigan flux to diffusion terms."""
 
-  consts = constants.CONSTANTS
+    consts = constants.CONSTANTS
 
-  geo_factor = jnp.concatenate(
-      [jnp.ones(1), geo.g1_over_vpr_face[1:] / geo.g0_face[1:]]
-  )
+    geo_factor = jnp.concatenate(
+        [jnp.ones(1), geo.g1_over_vpr_face[1:] / geo.g0_face[1:]])
 
-  chi_face_per_ion = (
-      geo.g1_over_vpr_face
-      * core_profiles.n_i.face_value()
-      * consts.keV_to_J
-      * runtime_params.solver.chi_pereverzev
-  )
+    chi_face_per_ion = (geo.g1_over_vpr_face * core_profiles.n_i.face_value() *
+                        consts.keV_to_J * runtime_params.solver.chi_pereverzev)
 
-  chi_face_per_el = (
-      geo.g1_over_vpr_face
-      * core_profiles.n_e.face_value()
-      * consts.keV_to_J
-      * runtime_params.solver.chi_pereverzev
-  )
+    chi_face_per_el = (geo.g1_over_vpr_face * core_profiles.n_e.face_value() *
+                       consts.keV_to_J * runtime_params.solver.chi_pereverzev)
 
-  d_face_per_el = runtime_params.solver.D_pereverzev
-  v_face_per_el = (
-      core_profiles.n_e.face_grad()
-      / core_profiles.n_e.face_value()
-      * d_face_per_el
-      * geo_factor
-  )
+    d_face_per_el = runtime_params.solver.D_pereverzev
+    v_face_per_el = (core_profiles.n_e.face_grad() /
+                     core_profiles.n_e.face_value() * d_face_per_el *
+                     geo_factor)
 
-  # remove Pereverzev flux from boundary region if pedestal model is on
-  # (for PDE stability)
-  chi_face_per_ion = jnp.where(
-      geo.rho_face_norm > pedestal_model_output.rho_norm_ped_top,
-      0.0,
-      chi_face_per_ion,
-  )
-  chi_face_per_el = jnp.where(
-      geo.rho_face_norm > pedestal_model_output.rho_norm_ped_top,
-      0.0,
-      chi_face_per_el,
-  )
+    # remove Pereverzev flux from boundary region if pedestal model is on
+    # (for PDE stability)
+    chi_face_per_ion = jnp.where(
+        geo.rho_face_norm > pedestal_model_output.rho_norm_ped_top,
+        0.0,
+        chi_face_per_ion,
+    )
+    chi_face_per_el = jnp.where(
+        geo.rho_face_norm > pedestal_model_output.rho_norm_ped_top,
+        0.0,
+        chi_face_per_el,
+    )
 
-  # set heat convection terms to zero out Pereverzev-Corrigan heat diffusion
-  v_heat_face_ion = (
-      core_profiles.T_i.face_grad()
-      / core_profiles.T_i.face_value()
-      * chi_face_per_ion
-  )
-  v_heat_face_el = (
-      core_profiles.T_e.face_grad()
-      / core_profiles.T_e.face_value()
-      * chi_face_per_el
-  )
+    # set heat convection terms to zero out Pereverzev-Corrigan heat diffusion
+    v_heat_face_ion = (core_profiles.T_i.face_grad() /
+                       core_profiles.T_i.face_value() * chi_face_per_ion)
+    v_heat_face_el = (core_profiles.T_e.face_grad() /
+                      core_profiles.T_e.face_value() * chi_face_per_el)
 
-  d_face_per_el = jnp.where(
-      geo.rho_face_norm > pedestal_model_output.rho_norm_ped_top,
-      0.0,
-      d_face_per_el * geo.g1_over_vpr_face,
-  )
+    d_face_per_el = jnp.where(
+        geo.rho_face_norm > pedestal_model_output.rho_norm_ped_top,
+        0.0,
+        d_face_per_el * geo.g1_over_vpr_face,
+    )
 
-  v_face_per_el = jnp.where(
-      geo.rho_face_norm > pedestal_model_output.rho_norm_ped_top,
-      0.0,
-      v_face_per_el * geo.g0_face,
-  )
+    v_face_per_el = jnp.where(
+        geo.rho_face_norm > pedestal_model_output.rho_norm_ped_top,
+        0.0,
+        v_face_per_el * geo.g0_face,
+    )
 
-  chi_face_per_ion = chi_face_per_ion.at[0].set(chi_face_per_ion[1])
-  chi_face_per_el = chi_face_per_el.at[0].set(chi_face_per_el[1])
+    chi_face_per_ion = chi_face_per_ion.at[0].set(chi_face_per_ion[1])
+    chi_face_per_el = chi_face_per_el.at[0].set(chi_face_per_el[1])
 
-  return (
-      chi_face_per_ion,
-      chi_face_per_el,
-      v_heat_face_ion,
-      v_heat_face_el,
-      d_face_per_el,
-      v_face_per_el,
-  )
+    return (
+        chi_face_per_ion,
+        chi_face_per_el,
+        v_heat_face_ion,
+        v_heat_face_el,
+        d_face_per_el,
+        v_face_per_el,
+    )
 
 
 def calc_coeffs(
@@ -3509,7 +3375,7 @@ def calc_coeffs(
     use_pereverzev: bool = False,
     explicit_call: bool = False,
 ):
-  """Calculates Block1DCoeffs for the time step described by `core_profiles`.
+    """Calculates Block1DCoeffs for the time step described by `core_profiles`.
 
   Args:
     runtime_params: General input parameters that can change from time step to
@@ -3538,24 +3404,24 @@ def calc_coeffs(
     coeffs: Block1DCoeffs containing the coefficients at this time step.
   """
 
-  # If we are fully implicit and we are making a call for calc_coeffs for the
-  # explicit components of the PDE, only return a cheaper reduced Block1DCoeffs
-  if explicit_call and runtime_params.solver.theta_implicit == 1.0:
-    return _calc_coeffs_reduced(
-        geo,
-        core_profiles,
-        evolving_names,
-    )
-  else:
-    return _calc_coeffs_full(
-        runtime_params=runtime_params,
-        geo=geo,
-        core_profiles=core_profiles,
-        explicit_source_profiles=explicit_source_profiles,
-        physics_models=physics_models,
-        evolving_names=evolving_names,
-        use_pereverzev=use_pereverzev,
-    )
+    # If we are fully implicit and we are making a call for calc_coeffs for the
+    # explicit components of the PDE, only return a cheaper reduced Block1DCoeffs
+    if explicit_call and runtime_params.solver.theta_implicit == 1.0:
+        return _calc_coeffs_reduced(
+            geo,
+            core_profiles,
+            evolving_names,
+        )
+    else:
+        return _calc_coeffs_full(
+            runtime_params=runtime_params,
+            geo=geo,
+            core_profiles=core_profiles,
+            explicit_source_profiles=explicit_source_profiles,
+            physics_models=physics_models,
+            evolving_names=evolving_names,
+            use_pereverzev=use_pereverzev,
+        )
 
 
 @functools.partial(
@@ -3573,346 +3439,265 @@ def _calc_coeffs_full(
     evolving_names: tuple[str, ...],
     use_pereverzev: bool = False,
 ):
-  """See `calc_coeffs` for details."""
+    """See `calc_coeffs` for details."""
 
-  consts = constants.CONSTANTS
+    consts = constants.CONSTANTS
 
-  pedestal_model_output = physics_models.pedestal_model(
-      runtime_params, geo, core_profiles
-  )
+    pedestal_model_output = physics_models.pedestal_model(
+        runtime_params, geo, core_profiles)
 
-  # Boolean mask for enforcing internal temperature boundary conditions to
-  # model the pedestal.
-  # If rho_norm_ped_top_idx is outside of bounds of the mesh, the pedestal is
-  # not present and the mask is all False. This is what is used in the case that
-  # set_pedestal is False.
-  mask = (
-      jnp.zeros_like(geo.rho, dtype=bool)
-      .at[pedestal_model_output.rho_norm_ped_top_idx]
-      .set(True)
-  )
+    # Boolean mask for enforcing internal temperature boundary conditions to
+    # model the pedestal.
+    # If rho_norm_ped_top_idx is outside of bounds of the mesh, the pedestal is
+    # not present and the mask is all False. This is what is used in the case that
+    # set_pedestal is False.
+    mask = (jnp.zeros_like(
+        geo.rho,
+        dtype=bool).at[pedestal_model_output.rho_norm_ped_top_idx].set(True))
 
-  conductivity = (
-      physics_models.neoclassical_models.conductivity.calculate_conductivity(
-          geo, core_profiles
-      )
-  )
+    conductivity = (
+        physics_models.neoclassical_models.conductivity.calculate_conductivity(
+            geo, core_profiles))
 
-  # Calculate the implicit source profiles and combines with the explicit
-  merged_source_profiles = source_profile_builders.build_source_profiles(
-      source_models=physics_models.source_models,
-      neoclassical_models=physics_models.neoclassical_models,
-      runtime_params=runtime_params,
-      geo=geo,
-      core_profiles=core_profiles,
-      explicit=False,
-      explicit_source_profiles=explicit_source_profiles,
-      conductivity=conductivity,
-  )
+    # Calculate the implicit source profiles and combines with the explicit
+    merged_source_profiles = source_profile_builders.build_source_profiles(
+        source_models=physics_models.source_models,
+        neoclassical_models=physics_models.neoclassical_models,
+        runtime_params=runtime_params,
+        geo=geo,
+        core_profiles=core_profiles,
+        explicit=False,
+        explicit_source_profiles=explicit_source_profiles,
+        conductivity=conductivity,
+    )
 
-  # psi source terms. Source matrix is zero for all psi sources
-  source_mat_psi = jnp.zeros_like(geo.rho)
+    # psi source terms. Source matrix is zero for all psi sources
+    source_mat_psi = jnp.zeros_like(geo.rho)
 
-  # fill source vector based on both original and updated core profiles
-  source_psi = merged_source_profiles.total_psi_sources(geo)
+    # fill source vector based on both original and updated core profiles
+    source_psi = merged_source_profiles.total_psi_sources(geo)
 
-  # Transient term coefficient vector (has radial dependence through r, n)
-  toc_T_i = 1.5 * geo.vpr ** (-2.0 / 3.0) * consts.keV_to_J
-  tic_T_i = core_profiles.n_i.value * geo.vpr ** (5.0 / 3.0)
-  toc_T_e = 1.5 * geo.vpr ** (-2.0 / 3.0) * consts.keV_to_J
-  tic_T_e = core_profiles.n_e.value * geo.vpr ** (5.0 / 3.0)
-  toc_psi = (
-      1.0
-      / runtime_params.numerics.resistivity_multiplier
-      * geo.rho_norm
-      * conductivity.sigma
-      * consts.mu_0
-      * 16
-      * jnp.pi**2
-      * geo.Phi_b**2
-      / geo.F**2
-  )
-  tic_psi = jnp.ones_like(toc_psi)
-  toc_dens_el = jnp.ones_like(geo.vpr)
-  tic_dens_el = geo.vpr
+    # Transient term coefficient vector (has radial dependence through r, n)
+    toc_T_i = 1.5 * geo.vpr**(-2.0 / 3.0) * consts.keV_to_J
+    tic_T_i = core_profiles.n_i.value * geo.vpr**(5.0 / 3.0)
+    toc_T_e = 1.5 * geo.vpr**(-2.0 / 3.0) * consts.keV_to_J
+    tic_T_e = core_profiles.n_e.value * geo.vpr**(5.0 / 3.0)
+    toc_psi = (1.0 / runtime_params.numerics.resistivity_multiplier *
+               geo.rho_norm * conductivity.sigma * consts.mu_0 * 16 *
+               jnp.pi**2 * geo.Phi_b**2 / geo.F**2)
+    tic_psi = jnp.ones_like(toc_psi)
+    toc_dens_el = jnp.ones_like(geo.vpr)
+    tic_dens_el = geo.vpr
 
-  # Diffusion term coefficients
-  turbulent_transport = physics_models.transport_model(
-      runtime_params, geo, core_profiles, pedestal_model_output
-  )
-  neoclassical_transport = physics_models.neoclassical_models.transport(
-      runtime_params, geo, core_profiles
-  )
+    # Diffusion term coefficients
+    turbulent_transport = physics_models.transport_model(
+        runtime_params, geo, core_profiles, pedestal_model_output)
+    neoclassical_transport = physics_models.neoclassical_models.transport(
+        runtime_params, geo, core_profiles)
 
-  chi_face_ion_total = (
-      turbulent_transport.chi_face_ion + neoclassical_transport.chi_neo_i
-  )
-  chi_face_el_total = (
-      turbulent_transport.chi_face_el + neoclassical_transport.chi_neo_e
-  )
-  d_face_el_total = (
-      turbulent_transport.d_face_el + neoclassical_transport.D_neo_e
-  )
-  v_face_el_total = (
-      turbulent_transport.v_face_el
-      + neoclassical_transport.V_neo_e
-      + neoclassical_transport.V_neo_ware_e
-  )
-  d_face_psi = geo.g2g3_over_rhon_face
-  # No poloidal flux convection term
-  v_face_psi = jnp.zeros_like(d_face_psi)
+    chi_face_ion_total = (turbulent_transport.chi_face_ion +
+                          neoclassical_transport.chi_neo_i)
+    chi_face_el_total = (turbulent_transport.chi_face_el +
+                         neoclassical_transport.chi_neo_e)
+    d_face_el_total = (turbulent_transport.d_face_el +
+                       neoclassical_transport.D_neo_e)
+    v_face_el_total = (turbulent_transport.v_face_el +
+                       neoclassical_transport.V_neo_e +
+                       neoclassical_transport.V_neo_ware_e)
+    d_face_psi = geo.g2g3_over_rhon_face
+    # No poloidal flux convection term
+    v_face_psi = jnp.zeros_like(d_face_psi)
 
-  # entire coefficient preceding dT/dr in heat transport equations
-  full_chi_face_ion = (
-      geo.g1_over_vpr_face
-      * core_profiles.n_i.face_value()
-      * consts.keV_to_J
-      * chi_face_ion_total
-  )
-  full_chi_face_el = (
-      geo.g1_over_vpr_face
-      * core_profiles.n_e.face_value()
-      * consts.keV_to_J
-      * chi_face_el_total
-  )
+    # entire coefficient preceding dT/dr in heat transport equations
+    full_chi_face_ion = (geo.g1_over_vpr_face *
+                         core_profiles.n_i.face_value() * consts.keV_to_J *
+                         chi_face_ion_total)
+    full_chi_face_el = (geo.g1_over_vpr_face * core_profiles.n_e.face_value() *
+                        consts.keV_to_J * chi_face_el_total)
 
-  # entire coefficient preceding dne/dr in particle equation
-  full_d_face_el = geo.g1_over_vpr_face * d_face_el_total
-  full_v_face_el = geo.g0_face * v_face_el_total
+    # entire coefficient preceding dne/dr in particle equation
+    full_d_face_el = geo.g1_over_vpr_face * d_face_el_total
+    full_v_face_el = geo.g0_face * v_face_el_total
 
-  # density source terms. Initialize source matrix to zero
-  source_mat_nn = jnp.zeros_like(geo.rho)
+    # density source terms. Initialize source matrix to zero
+    source_mat_nn = jnp.zeros_like(geo.rho)
 
-  # density source vector based both on original and updated core profiles
-  source_n_e = merged_source_profiles.total_sources('n_e', geo)
+    # density source vector based both on original and updated core profiles
+    source_n_e = merged_source_profiles.total_sources('n_e', geo)
 
-  source_n_e += (
-      mask
-      * runtime_params.numerics.adaptive_n_source_prefactor
-      * pedestal_model_output.n_e_ped
-  )
-  source_mat_nn += -(mask * runtime_params.numerics.adaptive_n_source_prefactor)
+    source_n_e += (mask * runtime_params.numerics.adaptive_n_source_prefactor *
+                   pedestal_model_output.n_e_ped)
+    source_mat_nn += -(mask *
+                       runtime_params.numerics.adaptive_n_source_prefactor)
 
-  # Pereverzev-Corrigan correction for heat and particle transport
-  # (deals with stiff nonlinearity of transport coefficients)
-  # TODO(b/311653933) this forces us to include value 0
-  # convection terms in discrete system, slowing compilation down by ~10%.
-  # See if can improve with a different pattern.
-  (
-      chi_face_per_ion,
-      chi_face_per_el,
-      v_heat_face_ion,
-      v_heat_face_el,
-      d_face_per_el,
-      v_face_per_el,
-  ) = jax.lax.cond(
-      use_pereverzev,
-      lambda: _calculate_pereverzev_flux(
-          runtime_params,
-          geo,
-          core_profiles,
-          pedestal_model_output,
-      ),
-      lambda: tuple([jnp.zeros_like(geo.rho_face)] * 6),
-  )
+    # Pereverzev-Corrigan correction for heat and particle transport
+    # (deals with stiff nonlinearity of transport coefficients)
+    # TODO(b/311653933) this forces us to include value 0
+    # convection terms in discrete system, slowing compilation down by ~10%.
+    # See if can improve with a different pattern.
+    (
+        chi_face_per_ion,
+        chi_face_per_el,
+        v_heat_face_ion,
+        v_heat_face_el,
+        d_face_per_el,
+        v_face_per_el,
+    ) = jax.lax.cond(
+        use_pereverzev,
+        lambda: _calculate_pereverzev_flux(
+            runtime_params,
+            geo,
+            core_profiles,
+            pedestal_model_output,
+        ),
+        lambda: tuple([jnp.zeros_like(geo.rho_face)] * 6),
+    )
 
-  full_chi_face_ion += chi_face_per_ion
-  full_chi_face_el += chi_face_per_el
-  full_d_face_el += d_face_per_el
-  full_v_face_el += v_face_per_el
+    full_chi_face_ion += chi_face_per_ion
+    full_chi_face_el += chi_face_per_el
+    full_d_face_el += d_face_per_el
+    full_v_face_el += v_face_per_el
 
-  # Add Phi_b_dot terms to heat transport convection
-  v_heat_face_ion += (
-      -3.0
-      / 4.0
-      * geo.Phi_b_dot
-      / geo.Phi_b
-      * geo.rho_face_norm
-      * geo.vpr_face
-      * core_profiles.n_i.face_value()
-      * consts.keV_to_J
-  )
+    # Add Phi_b_dot terms to heat transport convection
+    v_heat_face_ion += (-3.0 / 4.0 * geo.Phi_b_dot / geo.Phi_b *
+                        geo.rho_face_norm * geo.vpr_face *
+                        core_profiles.n_i.face_value() * consts.keV_to_J)
 
-  v_heat_face_el += (
-      -3.0
-      / 4.0
-      * geo.Phi_b_dot
-      / geo.Phi_b
-      * geo.rho_face_norm
-      * geo.vpr_face
-      * core_profiles.n_e.face_value()
-      * consts.keV_to_J
-  )
+    v_heat_face_el += (-3.0 / 4.0 * geo.Phi_b_dot / geo.Phi_b *
+                       geo.rho_face_norm * geo.vpr_face *
+                       core_profiles.n_e.face_value() * consts.keV_to_J)
 
-  # Add Phi_b_dot terms to particle transport convection
-  full_v_face_el += (
-      -1.0 / 2.0 * geo.Phi_b_dot / geo.Phi_b * geo.rho_face_norm * geo.vpr_face
-  )
+    # Add Phi_b_dot terms to particle transport convection
+    full_v_face_el += (-1.0 / 2.0 * geo.Phi_b_dot / geo.Phi_b *
+                       geo.rho_face_norm * geo.vpr_face)
 
-  # Fill heat transport equation sources. Initialize source matrices to zero
+    # Fill heat transport equation sources. Initialize source matrices to zero
 
-  source_i = merged_source_profiles.total_sources('T_i', geo)
-  source_e = merged_source_profiles.total_sources('T_e', geo)
+    source_i = merged_source_profiles.total_sources('T_i', geo)
+    source_e = merged_source_profiles.total_sources('T_e', geo)
 
-  # Add the Qei effects.
-  qei = merged_source_profiles.qei
-  source_mat_ii = qei.implicit_ii * geo.vpr
-  source_i += qei.explicit_i * geo.vpr
-  source_mat_ee = qei.implicit_ee * geo.vpr
-  source_e += qei.explicit_e * geo.vpr
-  source_mat_ie = qei.implicit_ie * geo.vpr
-  source_mat_ei = qei.implicit_ei * geo.vpr
+    # Add the Qei effects.
+    qei = merged_source_profiles.qei
+    source_mat_ii = qei.implicit_ii * geo.vpr
+    source_i += qei.explicit_i * geo.vpr
+    source_mat_ee = qei.implicit_ee * geo.vpr
+    source_e += qei.explicit_e * geo.vpr
+    source_mat_ie = qei.implicit_ie * geo.vpr
+    source_mat_ei = qei.implicit_ei * geo.vpr
 
-  # Pedestal
-  source_i += (
-      mask
-      * runtime_params.numerics.adaptive_T_source_prefactor
-      * pedestal_model_output.T_i_ped
-  )
-  source_e += (
-      mask
-      * runtime_params.numerics.adaptive_T_source_prefactor
-      * pedestal_model_output.T_e_ped
-  )
+    # Pedestal
+    source_i += (mask * runtime_params.numerics.adaptive_T_source_prefactor *
+                 pedestal_model_output.T_i_ped)
+    source_e += (mask * runtime_params.numerics.adaptive_T_source_prefactor *
+                 pedestal_model_output.T_e_ped)
 
-  source_mat_ii -= mask * runtime_params.numerics.adaptive_T_source_prefactor
+    source_mat_ii -= mask * runtime_params.numerics.adaptive_T_source_prefactor
 
-  source_mat_ee -= mask * runtime_params.numerics.adaptive_T_source_prefactor
+    source_mat_ee -= mask * runtime_params.numerics.adaptive_T_source_prefactor
 
-  # Add effective Phi_b_dot heat source terms
+    # Add effective Phi_b_dot heat source terms
 
-  d_vpr53_rhon_n_e_drhon = jnp.gradient(
-      geo.vpr ** (5.0 / 3.0) * geo.rho_norm * core_profiles.n_e.value,
-      geo.rho_norm,
-  )
-  d_vpr53_rhon_n_i_drhon = jnp.gradient(
-      geo.vpr ** (5.0 / 3.0) * geo.rho_norm * core_profiles.n_i.value,
-      geo.rho_norm,
-  )
+    d_vpr53_rhon_n_e_drhon = jnp.gradient(
+        geo.vpr**(5.0 / 3.0) * geo.rho_norm * core_profiles.n_e.value,
+        geo.rho_norm,
+    )
+    d_vpr53_rhon_n_i_drhon = jnp.gradient(
+        geo.vpr**(5.0 / 3.0) * geo.rho_norm * core_profiles.n_i.value,
+        geo.rho_norm,
+    )
 
-  source_i += (
-      3.0
-      / 4.0
-      * geo.vpr ** (-2.0 / 3.0)
-      * d_vpr53_rhon_n_i_drhon
-      * geo.Phi_b_dot
-      / geo.Phi_b
-      * core_profiles.T_i.value
-      * consts.keV_to_J
-  )
+    source_i += (3.0 / 4.0 * geo.vpr**(-2.0 / 3.0) * d_vpr53_rhon_n_i_drhon *
+                 geo.Phi_b_dot / geo.Phi_b * core_profiles.T_i.value *
+                 consts.keV_to_J)
 
-  source_e += (
-      3.0
-      / 4.0
-      * geo.vpr ** (-2.0 / 3.0)
-      * d_vpr53_rhon_n_e_drhon
-      * geo.Phi_b_dot
-      / geo.Phi_b
-      * core_profiles.T_e.value
-      * consts.keV_to_J
-  )
+    source_e += (3.0 / 4.0 * geo.vpr**(-2.0 / 3.0) * d_vpr53_rhon_n_e_drhon *
+                 geo.Phi_b_dot / geo.Phi_b * core_profiles.T_e.value *
+                 consts.keV_to_J)
 
-  d_vpr_rhon_drhon = jnp.gradient(geo.vpr * geo.rho_norm, geo.rho_norm)
+    d_vpr_rhon_drhon = jnp.gradient(geo.vpr * geo.rho_norm, geo.rho_norm)
 
-  # Add effective Phi_b_dot particle source terms
-  source_n_e += (
-      1.0
-      / 2.0
-      * d_vpr_rhon_drhon
-      * geo.Phi_b_dot
-      / geo.Phi_b
-      * core_profiles.n_e.value
-  )
+    # Add effective Phi_b_dot particle source terms
+    source_n_e += (1.0 / 2.0 * d_vpr_rhon_drhon * geo.Phi_b_dot / geo.Phi_b *
+                   core_profiles.n_e.value)
 
-  # Add effective Phi_b_dot poloidal flux source term
-  source_psi += (
-      8.0
-      * jnp.pi**2
-      * consts.mu_0
-      * geo.Phi_b_dot
-      * geo.Phi_b
-      * geo.rho_norm**2
-      * conductivity.sigma
-      / geo.F**2
-      * core_profiles.psi.grad()
-  )
+    # Add effective Phi_b_dot poloidal flux source term
+    source_psi += (8.0 * jnp.pi**2 * consts.mu_0 * geo.Phi_b_dot * geo.Phi_b *
+                   geo.rho_norm**2 * conductivity.sigma / geo.F**2 *
+                   core_profiles.psi.grad())
 
-  # Build arguments to solver based on which variables are evolving
-  var_to_toc = {
-      'T_i': toc_T_i,
-      'T_e': toc_T_e,
-      'psi': toc_psi,
-      'n_e': toc_dens_el,
-  }
-  var_to_tic = {
-      'T_i': tic_T_i,
-      'T_e': tic_T_e,
-      'psi': tic_psi,
-      'n_e': tic_dens_el,
-  }
-  transient_out_cell = tuple(var_to_toc[var] for var in evolving_names)
-  transient_in_cell = tuple(var_to_tic[var] for var in evolving_names)
+    # Build arguments to solver based on which variables are evolving
+    var_to_toc = {
+        'T_i': toc_T_i,
+        'T_e': toc_T_e,
+        'psi': toc_psi,
+        'n_e': toc_dens_el,
+    }
+    var_to_tic = {
+        'T_i': tic_T_i,
+        'T_e': tic_T_e,
+        'psi': tic_psi,
+        'n_e': tic_dens_el,
+    }
+    transient_out_cell = tuple(var_to_toc[var] for var in evolving_names)
+    transient_in_cell = tuple(var_to_tic[var] for var in evolving_names)
 
-  var_to_d_face = {
-      'T_i': full_chi_face_ion,
-      'T_e': full_chi_face_el,
-      'psi': d_face_psi,
-      'n_e': full_d_face_el,
-  }
-  d_face = tuple(var_to_d_face[var] for var in evolving_names)
+    var_to_d_face = {
+        'T_i': full_chi_face_ion,
+        'T_e': full_chi_face_el,
+        'psi': d_face_psi,
+        'n_e': full_d_face_el,
+    }
+    d_face = tuple(var_to_d_face[var] for var in evolving_names)
 
-  var_to_v_face = {
-      'T_i': v_heat_face_ion,
-      'T_e': v_heat_face_el,
-      'psi': v_face_psi,
-      'n_e': full_v_face_el,
-  }
-  v_face = tuple(var_to_v_face.get(var) for var in evolving_names)
+    var_to_v_face = {
+        'T_i': v_heat_face_ion,
+        'T_e': v_heat_face_el,
+        'psi': v_face_psi,
+        'n_e': full_v_face_el,
+    }
+    v_face = tuple(var_to_v_face.get(var) for var in evolving_names)
 
-  # d maps (row var, col var) to the coefficient for that block of the matrix
-  # (Can't use a descriptive name or the nested comprehension to build the
-  # matrix gets too long)
-  d = {
-      ('T_i', 'T_i'): source_mat_ii,
-      ('T_i', 'T_e'): source_mat_ie,
-      ('T_e', 'T_i'): source_mat_ei,
-      ('T_e', 'T_e'): source_mat_ee,
-      ('n_e', 'n_e'): source_mat_nn,
-      ('psi', 'psi'): source_mat_psi,
-  }
-  source_mat_cell = tuple(
-      tuple(d.get((row_block, col_block)) for col_block in evolving_names)
-      for row_block in evolving_names
-  )
+    # d maps (row var, col var) to the coefficient for that block of the matrix
+    # (Can't use a descriptive name or the nested comprehension to build the
+    # matrix gets too long)
+    d = {
+        ('T_i', 'T_i'): source_mat_ii,
+        ('T_i', 'T_e'): source_mat_ie,
+        ('T_e', 'T_i'): source_mat_ei,
+        ('T_e', 'T_e'): source_mat_ee,
+        ('n_e', 'n_e'): source_mat_nn,
+        ('psi', 'psi'): source_mat_psi,
+    }
+    source_mat_cell = tuple(
+        tuple(d.get((row_block, col_block)) for col_block in evolving_names)
+        for row_block in evolving_names)
 
-  # var_to_source ends up as a vector in the constructed PDE. Therefore any
-  # scalings from CoreProfiles state variables to x must be applied here too.
-  var_to_source = {
-      'T_i': source_i / SCALING_FACTORS['T_i'],
-      'T_e': source_e / SCALING_FACTORS['T_e'],
-      'psi': source_psi / SCALING_FACTORS['psi'],
-      'n_e': source_n_e / SCALING_FACTORS['n_e'],
-  }
-  source_cell = tuple(var_to_source.get(var) for var in evolving_names)
+    # var_to_source ends up as a vector in the constructed PDE. Therefore any
+    # scalings from CoreProfiles state variables to x must be applied here too.
+    var_to_source = {
+        'T_i': source_i / SCALING_FACTORS['T_i'],
+        'T_e': source_e / SCALING_FACTORS['T_e'],
+        'psi': source_psi / SCALING_FACTORS['psi'],
+        'n_e': source_n_e / SCALING_FACTORS['n_e'],
+    }
+    source_cell = tuple(var_to_source.get(var) for var in evolving_names)
 
-  coeffs = Block1DCoeffs(
-      transient_out_cell=transient_out_cell,
-      transient_in_cell=transient_in_cell,
-      d_face=d_face,
-      v_face=v_face,
-      source_mat_cell=source_mat_cell,
-      source_cell=source_cell,
-      auxiliary_outputs=(
-          merged_source_profiles,
-          conductivity,
-          state.CoreTransport(
-              **dataclasses.asdict(turbulent_transport),
-              **dataclasses.asdict(neoclassical_transport)
-          ),
-      ),
-  )
+    coeffs = Block1DCoeffs(
+        transient_out_cell=transient_out_cell,
+        transient_in_cell=transient_in_cell,
+        d_face=d_face,
+        v_face=v_face,
+        source_mat_cell=source_mat_cell,
+        source_cell=source_cell,
+        auxiliary_outputs=(
+            merged_source_profiles,
+            conductivity,
+            state.CoreTransport(**dataclasses.asdict(turbulent_transport),
+                                **dataclasses.asdict(neoclassical_transport)),
+        ),
+    )
 
-  return coeffs
+    return coeffs
 
 
 @functools.partial(
@@ -3926,26 +3711,25 @@ def _calc_coeffs_reduced(
     core_profiles: state.CoreProfiles,
     evolving_names: tuple[str, ...],
 ):
-  """Calculates only the transient_in_cell terms in Block1DCoeffs."""
+    """Calculates only the transient_in_cell terms in Block1DCoeffs."""
 
-  # Only transient_in_cell is used for explicit terms if theta_implicit=1
-  tic_T_i = core_profiles.n_i.value * geo.vpr ** (5.0 / 3.0)
-  tic_T_e = core_profiles.n_e.value * geo.vpr ** (5.0 / 3.0)
-  tic_psi = jnp.ones_like(geo.vpr)
-  tic_dens_el = geo.vpr
+    # Only transient_in_cell is used for explicit terms if theta_implicit=1
+    tic_T_i = core_profiles.n_i.value * geo.vpr**(5.0 / 3.0)
+    tic_T_e = core_profiles.n_e.value * geo.vpr**(5.0 / 3.0)
+    tic_psi = jnp.ones_like(geo.vpr)
+    tic_dens_el = geo.vpr
 
-  var_to_tic = {
-      'T_i': tic_T_i,
-      'T_e': tic_T_e,
-      'psi': tic_psi,
-      'n_e': tic_dens_el,
-  }
-  transient_in_cell = tuple(var_to_tic[var] for var in evolving_names)
+    var_to_tic = {
+        'T_i': tic_T_i,
+        'T_e': tic_T_e,
+        'psi': tic_psi,
+        'n_e': tic_dens_el,
+    }
+    transient_in_cell = tuple(var_to_tic[var] for var in evolving_names)
 
-  coeffs = Block1DCoeffs(
-      transient_in_cell=transient_in_cell,
-  )
-  return coeffs
+    coeffs = Block1DCoeffs(transient_in_cell=transient_in_cell, )
+    return coeffs
+
 
 def calc_c(
     x: tuple[cell_variable.CellVariable, ...],
@@ -3953,7 +3737,7 @@ def calc_c(
     convection_dirichlet_mode: str = 'ghost',
     convection_neumann_mode: str = 'ghost',
 ) -> tuple[jax.Array, jax.Array]:
-  """Calculate C and c such that F = C x + c.
+    """Calculate C and c such that F = C x + c.
 
   See docstrings for `Block1DCoeff` and `implicit_solve_block` for
   more detail.
@@ -3972,89 +3756,89 @@ def calc_c(
     c: the vector c
   """
 
-  d_face = coeffs.d_face
-  v_face = coeffs.v_face
-  source_mat_cell = coeffs.source_mat_cell
-  source_cell = coeffs.source_cell
+    d_face = coeffs.d_face
+    v_face = coeffs.v_face
+    source_mat_cell = coeffs.source_mat_cell
+    source_cell = coeffs.source_cell
 
-  num_cells = x[0].value.shape[0]
-  num_channels = len(x)
-  for _, x_i in enumerate(x):
-    if x_i.value.shape != (num_cells,):
-      raise ValueError(
-          f'Expected each x channel to have shape ({num_cells},) '
-          f'but got {x_i.value.shape}.'
-      )
+    num_cells = x[0].value.shape[0]
+    num_channels = len(x)
+    for _, x_i in enumerate(x):
+        if x_i.value.shape != (num_cells, ):
+            raise ValueError(
+                f'Expected each x channel to have shape ({num_cells},) '
+                f'but got {x_i.value.shape}.')
 
-  zero_block = jnp.zeros((num_cells, num_cells))
-  zero_row_of_blocks = [zero_block] * num_channels
-  zero_vec = jnp.zeros((num_cells))
-  zero_block_vec = [zero_vec] * num_channels
+    zero_block = jnp.zeros((num_cells, num_cells))
+    zero_row_of_blocks = [zero_block] * num_channels
+    zero_vec = jnp.zeros((num_cells))
+    zero_block_vec = [zero_vec] * num_channels
 
-  # Make a matrix C and vector c that will accumulate contributions from
-  # diffusion, convection, and source terms.
-  # C and c are both block structured, with one block per channel.
-  c_mat = [zero_row_of_blocks.copy() for _ in range(num_channels)]
-  c = zero_block_vec.copy()
+    # Make a matrix C and vector c that will accumulate contributions from
+    # diffusion, convection, and source terms.
+    # C and c are both block structured, with one block per channel.
+    c_mat = [zero_row_of_blocks.copy() for _ in range(num_channels)]
+    c = zero_block_vec.copy()
 
-  # Add diffusion terms
-  if d_face is not None:
-    for i in range(num_channels):
-      (
-          diffusion_mat,
-          diffusion_vec,
-      ) = diffusion_terms.make_diffusion_terms(
-          d_face[i],
-          x[i],
-      )
+    # Add diffusion terms
+    if d_face is not None:
+        for i in range(num_channels):
+            (
+                diffusion_mat,
+                diffusion_vec,
+            ) = diffusion_terms.make_diffusion_terms(
+                d_face[i],
+                x[i],
+            )
 
-      c_mat[i][i] += diffusion_mat
-      c[i] += diffusion_vec
+            c_mat[i][i] += diffusion_mat
+            c[i] += diffusion_vec
 
-  # Add convection terms
-  if v_face is not None:
-    for i in range(num_channels):
-      # Resolve diffusion to zeros if it is not specified
-      d_face_i = d_face[i] if d_face is not None else None
-      d_face_i = jnp.zeros_like(v_face[i]) if d_face_i is None else d_face_i
+    # Add convection terms
+    if v_face is not None:
+        for i in range(num_channels):
+            # Resolve diffusion to zeros if it is not specified
+            d_face_i = d_face[i] if d_face is not None else None
+            d_face_i = jnp.zeros_like(
+                v_face[i]) if d_face_i is None else d_face_i
 
-      (
-          conv_mat,
-          conv_vec,
-      ) = convection_terms.make_convection_terms(
-          v_face[i],
-          d_face_i,
-          x[i],
-          dirichlet_mode=convection_dirichlet_mode,
-          neumann_mode=convection_neumann_mode,
-      )
+            (
+                conv_mat,
+                conv_vec,
+            ) = convection_terms.make_convection_terms(
+                v_face[i],
+                d_face_i,
+                x[i],
+                dirichlet_mode=convection_dirichlet_mode,
+                neumann_mode=convection_neumann_mode,
+            )
 
-      c_mat[i][i] += conv_mat
-      c[i] += conv_vec
+            c_mat[i][i] += conv_mat
+            c[i] += conv_vec
 
-  # Add implicit source terms
-  if source_mat_cell is not None:
-    for i in range(num_channels):
-      for j in range(num_channels):
-        source = source_mat_cell[i][j]
-        if source is not None:
-          c_mat[i][j] += jnp.diag(source)
+    # Add implicit source terms
+    if source_mat_cell is not None:
+        for i in range(num_channels):
+            for j in range(num_channels):
+                source = source_mat_cell[i][j]
+                if source is not None:
+                    c_mat[i][j] += jnp.diag(source)
 
-  # Add explicit source terms
-  def add(left: jax.Array, right: jax.Array | None):
-    """Addition with adding None treated as no-op."""
-    if right is not None:
-      return left + right
-    return left
+    # Add explicit source terms
+    def add(left: jax.Array, right: jax.Array | None):
+        """Addition with adding None treated as no-op."""
+        if right is not None:
+            return left + right
+        return left
 
-  if source_cell is not None:
-    c = [add(c_i, source_i) for c_i, source_i in zip(c, source_cell)]
+    if source_cell is not None:
+        c = [add(c_i, source_i) for c_i, source_i in zip(c, source_cell)]
 
-  # Form block structure
-  c_mat = jnp.block(c_mat)
-  c = jnp.block(c)
+    # Form block structure
+    c_mat = jnp.block(c_mat)
+    c = jnp.block(c)
 
-  return c_mat, c
+    return c_mat, c
 
 
 @functools.partial(
@@ -4075,7 +3859,7 @@ def theta_method_matrix_equation(
     convection_dirichlet_mode: str = 'ghost',
     convection_neumann_mode: str = 'ghost',
 ) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array]:
-  """Returns the left-hand and right-hand sides of the theta method equation.
+    """Returns the left-hand and right-hand sides of the theta method equation.
 
   The theta method solves a differential equation
 
@@ -4137,73 +3921,74 @@ def theta_method_matrix_equation(
      - right-hand side vector, b
   """
 
-  x_new_guess_vec = cell_variable_tuple_to_vec(x_new_guess)
+    x_new_guess_vec = cell_variable_tuple_to_vec(x_new_guess)
 
-  theta_exp = 1.0 - theta_implicit
+    theta_exp = 1.0 - theta_implicit
 
-  tc_in_old = jnp.concatenate(coeffs_old.transient_in_cell)
-  tc_out_new = jnp.concatenate(coeffs_new.transient_out_cell)
-  tc_in_new = jnp.concatenate(coeffs_new.transient_in_cell)
-  chex.assert_rank(tc_in_old, 1)
-  chex.assert_rank(tc_out_new, 1)
-  chex.assert_rank(tc_in_new, 1)
+    tc_in_old = jnp.concatenate(coeffs_old.transient_in_cell)
+    tc_out_new = jnp.concatenate(coeffs_new.transient_out_cell)
+    tc_in_new = jnp.concatenate(coeffs_new.transient_in_cell)
+    chex.assert_rank(tc_in_old, 1)
+    chex.assert_rank(tc_out_new, 1)
+    chex.assert_rank(tc_in_new, 1)
 
-  eps = 1e-7
-  # adding sanity checks for values in denominators
-  # TODO(b/326577625) remove abs in checks once x_new range is restricted
-  tc_in_new = jax_utils.error_if(
-      tc_in_new,
-      jnp.any(jnp.abs(tc_in_new) < eps),
-      msg='|tc_in_new| unexpectedly < eps',
-  )
-  tc_in_new = jax_utils.error_if(
-      tc_in_new,
-      jnp.any(jnp.abs(tc_out_new * tc_in_new) < eps),
-      msg='|tc_out_new*tc_in_new| unexpectedly < eps',
-  )
-
-  left_transient = jnp.identity(len(x_new_guess_vec))
-  right_transient = jnp.diag(jnp.squeeze(tc_in_old / tc_in_new))
-
-  c_mat_new, c_new = calc_c(
-      x_new_guess,
-      coeffs_new,
-      convection_dirichlet_mode,
-      convection_neumann_mode,
-  )
-
-  broadcasted = jnp.expand_dims(1 / (tc_out_new * tc_in_new), 1)
-
-  lhs_mat = left_transient - dt * theta_implicit * broadcasted * c_mat_new
-  lhs_vec = -theta_implicit * dt * (1 / (tc_out_new * tc_in_new)) * c_new
-
-  if theta_exp > 0.0:
-    tc_out_old = jnp.concatenate(coeffs_old.transient_out_cell)
+    eps = 1e-7
+    # adding sanity checks for values in denominators
+    # TODO(b/326577625) remove abs in checks once x_new range is restricted
     tc_in_new = jax_utils.error_if(
         tc_in_new,
-        jnp.any(jnp.abs(tc_out_old * tc_in_new) < eps),
-        msg='|tc_out_old*tc_in_new| unexpectedly < eps',
+        jnp.any(jnp.abs(tc_in_new) < eps),
+        msg='|tc_in_new| unexpectedly < eps',
     )
-    c_mat_old, c_old = discrete_system.calc_c(
-        x_old,
-        coeffs_old,
+    tc_in_new = jax_utils.error_if(
+        tc_in_new,
+        jnp.any(jnp.abs(tc_out_new * tc_in_new) < eps),
+        msg='|tc_out_new*tc_in_new| unexpectedly < eps',
+    )
+
+    left_transient = jnp.identity(len(x_new_guess_vec))
+    right_transient = jnp.diag(jnp.squeeze(tc_in_old / tc_in_new))
+
+    c_mat_new, c_new = calc_c(
+        x_new_guess,
+        coeffs_new,
         convection_dirichlet_mode,
         convection_neumann_mode,
     )
-    broadcasted = jnp.expand_dims(1 / (tc_out_old * tc_in_new), 1)
-    rhs_mat = right_transient + dt * theta_exp * broadcasted * c_mat_old
-    rhs_vec = dt * theta_exp * (1 / (tc_out_old * tc_in_new)) * c_old
-  else:
-    rhs_mat = right_transient
-    rhs_vec = jnp.zeros_like(x_new_guess_vec)
 
-  return lhs_mat, lhs_vec, rhs_mat, rhs_vec
+    broadcasted = jnp.expand_dims(1 / (tc_out_new * tc_in_new), 1)
+
+    lhs_mat = left_transient - dt * theta_implicit * broadcasted * c_mat_new
+    lhs_vec = -theta_implicit * dt * (1 / (tc_out_new * tc_in_new)) * c_new
+
+    if theta_exp > 0.0:
+        tc_out_old = jnp.concatenate(coeffs_old.transient_out_cell)
+        tc_in_new = jax_utils.error_if(
+            tc_in_new,
+            jnp.any(jnp.abs(tc_out_old * tc_in_new) < eps),
+            msg='|tc_out_old*tc_in_new| unexpectedly < eps',
+        )
+        c_mat_old, c_old = discrete_system.calc_c(
+            x_old,
+            coeffs_old,
+            convection_dirichlet_mode,
+            convection_neumann_mode,
+        )
+        broadcasted = jnp.expand_dims(1 / (tc_out_old * tc_in_new), 1)
+        rhs_mat = right_transient + dt * theta_exp * broadcasted * c_mat_old
+        rhs_vec = dt * theta_exp * (1 / (tc_out_old * tc_in_new)) * c_old
+    else:
+        rhs_mat = right_transient
+        rhs_vec = jnp.zeros_like(x_new_guess_vec)
+
+    return lhs_mat, lhs_vec, rhs_mat, rhs_vec
 
 
 # Delta is a vector. If no entry of delta is above this magnitude, we terminate
 # the delta loop. This is to avoid getting stuck in an infinite loop in edge
 # cases with bad numerics.
 MIN_DELTA: Final[float] = 1e-7
+
 
 @functools.partial(
     jax_utils.jit,
@@ -4224,133 +4009,133 @@ def implicit_solve_block(
     convection_neumann_mode: str = 'ghost',
 ) -> tuple[cell_variable.CellVariable, ...]:
 
-  x_old_vec = cell_variable_tuple_to_vec(x_old)
+    x_old_vec = cell_variable_tuple_to_vec(x_old)
 
-  lhs_mat, lhs_vec, rhs_mat, rhs_vec = (
-      theta_method_matrix_equation(
-          dt=dt,
-          x_old=x_old,
-          x_new_guess=x_new_guess,
-          coeffs_old=coeffs_old,
-          coeffs_new=coeffs_new,
-          theta_implicit=theta_implicit,
-          convection_dirichlet_mode=convection_dirichlet_mode,
-          convection_neumann_mode=convection_neumann_mode,
-      )
-  )
+    lhs_mat, lhs_vec, rhs_mat, rhs_vec = (theta_method_matrix_equation(
+        dt=dt,
+        x_old=x_old,
+        x_new_guess=x_new_guess,
+        coeffs_old=coeffs_old,
+        coeffs_new=coeffs_new,
+        theta_implicit=theta_implicit,
+        convection_dirichlet_mode=convection_dirichlet_mode,
+        convection_neumann_mode=convection_neumann_mode,
+    ))
 
-  rhs = jnp.dot(rhs_mat, x_old_vec) + rhs_vec - lhs_vec
-  x_new = jnp.linalg.solve(lhs_mat, rhs)
+    rhs = jnp.dot(rhs_mat, x_old_vec) + rhs_vec - lhs_vec
+    x_new = jnp.linalg.solve(lhs_mat, rhs)
 
-  # Create updated CellVariable instances based on state_plus_dt which has
-  # updated boundary conditions and prescribed profiles.
-  x_new = jnp.split(x_new, len(x_old))
-  out = [
-      dataclasses.replace(var, value=value)
-      for var, value in zip(x_new_guess, x_new)
-  ]
-  out = tuple(out)
+    # Create updated CellVariable instances based on state_plus_dt which has
+    # updated boundary conditions and prescribed profiles.
+    x_new = jnp.split(x_new, len(x_old))
+    out = [
+        dataclasses.replace(var, value=value)
+        for var, value in zip(x_new_guess, x_new)
+    ]
+    out = tuple(out)
 
-  return out
+    return out
 
 
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class RuntimeParams:
-  """Input params for the solver which can be used as compiled args."""
-  theta_implicit: float = dataclasses.field(metadata={'static': True})
-  use_predictor_corrector: bool = dataclasses.field(metadata={'static': True})
-  n_corrector_steps: int = dataclasses.field(metadata={'static': True})
-  convection_dirichlet_mode: str = dataclasses.field(metadata={'static': True})
-  convection_neumann_mode: str = dataclasses.field(metadata={'static': True})
-  use_pereverzev: bool = dataclasses.field(metadata={'static': True})
-  chi_pereverzev: float
-  D_pereverzev: float  # pylint: disable=invalid-name
+    """Input params for the solver which can be used as compiled args."""
+    theta_implicit: float = dataclasses.field(metadata={'static': True})
+    use_predictor_corrector: bool = dataclasses.field(
+        metadata={'static': True})
+    n_corrector_steps: int = dataclasses.field(metadata={'static': True})
+    convection_dirichlet_mode: str = dataclasses.field(
+        metadata={'static': True})
+    convection_neumann_mode: str = dataclasses.field(metadata={'static': True})
+    use_pereverzev: bool = dataclasses.field(metadata={'static': True})
+    chi_pereverzev: float
+    D_pereverzev: float  # pylint: disable=invalid-name
+
 
 class Solver(abc.ABC):
-  """Solves for a single time steps update to State.
+    """Solves for a single time steps update to State.
 
   Attributes:
     physics_models: Physics models.
   """
 
-  def __init__(
-      self,
-      physics_models: PhysicsModels,
-  ):
-    self.physics_models = physics_models
+    def __init__(
+        self,
+        physics_models: PhysicsModels,
+    ):
+        self.physics_models = physics_models
 
-  def __hash__(self) -> int:
-    return hash(self.physics_models)
+    def __hash__(self) -> int:
+        return hash(self.physics_models)
 
-  def __eq__(self, other: typing_extensions.Self) -> bool:
-    return self.physics_models == other.physics_models
+    def __eq__(self, other: typing_extensions.Self) -> bool:
+        return self.physics_models == other.physics_models
 
-  @functools.partial(
-      jax_utils.jit,
-      static_argnames=[
-          'self',
-      ],
-  )
-  def __call__(
-      self,
-      t: jax.Array,
-      dt: jax.Array,
-      runtime_params_t: runtime_params_slice.RuntimeParams,
-      runtime_params_t_plus_dt: runtime_params_slice.RuntimeParams,
-      geo_t: geometry.Geometry,
-      geo_t_plus_dt: geometry.Geometry,
-      core_profiles_t: state.CoreProfiles,
-      core_profiles_t_plus_dt: state.CoreProfiles,
-      explicit_source_profiles: source_profiles.SourceProfiles,
-  ) -> tuple[
-      tuple[cell_variable.CellVariable, ...],
-      state.SolverNumericOutputs,
-  ]:
-    if runtime_params_t.numerics.evolving_names:
-      (
-          x_new,
-          solver_numeric_output,
-      ) = self._x_new(
-          dt=dt,
-          runtime_params_t=runtime_params_t,
-          runtime_params_t_plus_dt=runtime_params_t_plus_dt,
-          geo_t=geo_t,
-          geo_t_plus_dt=geo_t_plus_dt,
-          core_profiles_t=core_profiles_t,
-          core_profiles_t_plus_dt=core_profiles_t_plus_dt,
-          explicit_source_profiles=explicit_source_profiles,
-          evolving_names=runtime_params_t.numerics.evolving_names,
-      )
-    else:
-      x_new = tuple()
-      solver_numeric_output = state.SolverNumericOutputs()
-
-    return (
-        x_new,
-        solver_numeric_output,
+    @functools.partial(
+        jax_utils.jit,
+        static_argnames=[
+            'self',
+        ],
     )
+    def __call__(
+        self,
+        t: jax.Array,
+        dt: jax.Array,
+        runtime_params_t: runtime_params_slice.RuntimeParams,
+        runtime_params_t_plus_dt: runtime_params_slice.RuntimeParams,
+        geo_t: geometry.Geometry,
+        geo_t_plus_dt: geometry.Geometry,
+        core_profiles_t: state.CoreProfiles,
+        core_profiles_t_plus_dt: state.CoreProfiles,
+        explicit_source_profiles: source_profiles.SourceProfiles,
+    ) -> tuple[
+            tuple[cell_variable.CellVariable, ...],
+            state.SolverNumericOutputs,
+    ]:
+        if runtime_params_t.numerics.evolving_names:
+            (
+                x_new,
+                solver_numeric_output,
+            ) = self._x_new(
+                dt=dt,
+                runtime_params_t=runtime_params_t,
+                runtime_params_t_plus_dt=runtime_params_t_plus_dt,
+                geo_t=geo_t,
+                geo_t_plus_dt=geo_t_plus_dt,
+                core_profiles_t=core_profiles_t,
+                core_profiles_t_plus_dt=core_profiles_t_plus_dt,
+                explicit_source_profiles=explicit_source_profiles,
+                evolving_names=runtime_params_t.numerics.evolving_names,
+            )
+        else:
+            x_new = tuple()
+            solver_numeric_output = state.SolverNumericOutputs()
 
-  def _x_new(
-      self,
-      dt: jax.Array,
-      runtime_params_t: runtime_params_slice.RuntimeParams,
-      runtime_params_t_plus_dt: runtime_params_slice.RuntimeParams,
-      geo_t: geometry.Geometry,
-      geo_t_plus_dt: geometry.Geometry,
-      core_profiles_t: state.CoreProfiles,
-      core_profiles_t_plus_dt: state.CoreProfiles,
-      explicit_source_profiles: source_profiles.SourceProfiles,
-      evolving_names: tuple[str, ...],
-  ) -> tuple[
-      tuple[cell_variable.CellVariable, ...],
-      state.SolverNumericOutputs,
-  ]:
-    raise NotImplementedError(
-        f'{type(self)} must implement `_x_new` or '
-        'implement a different `__call__` that does not'
-        ' need `_x_new`.'
-    )
+        return (
+            x_new,
+            solver_numeric_output,
+        )
+
+    def _x_new(
+        self,
+        dt: jax.Array,
+        runtime_params_t: runtime_params_slice.RuntimeParams,
+        runtime_params_t_plus_dt: runtime_params_slice.RuntimeParams,
+        geo_t: geometry.Geometry,
+        geo_t_plus_dt: geometry.Geometry,
+        core_profiles_t: state.CoreProfiles,
+        core_profiles_t_plus_dt: state.CoreProfiles,
+        explicit_source_profiles: source_profiles.SourceProfiles,
+        evolving_names: tuple[str, ...],
+    ) -> tuple[
+            tuple[cell_variable.CellVariable, ...],
+            state.SolverNumericOutputs,
+    ]:
+        raise NotImplementedError(
+            f'{type(self)} must implement `_x_new` or '
+            'implement a different `__call__` that does not'
+            ' need `_x_new`.')
 
 
 @functools.partial(
@@ -4370,38 +4155,40 @@ def predictor_corrector_method(
     explicit_source_profiles: source_profiles.SourceProfiles,
     coeffs_callback: CoeffsCallback,
 ) -> tuple[cell_variable.CellVariable, ...]:
-  solver_params = runtime_params_t_plus_dt.solver
-  def loop_body(i, x_new_guess):  # pylint: disable=unused-argument
-    coeffs_new = coeffs_callback(
-        runtime_params_t_plus_dt,
-        geo_t_plus_dt,
-        core_profiles_t_plus_dt,
-        x_new_guess,
-        explicit_source_profiles=explicit_source_profiles,
-        allow_pereverzev=True,
-    )
+    solver_params = runtime_params_t_plus_dt.solver
 
-    return implicit_solve_block(
-        dt=dt,
-        x_old=x_old,
-        x_new_guess=x_new_guess,
-        coeffs_old=coeffs_exp,
-        coeffs_new=coeffs_new,
-        theta_implicit=solver_params.theta_implicit,
-        convection_dirichlet_mode=(solver_params.convection_dirichlet_mode),
-        convection_neumann_mode=(solver_params.convection_neumann_mode),
-    )
+    def loop_body(i, x_new_guess):  # pylint: disable=unused-argument
+        coeffs_new = coeffs_callback(
+            runtime_params_t_plus_dt,
+            geo_t_plus_dt,
+            core_profiles_t_plus_dt,
+            x_new_guess,
+            explicit_source_profiles=explicit_source_profiles,
+            allow_pereverzev=True,
+        )
 
-  if solver_params.use_predictor_corrector:
-    x_new = xnp.fori_loop(
-        0,
-        runtime_params_t_plus_dt.solver.n_corrector_steps + 1,
-        loop_body,
-        x_new_guess,
-    )
-  else:
-    x_new = loop_body(0, x_new_guess)
-  return x_new
+        return implicit_solve_block(
+            dt=dt,
+            x_old=x_old,
+            x_new_guess=x_new_guess,
+            coeffs_old=coeffs_exp,
+            coeffs_new=coeffs_new,
+            theta_implicit=solver_params.theta_implicit,
+            convection_dirichlet_mode=(
+                solver_params.convection_dirichlet_mode),
+            convection_neumann_mode=(solver_params.convection_neumann_mode),
+        )
+
+    if solver_params.use_predictor_corrector:
+        x_new = xnp.fori_loop(
+            0,
+            runtime_params_t_plus_dt.solver.n_corrector_steps + 1,
+            loop_body,
+            x_new_guess,
+        )
+    else:
+        x_new = loop_body(0, x_new_guess)
+    return x_new
 
 
 class LinearThetaMethod0(Solver):
@@ -4431,10 +4218,10 @@ class LinearThetaMethod0(Solver):
     ]:
         """See Solver._x_new docstring."""
 
-        x_old = core_profiles_to_solver_x_tuple(
-            core_profiles_t, evolving_names)
-        x_new_guess = core_profiles_to_solver_x_tuple(
-            core_profiles_t_plus_dt, evolving_names)
+        x_old = core_profiles_to_solver_x_tuple(core_profiles_t,
+                                                evolving_names)
+        x_new_guess = core_profiles_to_solver_x_tuple(core_profiles_t_plus_dt,
+                                                      evolving_names)
 
         coeffs_callback = CoeffsCallback(
             physics_models=self.physics_models,
@@ -5110,14 +4897,13 @@ class StateHistory:
                 attr_name, data_to_save)
 
         if self._stacked_post_processed_outputs.impurity_species:
-            radiation_outputs = (
-                construct_xarray_for_radiation_output(
-                    self._stacked_post_processed_outputs.impurity_species,
-                    self.times,
-                    self.rho_cell_norm,
-                    TIME,
-                    RHO_CELL_NORM,
-                ))
+            radiation_outputs = (construct_xarray_for_radiation_output(
+                self._stacked_post_processed_outputs.impurity_species,
+                self.times,
+                self.rho_cell_norm,
+                TIME,
+                RHO_CELL_NORM,
+            ))
             for key, value in radiation_outputs.items():
                 xr_dict[key] = value
 
@@ -5468,8 +5254,8 @@ class SimulationStepFn:
             (
                 initial_dt,
                 (
-                    core_profiles_to_solver_x_tuple(
-                        input_state.core_profiles, evolving_names),
+                    core_profiles_to_solver_x_tuple(input_state.core_profiles,
+                                                    evolving_names),
                     initial_dt,
                     state.SolverNumericOutputs(
                         solver_error_state=1,
@@ -5592,7 +5378,7 @@ class ToraxConfig(BaseModelFrozen):
         discriminator='model_name')
     pedestal: pedestal_pydantic_model.PedestalConfig = pydantic.Field(
         discriminator='model_name')
-    mhd: mhd_pydantic_model.MHD = mhd_pydantic_model.MHD()
+    mhd: MHD = MHD()
     restart: file_restart_pydantic_model.FileRestart | None = pydantic.Field(
         default=None)
 
@@ -5793,8 +5579,8 @@ initial_state = _get_initial_state(
     geo=geo_for_init,
     step_fn=step_fn,
 )
-post_processed_outputs = make_post_processed_outputs(
-    initial_state, runtime_params_for_init)
+post_processed_outputs = make_post_processed_outputs(initial_state,
+                                                     runtime_params_for_init)
 
 initial_post_processed_outputs = post_processed_outputs
 current_state = initial_state
