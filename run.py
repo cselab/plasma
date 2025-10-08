@@ -584,36 +584,11 @@ class ImpuritySpeciesOutput:
 
 def calculate_impurity_species_output(
     sim_state,
-    runtime_params: runtime_params_slice.RuntimeParams,
-) -> dict[str, ImpuritySpeciesOutput]:
-    """Calculates the output for each impurity species.
-
-  Args:
-    sim_state: The current state of the simulation.
-    runtime_params: The runtime parameters for the current simulation slice.
-
-  Returns:
-    A dictionary mapping impurity symbols to their `ImpuritySpeciesOutput`.
-    If the mavrin impurity radiation heat sink is not enabled then we output
-    zeros for the radiation output.
-  """
-    impurity_species_output: dict[str, ImpuritySpeciesOutput] = {}
+    runtime_params
+):
+    impurity_species_output = {}
     mavrin_active = True
-    # If the impurity radiation heat sink is not enabled, return empty dictionary.
-    if (impurity_radiation_heat_sink.ImpurityRadiationHeatSink.SOURCE_NAME
-            not in runtime_params.sources):
-        mavrin_active = False
-    else:
-        runtime_params_impurity = runtime_params.sources[
-            impurity_radiation_heat_sink.ImpurityRadiationHeatSink.SOURCE_NAME]
-        # If the impurity radiation heat sink is not the mavrin model and in model
-        # based mode, return empty dictionary.
-        if not (isinstance(runtime_params_impurity,
-                           impurity_radiation_mavrin_fit.RuntimeParams)
-                and runtime_params_impurity.mode
-                == source_runtime_params_lib.Mode.MODEL_BASED):
-            mavrin_active = False
-
+    mavrin_active = False
     impurity_fractions = sim_state.core_profiles.impurity_fractions
     impurity_names = runtime_params.plasma_composition.impurity_names
     charge_state_info = charge_states.get_average_charge_state(
