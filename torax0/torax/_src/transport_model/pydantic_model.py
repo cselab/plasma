@@ -29,10 +29,6 @@ from torax._src.transport_model import pydantic_model_base
 from torax._src.transport_model import qlknn_transport_model
 import typing_extensions
 
-
-def _resolve_qlknn_model_name(model_name: str, model_path: str) -> str:
-  return model_name
-
 # pylint: disable=invalid-name
 class QLKNNTransportModel(pydantic_model_base.TransportBase):
   model_name: Annotated[Literal['qlknn'], torax_pydantic.JAX_STATIC] = 'qlknn'
@@ -56,12 +52,7 @@ class QLKNNTransportModel(pydantic_model_base.TransportBase):
   @classmethod
   def _conform_data(cls, data: dict[str, Any]) -> dict[str, Any]:
     data = copy.deepcopy(data)
-
-    data['qlknn_model_name'] = _resolve_qlknn_model_name(
-        model_name=data.get('qlknn_model_name', ''),
-        model_path=data.get('model_path', ''),
-    )
-
+    data['qlknn_model_name'] = data.get('qlknn_model_name', '')
     if 'smoothing_width' not in data:
       data['smoothing_width'] = 0.1
     return data
