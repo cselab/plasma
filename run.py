@@ -56,6 +56,7 @@ from torax._src.transport_model import transport_coefficients_builder
 from torax._src.transport_model import transport_model as transport_model_lib
 from typing import Annotated, Any, Literal
 from typing import Any, Final, Mapping, Sequence, TypeAlias
+from typing import Final
 from typing_extensions import Annotated
 from typing_extensions import Self
 import abc
@@ -77,21 +78,6 @@ import torax
 import treelib
 import typing_extensions
 import xarray as xr
-import functools
-from typing import Final
-from torax._src import array_typing
-from torax._src import jax_utils
-from torax._src import physics_models as physics_models_lib
-from torax._src import state as state_module
-from torax._src.config import runtime_params_slice
-from torax._src.core_profiles import convertors
-from torax._src.fvm import calc_coeffs
-from torax._src.fvm import cell_variable
-from torax._src.fvm import enums
-from torax._src.fvm import fvm_conversions
-from torax._src.fvm import residual_and_loss
-from torax._src.geometry import geometry
-from torax._src.sources import source_profiles
 
 # Delta is a vector. If no entry of delta is above this magnitude, we terminate
 # the delta loop. This is to avoid getting stuck in an infinite loop in edge
