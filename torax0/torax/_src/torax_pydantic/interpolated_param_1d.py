@@ -28,23 +28,6 @@ import typing_extensions
 
 
 class TimeVaryingScalar(model_base.BaseModelFrozen):
-  """Base class for time interpolated scalar types.
-
-  The Pydantic `.model_validate` constructor can accept a variety of input types
-  defined by the `TimeInterpolatedInput` type. See
-  https://torax.readthedocs.io/en/latest/configuration.html#time-varying-scalars
-  for more details.
-
-  Attributes:
-    time: A 1-dimensional NumPy array of times sorted in ascending time order.
-    value: A NumPy array specifying the values to interpolate. The same length
-      as `time`.
-    is_bool_param: If True, the input value is assumed to be a bool and is
-      converted to a float.
-    interpolation_mode: An InterpolationMode enum specifying the interpolation
-      mode to use.
-  """
-
   time: pydantic_types.NumpyArray1DSorted
   value: pydantic_types.NumpyArray
   is_bool_param: typing_extensions.Annotated[bool, model_base.JAX_STATIC] = (
@@ -65,63 +48,18 @@ class TimeVaryingScalar(model_base.BaseModelFrozen):
     """
     return self._get_cached_interpolated_param.get_value(t)
 
-  def to_time_varying_array(self) -> interpolated_param_2d.TimeVaryingArray:
-    """Creates a TimeVaryingArray with radially-constant profiles."""
-    time_varying_array_values = {}
-    for time, value in zip(self.time, self.value, strict=True):
-      time_varying_array_values[float(time)] = (
-          np.array([0.0]),
-          np.array([value]),
-      )
-
-    return interpolated_param_2d.TimeVaryingArray.model_validate(
-        dict(
-            value=time_varying_array_values,
-            time_interpolation_mode=self.interpolation_mode,
-        ),
-    )
-
-  def __eq__(self, other):
-    return (
-        np.array_equal(self.time, other.time)
-        and np.array_equal(self.value, other.value)
-        and self.is_bool_param == other.is_bool_param
-        and self.interpolation_mode == other.interpolation_mode
-    )
-
   @pydantic.model_validator(mode='after')
   def _ensure_consistent_arrays(self) -> typing_extensions.Self:
-
-    if not np.issubdtype(self.time.dtype, np.floating):
-      raise ValueError('The time array must be a float array.')
-
-    if self.time.dtype != self.value.dtype:
-      raise ValueError('The time and value arrays must have the same dtype.')
-
-    if len(self.time) != len(self.value):
-      raise ValueError('The value and time arrays must be the same length.')
-
     return self
 
   @pydantic.model_validator(mode='before')
   @classmethod
   def _conform_data(
-      cls, data: interpolated_param.TimeInterpolatedInput | dict[str, Any]
-  ) -> dict[str, Any]:
-
-    if isinstance(data, dict):
-      # A workaround for https://github.com/pydantic/pydantic/issues/10477.
-      data.pop('_get_cached_interpolated_param', None)
-
-      # This is the standard constructor input. No conforming required.
-      if set(data.keys()).issubset(cls.model_fields.keys()):
-        return data  # pytype: disable=bad-return-type
-
+      cls, data
+  ):
     time, value, interpolation_mode, is_bool_param = (
         interpolated_param.convert_input_to_xs_ys(data)
     )
-
-    # Ensure that the time is sorted.
     sort_order = np.argsort(time)
     time = time[sort_order]
     value = value[sort_order]
@@ -151,14 +89,6 @@ def _is_positive(time_varying_scalar: TimeVaryingScalar) -> TimeVaryingScalar:
   return time_varying_scalar
 
 
-def _is_non_negative(
-    time_varying_scalar: TimeVaryingScalar,
-) -> TimeVaryingScalar:
-  if not np.all(time_varying_scalar.value >= 0):
-    raise ValueError('All values must be non-negative.')
-  return time_varying_scalar
-
-
 def _interval(
     time_varying_scalar: TimeVaryingScalar,
     lower_bound: float,
@@ -178,9 +108,6 @@ def _interval(
 
 PositiveTimeVaryingScalar: TypeAlias = typing_extensions.Annotated[
     TimeVaryingScalar, pydantic.AfterValidator(_is_positive)
-]
-NonNegativeTimeVaryingScalar: TypeAlias = typing_extensions.Annotated[
-    TimeVaryingScalar, pydantic.AfterValidator(_is_non_negative)
 ]
 UnitIntervalTimeVaryingScalar: TypeAlias = typing_extensions.Annotated[
     TimeVaryingScalar,

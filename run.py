@@ -4014,19 +4014,14 @@ def get_consistent_runtime_params_and_geometry(*, t, runtime_params_provider,
 TIME_INVARIANT = model_base.TIME_INVARIANT
 JAX_STATIC = model_base.JAX_STATIC
 BaseModelFrozen = model_base.BaseModelFrozen
-
 TimeVaryingScalar = interpolated_param_1d.TimeVaryingScalar
 TimeVaryingArray = interpolated_param_2d.TimeVaryingArray
 NonNegativeTimeVaryingArray = interpolated_param_2d.NonNegativeTimeVaryingArray
 PositiveTimeVaryingScalar = interpolated_param_1d.PositiveTimeVaryingScalar
-NonNegativeTimeVaryingScalar = (
-    interpolated_param_1d.NonNegativeTimeVaryingScalar)
 UnitIntervalTimeVaryingScalar = (
     interpolated_param_1d.UnitIntervalTimeVaryingScalar)
 PositiveTimeVaryingArray = interpolated_param_2d.PositiveTimeVaryingArray
-
 ValidatedDefault = functools.partial(pydantic.Field, validate_default=True)
-
 
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
