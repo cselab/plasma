@@ -23,7 +23,6 @@ from torax._src.fvm import cell_variable
 from torax._src.fvm import convection_terms
 from torax._src.fvm import diffusion_terms
 from torax._src.fvm import enums
-from torax._src.fvm import fvm_conversions
 from torax._src.geometry import geometry
 from torax._src.geometry import geometry as geometry_lib
 from torax._src.geometry import geometry_provider as geometry_provider_lib
@@ -83,6 +82,63 @@ import xarray as xr
 
 Block1DCoeffs: TypeAlias = block_1d_coeffs.Block1DCoeffs
 AuxiliaryOutput: TypeAlias = block_1d_coeffs.AuxiliaryOutput
+
+def cell_variable_tuple_to_vec(
+    x_tuple: tuple[cell_variable.CellVariable, ...],
+) -> jax.Array:
+  """Converts a tuple of CellVariables to a flat array.
+
+  Args:
+    x_tuple: A tuple of CellVariables.
+
+  Returns:
+    A flat array of evolving state variables.
+  """
+  x_vec = jnp.concatenate([x.value for x in x_tuple])
+  return x_vec
+
+
+def vec_to_cell_variable_tuple(
+    x_vec: jax.Array,
+    core_profiles: state.CoreProfiles,
+    evolving_names: tuple[str, ...],
+) -> tuple[cell_variable.CellVariable, ...]:
+  """Converts a flat array of core profile state vars to CellVariable tuple.
+
+  Requires an input CoreProfiles to provide boundary condition information.
+
+  Args:
+    x_vec: A flat array of evolving core profile state variables. The order of
+      the variables in the array must match the order of the evolving_names.
+    core_profiles: CoreProfiles containing all CellVariables with appropriate
+      boundary conditions.
+    evolving_names: The names of the evolving cell variables.
+
+  Returns:
+    A tuple of updated CellVariables.
+  """
+  x_split = jnp.split(x_vec, len(evolving_names))
+
+  # First scale the core profiles to match the scaling in x_split, then
+  # update the values in the scaled core profiles with new values from x_split.
+  scaled_evolving_cp_list = [
+      convertors.scale_cell_variable(
+          getattr(core_profiles, name),
+          scaling_factor=1 / convertors.SCALING_FACTORS[name],
+      )
+      for name in evolving_names
+  ]
+
+  x_out = [
+      dataclasses.replace(
+          scaled_evolving_cp,
+          value=value,
+      )
+      for scaled_evolving_cp, value in zip(scaled_evolving_cp_list, x_split)
+  ]
+
+  return tuple(x_out)
+
 
 # pylint: disable=invalid-name
 class CoeffsCallback:
@@ -902,7 +958,7 @@ def theta_method_matrix_equation(
      - right-hand side vector, b
   """
 
-  x_new_guess_vec = fvm_conversions.cell_variable_tuple_to_vec(x_new_guess)
+  x_new_guess_vec = cell_variable_tuple_to_vec(x_new_guess)
 
   theta_exp = 1.0 - theta_implicit
 
@@ -989,7 +1045,7 @@ def implicit_solve_block(
     convection_neumann_mode: str = 'ghost',
 ) -> tuple[cell_variable.CellVariable, ...]:
 
-  x_old_vec = fvm_conversions.cell_variable_tuple_to_vec(x_old)
+  x_old_vec = cell_variable_tuple_to_vec(x_old)
 
   lhs_mat, lhs_vec, rhs_mat, rhs_vec = (
       theta_method_matrix_equation(
