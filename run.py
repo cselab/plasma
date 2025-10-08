@@ -3550,11 +3550,6 @@ def _get_initial_state(runtime_params, geo, step_fn):
         geometry=geo,
     )
 
-
-def check_for_errors(numerics, output_state, post_processed_outputs):
-    return post_processed_outputs.check_for_errors()
-
-
 class SimulationStepFn:
 
     def __init__(self, runtime_params_provider, geometry_provider):
