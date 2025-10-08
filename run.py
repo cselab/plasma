@@ -979,30 +979,23 @@ def get_updated_electron_density(
         profile_conditions_params.n_e_right_bc * nGW,
         profile_conditions_params.n_e_right_bc,
     )
-    if profile_conditions_params.normalize_n_e_to_nbar:
-        face_left = n_e_value[0]
-        face_right = n_e_right_bc
-        face_inner = (n_e_value[..., :-1] + n_e_value[..., 1:]) / 2.0
-        n_e_face = jnp.concatenate(
-            [face_left[None], face_inner, face_right[None]], )
-        a_minor_out = geo.R_out_face[-1] - geo.R_out_face[0]
-        target_nbar = jnp.where(
-            profile_conditions_params.n_e_nbar_is_fGW,
-            profile_conditions_params.nbar * nGW,
-            profile_conditions_params.nbar,
-        )
-        if not profile_conditions_params.n_e_right_bc_is_absolute:
-            C = target_nbar / (_trapz(n_e_face, geo.R_out_face) / a_minor_out)
-            n_e_right_bc = C * n_e_right_bc
-        else:
-            nbar_from_n_e_face_inner = (
-                _trapz(n_e_face[:-1], geo.R_out_face[:-1]) / a_minor_out)
-            dr_edge = geo.R_out_face[-1] - geo.R_out_face[-2]
-            C = (target_nbar - 0.5 * n_e_face[-1] * dr_edge / a_minor_out) / (
-                nbar_from_n_e_face_inner +
-                0.5 * n_e_face[-2] * dr_edge / a_minor_out)
-    else:
-        C = 1
+    face_left = n_e_value[0]
+    face_right = n_e_right_bc
+    face_inner = (n_e_value[..., :-1] + n_e_value[..., 1:]) / 2.0
+    n_e_face = jnp.concatenate(
+        [face_left[None], face_inner, face_right[None]], )
+    a_minor_out = geo.R_out_face[-1] - geo.R_out_face[0]
+    target_nbar = jnp.where(
+        profile_conditions_params.n_e_nbar_is_fGW,
+        profile_conditions_params.nbar * nGW,
+        profile_conditions_params.nbar,
+    )
+    nbar_from_n_e_face_inner = (
+        _trapz(n_e_face[:-1], geo.R_out_face[:-1]) / a_minor_out)
+    dr_edge = geo.R_out_face[-1] - geo.R_out_face[-2]
+    C = (target_nbar - 0.5 * n_e_face[-1] * dr_edge / a_minor_out) / (
+        nbar_from_n_e_face_inner +
+        0.5 * n_e_face[-2] * dr_edge / a_minor_out)
     n_e_value = C * n_e_value
     n_e = cell_variable.CellVariable(
         value=n_e_value,
@@ -1140,11 +1133,7 @@ def get_updated_ions(
     for i, symbol in enumerate(
             runtime_params.plasma_composition.impurity_names):
         fraction = ion_properties.impurity_fractions[i]
-        if fraction.ndim == 0:
-            impurity_fractions_dict[symbol] = jnp.full_like(
-                n_e.value, fraction)
-        else:
-            impurity_fractions_dict[symbol] = fraction
+        impurity_fractions_dict[symbol] = fraction
     return Ions(
         n_i=n_i,
         n_impurity=n_impurity,
