@@ -47,12 +47,10 @@ from torax._src.physics import psi_calculations
 from torax._src.physics import scaling_laws
 from torax._src.sources import pydantic_model as sources_pydantic_model
 from torax._src.sources import qei_source as qei_source_lib
-from torax._src.sources import runtime_params as source_runtime_params_lib
 from torax._src.sources import source_models as source_models_lib
 from torax._src.sources import source_profile_builders
 from torax._src.sources import source_profiles
 from torax._src.sources import source_profiles as source_profiles_lib
-from torax._src.sources.impurity_radiation_heat_sink import impurity_radiation_heat_sink
 import pydantic
 from torax._src.torax_pydantic import torax_pydantic
 from torax._src.torax_pydantic import interpolated_param_1d
