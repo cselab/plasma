@@ -26,43 +26,17 @@ class CellVariable:
         for field in dataclasses.fields(self):
             value = getattr(self, field.name)
             name = field.name
-            if isinstance(value, jax.Array):
-                if value.dtype != jnp.float64 and jax.config.read(
-                        'jax_enable_x64'):
-                    raise TypeError(
-                        f'Expected dtype float64, got dtype {value.dtype} for `{name}`'
-                    )
-                if value.dtype != jnp.float32 and not jax.config.read(
-                        'jax_enable_x64'):
-                    raise TypeError(
-                        f'Expected dtype float32, got dtype {value.dtype} for `{name}`'
-                    )
         left_and = (self.left_face_constraint is not None
                     and self.left_face_grad_constraint is not None)
         left_or = (self.left_face_constraint is not None
                    or self.left_face_grad_constraint is not None)
-        if left_and or not left_or:
-            raise ValueError('Exactly one of left_face_constraint and '
-                             'left_face_grad_constraint must be set.')
         right_and = (self.right_face_constraint is not None
                      and self.right_face_grad_constraint is not None)
         right_or = (self.right_face_constraint is not None
                     or self.right_face_grad_constraint is not None)
-        if right_and or not right_or:
-            raise ValueError('Exactly one of right_face_constraint and '
-                             'right_face_grad_constraint must be set.')
 
     def _assert_unbatched(self):
-        if len(self.value.shape) != 1:
-            raise AssertionError(
-                'CellVariable must be unbatched, but has `value` shape '
-                f'{self.value.shape}. Consider using vmap to batch the function call.'
-            )
-        if self.dr.shape:
-            raise AssertionError(
-                'CellVariable must be unbatched, but has `dr` shape '
-                f'{self.dr.shape}. Consider using vmap to batch the function call.'
-            )
+        pass
 
     def face_grad(
         self,
@@ -81,10 +55,6 @@ class CellVariable:
             right: bool,
         ) -> jax.Array:
             if face is not None:
-                if grad is not None:
-                    raise ValueError(
-                        'Cannot constraint both the value and gradient of '
-                        'a face variable.')
                 if x is None:
                     dx = self.dr
                 else:
@@ -92,8 +62,6 @@ class CellVariable:
                 sign = -1 if right else 1
                 return sign * (cell - face) / (0.5 * dx)
             else:
-                if grad is None:
-                    raise ValueError('Must specify one of value or gradient.')
                 return grad
 
         left_grad = constrained_grad(
