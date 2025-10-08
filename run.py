@@ -1,19 +1,8 @@
-import dataclasses
-import functools
-import logging
-from typing import Final
-import jax
-from jax import numpy as jnp
-from torax._src import state
-from torax._src.config import runtime_params_slice
-from torax._src.geometry import geometry
-from torax._src.pedestal_model import pedestal_model as pedestal_model_lib
-from torax._src.transport_model import runtime_params as runtime_params_lib
-import typing_extensions
 from absl import logging
 from collections.abc import Callable
 from collections.abc import Mapping
 from collections.abc import Sequence
+from fusion_surrogates.qlknn import qlknn_model
 from jax import numpy as jnp
 from torax._src import array_typing
 from torax._src import constants
@@ -59,6 +48,8 @@ from torax._src.torax_pydantic import interpolated_param_2d
 from torax._src.torax_pydantic import model_base
 from torax._src.torax_pydantic import torax_pydantic
 from torax._src.transport_model import pydantic_model_base
+from torax._src.transport_model import qualikiz_based_transport_model
+from torax._src.transport_model import runtime_params as runtime_params_lib
 from torax._src.transport_model import transport_model as transport_model_lib
 from typing import Annotated, Any, Literal
 from typing import Annotated, Any, Literal, TypeAlias, TypeVar
@@ -85,22 +76,6 @@ import logging
 import numpy as np
 import pydantic
 import typing_extensions
-from collections.abc import Mapping
-from typing import Final
-from fusion_surrogates.qlknn import qlknn_model
-import immutabledict
-import jax
-import jax.numpy as jnp
-from torax._src import jax_utils
-from torax._src.transport_model import qualikiz_based_transport_model
-from collections.abc import Mapping
-from typing import Final
-from fusion_surrogates.qlknn import qlknn_model
-import immutabledict
-import jax
-import jax.numpy as jnp
-from torax._src import jax_utils
-from torax._src.transport_model import qualikiz_based_transport_model
 import xarray as xr
 
 _FLUX_NAME_MAP: Final[Mapping[str, str]] = immutabledict.immutabledict({
