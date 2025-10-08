@@ -449,19 +449,6 @@ class Neoclassical0(torax_pydantic.BaseModelFrozen):
         )
 
 
-@jax.tree_util.register_dataclass
-@dataclasses.dataclass(frozen=True)
-class PhysicsModels:
-    source_models: source_models_lib.SourceModels = dataclasses.field(
-        metadata=dict(static=True))
-    transport_model: transport_model_lib.TransportModel = dataclasses.field(
-        metadata=dict(static=True))
-    pedestal_model: pedestal_model_lib.PedestalModel = dataclasses.field(
-        metadata=dict(static=True))
-    neoclassical_models: neoclassical_models_lib.NeoclassicalModels = (
-        dataclasses.field(metadata=dict(static=True)))
-
-
 T = TypeVar('T')
 LY_OBJECT_TYPE: TypeAlias = (str
                              | Mapping[str, torax_pydantic.NumpyArray | float])
@@ -2119,11 +2106,7 @@ def cell_variable_tuple_to_vec(
 
 class CoeffsCallback:
 
-    def __init__(
-        self,
-        physics_models: PhysicsModels,
-        evolving_names: tuple[str, ...],
-    ):
+    def __init__(self, physics_models, evolving_names):
         self.physics_models = physics_models
         self.evolving_names = evolving_names
 
@@ -2223,16 +2206,14 @@ def _calculate_pereverzev_flux(
     )
 
 
-def calc_coeffs(
-    runtime_params: runtime_params_slice.RuntimeParams,
-    geo: geometry.Geometry,
-    core_profiles: state.CoreProfiles,
-    explicit_source_profiles: source_profiles_lib.SourceProfiles,
-    physics_models: PhysicsModels,
-    evolving_names: tuple[str, ...],
-    use_pereverzev: bool = False,
-    explicit_call: bool = False,
-):
+def calc_coeffs(runtime_params,
+                geo,
+                core_profiles,
+                explicit_source_profiles,
+                physics_models,
+                evolving_names,
+                use_pereverzev=False,
+                explicit_call=False):
     if explicit_call and runtime_params.solver.theta_implicit == 1.0:
         return _calc_coeffs_reduced(
             geo,
@@ -2257,15 +2238,13 @@ def calc_coeffs(
         'evolving_names',
     ],
 )
-def _calc_coeffs_full(
-    runtime_params: runtime_params_slice.RuntimeParams,
-    geo: geometry.Geometry,
-    core_profiles: state.CoreProfiles,
-    explicit_source_profiles: source_profiles_lib.SourceProfiles,
-    physics_models: PhysicsModels,
-    evolving_names: tuple[str, ...],
-    use_pereverzev: bool = False,
-):
+def _calc_coeffs_full(runtime_params,
+                      geo,
+                      core_profiles,
+                      explicit_source_profiles,
+                      physics_models,
+                      evolving_names,
+                      use_pereverzev=False):
     consts = constants.CONSTANTS
     pedestal_model_output = physics_models.pedestal_model(
         runtime_params, geo, core_profiles)
@@ -2665,10 +2644,7 @@ class RuntimeParams:
 
 class Solver(abc.ABC):
 
-    def __init__(
-        self,
-        physics_models: PhysicsModels,
-    ):
+    def __init__(self, physics_models):
         self.physics_models = physics_models
 
     def __hash__(self) -> int:
@@ -2883,10 +2859,7 @@ class BaseSolver(torax_pydantic.BaseModelFrozen, abc.ABC):
         pass
 
     @abc.abstractmethod
-    def build_solver(
-        self,
-        physics_models: PhysicsModels,
-    ):
+    def build_solver(self, physics_models):
         pass
 
 
@@ -2914,10 +2887,7 @@ class LinearThetaMethod(BaseSolver):
             n_corrector_steps=self.n_corrector_steps,
         )
 
-    def build_solver(
-        self,
-        physics_models: PhysicsModels,
-    ):
+    def build_solver(self, physics_models):
         return LinearThetaMethod0(physics_models=physics_models, )
 
 
@@ -3597,11 +3567,9 @@ def _get_initial_state(runtime_params, geo, step_fn):
     )
 
 
-def check_for_errors(
-    numerics,
-    output_state,
-    post_processed_outputs):
+def check_for_errors(numerics, output_state, post_processed_outputs):
     return post_processed_outputs.check_for_errors()
+
 
 class SimulationStepFn:
 

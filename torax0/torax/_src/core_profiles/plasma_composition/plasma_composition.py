@@ -1,7 +1,6 @@
 import copy
 import dataclasses
 import functools
-import logging
 from typing import Annotated, Any
 import chex
 import jax

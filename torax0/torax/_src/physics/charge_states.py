@@ -1,5 +1,5 @@
 import dataclasses
-from typing import Final, Mapping, Sequence
+from typing import Final, Mapping
 import immutabledict
 import jax
 from jax import numpy as jnp
