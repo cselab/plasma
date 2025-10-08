@@ -1,5 +1,4 @@
 import dataclasses
-import enum
 from typing import Mapping
 import jax
 from jax import numpy as jnp
