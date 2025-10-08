@@ -27,6 +27,7 @@ git add torax0 -A
 
 ```
 python3 -m pip install -e ./torax0
+python3 -m pip install coverage
 ```
 
 ```
