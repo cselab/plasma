@@ -47,7 +47,7 @@ class QLKNNModelWrapper(base_qlknn_model.BaseQLKNNModel):
         super().__init__(path=self._model.path, name=self._model.name)
 
     @property
-    def inputs_and_ranges(self) -> base_qlknn_model.InputsAndRanges:
+    def inputs_and_ranges(self):
         return self._model.inputs_and_ranges
 
     def get_model_inputs_from_qualikiz_inputs(

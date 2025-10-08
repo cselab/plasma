@@ -69,11 +69,11 @@ class QLKNNRuntimeConfigInputs:
 
 
 def _filter_model_output(
-    model_output: base_qlknn_model.ModelOutput,
+    model_output: None,
     include_ITG: bool,
     include_TEM: bool,
     include_ETG: bool,
-) -> base_qlknn_model.ModelOutput:
+):
     filter_map = {
         'qi_itg': include_ITG,
         'qe_itg': include_ITG,
@@ -95,10 +95,10 @@ def _filter_model_output(
 
 
 def clip_inputs(
-    feature_scan: jax.Array,
-    clip_margin: float,
-    inputs_and_ranges: base_qlknn_model.InputsAndRanges,
-) -> jax.Array:
+    feature_scan,
+    clip_margin,
+    inputs_and_ranges
+):
     for i, key in enumerate(inputs_and_ranges.keys()):
         bounds = inputs_and_ranges[key]
         min_val = bounds.get('min', -jnp.inf)
