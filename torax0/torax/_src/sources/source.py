@@ -72,27 +72,6 @@ class AffectedCoreProfile(enum.IntEnum):
 
 @dataclasses.dataclass(kw_only=True, frozen=True, eq=True)
 class Source(abc.ABC):
-  """Base class for a single source/sink term.
-
-  Sources are used to compute source profiles (see source_profiles.py), which
-  are in turn used to compute coeffs in sim.py.
-
-  Attributes:
-    SOURCE_NAME: The name of the source.
-    runtime_params: Input dataclass containing all the source-specific runtime
-      parameters. At runtime, the parameters here are interpolated to a specific
-      time t and then passed to the model_func, depending on the mode this
-      source is running in.
-    affected_core_profiles: Core profiles affected by this source's profile(s).
-      This attribute defines which equations the source profiles are terms for.
-      By default, the number of affected core profiles should equal the rank of
-      the output shape returned by `output_shape`.
-    model_func: The function used when the runtime type is set to "MODEL_BASED".
-      If not provided, then it defaults to returning zeros.
-    affected_core_profiles_ints: Derived property from the
-      affected_core_profiles. Integer values of those enums.
-  """
-
   SOURCE_NAME: ClassVar[str] = 'source'
   model_func: SourceProfileFunction | None = None
 
@@ -108,48 +87,16 @@ class Source(abc.ABC):
 
   def get_value(
       self,
-      runtime_params: runtime_params_slice.RuntimeParams,
-      geo: geometry.Geometry,
-      core_profiles: state.CoreProfiles,
-      calculated_source_profiles: source_profiles.SourceProfiles | None,
-      conductivity: conductivity_base.Conductivity | None,
-  ) -> tuple[array_typing.FloatVectorCell, ...]:
-    """Returns the cell grid profile for this source during one time step.
-
-    Args:
-      runtime_params: Slice of the general TORAX config that can be used as
-        input for this time step.
-      geo: Geometry of the torus.
-      core_profiles: Core plasma profiles. May be the profiles at the start of
-        the time step or a "live" set of core profiles being actively updated
-        depending on whether this source is explicit or implicit. Explicit
-        sources get the core profiles at the start of the time step, implicit
-        sources get the "live" profiles that is updated through the course of
-        the time step as the solver converges.
-      calculated_source_profiles: The source profiles which have already been
-        calculated for this time step if they exist. This is used to avoid
-        recalculating profiles that are used as inputs to other sources. These
-        profiles will only exist for Source instances that are implicit. i.e.
-        explicit sources cannot depend on other calculated source profiles. In
-        addition, different source types will have different availability of
-        specific calculated_source_profiles since the calculation order matters.
-        See source_profile_builders.py for more details.
-      conductivity: Conductivity profile if it exists. It is only provided for
-        implicit sources.
-
-    Returns:
-      A tuple of arrays of shape (cell grid length,) with one array per affected
-      core profile.
-    """
+      runtime_params,
+      geo,
+      core_profiles,
+      calculated_source_profiles,
+      conductivity
+  ):
     source_params = runtime_params.sources[self.source_name]
-
     mode = source_params.mode
     match mode:
       case runtime_params_lib.Mode.MODEL_BASED:
-        if self.model_func is None:
-          raise ValueError(
-              'Source is in MODEL_BASED mode but has no model function.'
-          )
         return self.model_func(
             runtime_params,
             geo,
@@ -158,29 +105,6 @@ class Source(abc.ABC):
             calculated_source_profiles,
             conductivity,
         )
-      case runtime_params_lib.Mode.PRESCRIBED:
-        if len(self.affected_core_profiles) != len(
-            source_params.prescribed_values
-        ):
-          raise ValueError(
-              'When using PRESCRIBED mode, the number of prescribed values must'
-              ' match the number of affected core profiles. Was: '
-              f'{len(source_params.prescribed_values)} '
-              f' Expected: {len(self.affected_core_profiles)}.'
-          )
-        return source_params.prescribed_values
-      case runtime_params_lib.Mode.ZERO:
-        zeros = jnp.zeros(geo.rho_norm.shape)
-        return (zeros,) * len(self.affected_core_profiles)
       case _:
         raise ValueError(f'Unknown mode: {mode}')
 
-  def __hash__(self) -> int:
-    return hash((self.SOURCE_NAME, self.model_func))
-
-  def __eq__(self, other) -> bool:
-    return (
-        isinstance(other, type(self))
-        and self.SOURCE_NAME == other.SOURCE_NAME
-        and self.model_func == other.model_func
-    )
