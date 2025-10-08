@@ -131,10 +131,6 @@ class QLKNNTransportModel(pydantic_model_base.TransportBase):
             **base_kwargs,
         )
 
-
-TransportConfig = QLKNNTransportModel
-
-
 @functools.partial(jax_utils.jit, static_argnums=(0, 1, 2))
 def calculate_total_transport_coeffs(
     pedestal_model: pedestal_model_lib.PedestalModel,
@@ -3624,7 +3620,7 @@ class ToraxConfig(model_base.BaseModelFrozen):
     sources: sources_pydantic_model.Sources
     neoclassical: Neoclassical0 = Neoclassical0()
     solver: SolverConfig = pydantic.Field(discriminator='solver_type')
-    transport: TransportConfig = pydantic.Field(discriminator='model_name')
+    transport: QLKNNTransportModel = pydantic.Field(discriminator='model_name')
     pedestal: pedestal_pydantic_model.PedestalConfig = pydantic.Field(
         discriminator='model_name')
 
