@@ -20,7 +20,6 @@ import chex
 from torax._src.pedestal_model import no_pedestal
 from torax._src.pedestal_model import pedestal_model
 from torax._src.pedestal_model import runtime_params
-from torax._src.pedestal_model import set_pped_tpedratio_nped
 from torax._src.pedestal_model import set_tped_nped
 from torax._src.torax_pydantic import torax_pydantic
 
@@ -48,56 +47,6 @@ class BasePedestal(torax_pydantic.BaseModelFrozen, abc.ABC):
       self, t: chex.Numeric
   ) -> runtime_params.RuntimeParams:
     """Builds the runtime params."""
-
-
-class SetPpedTpedRatioNped(BasePedestal):
-  """Model for direct specification of pressure, temperature ratio, and density.
-
-  Attributes:
-    P_ped: The plasma pressure at the pedestal [Pa].
-    n_e_ped: The electron density at the pedestal [m^-3] or fGW.
-    n_e_ped_is_fGW: Whether the electron density at the pedestal is in units of
-      fGW.
-    T_i_T_e_ratio: Ratio of the ion and electron temperature at the pedestal
-      [dimensionless].
-    rho_norm_ped_top: The location of the pedestal top.
-  """
-
-  model_name: Annotated[
-      Literal['set_P_ped_n_ped'], torax_pydantic.JAX_STATIC
-  ] = 'set_P_ped_n_ped'
-  P_ped: torax_pydantic.TimeVaryingScalar = torax_pydantic.ValidatedDefault(1e5)
-  n_e_ped: torax_pydantic.TimeVaryingScalar = torax_pydantic.ValidatedDefault(
-      0.7e20
-  )
-  n_e_ped_is_fGW: bool = False
-  T_i_T_e_ratio: torax_pydantic.TimeVaryingScalar = (
-      torax_pydantic.ValidatedDefault(1.0)
-  )
-  rho_norm_ped_top: torax_pydantic.TimeVaryingScalar = (
-      torax_pydantic.ValidatedDefault(0.91)
-  )
-
-  def build_pedestal_model(
-      self,
-  ) -> (
-      set_pped_tpedratio_nped.SetPressureTemperatureRatioAndDensityPedestalModel
-  ):
-    return (
-        set_pped_tpedratio_nped.SetPressureTemperatureRatioAndDensityPedestalModel()
-    )
-
-  def build_runtime_params(
-      self, t: chex.Numeric
-  ) -> set_pped_tpedratio_nped.RuntimeParams:
-    return set_pped_tpedratio_nped.RuntimeParams(
-        set_pedestal=self.set_pedestal.get_value(t),
-        P_ped=self.P_ped.get_value(t),
-        n_e_ped=self.n_e_ped.get_value(t),
-        n_e_ped_is_fGW=self.n_e_ped_is_fGW,
-        T_i_T_e_ratio=self.T_i_T_e_ratio.get_value(t),
-        rho_norm_ped_top=self.rho_norm_ped_top.get_value(t),
-    )
 
 
 class SetTpedNped(BasePedestal):
@@ -171,4 +120,4 @@ class NoPedestal(BasePedestal):
     )
 
 
-PedestalConfig = SetPpedTpedRatioNped | SetTpedNped | NoPedestal
+PedestalConfig = SetTpedNped | NoPedestal
