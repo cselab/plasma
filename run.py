@@ -2,6 +2,13 @@ from absl import logging
 from collections.abc import Sequence
 from collections.abc import Set
 from jax import numpy as jnp
+from torax._src import array_typing
+from torax._src import jax_utils
+from torax._src import physics_models as physics_models_lib
+from torax._src import state
+from torax._src import state as state_module
+from torax._src import version
+from torax._src import xnp
 from torax._src.config import numerics as numerics_lib
 from torax._src.config import runtime_params_slice
 from torax._src.core_profiles import convertors
@@ -10,26 +17,26 @@ from torax._src.core_profiles import initialization
 from torax._src.core_profiles import profile_conditions as profile_conditions_lib
 from torax._src.core_profiles import updaters
 from torax._src.core_profiles.plasma_composition import plasma_composition as plasma_composition_lib
+from torax._src.fvm import block_1d_coeffs
+from torax._src.fvm import calc_coeffs
+from torax._src.fvm import cell_variable
+from torax._src.fvm import enums
+from torax._src.fvm import implicit_solve_block
 from torax._src.geometry import geometry
 from torax._src.geometry import geometry as geometry_lib
 from torax._src.geometry import geometry_provider as geometry_provider_lib
 from torax._src.geometry import pydantic_model as geometry_pydantic_model
-from torax._src import array_typing
-from torax._src import jax_utils
-from torax._src import state
-from torax._src import state as state_module
-from torax._src import version
-from torax._src import xnp
 from torax._src.mhd import base as mhd_model_lib
 from torax._src.mhd import pydantic_model as mhd_pydantic_model
-from torax._src.neoclassical.conductivity import base as conductivity_base
 from torax._src.neoclassical import neoclassical_models as neoclassical_models_lib
 from torax._src.neoclassical import pydantic_model as neoclassical_pydantic_model
+from torax._src.neoclassical.conductivity import base as conductivity_base
 from torax._src.output_tools import impurity_radiation
 from torax._src.output_tools import post_processing
 from torax._src.pedestal_model import pedestal_model as pedestal_model_lib
 from torax._src.pedestal_model import pydantic_model as pedestal_pydantic_model
 from torax._src.physics import formulas
+from torax._src.solver import runtime_params
 from torax._src.sources import pydantic_model as sources_pydantic_model
 from torax._src.sources import qei_source as qei_source_lib
 from torax._src.sources import source_models as source_models_lib
@@ -41,13 +48,15 @@ from torax._src.torax_pydantic import interpolated_param_1d
 from torax._src.torax_pydantic import interpolated_param_2d
 from torax._src.torax_pydantic import model_base
 from torax._src.torax_pydantic import pydantic_types
+from torax._src.torax_pydantic import torax_pydantic
 from torax._src.transport_model import pydantic_model as transport_model_pydantic_model
 from torax._src.transport_model import pydantic_model as transport_pydantic_model
 from torax._src.transport_model import transport_coefficients_builder
 from torax._src.transport_model import transport_model as transport_model_lib
+from typing import Annotated, Any, Literal
+from typing import Any, Final, Mapping, Sequence, TypeAlias
 from typing_extensions import Annotated
 from typing_extensions import Self
-from typing import Any, Final, Mapping, Sequence, TypeAlias
 import abc
 import chex
 import copy
@@ -67,47 +76,6 @@ import torax
 import treelib
 import typing_extensions
 import xarray as xr
-import abc
-import functools
-from typing import Annotated, Any, Literal
-import pydantic
-from torax._src import physics_models as physics_models_lib
-from torax._src.fvm import enums
-from torax._src.solver import runtime_params
-from torax._src.torax_pydantic import torax_pydantic
-import functools
-import jax
-from torax._src import jax_utils
-from torax._src import state
-from torax._src.config import runtime_params_slice
-from torax._src.core_profiles import convertors
-from torax._src.fvm import calc_coeffs
-from torax._src.fvm import cell_variable
-from torax._src.geometry import geometry
-from torax._src.sources import source_profiles
-import functools
-import jax
-from torax._src import jax_utils
-from torax._src import state
-from torax._src import xnp
-from torax._src.config import runtime_params_slice
-from torax._src.fvm import block_1d_coeffs
-from torax._src.fvm import calc_coeffs
-from torax._src.fvm import cell_variable
-from torax._src.fvm import implicit_solve_block
-from torax._src.geometry import geometry
-from torax._src.sources import source_profiles
-import abc
-import functools
-import jax
-from torax._src import jax_utils
-from torax._src import physics_models as physics_models_lib
-from torax._src import state
-from torax._src.config import runtime_params_slice
-from torax._src.fvm import cell_variable
-from torax._src.geometry import geometry
-from torax._src.sources import source_profiles
-import typing_extensions
 
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
