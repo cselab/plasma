@@ -19,7 +19,6 @@ from typing import Any
 import immutabledict
 import pydantic
 from torax._src.sources import base
-from torax._src.sources import bremsstrahlung_heat_sink as bremsstrahlung_heat_sink_lib
 from torax._src.sources import electron_cyclotron_source as electron_cyclotron_source_lib
 from torax._src.sources import fusion_heat_source as fusion_heat_source_lib
 from torax._src.sources import gas_puff_source as gas_puff_source_lib
@@ -46,12 +45,6 @@ class Sources(torax_pydantic.BaseModelFrozen):
       {'mode': 'ZERO'}
   )
   # keep-sorted start
-  bremsstrahlung: (
-      bremsstrahlung_heat_sink_lib.BremsstrahlungHeatSinkConfig | None
-  ) = pydantic.Field(
-      discriminator='model_name',
-      default=None,
-  )
   cyclotron_radiation: (
       None
   ) = pydantic.Field(
@@ -168,44 +161,6 @@ class Sources(torax_pydantic.BaseModelFrozen):
                 'model_name'
             ] = ohmic_heat_source_lib.DEFAULT_MODEL_FUNCTION_NAME
     return constructor_data
-
-  @pydantic.model_validator(mode='after')
-  def validate_radiation_models(self) -> Self:
-    """Validate that bremsstrahlung and Mavrin models are not both active at the same time.
-
-    This prevents double counting radiation losses.
-
-    Returns:
-      Self for method chaining.
-
-    Raises:
-      ValueError: If both bremsstrahlung and Mavrin models are active.
-    """
-    # Check if both sources are defined
-    if isinstance(
-        self.bremsstrahlung,
-        bremsstrahlung_heat_sink_lib.BremsstrahlungHeatSinkConfig,
-    ) and isinstance(
-        self.impurity_radiation,
-        impurity_radiation_mavrin_fit.ImpurityRadiationHeatSinkMavrinFitConfig,
-    ):
-
-      bremsstrahlung_active = (
-          self.bremsstrahlung.mode != runtime_params.Mode.ZERO
-      )
-
-      impurity_active = self.impurity_radiation.mode != runtime_params.Mode.ZERO
-
-      # Only raise error if both are active (not in ZERO mode)
-      if bremsstrahlung_active and impurity_active:
-        raise ValueError("""
-            Both bremsstrahlung and impurity_radiation
-            with the Mavrin model should not be active at the same time to avoid
-            double-counting Bremstrahlung losses. Please either set one of them
-            to Mode.ZERO or remove one of them (most likely Bremstrahlung).
-            """)
-
-    return self
 
   def build_models(self) -> source_models.SourceModels:
     """Builds and returns a container with instantiated source model objects."""
