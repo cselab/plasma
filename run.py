@@ -5,34 +5,12 @@ from jax import numpy as jnp
 from torax._src import array_typing
 from torax._src import constants
 from torax._src import jax_utils
+from torax._src import math_utils
 from torax._src import physics_models as physics_models_lib
 from torax._src import state
 from torax._src import state as state_module
 from torax._src import version
 from torax._src import xnp
-import dataclasses
-
-from absl import logging
-import jax
-from jax import numpy as jnp
-import numpy as np
-from torax._src import array_typing
-from torax._src import constants
-from torax._src import jax_utils
-from torax._src import math_utils
-from torax._src import state
-from torax._src.config import runtime_params_slice
-from torax._src.core_profiles import getters
-from torax._src.core_profiles import profile_conditions as profile_conditions_lib
-from torax._src.fvm import cell_variable
-from torax._src.geometry import geometry
-from torax._src.geometry import standard_geometry
-from torax._src.neoclassical import neoclassical_models as neoclassical_models_lib
-from torax._src.neoclassical.bootstrap_current import base as bootstrap_current_base
-from torax._src.physics import psi_calculations
-from torax._src.sources import source_models as source_models_lib
-from torax._src.sources import source_profile_builders
-from torax._src.sources import source_profiles as source_profiles_lib
 from torax._src.config import numerics as numerics_lib
 from torax._src.config import runtime_params_slice
 from torax._src.core_profiles import getters
@@ -46,10 +24,12 @@ from torax._src.geometry import geometry
 from torax._src.geometry import geometry as geometry_lib
 from torax._src.geometry import geometry_provider as geometry_provider_lib
 from torax._src.geometry import pydantic_model as geometry_pydantic_model
+from torax._src.geometry import standard_geometry
 from torax._src.mhd import base as mhd_model_lib
 from torax._src.mhd import pydantic_model as mhd_pydantic_model
 from torax._src.neoclassical import neoclassical_models as neoclassical_models_lib
 from torax._src.neoclassical import pydantic_model as neoclassical_pydantic_model
+from torax._src.neoclassical.bootstrap_current import base as bootstrap_current_base
 from torax._src.neoclassical.conductivity import base as conductivity_base
 from torax._src.output_tools import impurity_radiation
 from torax._src.output_tools import post_processing
