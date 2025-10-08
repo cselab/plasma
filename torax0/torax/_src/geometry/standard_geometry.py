@@ -84,28 +84,6 @@ class StandardGeometry(geometry.Geometry):
   delta_lower_face: array_typing.FloatVectorFace
 
 
-@jax.tree_util.register_dataclass
-@dataclasses.dataclass(frozen=True)
-class StandardGeometryProvider(geometry_provider.TimeDependentGeometryProvider):
-  """Values to be interpolated for a Standard Geometry."""
-
-  Ip_from_parameters: bool = dataclasses.field(metadata=dict(static=True))
-  Ip_profile_face: interpolated_param.InterpolatedVarSingleAxis
-  psi: interpolated_param.InterpolatedVarSingleAxis
-  psi_from_Ip: interpolated_param.InterpolatedVarSingleAxis
-  psi_from_Ip_face: interpolated_param.InterpolatedVarSingleAxis
-  j_total: interpolated_param.InterpolatedVarSingleAxis
-  j_total_face: interpolated_param.InterpolatedVarSingleAxis
-  delta_upper_face: interpolated_param.InterpolatedVarSingleAxis
-  delta_lower_face: interpolated_param.InterpolatedVarSingleAxis
-  elongation: interpolated_param.InterpolatedVarSingleAxis
-  elongation_face: interpolated_param.InterpolatedVarSingleAxis
-
-  def __call__(self, t: chex.Numeric) -> geometry.Geometry:
-    """Returns a Geometry instance at the given time."""
-    return self._get_geometry_base(t, StandardGeometry)
-
-
 @dataclasses.dataclass(frozen=True)
 class StandardGeometryIntermediates:
   r"""Holds the intermediate values used to build a StandardGeometry.
