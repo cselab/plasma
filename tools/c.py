@@ -1,4 +1,4 @@
-import io, tokenize, re
+import io, tokenize
 import sys
 
 

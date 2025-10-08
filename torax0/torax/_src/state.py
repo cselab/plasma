@@ -1,15 +1,10 @@
 import dataclasses
 import enum
 from typing import Mapping
-from absl import logging
 import jax
 from jax import numpy as jnp
-import numpy as np
 from torax._src import array_typing
-from torax._src import constants
 from torax._src.fvm import cell_variable
-from torax._src.geometry import geometry
-import typing_extensions
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True, eq=False)
 class CoreProfiles:
