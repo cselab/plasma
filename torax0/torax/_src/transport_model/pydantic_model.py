@@ -201,53 +201,6 @@ class ConstantTransportModel(pydantic_model_base.TransportBase):
     )
 
 
-class CriticalGradientTransportModel(pydantic_model_base.TransportBase):
-  """Model for the Critical Gradient transport model.
-
-  Attributes:
-    model_name: The transport model to use. Hardcoded to 'CGM'.
-    alpha: Exponent of chi power law: chi ∝ (R/LTi - R/LTi_crit)^alpha.
-    chi_stiff: Stiffness parameter.
-    chi_e_i_ratio: Ratio of electron to ion heat transport coefficient (ion
-      higher for ITG).
-    chi_D_ratio: Ratio of electron particle to ion heat transport coefficient.
-    VR_D_ratio: Ratio of major radius * electron particle convection, to
-      electron diffusion. Sets the value of electron particle convection in the
-      model.
-  """
-
-  model_name: Annotated[Literal['CGM'], torax_pydantic.JAX_STATIC] = 'CGM'
-  alpha: float = 2.0
-  chi_stiff: float = 2.0
-  chi_e_i_ratio: torax_pydantic.TimeVaryingScalar = (
-      torax_pydantic.ValidatedDefault(2.0)
-  )
-  chi_D_ratio: torax_pydantic.PositiveTimeVaryingScalar = (
-      torax_pydantic.ValidatedDefault(5.0)
-  )
-  VR_D_ratio: torax_pydantic.TimeVaryingScalar = (
-      torax_pydantic.ValidatedDefault(0.0)
-  )
-
-  def build_transport_model(
-      self,
-  ) -> critical_gradient.CriticalGradientTransportModel:
-    return critical_gradient.CriticalGradientTransportModel()
-
-  def build_runtime_params(
-      self, t: chex.Numeric
-  ) -> critical_gradient.RuntimeParams:
-    base_kwargs = dataclasses.asdict(super().build_runtime_params(t))
-    return critical_gradient.RuntimeParams(
-        alpha=self.alpha,
-        chi_stiff=self.chi_stiff,
-        chi_e_i_ratio=self.chi_e_i_ratio.get_value(t),
-        chi_D_ratio=self.chi_D_ratio.get_value(t),
-        VR_D_ratio=self.VR_D_ratio.get_value(t),
-        **base_kwargs,
-    )
-
-
 class BohmGyroBohmTransportModel(pydantic_model_base.TransportBase):
   """Model for the Bohm + Gyro-Bohm transport model.
 
@@ -351,7 +304,6 @@ except ImportError:
   CombinedCompatibleTransportModel = (
       QLKNNTransportModel
       | ConstantTransportModel
-      | CriticalGradientTransportModel
       | BohmGyroBohmTransportModel
   )
 
