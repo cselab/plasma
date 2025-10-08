@@ -24,8 +24,6 @@ from torax._src.geometry import geometry as geometry_lib
 from torax._src.geometry import geometry_provider
 from torax._src.geometry import standard_geometry
 from torax._src.mhd import runtime_params as mhd_runtime_params
-from torax._src.mhd.sawtooth import pydantic_model as sawtooth_pydantic_model
-from torax._src.mhd.sawtooth import sawtooth_models as sawtooth_models_lib
 from torax._src.neoclassical import neoclassical_models
 from torax._src.neoclassical import neoclassical_models as neoclassical_models_lib
 from torax._src.neoclassical import runtime_params
@@ -213,23 +211,16 @@ class Neoclassical0(torax_pydantic.BaseModelFrozen):
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass
 class MHDModels:
-    sawtooth_models: sawtooth_models_lib.SawtoothModels | None = None
-
     def __eq__(self, other: 'MHDModels') -> bool:
         return self.sawtooth_models == other.sawtooth_models
 
     def __hash__(self) -> int:
-        return hash((self.sawtooth_models, ))
+        return 1
 
 
 class MHD(torax_pydantic.BaseModelFrozen):
-    sawtooth: sawtooth_pydantic_model.SawtoothConfig | None = pydantic.Field(
-        default=None)
-
     def build_mhd_models(self):
-        sawtooth_model = (None if self.sawtooth is None else
-                          self.sawtooth.build_models())
-        return MHDModels(sawtooth_models=sawtooth_model)
+        return MHDModels()
 
     def build_runtime_params(
             self, t: chex.Numeric) -> mhd_runtime_params.RuntimeParams:
