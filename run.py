@@ -12,7 +12,6 @@ from torax._src import version
 from torax._src import xnp
 from torax._src.config import numerics as numerics_lib
 from torax._src.config import runtime_params_slice
-from torax._src.core_profiles import convertors
 from torax._src.core_profiles import getters
 from torax._src.core_profiles import initialization
 from torax._src.core_profiles import profile_conditions as profile_conditions_lib
@@ -55,6 +54,7 @@ from torax._src.transport_model import transport_model as transport_model_lib
 from typing import Annotated, Any, Literal
 from typing import Any, Final, Mapping, Sequence, TypeAlias
 from typing import Final
+from typing import Final, Mapping, Tuple
 from typing import TypeAlias
 from typing_extensions import Annotated
 from typing_extensions import Self
@@ -64,6 +64,7 @@ import copy
 import dataclasses
 import enum
 import functools
+import immutabledict
 import inspect
 import itertools
 import jax
@@ -78,6 +79,126 @@ import torax
 import treelib
 import typing_extensions
 import xarray as xr
+
+SCALING_FACTORS: Final[Mapping[str, float]] = immutabledict.immutabledict({
+    'T_i': 1.0,
+    'T_e': 1.0,
+    'n_e': 1e20,
+    'psi': 1.0,
+})
+
+
+def core_profiles_to_solver_x_tuple(
+    core_profiles: state.CoreProfiles,
+    evolving_names: Tuple[str, ...],
+) -> Tuple[cell_variable.CellVariable, ...]:
+  """Converts evolving parts of CoreProfiles to the 'x' tuple for the solver.
+
+  State variables in the solver are scaled for solver numerical conditioning.
+  i.e., the solver methods find the zero of a residual, minimizes a loss, and/or
+  invert a linear system with respect to the state vector x, which is a
+  concetenated vector of the x_tuple values. It is important that the solution
+  state vector elements are of similar order of magnitude such that e.g. scalars
+  related to residual or loss minimizations have similar contributions from the
+  various state vector components.
+
+  Args:
+    core_profiles: The input CoreProfiles object.
+    evolving_names: Tuple of strings naming the variables to be evolved by the
+      solver.
+
+  Returns:
+    A tuple of CellVariable objects, one for each name in evolving_names,
+    with density values appropriately scaled for the solver.
+  """
+  x_tuple_for_solver_list = []
+
+  for name in evolving_names:
+    original_units_cv = getattr(core_profiles, name)
+    # Scale for solver (divide by scaling factor)
+    solver_x_tuple_cv = scale_cell_variable(
+        cv=original_units_cv,
+        scaling_factor=1 / SCALING_FACTORS[name],
+    )
+    x_tuple_for_solver_list.append(solver_x_tuple_cv)
+
+  return tuple(x_tuple_for_solver_list)
+
+
+def solver_x_tuple_to_core_profiles(
+    x_new: tuple[cell_variable.CellVariable, ...],
+    evolving_names: tuple[str, ...],
+    core_profiles: state.CoreProfiles,
+) -> state.CoreProfiles:
+  """Gets updated cell variables for evolving state variables in core_profiles.
+
+  If a variable is in `evolving_names`, its new value is taken from `x_new`.
+  Otherwise, the existing value from `core_profiles` is kept.
+  State variables in the solver may be scaled for solver numerical conditioning,
+  and must be scaled back to their original units before being written to
+  `core_profiles`.
+
+  Args:
+    x_new: The new values of the evolving variables.
+    evolving_names: The names of the evolving variables.
+    core_profiles: The current set of core plasma profiles.
+
+  Returns:
+    An updated CoreProfiles object with the new values.
+  """
+  updated_vars = {}
+
+  for i, var_name in enumerate(evolving_names):
+    solver_x_tuple_cv = x_new[i]
+    # Unscale from solver (multiply by scaling factor)
+    original_units_cv = scale_cell_variable(
+        cv=solver_x_tuple_cv,
+        scaling_factor=SCALING_FACTORS[var_name],
+    )
+    updated_vars[var_name] = original_units_cv
+
+  return dataclasses.replace(core_profiles, **updated_vars)
+
+
+def scale_cell_variable(
+    cv: cell_variable.CellVariable,
+    scaling_factor: float,
+) -> cell_variable.CellVariable:
+  """Scales or unscales a CellVariable's relevant fields.
+
+  Args:
+    cv: The CellVariable to scale.
+    scaling_factor: The factor to scale values and boundary conditions by.
+
+  Returns:
+    A new CellVariable with scaled or unscaled values.
+  """
+  operation = lambda x, factor: x * factor if x is not None else None
+
+  scaled_value = operation(cv.value, scaling_factor)
+
+  # Only scale constraints if they are not None
+  scaled_left_face_constraint = operation(
+      cv.left_face_constraint, scaling_factor
+  )
+  scaled_left_face_grad_constraint = operation(
+      cv.left_face_grad_constraint, scaling_factor
+  )
+  scaled_right_face_constraint = operation(
+      cv.right_face_constraint, scaling_factor
+  )
+  scaled_right_face_grad_constraint = operation(
+      cv.right_face_grad_constraint, scaling_factor
+  )
+
+  return cell_variable.CellVariable(
+      value=scaled_value,
+      left_face_constraint=scaled_left_face_constraint,
+      left_face_grad_constraint=scaled_left_face_grad_constraint,
+      right_face_constraint=scaled_right_face_constraint,
+      right_face_grad_constraint=scaled_right_face_grad_constraint,
+      dr=cv.dr,
+  )
 
 # An optional argument, consisting of a 2D matrix of nested tuples, with each
 # leaf being either None or a JAX Array. Used to define block matrices.
@@ -204,7 +325,7 @@ def update_core_profiles_during_step(
     evolving_names: The names of the evolving variables.
   """
 
-  updated_core_profiles = convertors.solver_x_tuple_to_core_profiles(
+  updated_core_profiles = solver_x_tuple_to_core_profiles(
       x_new, evolving_names, core_profiles
   )
 
@@ -268,7 +389,7 @@ def update_core_and_source_profiles_after_step(
     A tuple of the new core profiles and the source profiles.
   """
 
-  updated_core_profiles_t_plus_dt = convertors.solver_x_tuple_to_core_profiles(
+  updated_core_profiles_t_plus_dt = solver_x_tuple_to_core_profiles(
       x_new, evolving_names, core_profiles_t_plus_dt
   )
 
@@ -717,9 +838,9 @@ def vec_to_cell_variable_tuple(
   # First scale the core profiles to match the scaling in x_split, then
   # update the values in the scaled core profiles with new values from x_split.
   scaled_evolving_cp_list = [
-      convertors.scale_cell_variable(
+      scale_cell_variable(
           getattr(core_profiles, name),
-          scaling_factor=1 / convertors.SCALING_FACTORS[name],
+          scaling_factor=1 / SCALING_FACTORS[name],
       )
       for name in evolving_names
   ]
@@ -1304,10 +1425,10 @@ def _calc_coeffs_full(
   # var_to_source ends up as a vector in the constructed PDE. Therefore any
   # scalings from CoreProfiles state variables to x must be applied here too.
   var_to_source = {
-      'T_i': source_i / convertors.SCALING_FACTORS['T_i'],
-      'T_e': source_e / convertors.SCALING_FACTORS['T_e'],
-      'psi': source_psi / convertors.SCALING_FACTORS['psi'],
-      'n_e': source_n_e / convertors.SCALING_FACTORS['n_e'],
+      'T_i': source_i / SCALING_FACTORS['T_i'],
+      'T_e': source_e / SCALING_FACTORS['T_e'],
+      'psi': source_psi / SCALING_FACTORS['psi'],
+      'n_e': source_n_e / SCALING_FACTORS['n_e'],
   }
   source_cell = tuple(var_to_source.get(var) for var in evolving_names)
 
@@ -1847,9 +1968,9 @@ class LinearThetaMethod0(Solver):
     ]:
         """See Solver._x_new docstring."""
 
-        x_old = convertors.core_profiles_to_solver_x_tuple(
+        x_old = core_profiles_to_solver_x_tuple(
             core_profiles_t, evolving_names)
-        x_new_guess = convertors.core_profiles_to_solver_x_tuple(
+        x_new_guess = core_profiles_to_solver_x_tuple(
             core_profiles_t_plus_dt, evolving_names)
 
         coeffs_callback = CoeffsCallback(
@@ -2884,7 +3005,7 @@ class SimulationStepFn:
             (
                 initial_dt,
                 (
-                    convertors.core_profiles_to_solver_x_tuple(
+                    core_profiles_to_solver_x_tuple(
                         input_state.core_profiles, evolving_names),
                     initial_dt,
                     state.SolverNumericOutputs(
