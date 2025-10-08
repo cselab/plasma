@@ -56,7 +56,8 @@ from torax._src.sources import source_profiles
 from torax._src.sources import source_profiles as source_profiles_lib
 from torax._src.sources.impurity_radiation_heat_sink import impurity_radiation_heat_sink
 from torax._src.sources.impurity_radiation_heat_sink import impurity_radiation_mavrin_fit
-from torax._src.torax_pydantic import file_restart as file_restart_pydantic_model
+import pydantic
+from torax._src.torax_pydantic import torax_pydantic
 from torax._src.torax_pydantic import interpolated_param_1d
 from torax._src.torax_pydantic import interpolated_param_2d
 from torax._src.torax_pydantic import model_base
@@ -91,6 +92,11 @@ import pydantic
 import typing_extensions
 import xarray as xr
 
+class FileRestart(torax_pydantic.BaseModelFrozen):
+  filename: pydantic.FilePath
+  time: torax_pydantic.Second
+  do_restart: bool
+  stitch: bool
 
 class Neoclassical0(torax_pydantic.BaseModelFrozen):
     """Config for neoclassical models."""
@@ -5379,7 +5385,7 @@ class ToraxConfig(BaseModelFrozen):
     pedestal: pedestal_pydantic_model.PedestalConfig = pydantic.Field(
         discriminator='model_name')
     mhd: MHD = MHD()
-    restart: file_restart_pydantic_model.FileRestart | None = pydantic.Field(
+    restart: FileRestart | None = pydantic.Field(
         default=None)
 
     def build_physics_models(self):
