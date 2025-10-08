@@ -23,7 +23,6 @@ import jax
 import pydantic
 from torax._src import array_typing
 from torax._src.config import runtime_validation_utils
-from torax._src.core_profiles.plasma_composition import electron_density_ratios_zeff
 from torax._src.core_profiles.plasma_composition import impurity_fractions
 from torax._src.core_profiles.plasma_composition import ion_mixture
 from torax._src.torax_pydantic import torax_pydantic
@@ -46,7 +45,6 @@ class RuntimeParams:
   main_ion: ion_mixture.RuntimeParams
   impurity: (
       ion_mixture.RuntimeParams
-      | electron_density_ratios_zeff.RuntimeParams
   )
   Z_eff: array_typing.FloatVectorCell
   Z_eff_face: array_typing.FloatVectorFace
@@ -97,8 +95,7 @@ class PlasmaComposition(torax_pydantic.BaseModelFrozen):
   """
 
   impurity: Annotated[
-      impurity_fractions.ImpurityFractions
-      | electron_density_ratios_zeff.ElectronDensityRatiosZeff,
+      impurity_fractions.ImpurityFractions,
       pydantic.Field(discriminator='impurity_mode'),
   ]
   main_ion: runtime_validation_utils.IonMapping = (
