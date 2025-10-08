@@ -3664,13 +3664,6 @@ class ToraxConfig(BaseModelFrozen):
             neoclassical_models=self.neoclassical.build_models(),
         )
 
-    @pydantic.model_validator(mode='before')
-    @classmethod
-    def _defaults(cls, data: dict[str, Any]) -> dict[str, Any]:
-        configurable_data = copy.deepcopy(data)
-        return configurable_data
-
-
 CONFIG = {
     'plasma_composition': {
         'main_ion': {
