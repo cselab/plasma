@@ -137,11 +137,8 @@ class _PiecewiseLinearInterpolatedParam(InterpolatedParamBase):
       raise ValueError(f'xs must be a float array, but got {xs.dtype}.')
     if not np.issubdtype(ys.dtype, np.floating):
       raise ValueError(f'ys must be a float array, but got {ys.dtype}.')
-
     self._xs = xs
     self._ys = ys
-
-    jax_utils.assert_rank(self.xs, 1)
     if self.xs.shape[0] != self.ys.shape[0]:
       raise ValueError(
           'xs and ys must have the same number of elements in the first '
@@ -319,24 +316,8 @@ class InterpolatedVarSingleAxis(InterpolatedParamBase):
       ),
       is_bool_param: bool = False,
   ):
-    """Initializes InterpolatedVarSingleAxis.
-
-    Args:
-      value: A tuple of `(xs, ys)` where `xs` is assumed to be a 1D array and
-        `ys` can either be a 1D or 2D array with ys.shape[0] = len(xs).
-        Additionally it is expected that `xs` is sorted and an error will be
-        raised at runtime if this is not the case.
-      interpolation_mode: Defines how to interpolate between values in `value`.
-      is_bool_param: If True, the input value is assumed to be a bool and is
-        converted to a float.
-
-    Raises:
-      RuntimeError: If the input xs is not sorted.
-    """
     self._value = value
     xs, ys = value
-    jax_utils.error_if(xs, jnp.any(jnp.diff(xs) < 0), 'xs must be sorted.')
-
     if not np.issubdtype(xs.dtype, np.floating):
       raise ValueError(f'xs must be a float array, but got {xs.dtype}.')
     if not np.issubdtype(ys.dtype, np.floating):

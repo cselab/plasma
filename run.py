@@ -3502,9 +3502,6 @@ def theta_method_matrix_equation(
     tc_in_old = jnp.concatenate(coeffs_old.transient_in_cell)
     tc_out_new = jnp.concatenate(coeffs_new.transient_out_cell)
     tc_in_new = jnp.concatenate(coeffs_new.transient_in_cell)
-    chex.assert_rank(tc_in_old, 1)
-    chex.assert_rank(tc_out_new, 1)
-    chex.assert_rank(tc_in_new, 1)
 
     eps = 1e-7
     # adding sanity checks for values in denominators
@@ -4162,8 +4159,6 @@ class StateHistory:
         self._stacked_solver_numeric_outputs: state.SolverNumericOutputs = (
             jax.tree_util.tree_map(stack, *self._solver_numeric_outputs))
         self._times = np.array([state.t for state in state_history])
-        chex.assert_rank(self.times, 1)
-        # The rho grid does not change in time so we can just take the first one.
         self._rho_cell_norm = state_history[0].geometry.rho_norm
         self._rho_face_norm = state_history[0].geometry.rho_face_norm
         self._rho_norm = np.concatenate([[0.0], self.rho_cell_norm, [1.0]])

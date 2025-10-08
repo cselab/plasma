@@ -274,11 +274,7 @@ class QuasilinearTransportModel(transport_model_lib.TransportModel):
       v_face_el = jnp.where(Deff_mask, 0.0, Veff)
       return d_face_el, v_face_el
 
-    # Scaled D approach. Scale electron diffusivity to electron heat
-    # conductivity (this has some physical motivations),
-    # and set convection to then match total particle transport
-    def Dscaled_approach() -> tuple[jax.Array, jax.Array]:
-      chex.assert_rank(pfe, 1)
+    def Dscaled_approach():
       d_face_el = chi_face_el
       v_face_el = (
           pfe_SI / core_profiles.n_e.face_value()

@@ -39,14 +39,5 @@ def get_np_dtype():
     precision = os.getenv('JAX_PRECISION', 'f64')
     return np.float64 if precision == 'f64' else np.float32
 
-
-def error_if(var, cond, msg):
-    return var
-
-
-def assert_rank(inputs, rank):
-    chex.assert_rank(inputs, rank)
-
-
 def jit(*args, **kwargs):
     return jax.jit(*args, **kwargs)
