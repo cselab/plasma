@@ -14,7 +14,6 @@
 
 """Pydantic model for sawtooth configuration."""
 import chex
-import pydantic
 from torax._src.mhd.sawtooth import runtime_params as sawtooth_runtime_params
 from torax._src.mhd.sawtooth import sawtooth_models
 from torax._src.torax_pydantic import torax_pydantic

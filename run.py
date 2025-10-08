@@ -10,14 +10,12 @@ from absl import logging
 from collections.abc import Callable
 from collections.abc import Mapping
 from collections.abc import Sequence
-from collections.abc import Set
 from jax import numpy as jnp
 from torax._src import array_typing
 from torax._src import constants
 from torax._src import jax_utils
 from torax._src import math_utils
 from torax._src import state
-from torax._src import state as state_module
 from torax._src import xnp
 from torax._src.config import numerics as numerics_lib
 from torax._src.config import runtime_params_slice
@@ -34,12 +32,10 @@ from torax._src.fvm import enums
 from torax._src.geometry import geometry
 from torax._src.geometry import geometry as geometry_lib
 from torax._src.geometry import geometry_provider
-from torax._src.geometry import geometry_provider as geometry_provider_lib
 from torax._src.geometry import standard_geometry
 from torax._src.neoclassical import neoclassical_models
 from torax._src.neoclassical import neoclassical_models as neoclassical_models_lib
 from torax._src.neoclassical import runtime_params
-from torax._src.neoclassical.bootstrap_current import base as bootstrap_current_base
 from torax._src.neoclassical.bootstrap_current import sauter as sauter_current
 from torax._src.neoclassical.bootstrap_current import zeros as bootstrap_current_zeros
 from torax._src.neoclassical.conductivity import base as conductivity_base
@@ -64,10 +60,8 @@ from torax._src.torax_pydantic import file_restart as file_restart_pydantic_mode
 from torax._src.torax_pydantic import interpolated_param_1d
 from torax._src.torax_pydantic import interpolated_param_2d
 from torax._src.torax_pydantic import model_base
-from torax._src.torax_pydantic import pydantic_types
 from torax._src.torax_pydantic import torax_pydantic
 from torax._src.transport_model import pydantic_model as transport_model_pydantic_model
-from torax._src.transport_model import pydantic_model as transport_pydantic_model
 from torax._src.transport_model import transport_coefficients_builder
 from torax._src.transport_model import transport_model as transport_model_lib
 from typing import Annotated, Any, Literal
@@ -80,7 +74,6 @@ from typing import Final, Mapping, Tuple
 from typing import Mapping
 from typing import TypeAlias
 from typing_extensions import Annotated
-from typing_extensions import Self
 import abc
 import chex
 import copy
@@ -92,14 +85,9 @@ import inspect
 import itertools
 import jax
 import jax.numpy as jnp
-import jaxopt
 import logging
 import numpy as np
-import os
 import pydantic
-import time
-import torax
-import treelib
 import typing_extensions
 import xarray as xr
 

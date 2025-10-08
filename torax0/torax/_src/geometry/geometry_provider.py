@@ -17,18 +17,13 @@
 NOTE: Time dependent providers currently live in `geometry.py` and match the
 protocol defined here.
 """
-from collections.abc import Mapping
 import dataclasses
-from typing import Protocol, Type
+from typing import Protocol
 
 import chex
 import jax
-import numpy as np
-from torax._src import interpolated_param
-from torax._src import jax_utils
 from torax._src.geometry import geometry
 from torax._src.torax_pydantic import torax_pydantic
-import typing_extensions
 
 # Using invalid-name because we are using the same naming convention as the
 # external physics implementations

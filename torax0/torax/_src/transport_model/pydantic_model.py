@@ -26,7 +26,6 @@ import pydantic
 from torax._src.torax_pydantic import torax_pydantic
 from torax._src.transport_model import bohm_gyrobohm
 from torax._src.transport_model import constant
-from torax._src.transport_model import critical_gradient
 from torax._src.transport_model import pydantic_model_base
 from torax._src.transport_model import qlknn_transport_model
 import typing_extensions

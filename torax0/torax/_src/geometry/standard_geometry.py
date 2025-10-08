@@ -22,18 +22,13 @@ from collections.abc import Mapping
 import dataclasses
 import logging
 
-import chex
-import contourpy
-from imas import ids_toplevel
 import jax
 import numpy as np
 import scipy
 from torax._src import array_typing
 from torax._src import constants
-from torax._src import interpolated_param
 from torax._src.geometry import geometry
 from torax._src.geometry import geometry_loader
-from torax._src.geometry import geometry_provider
 from torax._src.torax_pydantic import torax_pydantic
 import typing_extensions
 

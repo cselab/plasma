@@ -22,7 +22,6 @@ import numpy as np
 import pydantic
 from torax._src import array_typing
 from torax._src import interpolated_param
-from torax._src import jax_utils
 from torax._src.torax_pydantic import model_base
 from torax._src.torax_pydantic import pydantic_types
 import typing_extensions

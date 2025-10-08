@@ -14,11 +14,9 @@
 
 """Commonly repeated jax expressions."""
 
-import contextlib
 import functools
-import inspect
 import os
-from typing import Any, Callable, Literal, ParamSpec, TypeAlias, TypeVar
+from typing import Any, Callable, ParamSpec, TypeAlias, TypeVar
 
 import chex
 import equinox as eqx

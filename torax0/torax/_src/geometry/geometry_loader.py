@@ -15,13 +15,9 @@
 """File I/O for loading geometry files."""
 
 import enum
-import logging
 import os
-from typing import IO
 
-import eqdsk
 import numpy as np
-import scipy
 import torax
 
 
