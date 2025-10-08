@@ -1,18 +1,13 @@
-import chex
-import jax
 from jax import numpy as jnp
 from torax._src import jax_utils
 from torax._src import math_utils
-from torax._src.fvm import cell_variable
 
 
-def make_convection_terms(
-    v_face: jax.Array,
-    d_face: jax.Array,
-    var: cell_variable.CellVariable,
-    dirichlet_mode: str = 'ghost',
-    neumann_mode: str = 'ghost',
-) -> tuple[jax.Array, jax.Array]:
+def make_convection_terms(v_face,
+                          d_face,
+                          var,
+                          dirichlet_mode='ghost',
+                          neumann_mode='ghost'):
     eps = 1e-20
     is_neg = d_face < 0.0
     nonzero_sign = jnp.ones_like(is_neg) - 2 * is_neg
@@ -51,69 +46,20 @@ def make_convection_terms(
     below = below[1:]
     mat = math_utils.tridiag(diag, above, below)
     vec = jnp.zeros_like(diag)
-    if vec.shape[0] < 2:
-        raise NotImplementedError(
-            'We do not support the case where a single cell'
-            ' is affected by both boundary conditions.')
-    chex.assert_exactly_one_is_none(var.left_face_grad_constraint,
-                                    var.left_face_constraint)
-    chex.assert_exactly_one_is_none(var.right_face_grad_constraint,
-                                    var.right_face_constraint)
-    if var.left_face_constraint is not None:
-        if dirichlet_mode == 'ghost':
-            mat_value = (v_face[0] * (2.0 * left_alpha[0] - 1.0) -
-                         v_face[1] * right_alpha[0]) / var.dr
-            vec_value = (2.0 * v_face[0] * (1.0 - left_alpha[0]) *
-                         var.left_face_constraint) / var.dr
-        elif dirichlet_mode == 'direct':
-            vec_value = v_face[0] * var.left_face_constraint / var.dr
-            mat_value = -v_face[1] * right_alpha[0]
-        elif dirichlet_mode == 'semi-implicit':
-            vec_value = (v_face[0] * (1.0 - left_alpha[0]) *
-                         var.left_face_constraint) / var.dr
-            mat_value = mat[0, 0]
-            print('left vec_value: ', vec_value)
-        else:
-            raise ValueError(dirichlet_mode)
-    else:
-        mat_value = (v_face[0] - right_alpha[0] * v_face[1]) / var.dr
-        vec_value = (-v_face[0] * (1.0 - left_alpha[0]) *
-                     var.left_face_grad_constraint)
-        if neumann_mode == 'ghost':
-            pass
-        elif neumann_mode == 'semi-implicit':
-            vec_value /= 2.0
-        else:
-            raise ValueError(neumann_mode)
+    mat_value = (v_face[0] - right_alpha[0] * v_face[1]) / var.dr
+    vec_value = (-v_face[0] * (1.0 - left_alpha[0]) *
+                 var.left_face_grad_constraint)
     mat = mat.at[0, 0].set(mat_value)
     vec = vec.at[0].set(vec_value)
     if var.right_face_constraint is not None:
-        if dirichlet_mode == 'ghost':
-            mat_value = (v_face[-2] * left_alpha[-1] + v_face[-1] *
-                         (1.0 - 2.0 * right_alpha[-1])) / var.dr
-            vec_value = (-2.0 * v_face[-1] * (1.0 - right_alpha[-1]) *
-                         var.right_face_constraint) / var.dr
-        elif dirichlet_mode == 'direct':
-            mat_value = v_face[-2] * left_alpha[-1] / var.dr
-            vec_value = -v_face[-1] * var.right_face_constraint / var.dr
-        elif dirichlet_mode == 'semi-implicit':
-            mat_value = mat[-1, -1]
-            vec_value = (
-                -(v_face[-1] *
-                  (1.0 - right_alpha[-1]) * var.right_face_constraint) /
-                var.dr)
-        else:
-            raise ValueError(dirichlet_mode)
+        mat_value = (v_face[-2] * left_alpha[-1] + v_face[-1] *
+                     (1.0 - 2.0 * right_alpha[-1])) / var.dr
+        vec_value = (-2.0 * v_face[-1] * (1.0 - right_alpha[-1]) *
+                     var.right_face_constraint) / var.dr
     else:
         mat_value = -(v_face[-1] - v_face[-2] * left_alpha[-1]) / var.dr
         vec_value = (-v_face[-1] * (1.0 - right_alpha[-1]) *
                      var.right_face_grad_constraint)
-        if neumann_mode == 'ghost':
-            pass
-        elif neumann_mode == 'semi-implicit':
-            vec_value /= 2.0
-        else:
-            raise ValueError(neumann_mode)
     mat = mat.at[-1, -1].set(mat_value)
     vec = vec.at[-1].set(vec_value)
     return mat, vec
