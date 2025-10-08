@@ -10,11 +10,14 @@ jax.config.update('jax_enable_x64', True)
 
 # Global figure counter and output directory
 _figure_counter = 1
+
+
 def get_figure_filename():
     global _figure_counter
     filename = f"{_figure_counter:03d}.png"
     _figure_counter += 1
     return filename
+
 
 # In[ ]:
 
@@ -1095,8 +1098,8 @@ compare_profiles([out0, out3],
 # In[ ]:
 
 # Optional, can investigate the more detailed plots
-detailed_plot_single_sim(out0, time = 60)
-detailed_plot_single_sim(out3, time = 120)
+detailed_plot_single_sim(out0, time=60)
+detailed_plot_single_sim(out3, time=120)
 
 # In[ ]:
 

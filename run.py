@@ -87,11 +87,13 @@ import pydantic
 import typing_extensions
 import xarray as xr
 
+
 class FileRestart(torax_pydantic.BaseModelFrozen):
-  filename: pydantic.FilePath
-  time: torax_pydantic.Second
-  do_restart: bool
-  stitch: bool
+    filename: pydantic.FilePath
+    time: torax_pydantic.Second
+    do_restart: bool
+    stitch: bool
+
 
 class Neoclassical0(torax_pydantic.BaseModelFrozen):
     """Config for neoclassical models."""
@@ -136,18 +138,20 @@ class Neoclassical0(torax_pydantic.BaseModelFrozen):
             transport=self.transport.build_model(),
         )
 
+
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass
 class MHDModels:
-  """Container for instantiated MHD model objects."""
+    """Container for instantiated MHD model objects."""
 
-  sawtooth_models: sawtooth_models_lib.SawtoothModels | None = None
+    sawtooth_models: sawtooth_models_lib.SawtoothModels | None = None
 
-  def __eq__(self, other: 'MHDModels') -> bool:
-    return self.sawtooth_models == other.sawtooth_models
+    def __eq__(self, other: 'MHDModels') -> bool:
+        return self.sawtooth_models == other.sawtooth_models
 
-  def __hash__(self) -> int:
-    return hash((self.sawtooth_models,))
+    def __hash__(self) -> int:
+        return hash((self.sawtooth_models, ))
+
 
 class MHD(torax_pydantic.BaseModelFrozen):
     """Config for MHD models.
@@ -190,8 +194,7 @@ class PhysicsModels:
         metadata=dict(static=True))
     neoclassical_models: neoclassical_models_lib.NeoclassicalModels = (
         dataclasses.field(metadata=dict(static=True)))
-    mhd_models: MHDModels = dataclasses.field(metadata=dict(
-        static=True))
+    mhd_models: MHDModels = dataclasses.field(metadata=dict(static=True))
 
 
 # Using invalid-name because we are using the same naming convention as the
@@ -580,10 +583,7 @@ class ImpuritySpeciesOutput:
     Z_impurity: array_typing.FloatVectorCell
 
 
-def calculate_impurity_species_output(
-    sim_state,
-    runtime_params
-):
+def calculate_impurity_species_output(sim_state, runtime_params):
     impurity_species_output = {}
     mavrin_active = True
     mavrin_active = False
@@ -819,10 +819,11 @@ class PostProcessedOutputs:
     beta_N: array_typing.FloatScalar
     S_total: array_typing.FloatScalar
     impurity_species: dict[str, ImpuritySpeciesOutput]
+
     # pylint: enable=invalid-name
 
     def check_for_errors(self):
-      return state.SimError.NO_ERROR
+        return state.SimError.NO_ERROR
 
 
 # TODO(b/376010694): use the various SOURCE_NAMES for the keys.
@@ -3432,69 +3433,7 @@ def theta_method_matrix_equation(
     theta_implicit: float = 1.0,
     convection_dirichlet_mode: str = 'ghost',
     convection_neumann_mode: str = 'ghost',
-) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array]:
-    """Returns the left-hand and right-hand sides of the theta method equation.
-
-  The theta method solves a differential equation
-
-    tc_out partial (tc_in x) / partial t = F
-
-  where `tc` is the transient coefficient, with `tc_out`
-  being outside the partial derivative and `tc_in` inside it.
-
-  We rearrange this to
-
-    partial tc_in x / partial t = F / tc_out
-
-  The theta method calculates one discrete time step by solving:
-
-    | (tc_in_new x_new - tc_in_old x_old) / dt =
-    | theta_implicit F_new / tc_out_new + theta_exp F_old / tc_out_old
-
-  The equation is on the cell grid where `tc` is never zero. Therefore
-  it's safe to multiply equation by `dt/tc_in_new` and scale the residual to
-  `x`, which has O(1) values and thus the residual is scaled appropriately.
-
-  We thus rearrange to:
-
-    | x_new - tc_in_old/tc_in_new x_old =
-    | dt theta_implicit F_new / (tc_out_new tc_in_new) +
-    | dt theta_exp F_old / (tc_out_old tc_in_new)
-
-  Rearranging we obtain
-
-    | x_new - dt theta_implicit F_new / (tc_out_new tc_in_new) =
-    | tc_in_old/tc_in_new x_old + dt theta_exp F_old / (tc_out_old tc_in_new)
-
-  We now substitute in `F = Cu + c`:
-
-    | (I - dt theta_implicit diag(1/(tc_out_new tc_in_new)) C_new) x_new
-    | - dt theta_implicit diag(1/(tc_out_new tc_in_new)) c_new
-    | =
-    | (diag(tc_in_old/tc_in_new)
-    | + dt theta_exp diag(1/(tc_out_old tc_in_new)) C_old) x_old
-    | + dt theta_exp diag(1/(tc_out_old tc_in_new)) c_old
-
-  Args:
-    dt: Time step duration.
-    x_old: The starting x defined as a tuple of CellVariables.
-    x_new_guess: Current guess of x_new defined as a tuple of CellVariables.
-    coeffs_old: The coefficients calculated at x_old.
-    coeffs_new: The coefficients calculated at x_new.
-    theta_implicit: Coefficient on implicit term of theta method.
-    convection_dirichlet_mode: See docstring of the `convection_terms` function,
-      `dirichlet_mode` argument.
-    convection_neumann_mode: See docstring of the `convection_terms` function,
-      `neumann_mode` argument.
-
-  Returns:
-    For the equation A x_new + a_vec = B x_old + b_vec. This function returns
-     - left-hand side matrix, A
-     - left-hand side vector, a
-     - right-hand side matrix B
-     - right-hand side vector, b
-  """
-
+):
     x_new_guess_vec = cell_variable_tuple_to_vec(x_new_guess)
 
     theta_exp = 1.0 - theta_implicit
@@ -3504,19 +3443,6 @@ def theta_method_matrix_equation(
     tc_in_new = jnp.concatenate(coeffs_new.transient_in_cell)
 
     eps = 1e-7
-    # adding sanity checks for values in denominators
-    # TODO(b/326577625) remove abs in checks once x_new range is restricted
-    tc_in_new = jax_utils.error_if(
-        tc_in_new,
-        jnp.any(jnp.abs(tc_in_new) < eps),
-        msg='|tc_in_new| unexpectedly < eps',
-    )
-    tc_in_new = jax_utils.error_if(
-        tc_in_new,
-        jnp.any(jnp.abs(tc_out_new * tc_in_new) < eps),
-        msg='|tc_out_new*tc_in_new| unexpectedly < eps',
-    )
-
     left_transient = jnp.identity(len(x_new_guess_vec))
     right_transient = jnp.diag(jnp.squeeze(tc_in_old / tc_in_new))
 
@@ -4018,6 +3944,7 @@ UnitIntervalTimeVaryingScalar = (
 PositiveTimeVaryingArray = interpolated_param_2d.PositiveTimeVaryingArray
 ValidatedDefault = functools.partial(pydantic.Field, validate_default=True)
 
+
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class PhysicsModels:
@@ -4029,8 +3956,7 @@ class PhysicsModels:
         metadata=dict(static=True))
     neoclassical_models: neoclassical_models_lib.NeoclassicalModels = (
         dataclasses.field(metadata=dict(static=True)))
-    mhd_models: MHDModels = dataclasses.field(metadata=dict(
-        static=True))
+    mhd_models: MHDModels = dataclasses.field(metadata=dict(static=True))
 
 
 TIME_INVARIANT: Final[str] = '_pydantic_time_invariant_field'
@@ -4943,8 +4869,7 @@ class ToraxConfig(BaseModelFrozen):
     pedestal: pedestal_pydantic_model.PedestalConfig = pydantic.Field(
         discriminator='model_name')
     mhd: MHD = MHD()
-    restart: FileRestart | None = pydantic.Field(
-        default=None)
+    restart: FileRestart | None = pydantic.Field(default=None)
 
     def build_physics_models(self):
         return PhysicsModels(

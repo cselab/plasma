@@ -1,6 +1,9 @@
 CONFIG = {
     'plasma_composition': {
-        'main_ion': {'D': 0.5, 'T': 0.5},  # (bundled isotope average)
+        'main_ion': {
+            'D': 0.5,
+            'T': 0.5
+        },  # (bundled isotope average)
         'impurity': 'Ne',
         'Z_eff': 1.6,  # sets impurity density
     },
@@ -8,17 +11,33 @@ CONFIG = {
         'Ip': 10.5e6,  # total plasma current in A
         # boundary + initial conditions for T and n
         # initial condition ion temperature for r=0 and r=a_minor
-        'T_i': {0.0: {0.0: 15.0, 1.0: 0.2}},
-        'T_i_right_bc': 0.2,  # boundary condition ion temperature for r=a_minor
+        'T_i': {
+            0.0: {
+                0.0: 15.0,
+                1.0: 0.2
+            }
+        },
+        'T_i_right_bc':
+        0.2,  # boundary condition ion temperature for r=a_minor
         # initial condition electron temperature for r=0 and r=a_minor
-        'T_e': {0.0: {0.0: 15.0, 1.0: 0.2}},
+        'T_e': {
+            0.0: {
+                0.0: 15.0,
+                1.0: 0.2
+            }
+        },
         'T_e_right_bc': 0.2,  # boundary condition electron temp for r=a_minor
         'n_e_right_bc': 0.25e20,  # boundary condition density for r=a_minor
         # set initial condition density according to Greenwald fraction.
         'n_e_nbar_is_fGW': True,
         'normalize_n_e_to_nbar': True,
         'nbar': 0.8,  # original simulation goes up to ~0.9
-        'n_e': {0: {0.0: 1.5, 1.0: 1.0}},  # Initial electron density profile
+        'n_e': {
+            0: {
+                0.0: 1.5,
+                1.0: 1.0
+            }
+        },  # Initial electron density profile
     },
     'numerics': {
         # simulation control
