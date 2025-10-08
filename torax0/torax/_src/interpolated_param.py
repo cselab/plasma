@@ -119,52 +119,15 @@ def _convert_value_to_floats(
 
 
 def convert_input_to_xs_ys(
-    interp_input: TimeInterpolatedInput,
-) -> tuple[np.ndarray, np.ndarray, InterpolationMode, bool]:
+    interp_input
+):
     interpolation_mode = InterpolationMode.PIECEWISE_LINEAR
-    if isinstance(interp_input, tuple):
-        if len(interp_input) != 2:
-            raise ValueError(
-                'Single axis interpolated var tuple length must be 2. The first '
-                'element are the values and the second element is the '
-                'interpolation mode or both values should be arrays to be directly '
-                f'interpolated. Given: {interp_input}.')
-        if isinstance(interp_input[1], str):
-            interpolation_mode = InterpolationMode[interp_input[1].upper()]
-            interp_input = interp_input[0]
     if _is_bool(interp_input):
         interp_input = _convert_value_to_floats(interp_input)
         is_bool_param = True
     else:
         is_bool_param = False
-    if isinstance(interp_input, xr.DataArray):
-        if not isinstance(interp_input.coords, Mapping):
-            raise ValueError(
-                'The coords in the xr.DataArray must be a mapping.')
-        if 'time' not in interp_input.coords:
-            raise ValueError(
-                'The coords in the xr.DataArray must include a "time" coordinate.'
-            )
-        return (
-            np.asarray(interp_input.coords['time'],
-                       dtype=jax_utils.get_np_dtype()),
-            np.asarray(interp_input.values, dtype=jax_utils.get_np_dtype()),
-            interpolation_mode,
-            is_bool_param,
-        )
-    if isinstance(interp_input, tuple):
-        if len(interp_input) != 2:
-            raise ValueError(
-                'The time interpolated input tuple must be length 2. Given: '
-                f'{interp_input}.')
-        xs, ys = interp_input
-        xs = np.asarray(xs, dtype=jax_utils.get_np_dtype())
-        ys = np.asarray(ys, dtype=jax_utils.get_np_dtype())
-        return xs, ys, interpolation_mode, is_bool_param
     if isinstance(interp_input, dict):
-        if not interp_input:
-            raise ValueError(
-                'The time interpolated input dict must be non-empty.')
         return (
             np.array(list(interp_input.keys()),
                      dtype=jax_utils.get_np_dtype()),
@@ -194,10 +157,6 @@ class InterpolatedVarSingleAxis(InterpolatedParamBase):
     ):
         self._value = value
         xs, ys = value
-        if not np.issubdtype(xs.dtype, np.floating):
-            raise ValueError(f'xs must be a float array, but got {xs.dtype}.')
-        if not np.issubdtype(ys.dtype, np.floating):
-            raise ValueError(f'ys must be a float array, but got {ys.dtype}.')
         self._is_bool_param = is_bool_param
         self._interpolation_mode = interpolation_mode
         match interpolation_mode:
