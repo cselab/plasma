@@ -15,13 +15,6 @@ _interp_fn = jax_utils.jit(jnp.interp)
 _interp_fn_vmap = jax_utils.jit(jax.vmap(jnp.interp, in_axes=(None, None, 1)))
 
 
-@jax_utils.jit
-def _step_interpolation(xs: array_typing.Array,
-                        x: chex.Numeric) -> array_typing.Array:
-    return jnp.clip(
-        jnp.searchsorted(xs, x, side='left') - 1, 0, xs.shape[0] - 1)
-
-
 @enum.unique
 class InterpolationMode(enum.Enum):
     PIECEWISE_LINEAR = 'piecewise_linear'
@@ -69,19 +62,8 @@ class InterpolatedParamBase(abc.ABC):
 class _PiecewiseLinearInterpolatedParam(InterpolatedParamBase):
 
     def __init__(self, xs: array_typing.Array, ys: array_typing.Array):
-        if not np.issubdtype(xs.dtype, np.floating):
-            raise ValueError(f'xs must be a float array, but got {xs.dtype}.')
-        if not np.issubdtype(ys.dtype, np.floating):
-            raise ValueError(f'ys must be a float array, but got {ys.dtype}.')
         self._xs = xs
         self._ys = ys
-        if self.xs.shape[0] != self.ys.shape[0]:
-            raise ValueError(
-                'xs and ys must have the same number of elements in the first '
-                f'dimension. Given: {self.xs.shape} and {self.ys.shape}.')
-        if ys.ndim not in (1, 2):
-            raise ValueError(
-                f'ys must be either 1D or 2D. Given: {self.ys.shape}.')
 
     @property
     def xs(self) -> array_typing.Array:
