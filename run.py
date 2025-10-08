@@ -1385,7 +1385,7 @@ post_processing_history = [initial_post_processed_outputs]
 sim_error = state.SimError.NO_ERROR
 initial_runtime_params = runtime_params_provider(initial_state.t)
 time_step_calculator_params = initial_runtime_params.time_step_calculator
-while step_fn.time_step_calculator.not_done(
+while g.ts.not_done(
         current_state.t,
         runtime_params_provider.numerics.t_final,
         time_step_calculator_params,
