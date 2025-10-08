@@ -22,36 +22,12 @@ from torax._src.neoclassical.bootstrap_current import base
 from torax._src.neoclassical.bootstrap_current import runtime_params as bootstrap_runtime_params
 from torax._src.torax_pydantic import torax_pydantic
 
-
 class ZerosModel(base.BootstrapCurrentModel):
-  """Zeros model for bootstrap current."""
-
-  def calculate_bootstrap_current(
-      self,
-      runtime_params: runtime_params_slice.RuntimeParams,
-      geometry: geometry_lib.Geometry,
-      core_profiles: state.CoreProfiles,
-  ) -> base.BootstrapCurrent:
-    """Calculates bootstrap current."""
-    return base.BootstrapCurrent(
-        j_bootstrap=jnp.zeros_like(geometry.rho),
-        j_bootstrap_face=jnp.zeros_like(geometry.rho_face),
-    )
-
-  def __eq__(self, other) -> bool:
-    return isinstance(other, self.__class__)
-
-  def __hash__(self) -> int:
-    return hash(self.__class__)
-
+  pass
 
 class ZerosModelConfig(base.BootstrapCurrentModelConfig):
-  """Config for the Zeros model implementation of bootstrap current."""
-
   model_name: Annotated[Literal['zeros'], torax_pydantic.JAX_STATIC] = 'zeros'
-
-  def build_runtime_params(self) -> bootstrap_runtime_params.RuntimeParams:
+  def build_runtime_params(self):
     return bootstrap_runtime_params.RuntimeParams()
-
-  def build_model(self) -> ZerosModel:
+  def build_model(self):
     return ZerosModel()
