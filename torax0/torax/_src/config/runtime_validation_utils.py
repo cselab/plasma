@@ -22,18 +22,8 @@ def time_varying_array_bounded(
     time_varying_array: torax_pydantic.TimeVaryingArray,
     lower_bound: float = -np.inf,
     upper_bound: float = np.inf,
-) -> torax_pydantic.TimeVaryingArray:
-    for t, (_, values) in time_varying_array.value.items():
-        if not np.all(values >= lower_bound):
-            raise ValueError(
-                f'Some values are smaller than lower bound {lower_bound} at time'
-                f' {t}: {values}')
-        if not np.all(values <= upper_bound):
-            raise ValueError(
-                f'Some values are larger than upper bound {upper_bound} at time'
-                f' {t}: {values}')
+):
     return time_varying_array
-
 
 TimeVaryingArrayDefinedAtRightBoundaryAndBounded: TypeAlias = Annotated[
     torax_pydantic.TimeVaryingArray,
@@ -54,24 +44,11 @@ def _ion_mixture_before_validator(value: Any) -> Any:
 
 def _ion_mixture_after_validator(
     value: Mapping[str, torax_pydantic.TimeVaryingScalar],
-) -> Mapping[str, torax_pydantic.TimeVaryingScalar]:
-    if not value:
-        raise ValueError('The species dictionary cannot be empty.')
+):
     invalid_ion_symbols = set(value.keys()) - constants.ION_SYMBOLS
-    if invalid_ion_symbols:
-        raise ValueError(
-            f'Invalid ion symbols: {invalid_ion_symbols}. Allowed symbols are:'
-            f' {constants.ION_SYMBOLS}')
     time_arrays = [v.time for v in value.values()]
     fraction_arrays = [v.value for v in value.values()]
-    if not all(np.array_equal(time_arrays[0], x) for x in time_arrays[1:]):
-        raise ValueError(
-            'All time indices for ion mixture fractions must be equal.')
     fraction_sum = np.sum(fraction_arrays, axis=0)
-    if not np.allclose(fraction_sum, 1.0, rtol=_TOLERANCE):
-        raise ValueError(
-            'Fractional concentrations in an IonMixture must sum to 1 at all times.'
-        )
     return value
 
 

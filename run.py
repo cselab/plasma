@@ -77,6 +77,7 @@ import pydantic
 import typing_extensions
 import xarray as xr
 
+
 class QLKNNTransportModel(pydantic_model_base.TransportBase):
     model_name: Annotated[Literal['qlknn'],
                           torax_pydantic.JAX_STATIC] = 'qlknn'
@@ -133,6 +134,7 @@ class QLKNNTransportModel(pydantic_model_base.TransportBase):
 
 CombinedCompatibleTransportModel = QLKNNTransportModel
 TransportConfig = CombinedCompatibleTransportModel
+
 
 @functools.partial(jax_utils.jit, static_argnums=(0, 1, 2))
 def calculate_total_transport_coeffs(
@@ -205,6 +207,7 @@ class Neoclassical0(torax_pydantic.BaseModelFrozen):
             bootstrap_current=self.bootstrap_current.build_model(),
             transport=self.transport.build_model(),
         )
+
 
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
@@ -2835,6 +2838,7 @@ class PhysicsModels:
     neoclassical_models: neoclassical_models_lib.NeoclassicalModels = (
         dataclasses.field(metadata=dict(static=True)))
 
+
 TIME_INVARIANT: Final[str] = '_pydantic_time_invariant_field'
 JAX_STATIC: Final[str] = '_pydantic_jax_static_field'
 StaticKwargs: TypeAlias = dict[str, Any]
@@ -3388,15 +3392,14 @@ def _get_initial_state(runtime_params, geo, step_fn):
             sigma_face=initial_core_profiles.sigma_face,
         ),
     )
-    transport_coeffs = (
-        calculate_total_transport_coeffs(
-            physics_models.pedestal_model,
-            physics_models.transport_model,
-            physics_models.neoclassical_models,
-            runtime_params,
-            geo,
-            initial_core_profiles,
-        ))
+    transport_coeffs = (calculate_total_transport_coeffs(
+        physics_models.pedestal_model,
+        physics_models.transport_model,
+        physics_models.neoclassical_models,
+        runtime_params,
+        geo,
+        initial_core_profiles,
+    ))
     return ToraxSimState(
         t=np.array(runtime_params.numerics.t_initial),
         dt=np.zeros(()),
@@ -3614,15 +3617,14 @@ def _finalize_outputs(t, dt, x_new, solver_numeric_outputs, geometry_t_plus_dt,
             neoclassical_models=physics_models.neoclassical_models,
             evolving_names=evolving_names,
         ))
-    final_total_transport = (
-        calculate_total_transport_coeffs(
-            physics_models.pedestal_model,
-            physics_models.transport_model,
-            physics_models.neoclassical_models,
-            runtime_params_t_plus_dt,
-            geometry_t_plus_dt,
-            final_core_profiles,
-        ))
+    final_total_transport = (calculate_total_transport_coeffs(
+        physics_models.pedestal_model,
+        physics_models.transport_model,
+        physics_models.neoclassical_models,
+        runtime_params_t_plus_dt,
+        geometry_t_plus_dt,
+        final_core_profiles,
+    ))
     output_state = ToraxSimState(
         t=t + dt,
         dt=dt,
@@ -3674,8 +3676,7 @@ class ToraxConfig(BaseModelFrozen):
     sources: sources_pydantic_model.Sources
     neoclassical: Neoclassical0 = (Neoclassical0())
     solver: SolverConfig = pydantic.Field(discriminator='solver_type')
-    transport: TransportConfig = pydantic.Field(
-        discriminator='model_name')
+    transport: TransportConfig = pydantic.Field(discriminator='model_name')
     pedestal: pedestal_pydantic_model.PedestalConfig = pydantic.Field(
         discriminator='model_name')
     restart: FileRestart | None = pydantic.Field(default=None)
