@@ -47,36 +47,6 @@ class TransportBase(torax_pydantic.BaseModelFrozen, abc.ABC):
     smoothing_width: pydantic.NonNegativeFloat = 0.0
     smooth_everywhere: bool = False
 
-    @pydantic.model_validator(mode='after')
-    def _check_fields(self) -> typing_extensions.Self:
-        if not self.chi_max > self.chi_min:
-            raise ValueError('chi_min must be less than chi_max.')
-        if not self.D_e_min < self.D_e_max:
-            raise ValueError('D_e_min must be less than D_e_max.')
-        if not self.V_e_min < self.V_e_max:
-            raise ValueError('V_e_min must be less than V_e_max.')
-        if self.rho_outer.interpolation_mode != self.rho_inner.interpolation_mode:
-            raise ValueError(
-                'rho_outer and rho_inner must have the same interpolation mode.'
-            )
-        if self.rho_max.interpolation_mode != self.rho_min.interpolation_mode:
-            raise ValueError(
-                'rho_max and rho_min must have the same interpolation mode.')
-        all_times_inner_outer = np.union1d(self.rho_inner.time,
-                                           self.rho_outer.time)
-        if not np.all(
-                self.rho_outer.get_value(all_times_inner_outer) >
-                self.rho_inner.get_value(all_times_inner_outer)):
-            raise ValueError(
-                'rho_outer must be greater than rho_inner for all time.')
-        all_times_min_max = np.union1d(self.rho_min.time, self.rho_max.time)
-        if not np.all(
-                self.rho_max.get_value(all_times_min_max) >
-                self.rho_min.get_value(all_times_min_max)):
-            raise ValueError(
-                'rho_max must be greater than rho_min for all time.')
-        return self
-
     def build_runtime_params(self,
                              t: chex.Numeric) -> runtime_params.RuntimeParams:
         return runtime_params.RuntimeParams(
