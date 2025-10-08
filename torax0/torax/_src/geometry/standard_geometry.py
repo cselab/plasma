@@ -168,60 +168,6 @@ class StandardGeometryIntermediates:
             z_magnetic_axis=None,
         )
 
-    @classmethod
-    def _from_fbt(
-        cls,
-        LY: Mapping[str, np.ndarray],
-        L: Mapping[str, np.ndarray],
-        Ip_from_parameters: bool = True,
-        n_rho: int = 25,
-        hires_factor: int = 4,
-    ) -> typing_extensions.Self:
-        R_major = LY['rgeom'][-1]
-        B_0 = LY['rBt'] / R_major
-        a_minor = LY['aminor'][-1]
-        if 'FtPVQ' in LY:
-            Phi = LY['FtPVQ']
-        else:
-            logging.warning(
-                'FtPVQ not found in LY, using FtPQ instead. Please upgrade to'
-                ' a newer version of MEQ as the source of the LY data. This will'
-                ' throw an error in a future version.')
-            Phi = LY['FtPQ']
-        rhon = np.sqrt(Phi / Phi[-1])
-        psi = L['pQ']**2 * (LY['FB'] - LY['FA']) + LY['FA']
-        LY_Q1Q = np.where(LY['Q1Q'] != 0, LY['Q1Q'], constants.CONSTANTS.eps)
-        flux_surf_avg_B2 = B_0**2 / np.sqrt(1.0 - LY['epsilon']**2)
-        flux_surf_avg_1_over_B2 = B_0**-2 * (1.0 + 1.5 * LY['epsilon']**2)
-        return cls(
-            geometry_type=geometry.GeometryType.FBT,
-            Ip_from_parameters=Ip_from_parameters,
-            R_major=R_major,
-            a_minor=a_minor,
-            B_0=B_0,
-            psi=psi,
-            Phi=Phi,
-            Ip_profile=np.abs(LY['ItQ']),
-            R_in=LY['rgeom'] - LY['aminor'],
-            R_out=LY['rgeom'] + LY['aminor'],
-            F=np.abs(LY['TQ']),
-            int_dl_over_Bp=1 / LY_Q1Q,
-            flux_surf_avg_1_over_R=LY['Q0Q'],
-            flux_surf_avg_1_over_R2=LY['Q2Q'],
-            flux_surf_avg_Bp2=np.abs(LY['Q3Q']) / (4 * np.pi**2),
-            flux_surf_avg_RBp=np.abs(LY['Q5Q']) / (2 * np.pi),
-            flux_surf_avg_R2Bp2=np.abs(LY['Q4Q']) / (2 * np.pi)**2,
-            flux_surf_avg_B2=flux_surf_avg_B2,
-            flux_surf_avg_1_over_B2=flux_surf_avg_1_over_B2,
-            delta_upper_face=LY['deltau'],
-            delta_lower_face=LY['deltal'],
-            elongation=LY['kappa'],
-            vpr=4 * np.pi * Phi[-1] * rhon / (np.abs(LY['TQ']) * LY['Q2Q']),
-            n_rho=n_rho,
-            hires_factor=hires_factor,
-            z_magnetic_axis=LY['zA'],
-        )
-
 
 def build_standard_geometry(
     intermediate: StandardGeometryIntermediates, ) -> StandardGeometry:
