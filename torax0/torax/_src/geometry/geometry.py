@@ -176,17 +176,9 @@ class Geometry:
                                axis=-1)
 
 def stack_geometries(geometries: Sequence[Geometry]) -> Geometry:
-    if not geometries:
-        raise ValueError('No geometries provided.')
     first_geo = geometries[0]
     torax_mesh = first_geo.torax_mesh
     geometry_type = first_geo.geometry_type
-    for geometry in geometries[1:]:
-        if geometry.torax_mesh != torax_mesh:
-            raise ValueError('All geometries must have the same mesh.')
-        if geometry.geometry_type != geometry_type:
-            raise ValueError(
-                'All geometries must have the same geometry type.')
     stacked_data = {}
     for field in dataclasses.fields(first_geo):
         field_name = field.name
