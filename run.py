@@ -3683,11 +3683,6 @@ class ToraxConfig(BaseModelFrozen):
                                         == enums.InitialGuessMode.LINEAR)
         return self
 
-    @pydantic.computed_field
-    @property
-    def torax_version(self) -> str:
-        return version.TORAX_VERSION
-
 
 CONFIG = {
     'plasma_composition': {
