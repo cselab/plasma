@@ -1,43 +1,19 @@
-# Copyright 2024 DeepMind Technologies Limited
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-"""Profile condition parameters used throughout TORAX simulations."""
 import dataclasses
 import enum
 from typing import Annotated, Final
-
 import jax
 import pydantic
 from torax._src import array_typing
 from torax._src.torax_pydantic import torax_pydantic
-
-# pylint: disable=invalid-name
-
-# Order of magnitude validations to catch common config errors.
 _MIN_IP_AMPS: Final[float] = 1e3
 _MIN_DENSITY_M3: Final[float] = 1e10
 _MAX_DENSITY_GW: Final[float] = 1e2
 _MAX_TEMPERATURE_KEV: Final[float] = 1e3
 _MAX_TEMPERATURE_BC_KEV: Final[float] = 5e1
-
-
 class InitialPsiMode(enum.StrEnum):
   PROFILE_CONDITIONS = 'profile_conditions'
   GEOMETRY = 'geometry'
   J = 'j'
-
-
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass
 class RuntimeParams:
@@ -45,13 +21,10 @@ class RuntimeParams:
   v_loop_lcfs: array_typing.FloatScalar
   T_i_right_bc: array_typing.FloatScalar
   T_e_right_bc: array_typing.FloatScalar
-  # Temperature profiles defined on the cell grid.
   T_e: array_typing.FloatVector
   T_i: array_typing.FloatVector
-  # If provided as array, Psi profile defined on the cell grid.
   psi: array_typing.FloatVector | None
   psidot: array_typing.FloatVector | None
-  # Electron density profile on the cell grid.
   n_e: array_typing.FloatVector
   nbar: array_typing.FloatScalar
   n_e_nbar_is_fGW: bool
@@ -68,8 +41,6 @@ class RuntimeParams:
   initial_psi_mode: InitialPsiMode = dataclasses.field(
       metadata={'static': True}
   )
-
-
 class ProfileConditions(torax_pydantic.BaseModelFrozen):
   Ip: torax_pydantic.TimeVaryingScalar = torax_pydantic.ValidatedDefault(15e6)
   use_v_loop_lcfs_boundary_condition: Annotated[
@@ -100,17 +71,13 @@ class ProfileConditions(torax_pydantic.BaseModelFrozen):
   n_e_right_bc_is_fGW: bool = False
   current_profile_nu: float = 1.0
   initial_j_is_total_current: bool = False
-  # TODO(b/434175938): Remove this before the V2 API release in place of
-  # initial_psi_source.
   initial_psi_from_j: bool = False
   initial_psi_mode: Annotated[InitialPsiMode, torax_pydantic.JAX_STATIC] = (
       InitialPsiMode.PROFILE_CONDITIONS
   )
-
   @pydantic.model_validator(mode='after')
   def after_validator(self):
     return self
-
   def build_runtime_params(self, t):
     runtime_params = {
         x.name: getattr(self, x.name)
@@ -118,7 +85,6 @@ class ProfileConditions(torax_pydantic.BaseModelFrozen):
         if x.name != 'n_e_right_bc_is_absolute'
     }
     runtime_params['n_e_right_bc_is_absolute'] = True
-
     def _get_value(x):
       if isinstance(
           x, (torax_pydantic.TimeVaryingScalar, torax_pydantic.TimeVaryingArray)
@@ -126,7 +92,5 @@ class ProfileConditions(torax_pydantic.BaseModelFrozen):
         return x.get_value(t)
       else:
         return x
-
     runtime_params = {k: _get_value(v) for k, v in runtime_params.items()}
     return RuntimeParams(**runtime_params)
-

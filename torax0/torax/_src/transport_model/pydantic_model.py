@@ -1,30 +1,11 @@
-# Copyright 2024 DeepMind Technologies Limited
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-"""Pydantic config for Transport models."""
-
 import copy
 import dataclasses
 from typing import Annotated, Any, Literal
-
 import chex
 import pydantic
 from torax._src.torax_pydantic import torax_pydantic
 from torax._src.transport_model import pydantic_model_base
 from torax._src.transport_model import qlknn_transport_model
-
-# pylint: disable=invalid-name
 class QLKNNTransportModel(pydantic_model_base.TransportBase):
   model_name: Annotated[Literal['qlknn'], torax_pydantic.JAX_STATIC] = 'qlknn'
   model_path: Annotated[str, torax_pydantic.JAX_STATIC] = ''
@@ -42,7 +23,6 @@ class QLKNNTransportModel(pydantic_model_base.TransportBase):
   q_sawtooth_proxy: bool = True
   DV_effective: bool = False
   An_min: pydantic.PositiveFloat = 0.05
-
   @pydantic.model_validator(mode='before')
   @classmethod
   def _conform_data(cls, data: dict[str, Any]) -> dict[str, Any]:
@@ -51,12 +31,10 @@ class QLKNNTransportModel(pydantic_model_base.TransportBase):
     if 'smoothing_width' not in data:
       data['smoothing_width'] = 0.1
     return data
-
   def build_transport_model(self) -> qlknn_transport_model.QLKNNTransportModel:
     return qlknn_transport_model.QLKNNTransportModel(
         path=self.model_path, name=self.qlknn_model_name
     )
-
   def build_runtime_params(
       self, t: chex.Numeric
   ) -> qlknn_transport_model.RuntimeParams:
@@ -77,8 +55,5 @@ class QLKNNTransportModel(pydantic_model_base.TransportBase):
         An_min=self.An_min,
         **base_kwargs,
     )
-
-
-
 CombinedCompatibleTransportModel = QLKNNTransportModel
-TransportConfig = CombinedCompatibleTransportModel  # pytype: disable=invalid-annotation
+TransportConfig = CombinedCompatibleTransportModel  

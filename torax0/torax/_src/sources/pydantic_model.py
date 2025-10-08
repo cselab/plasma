@@ -1,21 +1,5 @@
-# Copyright 2024 DeepMind Technologies Limited
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-"""Pydantic config for source models."""
 import copy
 from typing import Any
-
 import immutabledict
 import pydantic
 from torax._src.sources import base
@@ -28,13 +12,10 @@ from torax._src.sources import pellet_source as pellet_source_lib
 from torax._src.sources import qei_source as qei_source_lib
 from torax._src.sources import source_models
 from torax._src.torax_pydantic import torax_pydantic
-
-
 class Sources(torax_pydantic.BaseModelFrozen):
   ei_exchange: qei_source_lib.QeiSourceConfig = torax_pydantic.ValidatedDefault(
       {'mode': 'ZERO'}
   )
-  # keep-sorted start
   cyclotron_radiation: (
       None
   ) = pydantic.Field(
@@ -74,14 +55,11 @@ class Sources(torax_pydantic.BaseModelFrozen):
       discriminator='model_name',
       default=None,
   )
-  # keep-sorted end
-
   @pydantic.model_validator(mode='before')
   @classmethod
   def _set_default_model_functions(cls, x: dict[str, Any]) -> dict[str, Any]:
     constructor_data = copy.deepcopy(x)
     for k, v in x.items():
-      # If this an already validated model, skip it.
       if isinstance(v, base.SourceModelBase) or v is None:
         continue
       match k:
@@ -141,12 +119,9 @@ class Sources(torax_pydantic.BaseModelFrozen):
                 'model_name'
             ] = ohmic_heat_source_lib.DEFAULT_MODEL_FUNCTION_NAME
     return constructor_data
-
   def build_models(self) -> source_models.SourceModels:
-    """Builds and returns a container with instantiated source model objects."""
     standard_sources = {}
     for k, v in dict(self).items():
-      # ei_exchange is handled separately above.
       if k == 'ei_exchange':
         continue
       else:
@@ -158,13 +133,10 @@ class Sources(torax_pydantic.BaseModelFrozen):
             )
           standard_sources[k] = source
     qei_source_model = self.ei_exchange.build_source()
-    # Qei is a special source that is not in standard_sources.
-    # It has its own attribute in SourceModels.
     return source_models.SourceModels(
         qei_source=qei_source_model,
         standard_sources=immutabledict.immutabledict(standard_sources),
     )
-
   @property
   def source_model_config(self) -> dict[str, base.SourceModelBase]:
     return {
