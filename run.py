@@ -790,9 +790,6 @@ class PostProcessedOutputs:
     S_total: array_typing.FloatScalar
     impurity_species: dict[str, ImpuritySpeciesOutput]
 
-    def check_for_errors(self):
-        return state.SimError.NO_ERROR
-
 
 ION_EL_HEAT_SOURCE_TRANSFORMATIONS = {
     'generic_heat': 'P_aux_generic',
@@ -3507,9 +3504,6 @@ class ToraxSimState:
     core_sources: source_profiles.SourceProfiles
     geometry: Any
     solver_numeric_outputs: state.SolverNumericOutputs
-
-    def check_for_errors(self) -> state.SimError:
-        return state.SimError.NO_ERROR
 
     def has_nan(self) -> bool:
         return any([np.any(np.isnan(x)) for x in jax.tree.leaves(self)])

@@ -23,7 +23,6 @@ from torax._src.geometry.geometry import Geometry
 from torax._src.sources.source_profiles import SourceProfiles
 from torax._src.state import CoreProfiles
 from torax._src.state import CoreTransport
-from torax._src.state import SimError
 from torax._src.state import SolverNumericOutputs
 
 # pylint: enable=g-importing-member

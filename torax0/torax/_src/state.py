@@ -77,11 +77,3 @@ class SolverNumericOutputs:
     inner_solver_iterations: array_typing.IntScalar = 0
     sawtooth_crash: array_typing.BoolScalar = False
 
-
-@enum.unique
-class SimError(enum.Enum):
-    NO_ERROR = 0
-    NAN_DETECTED = 1
-    QUASINEUTRALITY_BROKEN = 2
-    NEGATIVE_CORE_PROFILES = 3
-    REACHED_MIN_DT = 4
