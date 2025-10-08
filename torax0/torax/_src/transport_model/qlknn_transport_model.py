@@ -32,7 +32,7 @@ _EPSILON_NN: Final[float] = (1 / 3)
 
 
 @functools.lru_cache(maxsize=1)
-def get_model(path: str, name: str) -> base_qlknn_model.BaseQLKNNModel:
+def get_model(path: str, name: str):
     try:
         if path:
             if not path.endswith('.qlknn'):

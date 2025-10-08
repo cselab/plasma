@@ -26,7 +26,7 @@ _FLUX_NAME_MAP: Final[Mapping[str, str]] = immutabledict.immutabledict({
 })
 
 
-class QLKNNModelWrapper(base_qlknn_model.BaseQLKNNModel):
+class QLKNNModelWrapper:
 
     def __init__(
         self,
@@ -34,6 +34,8 @@ class QLKNNModelWrapper(base_qlknn_model.BaseQLKNNModel):
         name: str = '',
         flux_name_map: Mapping[str, str] | None = None,
     ):
+        self.path = path
+        self.name = name
         if flux_name_map is None:
             flux_name_map = _FLUX_NAME_MAP
         self._flux_name_map = flux_name_map
@@ -44,7 +46,6 @@ class QLKNNModelWrapper(base_qlknn_model.BaseQLKNNModel):
             self._model = qlknn_model.QLKNNModel.load_model_from_name(name)
         else:
             self._model = qlknn_model.QLKNNModel.load_default_model()
-        super().__init__(path=self._model.path, name=self._model.name)
 
     @property
     def inputs_and_ranges(self):
