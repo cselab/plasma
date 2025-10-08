@@ -3002,8 +3002,6 @@ class PhysicsModels:
         dataclasses.field(metadata=dict(static=True)))
 
 
-TIME_INVARIANT: Final[str] = '_pydantic_time_invariant_field'
-JAX_STATIC: Final[str] = '_pydantic_jax_static_field'
 StaticKwargs: TypeAlias = dict[str, Any]
 DynamicArgs: TypeAlias = list[Any]
 PROFILES = "profiles"
