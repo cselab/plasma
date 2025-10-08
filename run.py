@@ -297,16 +297,9 @@ class Geometry0(torax_pydantic.BaseModelFrozen):
 
     @pydantic.model_validator(mode='before')
     @classmethod
-    def _conform_data(cls, data: dict[str, Any]) -> dict[str, Any]:
-        if 'geometry_type' not in data:
-            raise ValueError('geometry_type must be set in the input config.')
+    def _conform_data(cls, data):
         geometry_type = data['geometry_type']
-        if isinstance(geometry_type, geometry.GeometryType | int):
-            return data
-        elif isinstance(geometry_type, str):
-            return _conform_user_data(data)
-        else:
-            raise ValueError(f'Invalid value for geometry: {geometry_type}')
+        return _conform_user_data(data)
 
     @functools.cached_property
     def build_provider(self) -> geometry_provider.GeometryProvider:
@@ -326,10 +319,6 @@ class Geometry0(torax_pydantic.BaseModelFrozen):
 
 
 def _conform_user_data(data: dict[str, Any]) -> dict[str, Any]:
-    if 'LY_bundle_object' in data and 'geometry_configs' in data:
-        raise ValueError(
-            'Cannot use both `LY_bundle_object` and `geometry_configs` together.'
-        )
     data_copy = data.copy()
     data_copy['geometry_type'] = data['geometry_type'].lower()
     geometry_type = getattr(geometry.GeometryType,
@@ -460,14 +449,7 @@ def _root_in_interval(coeffs: jax.Array, interval: jax.Array,
 
 
 @jax_utils.jit
-def find_min_q_and_q_surface_intercepts(rho_norm: jax.Array,
-                                        q_face: jax.Array) -> SafetyFactorFit:
-    if len(q_face) != len(rho_norm):
-        raise ValueError(
-            f'Input arrays must have the same length. {len(q_face)} !='
-            f' {len(rho_norm)}')
-    if len(q_face) < 4:
-        raise ValueError('Input arrays must have at least four points.')
+def find_min_q_and_q_surface_intercepts(rho_norm, q_face):
     sorted_indices = jnp.argsort(rho_norm)
     rho_norm = rho_norm[sorted_indices]
     q_face = q_face[sorted_indices]
@@ -517,7 +499,6 @@ class ImpuritySpeciesOutput:
 
 def calculate_impurity_species_output(sim_state, runtime_params):
     impurity_species_output = {}
-    mavrin_active = True
     mavrin_active = False
     impurity_fractions = sim_state.core_profiles.impurity_fractions
     impurity_names = runtime_params.plasma_composition.impurity_names
@@ -535,12 +516,7 @@ def calculate_impurity_species_output(sim_state, runtime_params):
         n_imp = (impurity_fractions[symbol] * core_profiles.n_impurity.value *
                  impurity_density_scaling)
         Z_imp = charge_state_info.Z_per_species[i]
-        if mavrin_active:
-            lz = impurity_radiation_mavrin_fit.calculate_impurity_radiation_single_species(
-                core_profiles.T_e.value, symbol)
-            radiation = n_imp * core_profiles.n_e.value * lz
-        else:
-            radiation = jnp.zeros_like(n_imp)
+        radiation = jnp.zeros_like(n_imp)
         impurity_species_output[symbol] = ImpuritySpeciesOutput(
             radiation=radiation, n_impurity=n_imp, Z_impurity=Z_imp)
     return impurity_species_output
@@ -699,11 +675,6 @@ def _calculate_integrated_sources(
     for key, value in ION_EL_HEAT_SOURCE_TRANSFORMATIONS.items():
         is_in_T_i = key in core_sources.T_i
         is_in_T_e = key in core_sources.T_e
-        if is_in_T_i != is_in_T_e:
-            raise ValueError(
-                f"Source '{key}' is expected to be defined for both ion and electron"
-                ' channels (in core_sources.T_i and core_sources.T_e respectively).'
-                f' Found in T_i: {is_in_T_i}, Found in T_e: {is_in_T_e}.')
         integrated[f'{value}_i'] = _get_integrated_source_value(
             core_sources.T_i, key, geo, math_utils.volume_integration)
         integrated[f'{value}_e'] = _get_integrated_source_value(
@@ -725,11 +696,6 @@ def _calculate_integrated_sources(
                 integrated['P_external_injected'] += integrated[
                     f'{value}_total']
     for key, value in EL_HEAT_SOURCE_TRANSFORMATIONS.items():
-        if key in core_sources.T_e and key in core_sources.T_i:
-            raise ValueError(
-                f"Source '{key}' was expected to only be an electron heat source (in"
-                ' core_sources.T_e), but it was also found in ion heat sources'
-                ' (core_sources.T_i).')
         integrated[f'{value}'] = _get_integrated_source_value(
             core_sources.T_e, key, geo, math_utils.volume_integration)
         integrated['P_SOL_e'] += integrated[f'{value}']
@@ -1153,50 +1119,6 @@ def _get_ion_properties_from_fractions(
     )
 
 
-def _get_ion_properties_from_n_e_ratios(
-    impurity_symbols: tuple[str, ...],
-    impurity_params,
-    T_e: cell_variable.CellVariable,
-    Z_i: array_typing.FloatVectorCell,
-    Z_i_face: array_typing.FloatVectorFace,
-) -> _IonProperties:
-    average_charge_state = charge_states.get_average_charge_state(
-        ion_symbols=impurity_symbols,
-        T_e=T_e.value,
-        fractions=impurity_params.fractions,
-        Z_override=impurity_params.Z_override,
-    )
-    average_charge_state_face = charge_states.get_average_charge_state(
-        ion_symbols=impurity_symbols,
-        T_e=T_e.face_value(),
-        fractions=impurity_params.fractions_face,
-        Z_override=impurity_params.Z_override,
-    )
-    Z_impurity = average_charge_state.Z_mixture
-    Z_impurity_face = average_charge_state_face.Z_mixture
-    dilution_factor = (1 - jnp.sum(
-        average_charge_state.Z_per_species * impurity_params.n_e_ratios,
-        axis=0,
-    ) / Z_i)
-    dilution_factor_edge = (1 - jnp.sum(
-        average_charge_state_face.Z_per_species[:, -1] *
-        impurity_params.n_e_ratios_face[:, -1], ) / Z_i_face[-1])
-    Z_eff = dilution_factor * Z_i**2 + jnp.sum(
-        average_charge_state.Z_per_species**2 * impurity_params.n_e_ratios,
-        axis=0,
-    )
-    return _IonProperties(
-        A_impurity=impurity_params.A_avg,
-        A_impurity_face=impurity_params.A_avg_face,
-        Z_impurity=Z_impurity,
-        Z_impurity_face=Z_impurity_face,
-        Z_eff=Z_eff,
-        dilution_factor=dilution_factor,
-        dilution_factor_edge=dilution_factor_edge,
-        impurity_fractions=impurity_params.fractions,
-    )
-
-
 @jax_utils.jit
 def get_updated_ions(
     runtime_params: runtime_params_slice.RuntimeParams,
@@ -1221,23 +1143,6 @@ def get_updated_ions(
         case impurity_fractions.RuntimeParams():
             ion_properties = _get_ion_properties_from_fractions(
                 runtime_params.plasma_composition.impurity_names,
-                impurity_params,
-                T_e,
-                Z_i,
-                Z_i_face,
-                runtime_params.plasma_composition.Z_eff,
-                runtime_params.plasma_composition.Z_eff_face,
-            )
-        case electron_density_ratios.RuntimeParams():
-            ion_properties = _get_ion_properties_from_n_e_ratios(
-                runtime_params.plasma_composition.impurity_names,
-                impurity_params,
-                T_e,
-                Z_i,
-                Z_i_face,
-            )
-        case electron_density_ratios_zeff.RuntimeParams():
-            ion_properties = _get_ion_properties_from_n_e_ratios_Z_eff(
                 impurity_params,
                 T_e,
                 Z_i,
