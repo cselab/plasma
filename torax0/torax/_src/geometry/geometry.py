@@ -175,14 +175,6 @@ class Geometry:
         return jnp.concatenate([jnp.expand_dims(first_element, axis=-1), bulk],
                                axis=-1)
 
-    def z_magnetic_axis(self) -> chex.Numeric:
-        z_magnetic_axis = self._z_magnetic_axis
-        if z_magnetic_axis is not None:
-            return z_magnetic_axis
-        else:
-            raise ValueError('Geometry does not have a z magnetic axis.')
-
-
 def stack_geometries(geometries: Sequence[Geometry]) -> Geometry:
     if not geometries:
         raise ValueError('No geometries provided.')
@@ -208,13 +200,3 @@ def stack_geometries(geometries: Sequence[Geometry]) -> Geometry:
     return first_geo.__class__(**stacked_data)
 
 
-def update_geometries_with_Phibdot(
-    *,
-    dt: chex.Numeric,
-    geo_t: Geometry,
-    geo_t_plus_dt: Geometry,
-) -> tuple[Geometry, Geometry]:
-    Phibdot = (geo_t_plus_dt.Phi_b - geo_t.Phi_b) / dt
-    geo_t = dataclasses.replace(geo_t, Phi_b_dot=Phibdot)
-    geo_t_plus_dt = dataclasses.replace(geo_t_plus_dt, Phi_b_dot=Phibdot)
-    return geo_t, geo_t_plus_dt
