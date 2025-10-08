@@ -55,21 +55,7 @@ class Sources(torax_pydantic.BaseModelFrozen):
     def _set_default_model_functions(cls, x: dict[str, Any]) -> dict[str, Any]:
         constructor_data = copy.deepcopy(x)
         for k, v in x.items():
-            if isinstance(v, base.SourceModelBase) or v is None:
-                continue
             match k:
-                case 'bremsstrahlung':
-                    if 'model_name' not in v:
-                        constructor_data[k][
-                            'model_name'] = bremsstrahlung_heat_sink_lib.DEFAULT_MODEL_FUNCTION_NAME
-                case 'cyclotron_radiation':
-                    if 'model_name' not in v:
-                        constructor_data[k][
-                            'model_name'] = cyclotron_radiation_heat_sink_lib.DEFAULT_MODEL_FUNCTION_NAME
-                case 'ecrh':
-                    if 'model_name' not in v:
-                        constructor_data[k][
-                            'model_name'] = electron_cyclotron_source_lib.DEFAULT_MODEL_FUNCTION_NAME
                 case 'gas_puff':
                     if 'model_name' not in v:
                         constructor_data[k][
@@ -90,18 +76,6 @@ class Sources(torax_pydantic.BaseModelFrozen):
                     if 'model_name' not in v:
                         constructor_data[k][
                             'model_name'] = generic_ion_el_heat_source_lib.DEFAULT_MODEL_FUNCTION_NAME
-                case 'impurity_radiation':
-                    if 'model_name' not in v:
-                        constructor_data[k][
-                            'model_name'] = impurity_radiation_mavrin_fit.DEFAULT_MODEL_FUNCTION_NAME
-                case 'icrh':
-                    if 'model_name' not in v:
-                        constructor_data[k][
-                            'model_name'] = ion_cyclotron_source_lib.DEFAULT_MODEL_FUNCTION_NAME
-                case 'ohmic':
-                    if 'model_name' not in v:
-                        constructor_data[k][
-                            'model_name'] = ohmic_heat_source_lib.DEFAULT_MODEL_FUNCTION_NAME
         return constructor_data
 
     def build_models(self) -> source_models.SourceModels:
@@ -112,10 +86,6 @@ class Sources(torax_pydantic.BaseModelFrozen):
             else:
                 if v is not None:
                     source = v.build_source()
-                    if k in standard_sources:
-                        raise ValueError(
-                            f'Trying to add another source with the same name: {k}.'
-                        )
                     standard_sources[k] = source
         qei_source_model = self.ei_exchange.build_source()
         return source_models.SourceModels(
@@ -123,10 +93,3 @@ class Sources(torax_pydantic.BaseModelFrozen):
             standard_sources=immutabledict.immutabledict(standard_sources),
         )
 
-    @property
-    def source_model_config(self) -> dict[str, base.SourceModelBase]:
-        return {
-            k: v
-            for k, v in self.__dict__.items()
-            if isinstance(v, base.SourceModelBase)
-        }
