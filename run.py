@@ -38,9 +38,6 @@ from torax._src.sources import source_models as source_models_lib
 from torax._src.sources import source_profile_builders
 from torax._src.sources import source_profiles
 from torax._src.sources import source_profiles as source_profiles_lib
-from torax._src.time_step_calculator import pydantic_model as time_step_calculator_pydantic_model
-from torax._src.time_step_calculator import runtime_params as time_runtime_params
-from torax._src.time_step_calculator import time_step_calculator
 from torax._src.torax_pydantic import file_restart as file_restart_pydantic_model
 from torax._src.torax_pydantic import interpolated_param_1d
 from torax._src.torax_pydantic import interpolated_param_2d
@@ -114,7 +111,6 @@ class RuntimeParamsProvider:
     pedestal: Any
     mhd: Any
     neoclassical: Any
-    time_step_calculator: Any
 
     @classmethod
     def from_config(cls, config):
@@ -128,7 +124,6 @@ class RuntimeParamsProvider:
             pedestal=config.pedestal,
             mhd=config.mhd,
             neoclassical=config.neoclassical,
-            time_step_calculator=config.time_step_calculator,
         )
 
     @jax_utils.jit
@@ -151,8 +146,6 @@ class RuntimeParamsProvider:
             neoclassical=self.neoclassical.build_runtime_params(),
             pedestal=self.pedestal.build_runtime_params(t),
             mhd=self.mhd.build_runtime_params(t),
-            time_step_calculator=self.time_step_calculator.
-            build_runtime_params(),
         )
 
 
@@ -860,10 +853,6 @@ class SimulationStepFn:
     def solver(self):
         return self._solver
 
-    @property
-    def time_step_calculator(self):
-        return self._time_step_calculator
-
     @xnp.jit
     def __call__(
         self,
@@ -1119,9 +1108,6 @@ class ToraxConfig(BaseModelFrozen):
     pedestal: pedestal_pydantic_model.PedestalConfig = pydantic.Field(
         discriminator='model_name')
     mhd: mhd_pydantic_model.MHD = mhd_pydantic_model.MHD()
-    time_step_calculator: (
-        time_step_calculator_pydantic_model.TimeStepCalculator
-    ) = time_step_calculator_pydantic_model.TimeStepCalculator()
     restart: file_restart_pydantic_model.FileRestart | None = pydantic.Field(
         default=None)
 
@@ -1294,9 +1280,6 @@ CONFIG = {
         'chi_pereverzev': 30,
         'D_pereverzev': 15,
         'use_pereverzev': True,
-    },
-    'time_step_calculator': {
-        'calculator_type': 'chi',
     },
 }
 

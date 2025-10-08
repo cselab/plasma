@@ -50,7 +50,6 @@ from torax._src.neoclassical import runtime_params as neoclassical_params
 from torax._src.pedestal_model import runtime_params as pedestal_model_params
 from torax._src.solver import runtime_params as solver_params
 from torax._src.sources import runtime_params as sources_params
-from torax._src.time_step_calculator import runtime_params as time_step_calculator_runtime_params
 from torax._src.transport_model import runtime_params as transport_model_params
 
 # Many of the variables follow scientific or mathematical notation, so disable
@@ -83,7 +82,6 @@ class RuntimeParams:
   solver: solver_params.RuntimeParams
   sources: Mapping[str, sources_params.RuntimeParams]
   transport: transport_model_params.RuntimeParams
-  time_step_calculator: time_step_calculator_runtime_params.RuntimeParams
 
 
 def make_ip_consistent(
