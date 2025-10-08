@@ -54,7 +54,6 @@ from torax._src.sources import source_profile_builders
 from torax._src.sources import source_profiles
 from torax._src.sources import source_profiles as source_profiles_lib
 from torax._src.sources.impurity_radiation_heat_sink import impurity_radiation_heat_sink
-from torax._src.sources.impurity_radiation_heat_sink import impurity_radiation_mavrin_fit
 import pydantic
 from torax._src.torax_pydantic import torax_pydantic
 from torax._src.torax_pydantic import interpolated_param_1d

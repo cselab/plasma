@@ -32,7 +32,6 @@ from torax._src.sources import qei_source as qei_source_lib
 from torax._src.sources import runtime_params
 from torax._src.sources import source_models
 from torax._src.sources.impurity_radiation_heat_sink import impurity_radiation_constant_fraction
-from torax._src.sources.impurity_radiation_heat_sink import impurity_radiation_mavrin_fit
 from torax._src.torax_pydantic import torax_pydantic
 from typing_extensions import Self
 
@@ -90,8 +89,7 @@ class Sources(torax_pydantic.BaseModelFrozen):
       default=None,
   )
   impurity_radiation: (
-      impurity_radiation_mavrin_fit.ImpurityRadiationHeatSinkMavrinFitConfig
-      | impurity_radiation_constant_fraction.ImpurityRadiationHeatSinkConstantFractionConfig
+      impurity_radiation_constant_fraction.ImpurityRadiationHeatSinkConstantFractionConfig
       | None
   ) = pydantic.Field(
       discriminator='model_name',
