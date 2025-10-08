@@ -238,9 +238,7 @@ class CheaseConfig(torax_pydantic.BaseModelFrozen):
     B_0: torax_pydantic.Tesla = 5.3
 
     @pydantic.model_validator(mode='after')
-    def _check_fields(self) -> typing_extensions.Self:
-        if not self.R_major >= self.a_minor:
-            raise ValueError('a_minor must be less than or equal to R_major.')
+    def _check_fields(self):
         return self
 
     def build_geometry(self) -> standard_geometry.StandardGeometry:
@@ -267,19 +265,9 @@ class Geometry0(torax_pydantic.BaseModelFrozen):
         return _conform_user_data(data)
 
     @functools.cached_property
-    def build_provider(self) -> geometry_provider.GeometryProvider:
-        if isinstance(self.geometry_configs, dict):
-            geometries = {
-                time: config.config.build_geometry()
-                for time, config in self.geometry_configs.items()
-            }
-            provider = (
-                geometry_provider.TimeDependentGeometryProvider.create_provider
-                if self.geometry_type == geometry.GeometryType.CIRCULAR else
-                standard_geometry.StandardGeometryProvider.create_provider)
-        else:
-            geometries = self.geometry_configs.config.build_geometry()
-            provider = geometry_provider.ConstantGeometryProvider
+    def build_provider(self):
+        geometries = self.geometry_configs.config.build_geometry()
+        provider = geometry_provider.ConstantGeometryProvider
         return provider(geometries)
 
 
