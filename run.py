@@ -52,7 +52,6 @@ from torax._src.torax_pydantic import model_base
 from torax._src.torax_pydantic import torax_pydantic
 from torax._src.transport_model import pydantic_model_base
 from torax._src.transport_model import qlknn_transport_model
-from torax._src.transport_model import transport_coefficients_builder
 from torax._src.transport_model import transport_model as transport_model_lib
 from typing import Annotated, Any, Literal
 from typing import Annotated, Any, Literal, TypeAlias, TypeVar
@@ -137,6 +136,32 @@ class QLKNNTransportModel(pydantic_model_base.TransportBase):
 
 CombinedCompatibleTransportModel = QLKNNTransportModel
 TransportConfig = CombinedCompatibleTransportModel
+
+@functools.partial(jax_utils.jit, static_argnums=(0, 1, 2))
+def calculate_total_transport_coeffs(
+    pedestal_model: pedestal_model_lib.PedestalModel,
+    transport_model: transport_model_lib.TransportModel,
+    neoclassical_models: neoclassical_models_lib.NeoclassicalModels,
+    runtime_params: runtime_params_slice.RuntimeParams,
+    geo: geometry.Geometry,
+    core_profiles: state.CoreProfiles,
+) -> state.CoreTransport:
+    pedestal_model_output = pedestal_model(runtime_params, geo, core_profiles)
+    turbulent_transport = transport_model(
+        runtime_params=runtime_params,
+        geo=geo,
+        core_profiles=core_profiles,
+        pedestal_model_output=pedestal_model_output,
+    )
+    neoclassical_transport_coeffs = neoclassical_models.transport(
+        runtime_params,
+        geo,
+        core_profiles,
+    )
+    return state.CoreTransport(
+        **dataclasses.asdict(turbulent_transport),
+        **dataclasses.asdict(neoclassical_transport_coeffs),
+    )
 
 
 class FileRestart(torax_pydantic.BaseModelFrozen):
@@ -3500,7 +3525,7 @@ def _get_initial_state(runtime_params, geo, step_fn):
         ),
     )
     transport_coeffs = (
-        transport_coefficients_builder.calculate_total_transport_coeffs(
+        calculate_total_transport_coeffs(
             physics_models.pedestal_model,
             physics_models.transport_model,
             physics_models.neoclassical_models,
@@ -3726,7 +3751,7 @@ def _finalize_outputs(t, dt, x_new, solver_numeric_outputs, geometry_t_plus_dt,
             evolving_names=evolving_names,
         ))
     final_total_transport = (
-        transport_coefficients_builder.calculate_total_transport_coeffs(
+        calculate_total_transport_coeffs(
             physics_models.pedestal_model,
             physics_models.transport_model,
             physics_models.neoclassical_models,
