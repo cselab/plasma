@@ -9,24 +9,6 @@ from torax._src import array_typing
 from torax._src import constants
 from torax._src import jax_utils
 from torax._src import math_utils
-import dataclasses
-import copy
-from typing import Any
-
-import pydantic
-from torax._src.neoclassical import neoclassical_models
-from torax._src.neoclassical import runtime_params
-from torax._src.neoclassical.bootstrap_current import sauter as sauter_current
-from torax._src.neoclassical.bootstrap_current import zeros as bootstrap_current_zeros
-from torax._src.neoclassical.conductivity import sauter as sauter_conductivity
-from torax._src.neoclassical.transport import zeros as transport_zeros
-from torax._src.torax_pydantic import torax_pydantic
-import jax
-from torax._src.mhd import base as mhd_model_lib
-from torax._src.neoclassical import neoclassical_models as neoclassical_models_lib
-from torax._src.pedestal_model import pedestal_model as pedestal_model_lib
-from torax._src.sources import source_models as source_models_lib
-from torax._src.transport_model import transport_model as transport_model_lib
 from torax._src import state
 from torax._src import state as state_module
 from torax._src import xnp
@@ -49,9 +31,15 @@ from torax._src.geometry import geometry_provider as geometry_provider_lib
 from torax._src.geometry import standard_geometry
 from torax._src.mhd import base as mhd_model_lib
 from torax._src.mhd import pydantic_model as mhd_pydantic_model
+from torax._src.neoclassical import neoclassical_models
 from torax._src.neoclassical import neoclassical_models as neoclassical_models_lib
+from torax._src.neoclassical import runtime_params
 from torax._src.neoclassical.bootstrap_current import base as bootstrap_current_base
+from torax._src.neoclassical.bootstrap_current import sauter as sauter_current
+from torax._src.neoclassical.bootstrap_current import zeros as bootstrap_current_zeros
 from torax._src.neoclassical.conductivity import base as conductivity_base
+from torax._src.neoclassical.conductivity import sauter as sauter_conductivity
+from torax._src.neoclassical.transport import zeros as transport_zeros
 from torax._src.pedestal_model import pedestal_model as pedestal_model_lib
 from torax._src.pedestal_model import pydantic_model as pedestal_pydantic_model
 from torax._src.physics import charge_states
@@ -79,6 +67,7 @@ from torax._src.transport_model import transport_coefficients_builder
 from torax._src.transport_model import transport_model as transport_model_lib
 from typing import Annotated, Any, Literal
 from typing import Annotated, Any, Literal, TypeAlias, TypeVar
+from typing import Any
 from typing import Any, Final, Mapping, Sequence, TypeAlias
 from typing import Callable
 from typing import Final
