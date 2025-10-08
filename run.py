@@ -86,7 +86,7 @@ class RuntimeParams:
     tolerance: float
 
 
-class TimeStepCalculator(abc.ABC):
+class ChiTimeStepCalculator:
 
     def not_done(self, t, t_final, time_calculator_params):
         return t < (t_final - time_calculator_params.tolerance)
@@ -113,21 +113,6 @@ class TimeStepCalculator(abc.ABC):
             dt,
         )
         return dt
-
-    @abc.abstractmethod
-    def _next_dt(self, runtime_params, geo, core_profiles, core_transport):
-        """Returns the next time step duration."""
-
-    @abc.abstractmethod
-    def __eq__(self, other):
-        """Equality for the TimeStepCalculator, needed for JAX."""
-
-    @abc.abstractmethod
-    def __hash__(self):
-        """Hash for the TimeStepCalculator, needed for JAX."""
-
-
-class ChiTimeStepCalculator(TimeStepCalculator):
 
     def _next_dt(self, runtime_params, geo, core_profiles, core_transport):
         chi_max = core_transport.chi_max(geo)
@@ -160,7 +145,7 @@ class RuntimeParamsProvider:
     pedestal: pedestal_pydantic_model.PedestalConfig
     mhd: mhd_pydantic_model.MHD
     neoclassical: neoclassical_pydantic_model.Neoclassical
-    time_step_calculator: TimeStepCalculator
+    time_step_calculator: Any
 
     @classmethod
     def from_config(cls, config) -> typing_extensions.Self:
@@ -955,7 +940,7 @@ class SimulationStepFn:
         previous_post_processed_outputs,
     ):
         evolving_names = runtime_params_t.numerics.evolving_names
-        initial_dt = self.time_step_calculator.next_dt(
+        initial_dt = g.ts.next_dt(
             input_state.t,
             runtime_params_t,
             geo_t,
