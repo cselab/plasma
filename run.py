@@ -9,7 +9,14 @@ from torax._src import array_typing
 from torax._src import constants
 from torax._src import jax_utils
 from torax._src import math_utils
-from torax._src import physics_models as physics_models_lib
+import dataclasses
+
+import jax
+from torax._src.mhd import base as mhd_model_lib
+from torax._src.neoclassical import neoclassical_models as neoclassical_models_lib
+from torax._src.pedestal_model import pedestal_model as pedestal_model_lib
+from torax._src.sources import source_models as source_models_lib
+from torax._src.transport_model import transport_model as transport_model_lib
 from torax._src import state
 from torax._src import state as state_module
 from torax._src import xnp
@@ -92,6 +99,27 @@ import torax
 import treelib
 import typing_extensions
 import xarray as xr
+
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(frozen=True)
+class PhysicsModels:
+  """A container for all physics models."""
+
+  source_models: source_models_lib.SourceModels = dataclasses.field(
+      metadata=dict(static=True)
+  )
+  transport_model: transport_model_lib.TransportModel = dataclasses.field(
+      metadata=dict(static=True)
+  )
+  pedestal_model: pedestal_model_lib.PedestalModel = dataclasses.field(
+      metadata=dict(static=True)
+  )
+  neoclassical_models: neoclassical_models_lib.NeoclassicalModels = (
+      dataclasses.field(metadata=dict(static=True))
+  )
+  mhd_models: mhd_model_lib.MHDModels = dataclasses.field(
+      metadata=dict(static=True)
+  )
 
 # Using invalid-name because we are using the same naming convention as the
 # external physics implementations
@@ -3253,7 +3281,7 @@ class CoeffsCallback:
 
   def __init__(
       self,
-      physics_models: physics_models_lib.PhysicsModels,
+      physics_models: PhysicsModels,
       evolving_names: tuple[str, ...],
   ):
     self.physics_models = physics_models
@@ -3432,7 +3460,7 @@ def calc_coeffs(
     geo: geometry.Geometry,
     core_profiles: state.CoreProfiles,
     explicit_source_profiles: source_profiles_lib.SourceProfiles,
-    physics_models: physics_models_lib.PhysicsModels,
+    physics_models: PhysicsModels,
     evolving_names: tuple[str, ...],
     use_pereverzev: bool = False,
     explicit_call: bool = False,
@@ -3497,7 +3525,7 @@ def _calc_coeffs_full(
     geo: geometry.Geometry,
     core_profiles: state.CoreProfiles,
     explicit_source_profiles: source_profiles_lib.SourceProfiles,
-    physics_models: physics_models_lib.PhysicsModels,
+    physics_models: PhysicsModels,
     evolving_names: tuple[str, ...],
     use_pereverzev: bool = False,
 ):
@@ -4204,7 +4232,7 @@ class Solver(abc.ABC):
 
   def __init__(
       self,
-      physics_models: physics_models_lib.PhysicsModels,
+      physics_models: PhysicsModels,
   ):
     self.physics_models = physics_models
 
@@ -4438,7 +4466,7 @@ class BaseSolver(torax_pydantic.BaseModelFrozen, abc.ABC):
     @abc.abstractmethod
     def build_solver(
         self,
-        physics_models: physics_models_lib.PhysicsModels,
+        physics_models: PhysicsModels,
     ):
         """Builds a solver from the config."""
 
@@ -4469,7 +4497,7 @@ class LinearThetaMethod(BaseSolver):
 
     def build_solver(
         self,
-        physics_models: physics_models_lib.PhysicsModels,
+        physics_models: PhysicsModels,
     ):
         return LinearThetaMethod0(physics_models=physics_models, )
 
