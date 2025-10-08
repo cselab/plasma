@@ -18,7 +18,6 @@ from torax._src.core_profiles import initialization
 from torax._src.core_profiles import profile_conditions as profile_conditions_lib
 from torax._src.core_profiles import updaters
 from torax._src.core_profiles.plasma_composition import plasma_composition as plasma_composition_lib
-from torax._src.fvm import block_1d_coeffs
 from torax._src.fvm import cell_variable
 from torax._src.fvm import convection_terms
 from torax._src.fvm import diffusion_terms
@@ -80,8 +79,78 @@ import treelib
 import typing_extensions
 import xarray as xr
 
-Block1DCoeffs: TypeAlias = block_1d_coeffs.Block1DCoeffs
-AuxiliaryOutput: TypeAlias = block_1d_coeffs.AuxiliaryOutput
+# An optional argument, consisting of a 2D matrix of nested tuples, with each
+# leaf being either None or a JAX Array. Used to define block matrices.
+# examples:
+#
+# ((a, b), (c, d)) where a, b, c, d are each jax.Array
+#
+# ((a, None), (None, d)) : represents a diagonal block matrix
+OptionalTupleMatrix: TypeAlias = tuple[tuple[jax.Array | None, ...], ...] | None
+
+
+# Alias for better readability.
+AuxiliaryOutput: TypeAlias = Any
+
+
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(frozen=True)
+class Block1DCoeffs:
+  # pyformat: disable  # pyformat removes line breaks needed for readability
+  """The coefficients of coupled 1D fluid dynamics PDEs.
+
+  The differential equation is:
+  transient_out_coeff partial x transient_in_coeff / partial t = F
+  where F =
+  divergence(diffusion_coeff * grad(x))
+  - divergence(convection_coeff * x)
+  + source_mat_coeffs * u
+  + sources.
+
+  source_mat_coeffs exists for specific classes of sources where this
+  decomposition is valid, allowing x to be treated implicitly in linear solvers,
+  even if source_mat_coeffs contains state-dependent terms
+
+  This class captures a snapshot of the coefficients of the equation at one
+  instant in time, discretized spatially across a mesh.
+
+  This class imposes the following structure on the problem:
+  - It assumes the variables are arranged on a 1-D, evenly spaced grid.
+  - It assumes the x variable is broken up into "channels," so the resulting
+  matrix equation has one block per channel.
+
+  Attributes:
+    transient_out_cell: Tuple with one entry per channel, transient_out_cell[i]
+      gives the transient coefficients outside the time derivative for channel i
+      on the cell grid.
+    transient_in_cell: Tuple with one entry per channel, transient_in_cell[i]
+      gives the transient coefficients inside the time derivative for channel i
+      on the cell grid.
+    d_face: Tuple, with d_face[i] containing diffusion term coefficients for
+      channel i on the face grid.
+    v_face: Tuple, with v_face[i] containing convection term coefficients for
+      channel i on the face grid.
+    source_mat_cell: 2-D matrix of Tuples, with source_mat_cell[i][j] adding to
+      block-row i a term of the form source_cell[j] * u[channel j]. Depending on
+      the source runtime_params, may be constant values for a timestep, or
+      updated iteratively with new states in a nonlinear solver
+    source_cell: Additional source terms on the cell grid for each channel.
+      Depending on the source runtime_params, may be constant values for a
+      timestep, or updated iteratively with new states in a nonlinear solver
+    auxiliary_outputs: Optional extra output which can include auxiliary state
+      or information useful for inspecting the computation inside the callback
+      which calculated these coeffs.
+  """
+  transient_in_cell: tuple[jax.Array, ...]
+  transient_out_cell: tuple[jax.Array, ...] | None = None
+  d_face: tuple[jax.Array, ...] | None = None
+  v_face: tuple[jax.Array, ...] | None = None
+  source_mat_cell: OptionalTupleMatrix = None
+  source_cell: tuple[jax.Array | None, ...] | None = None
+  auxiliary_outputs: AuxiliaryOutput | None = None
+
+Block1DCoeffs: TypeAlias = Block1DCoeffs
+AuxiliaryOutput: TypeAlias = AuxiliaryOutput
 
 def cell_variable_tuple_to_vec(
     x_tuple: tuple[cell_variable.CellVariable, ...],
@@ -175,7 +244,7 @@ class CoeffsCallback:
       # Checks if reduced calc_coeffs for explicit terms when theta_implicit=1
       # should be called
       explicit_call: bool = False,
-  ) -> block_1d_coeffs.Block1DCoeffs:
+  ):
     """Returns coefficients given a state x.
 
     Used to calculate the coefficients for the implicit or explicit components
@@ -329,7 +398,7 @@ def calc_coeffs(
     evolving_names: tuple[str, ...],
     use_pereverzev: bool = False,
     explicit_call: bool = False,
-) -> block_1d_coeffs.Block1DCoeffs:
+):
   """Calculates Block1DCoeffs for the time step described by `core_profiles`.
 
   Args:
@@ -393,7 +462,7 @@ def _calc_coeffs_full(
     physics_models: physics_models_lib.PhysicsModels,
     evolving_names: tuple[str, ...],
     use_pereverzev: bool = False,
-) -> block_1d_coeffs.Block1DCoeffs:
+):
   """See `calc_coeffs` for details."""
 
   consts = constants.CONSTANTS
@@ -716,7 +785,7 @@ def _calc_coeffs_full(
   }
   source_cell = tuple(var_to_source.get(var) for var in evolving_names)
 
-  coeffs = block_1d_coeffs.Block1DCoeffs(
+  coeffs = Block1DCoeffs(
       transient_out_cell=transient_out_cell,
       transient_in_cell=transient_in_cell,
       d_face=d_face,
@@ -746,7 +815,7 @@ def _calc_coeffs_reduced(
     geo: geometry.Geometry,
     core_profiles: state.CoreProfiles,
     evolving_names: tuple[str, ...],
-) -> block_1d_coeffs.Block1DCoeffs:
+):
   """Calculates only the transient_in_cell terms in Block1DCoeffs."""
 
   # Only transient_in_cell is used for explicit terms if theta_implicit=1
@@ -763,7 +832,7 @@ def _calc_coeffs_reduced(
   }
   transient_in_cell = tuple(var_to_tic[var] for var in evolving_names)
 
-  coeffs = block_1d_coeffs.Block1DCoeffs(
+  coeffs = Block1DCoeffs(
       transient_in_cell=transient_in_cell,
   )
   return coeffs
@@ -1038,8 +1107,8 @@ def implicit_solve_block(
     dt: jax.Array,
     x_old: tuple[cell_variable.CellVariable, ...],
     x_new_guess: tuple[cell_variable.CellVariable, ...],
-    coeffs_old: block_1d_coeffs.Block1DCoeffs,
-    coeffs_new: block_1d_coeffs.Block1DCoeffs,
+    coeffs_old,
+    coeffs_new,
     theta_implicit: float = 1.0,
     convection_dirichlet_mode: str = 'ghost',
     convection_neumann_mode: str = 'ghost',
@@ -1187,7 +1256,7 @@ def predictor_corrector_method(
     x_old: tuple[cell_variable.CellVariable, ...],
     x_new_guess: tuple[cell_variable.CellVariable, ...],
     core_profiles_t_plus_dt: state.CoreProfiles,
-    coeffs_exp: block_1d_coeffs.Block1DCoeffs,
+    coeffs_exp,
     explicit_source_profiles: source_profiles.SourceProfiles,
     coeffs_callback: CoeffsCallback,
 ) -> tuple[cell_variable.CellVariable, ...]:
