@@ -192,37 +192,6 @@ class _PiecewiseLinearInterpolatedParam(InterpolatedParamBase):
       case _:
         raise ValueError(f'ys must be either 1D or 2D. Given: {self.ys.shape}.')
 
-
-class _StepInterpolatedParam(InterpolatedParamBase):
-  """Parameter using step interpolation to compute its value."""
-
-  def __init__(self, xs: array_typing.Array, ys: array_typing.Array):
-    """Creates a step interpolated param, xs must be sorted."""
-    self._xs = jnp.asarray(xs)
-    self._ys = jnp.asarray(ys)
-    jax_utils.assert_rank(self.xs, 1)
-    if self.ys.ndim not in (1, 2):
-      raise ValueError(f'ys must be either 1D or 2D. Given: {self.ys.shape}.')
-    if self.xs.shape[0] != self.ys.shape[0]:
-      raise ValueError(
-          'xs and ys must have the same number of elements in the first '
-          f'dimension. Given: {self.xs.shape} and {self.ys.shape}.'
-      )
-
-  @property
-  def xs(self) -> array_typing.Array:
-    return self._xs
-
-  @property
-  def ys(self) -> array_typing.Array:
-    return self._ys
-
-  def get_value(self, x: chex.Numeric) -> array_typing.Array:
-    """Returns a single value for this range at the given coordinate."""
-    indices = _step_interpolation(self.xs, x)
-    return self.ys[indices]
-
-
 def _is_bool(
     interp_input: InterpolatedVarSingleAxisInput,
 ) -> bool:
@@ -378,8 +347,6 @@ class InterpolatedVarSingleAxis(InterpolatedParamBase):
     match interpolation_mode:
       case InterpolationMode.PIECEWISE_LINEAR:
         self._param = _PiecewiseLinearInterpolatedParam(xs=xs, ys=ys)
-      case InterpolationMode.STEP:
-        self._param = _StepInterpolatedParam(xs=xs, ys=ys)
       case _:
         raise ValueError('Unknown interpolation mode.')
 
