@@ -98,35 +98,11 @@ class TimeVaryingArray(model_base.BaseModelFrozen):
             case _:
                 raise ValueError(f'Unknown grid type: {grid_type}')
 
-    def __eq__(self, other: typing_extensions.Self):
-        try:
-            chex.assert_trees_all_equal(self.value, other.value)
-            return (self.rho_interpolation_mode == other.rho_interpolation_mode
-                    and self.time_interpolation_mode
-                    == other.time_interpolation_mode
-                    and self.grid == other.grid)
-        except AssertionError:
-            return False
 
     @pydantic.field_validator('value', mode='after')
     @classmethod
     def _valid_value(cls, value: ValueType) -> ValueType:
         value = dict(sorted(value.items()))
-        for t, (rho_norm, values) in value.items():
-            if not isinstance(t, float):
-                raise ValueError(f'Time values must be a float, but got {t}.')
-            if not np.issubdtype(rho_norm.dtype, np.floating):
-                raise ValueError(
-                    f'rho_norm must be a float array, but got {rho_norm.dtype}.'
-                )
-            if rho_norm.dtype != values.dtype:
-                raise ValueError(
-                    'rho_norm and values must have the same dtype. Given: '
-                    f'{rho_norm.dtype} and {values.dtype}.')
-            if len(rho_norm) != len(values):
-                raise ValueError(
-                    'rho_norm and values must be of the same length. Given: '
-                    f'{len(rho_norm)} and {len(values)}.')
         return value
 
     @pydantic.model_validator(mode='before')
@@ -144,34 +120,7 @@ class TimeVaryingArray(model_base.BaseModelFrozen):
             interpolated_param.InterpolationMode.PIECEWISE_LINEAR)
         rho_interpolation_mode = (
             interpolated_param.InterpolationMode.PIECEWISE_LINEAR)
-        if isinstance(data, tuple):
-            if len(data) == 2 and isinstance(data[1], dict):
-                time_interpolation_mode = interpolated_param.InterpolationMode[
-                    data[1]['time_interpolation_mode'].upper()]
-                rho_interpolation_mode = interpolated_param.InterpolationMode[
-                    data[1]['rho_interpolation_mode'].upper()]
-                data = data[0]
-        if isinstance(data, xr.DataArray):
-            value = _load_from_arrays(data)
-        elif isinstance(data, tuple):
-            values = []
-            for v in data:
-                if isinstance(v, array_typing.Array):
-                    values.append(v)
-                elif isinstance(v, list):
-                    values.append(np.asarray(v))
-                else:
-                    raise ValueError(
-                        'Input to TimeVaryingArray unsupported. Input was of type:'
-                        f' {type(v)}. Expected array_typing.Array or list of'
-                        ' floats/ints/bools.')
-            value = _load_from_arrays(tuple(values))
-        elif isinstance(data, Mapping) or isinstance(data, (float, int)):
-            value = _load_from_primitives(data)
-        else:
-            raise ValueError(
-                'Input to TimeVaryingArray unsupported. Input was of type:'
-                f' {type(data)}')
+        value = _load_from_primitives(data)
         return dict(
             value=value,
             time_interpolation_mode=time_interpolation_mode,
@@ -181,8 +130,6 @@ class TimeVaryingArray(model_base.BaseModelFrozen):
     @functools.cached_property
     def _get_cached_interpolated_param_cell(
         self, ) -> interpolated_param.InterpolatedVarTimeRho:
-        if self.grid is None:
-            raise RuntimeError('grid must be set.')
         return interpolated_param.InterpolatedVarTimeRho(
             self.value,
             rho_norm=self.grid.cell_centers,
@@ -193,8 +140,6 @@ class TimeVaryingArray(model_base.BaseModelFrozen):
     @functools.cached_property
     def _get_cached_interpolated_param_face(
         self, ) -> interpolated_param.InterpolatedVarTimeRho:
-        if self.grid is None:
-            raise RuntimeError('grid must be set.')
         return interpolated_param.InterpolatedVarTimeRho(
             self.value,
             rho_norm=self.grid.face_centers,
@@ -205,8 +150,6 @@ class TimeVaryingArray(model_base.BaseModelFrozen):
     @functools.cached_property
     def _get_cached_interpolated_param_face_right(
         self, ) -> interpolated_param.InterpolatedVarTimeRho:
-        if self.grid is None:
-            raise RuntimeError('grid must be set.')
         return interpolated_param.InterpolatedVarTimeRho(
             self.value,
             rho_norm=self.grid.face_centers[-1],
@@ -216,9 +159,6 @@ class TimeVaryingArray(model_base.BaseModelFrozen):
 
 
 def _is_positive(array: TimeVaryingArray) -> TimeVaryingArray:
-    for _, value in array.value.values():
-        if not np.all(value > 0):
-            raise ValueError('All values must be positive.')
     return array
 
 
