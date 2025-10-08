@@ -10,7 +10,17 @@ from torax._src import constants
 from torax._src import jax_utils
 from torax._src import math_utils
 import dataclasses
+import copy
+from typing import Any
 
+import pydantic
+from torax._src.neoclassical import neoclassical_models
+from torax._src.neoclassical import runtime_params
+from torax._src.neoclassical.bootstrap_current import sauter as sauter_current
+from torax._src.neoclassical.bootstrap_current import zeros as bootstrap_current_zeros
+from torax._src.neoclassical.conductivity import sauter as sauter_conductivity
+from torax._src.neoclassical.transport import zeros as transport_zeros
+from torax._src.torax_pydantic import torax_pydantic
 import jax
 from torax._src.mhd import base as mhd_model_lib
 from torax._src.neoclassical import neoclassical_models as neoclassical_models_lib
@@ -40,7 +50,6 @@ from torax._src.geometry import standard_geometry
 from torax._src.mhd import base as mhd_model_lib
 from torax._src.mhd import pydantic_model as mhd_pydantic_model
 from torax._src.neoclassical import neoclassical_models as neoclassical_models_lib
-from torax._src.neoclassical import pydantic_model as neoclassical_pydantic_model
 from torax._src.neoclassical.bootstrap_current import base as bootstrap_current_base
 from torax._src.neoclassical.conductivity import base as conductivity_base
 from torax._src.pedestal_model import pedestal_model as pedestal_model_lib
@@ -99,6 +108,52 @@ import torax
 import treelib
 import typing_extensions
 import xarray as xr
+
+class Neoclassical0(torax_pydantic.BaseModelFrozen):
+  """Config for neoclassical models."""
+
+  bootstrap_current: (
+      bootstrap_current_zeros.ZerosModelConfig
+      | sauter_current.SauterModelConfig
+  ) = pydantic.Field(discriminator="model_name")
+  conductivity: sauter_conductivity.SauterModelConfig = (
+      torax_pydantic.ValidatedDefault(sauter_conductivity.SauterModelConfig())
+  )
+  transport: (
+      transport_zeros.ZerosModelConfig
+  ) = pydantic.Field(discriminator="model_name")
+
+  @pydantic.model_validator(mode="before")
+  @classmethod
+  def _defaults(cls, data: dict[str, Any]) -> dict[str, Any]:
+    configurable_data = copy.deepcopy(data)
+    # Set zero models if model not in config dict.
+    if "bootstrap_current" not in configurable_data:
+      configurable_data["bootstrap_current"] = {"model_name": "zeros"}
+    if "transport" not in configurable_data:
+      configurable_data["transport"] = {"model_name": "zeros"}
+    # Set default model names.
+    if "model_name" not in configurable_data["bootstrap_current"]:
+      configurable_data["bootstrap_current"]["model_name"] = "sauter"
+    if "model_name" not in configurable_data["transport"]:
+      configurable_data["transport"]["model_name"] = "angioni_sauter"
+
+    return configurable_data
+
+  def build_runtime_params(self) -> runtime_params.RuntimeParams:
+    return runtime_params.RuntimeParams(
+        bootstrap_current=self.bootstrap_current.build_runtime_params(),
+        conductivity=self.conductivity.build_runtime_params(),
+        transport=self.transport.build_runtime_params(),
+    )
+
+  def build_models(self) -> neoclassical_models.NeoclassicalModels:
+    return neoclassical_models.NeoclassicalModels(
+        conductivity=self.conductivity.build_model(),
+        bootstrap_current=self.bootstrap_current.build_model(),
+        transport=self.transport.build_model(),
+    )
+
 
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
@@ -5540,8 +5595,8 @@ class ToraxConfig(BaseModelFrozen):
     plasma_composition: plasma_composition_lib.PlasmaComposition
     geometry: Geometry0
     sources: sources_pydantic_model.Sources
-    neoclassical: neoclassical_pydantic_model.Neoclassical = (
-        neoclassical_pydantic_model.Neoclassical()  # pylint: disable=missing-kwoa
+    neoclassical: Neoclassical0 = (
+        Neoclassical0()  # pylint: disable=missing-kwoa
     )
     solver: SolverConfig = pydantic.Field(discriminator='solver_type')
     transport: transport_model_pydantic_model.TransportConfig = pydantic.Field(
