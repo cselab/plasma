@@ -21,20 +21,14 @@ class PedestalModelOutput:
 class PedestalModel(abc.ABC):
 
     def __setattr__(self, attr, value):
-        if getattr(self, "_frozen", False):
-            raise AttributeError("PedestalModels are immutable.")
         return super().__setattr__(attr, value)
 
     def __call__(
         self,
-        runtime_params: runtime_params_slice.RuntimeParams,
-        geo: geometry.Geometry,
-        core_profiles: state.CoreProfiles,
-    ) -> PedestalModelOutput:
-        if not getattr(self, "_frozen", False):
-            raise RuntimeError(
-                f"Subclass implementation {type(self)} forgot to "
-                "freeze at the end of __init__.")
+        runtime_params,
+        geo,
+        core_profiles,
+    ):
         return jax.lax.cond(
             runtime_params.pedestal.set_pedestal,
             lambda: self._call_implementation(runtime_params, geo,
@@ -51,10 +45,10 @@ class PedestalModel(abc.ABC):
     @abc.abstractmethod
     def _call_implementation(
         self,
-        runtime_params: runtime_params_slice.RuntimeParams,
-        geo: geometry.Geometry,
-        core_profiles: state.CoreProfiles,
-    ) -> PedestalModelOutput:
+        runtime_params,
+        geo,
+        core_profiles,
+    ):
         pass
 
     @abc.abstractmethod
