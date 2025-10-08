@@ -137,13 +137,7 @@ class QLKNNModelWrapper:
         if flux_name_map is None:
             flux_name_map = _FLUX_NAME_MAP
         self._flux_name_map = flux_name_map
-        if path:
-            self._model = qlknn_model.QLKNNModel.load_model_from_path(
-                path, name)
-        elif name:
-            self._model = qlknn_model.QLKNNModel.load_model_from_name(name)
-        else:
-            self._model = qlknn_model.QLKNNModel.load_default_model()
+        self._model = qlknn_model.QLKNNModel.load_default_model()
 
     @property
     def inputs_and_ranges(self):
@@ -175,6 +169,7 @@ class QLKNNModelWrapper:
             for flux_name, flux_value in model_predictions.items()
         }
 
+
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class RuntimeParams0(qualikiz_based_transport_model.RuntimeParams):
@@ -192,18 +187,7 @@ _EPSILON_NN: Final[float] = (1 / 3)
 
 @functools.lru_cache(maxsize=1)
 def get_model(path: str, name: str):
-    try:
-        if path:
-            if not path.endswith('.qlknn'):
-                logging.info('Loading QLKNN10D model from path %s.', path)
-                return qlknn_10d.QLKNN10D(path, name)
-            else:
-                return QLKNNModelWrapper(path, name)
-        return QLKNNModelWrapper(path, name)
-    except FileNotFoundError as fnfe:
-        raise FileNotFoundError(
-            f'Failed to load model with path "{path}" and name "{name}". Check that'
-            ' the path exists.') from fnfe
+    return QLKNNModelWrapper(path, name)
 
 
 @jax.tree_util.register_dataclass
@@ -253,11 +237,7 @@ def _filter_model_output(
     return {k: filter_flux(k, v) for k, v in model_output.items()}
 
 
-def clip_inputs(
-    feature_scan,
-    clip_margin,
-    inputs_and_ranges
-):
+def clip_inputs(feature_scan, clip_margin, inputs_and_ranges):
     for i, key in enumerate(inputs_and_ranges.keys()):
         bounds = inputs_and_ranges[key]
         min_val = bounds.get('min', -jnp.inf)
@@ -373,6 +353,7 @@ class QLKNNTransportModel0(
         return (isinstance(other, QLKNNTransportModel)
                 and self.path == other.path and self.name == other.name)
 
+
 class QLKNNTransportModel(pydantic_model_base.TransportBase):
     model_name: Annotated[Literal['qlknn'],
                           torax_pydantic.JAX_STATIC] = 'qlknn'
@@ -401,12 +382,11 @@ class QLKNNTransportModel(pydantic_model_base.TransportBase):
             data['smoothing_width'] = 0.1
         return data
 
-    def build_transport_model(
-            self):
-        return QLKNNTransportModel0(path=self.model_path, name=self.qlknn_model_name)
+    def build_transport_model(self):
+        return QLKNNTransportModel0(path=self.model_path,
+                                    name=self.qlknn_model_name)
 
-    def build_runtime_params(
-            self, t: chex.Numeric):
+    def build_runtime_params(self, t: chex.Numeric):
         base_kwargs = dataclasses.asdict(super().build_runtime_params(t))
         return RuntimeParams0(
             include_ITG=self.include_ITG,
@@ -424,6 +404,7 @@ class QLKNNTransportModel(pydantic_model_base.TransportBase):
             An_min=self.An_min,
             **base_kwargs,
         )
+
 
 @functools.partial(jax_utils.jit, static_argnums=(0, 1, 2))
 def calculate_total_transport_coeffs(
@@ -1438,22 +1419,12 @@ def get_updated_ions(
     )
 
 
-def _calculate_Z_eff(
-    Z_i: array_typing.FloatVector,
-    Z_impurity: array_typing.FloatVector,
-    n_i: array_typing.FloatVector,
-    n_impurity: array_typing.FloatVector,
-    n_e: array_typing.FloatVector,
-) -> array_typing.FloatVector:
+def _calculate_Z_eff(Z_i, Z_impurity, n_i, n_impurity, n_e):
     return (Z_i**2 * n_i + Z_impurity**2 * n_impurity) / n_e
 
 
-def initial_core_profiles0(
-    runtime_params: runtime_params_slice.RuntimeParams,
-    geo: geometry.Geometry,
-    source_models: source_models_lib.SourceModels,
-    neoclassical_models: neoclassical_models_lib.NeoclassicalModels,
-) -> state.CoreProfiles:
+def initial_core_profiles0(runtime_params, geo, source_models,
+                           neoclassical_models):
     T_i = get_updated_ion_temperature(runtime_params.profile_conditions, geo)
     T_e = get_updated_electron_temperature(runtime_params.profile_conditions,
                                            geo)
@@ -3074,6 +3045,7 @@ def get_consistent_runtime_params_and_geometry(*, t, runtime_params_provider,
     geo = geometry_provider(t)
     runtime_params = runtime_params_provider(t=t)
     return runtime_params_slice.make_ip_consistent(runtime_params, geo)
+
 
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
