@@ -3073,13 +3073,11 @@ def _extend_cell_grid_to_boundaries(
 
 class StateHistory:
 
-    def __init__(self, state_history, post_processed_outputs_history,
-                 sim_error, torax_config):
+    def __init__(self, state_history, post_processed_outputs_history, torax_config):
         state_history[0].core_profiles = dataclasses.replace(
             state_history[0].core_profiles,
             v_loop_lcfs=state_history[1].core_profiles.v_loop_lcfs,
         )
-        self._sim_error = sim_error
         self._torax_config = torax_config
         self._post_processed_outputs = post_processed_outputs_history
         self._solver_numeric_outputs = [
@@ -3110,10 +3108,6 @@ class StateHistory:
     @property
     def torax_config(self):
         return self._torax_config
-
-    @property
-    def sim_error(self) -> state.SimError:
-        return self._sim_error
 
     @property
     def times(self) -> array_typing.Array:
@@ -3168,8 +3162,6 @@ class StateHistory:
             else:
                 raise ValueError(f"Duplicate key: {key}")
         numerics_dict = {
-            SIM_ERROR:
-            self.sim_error.value,
             SAWTOOTH_CRASH:
             xr.DataArray(
                 self._stacked_solver_numeric_outputs.sawtooth_crash,
@@ -3986,24 +3978,17 @@ initial_post_processed_outputs = post_processed_outputs
 current_state = initial_state
 state_history = [current_state]
 post_processing_history = [initial_post_processed_outputs]
-sim_error = state.SimError.NO_ERROR
 initial_runtime_params = runtime_params_provider(initial_state.t)
 while not_done(current_state.t, runtime_params_provider.numerics.t_final):
     current_state, post_processed_outputs = step_fn(
         current_state,
         post_processing_history[-1],
     )
-    sim_error = check_for_errors(
-        runtime_params_provider.numerics,
-        current_state,
-        post_processed_outputs,
-    )
     state_history.append(current_state)
     post_processing_history.append(post_processed_outputs)
 state_history = StateHistory(
     state_history=state_history,
     post_processed_outputs_history=post_processing_history,
-    sim_error=sim_error,
     torax_config=torax_config,
 )
 data_tree = state_history.simulation_output_to_xr()
