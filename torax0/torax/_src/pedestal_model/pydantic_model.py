@@ -17,7 +17,6 @@ import abc
 from typing import Annotated, Literal
 
 import chex
-from torax._src.pedestal_model import no_pedestal
 from torax._src.pedestal_model import pedestal_model
 from torax._src.pedestal_model import runtime_params
 from torax._src.pedestal_model import set_tped_nped
@@ -96,28 +95,4 @@ class SetTpedNped(BasePedestal):
     )
 
 
-class NoPedestal(BasePedestal):
-  """A pedestal model for when there is no pedestal.
-
-  Note that setting `set_pedestal` to True with a NoPedestal model is the
-  equivalent of setting it to False.
-  """
-
-  model_name: Annotated[Literal['no_pedestal'], torax_pydantic.JAX_STATIC] = (
-      'no_pedestal'
-  )
-
-  def build_pedestal_model(
-      self,
-  ) -> no_pedestal.NoPedestal:
-    return no_pedestal.NoPedestal()
-
-  def build_runtime_params(
-      self, t: chex.Numeric
-  ) -> runtime_params.RuntimeParams:
-    return runtime_params.RuntimeParams(
-        set_pedestal=self.set_pedestal.get_value(t),
-    )
-
-
-PedestalConfig = SetTpedNped | NoPedestal
+PedestalConfig = SetTpedNped
