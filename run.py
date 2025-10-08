@@ -1,46 +1,4 @@
-import dataclasses
-import functools
-
-import chex
-import jax
-from jax import numpy as jnp
-from torax._src import array_typing
-from torax._src import jax_utils
-
-import dataclasses
-
-import jax
-from jax import numpy as jnp
-import numpy as np
-from torax._src import array_typing
-from torax._src.config import runtime_params_slice
-from torax._src.physics import charge_states
-from torax._src.sources import runtime_params as source_runtime_params_lib
-from torax._src.sources.impurity_radiation_heat_sink import impurity_radiation_heat_sink
-from torax._src.sources.impurity_radiation_heat_sink import impurity_radiation_mavrin_fit
-import xarray as xr
 from absl import logging
-import dataclasses
-from typing import Callable
-
-from absl import logging
-import jax
-from jax import numpy as jnp
-import numpy as np
-from torax._src import array_typing
-from torax._src import constants
-from torax._src import jax_utils
-from torax._src import math_utils
-from torax._src import state
-from torax._src.config import runtime_params_slice
-from torax._src.fvm import cell_variable
-from torax._src.geometry import geometry
-from torax._src.physics import formulas
-from torax._src.physics import psi_calculations
-from torax._src.physics import scaling_laws
-from torax._src.sources import source_profiles
-import typing_extensions
-
 from collections.abc import Sequence
 from collections.abc import Set
 from jax import numpy as jnp
@@ -80,12 +38,16 @@ from torax._src.pedestal_model import pydantic_model as pedestal_pydantic_model
 from torax._src.physics import charge_states
 from torax._src.physics import formulas
 from torax._src.physics import psi_calculations
+from torax._src.physics import scaling_laws
 from torax._src.sources import pydantic_model as sources_pydantic_model
 from torax._src.sources import qei_source as qei_source_lib
+from torax._src.sources import runtime_params as source_runtime_params_lib
 from torax._src.sources import source_models as source_models_lib
 from torax._src.sources import source_profile_builders
 from torax._src.sources import source_profiles
 from torax._src.sources import source_profiles as source_profiles_lib
+from torax._src.sources.impurity_radiation_heat_sink import impurity_radiation_heat_sink
+from torax._src.sources.impurity_radiation_heat_sink import impurity_radiation_mavrin_fit
 from torax._src.torax_pydantic import file_restart as file_restart_pydantic_model
 from torax._src.torax_pydantic import interpolated_param_1d
 from torax._src.torax_pydantic import interpolated_param_2d
@@ -98,6 +60,7 @@ from torax._src.transport_model import transport_coefficients_builder
 from torax._src.transport_model import transport_model as transport_model_lib
 from typing import Annotated, Any, Literal
 from typing import Any, Final, Mapping, Sequence, TypeAlias
+from typing import Callable
 from typing import Final
 from typing import Final, Mapping, Tuple
 from typing import Mapping
