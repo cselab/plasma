@@ -81,11 +81,7 @@ class CellVariable:
         return jnp.concatenate([left, forward_difference, right])
 
     def _left_face_value(self) -> jt.Float[chex.Array, '#t']:
-        if self.left_face_constraint is not None:
-            value = self.left_face_constraint
-            value = jnp.expand_dims(value, axis=-1)
-        else:
-            value = self.value[..., 0:1]
+        value = self.value[..., 0:1]
         return value
 
     def _right_face_value(self) -> jt.Float[chex.Array, '#t']:
