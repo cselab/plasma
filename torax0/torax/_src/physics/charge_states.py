@@ -85,15 +85,7 @@ class ChargeStateInfo:
 def calculate_average_charge_state_single_species(
     T_e: array_typing.FloatVector,
     ion_symbol: str,
-) -> array_typing.FloatVector:
-    if T_e.ndim == 0:
-        raise ValueError(
-            'T_e must be a 1D array, but is a scalar. Please provide a 1D array.'
-        )
-    if ion_symbol not in constants.ION_SYMBOLS:
-        raise ValueError(
-            f'Invalid ion symbol: {ion_symbol}. Allowed symbols are :'
-            f' {constants.ION_SYMBOLS}')
+):
     if ion_symbol not in _MAVRIN_Z_COEFFS:
         return jnp.ones_like(T_e) * constants.ION_PROPERTIES_DICT[ion_symbol].Z
     T_e_allowed_range = (0.1, 100.0)
@@ -109,22 +101,10 @@ def calculate_average_charge_state_single_species(
 
 
 def get_average_charge_state(
-    ion_symbols: Sequence[str],
-    T_e: array_typing.FloatVector,
-    fractions: array_typing.FloatVector,
-    Z_override: array_typing.FloatScalar | None = None,
-) -> ChargeStateInfo:
-    if T_e.ndim == 0:
-        raise ValueError(
-            'T_e must be a 1D array, but is a scalar. Please provide a 1D array.'
-        )
-    if Z_override is not None:
-        override_val = jnp.ones_like(T_e) * Z_override
-        return ChargeStateInfo(
-            Z_avg=override_val,
-            Z2_avg=override_val**2,
-            Z_per_species=jnp.stack([override_val for _ in ion_symbols]),
-        )
+    ion_symbols,
+    T_e,
+    fractions,
+    Z_override):
     Z_per_species = jnp.stack([
         calculate_average_charge_state_single_species(T_e, ion_symbol)
         for ion_symbol in ion_symbols
