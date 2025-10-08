@@ -24,7 +24,6 @@ from fusion_surrogates.qlknn.models import registry
 import numpy as np
 import pydantic
 from torax._src.torax_pydantic import torax_pydantic
-from torax._src.transport_model import bohm_gyrobohm
 from torax._src.transport_model import constant
 from torax._src.transport_model import pydantic_model_base
 from torax._src.transport_model import qlknn_transport_model
@@ -200,91 +199,6 @@ class ConstantTransportModel(pydantic_model_base.TransportBase):
     )
 
 
-class BohmGyroBohmTransportModel(pydantic_model_base.TransportBase):
-  """Model for the Bohm + Gyro-Bohm transport model.
-
-  Attributes:
-    model_name: The transport model to use. Hardcoded to 'bohm-gyrobohm'.
-    chi_e_bohm_coeff: Prefactor for Bohm term for electron heat conductivity.
-    chi_e_gyrobohm_coeff: Prefactor for GyroBohm term for electron heat
-      conductivity.
-    chi_i_bohm_coeff: Prefactor for Bohm term for ion heat conductivity.
-    chi_i_gyrobohm_coeff: Prefactor for GyroBohm term for ion heat conductivity.
-    chi_e_bohm_multiplier: Multiplier for chi_e_bohm_coeff. Intended for
-      user-friendly default modification.
-    chi_e_gyrobohm_multiplier: Multiplier for chi_e_gyrobohm_coeff. Intended for
-      user-friendly default modification.
-    chi_i_bohm_multiplier: Multiplier for chi_i_bohm_coeff. Intended for
-      user-friendly default modification.
-    chi_i_gyrobohm_multiplier: Multiplier for chi_i_gyrobohm_coeff. Intended for
-      user-friendly default modification.
-    D_face_c1: Constant for the electron diffusivity weighting factor.
-    D_face_c2: Constant for the electron diffusivity weighting factor.
-    V_face_coeff: Proportionality factor between convectivity and diffusivity.
-  """
-
-  model_name: Annotated[Literal['bohm-gyrobohm'], torax_pydantic.JAX_STATIC] = (
-      'bohm-gyrobohm'
-  )
-  chi_e_bohm_coeff: torax_pydantic.PositiveTimeVaryingScalar = (
-      torax_pydantic.ValidatedDefault(8e-5)
-  )
-  chi_e_gyrobohm_coeff: torax_pydantic.PositiveTimeVaryingScalar = (
-      torax_pydantic.ValidatedDefault(5e-6)
-  )
-  chi_i_bohm_coeff: torax_pydantic.PositiveTimeVaryingScalar = (
-      torax_pydantic.ValidatedDefault(8e-5)
-  )
-  chi_i_gyrobohm_coeff: torax_pydantic.PositiveTimeVaryingScalar = (
-      torax_pydantic.ValidatedDefault(5e-6)
-  )
-  chi_e_bohm_multiplier: torax_pydantic.PositiveTimeVaryingScalar = (
-      torax_pydantic.ValidatedDefault(1.0)
-  )
-  chi_e_gyrobohm_multiplier: torax_pydantic.PositiveTimeVaryingScalar = (
-      torax_pydantic.ValidatedDefault(1.0)
-  )
-  chi_i_bohm_multiplier: torax_pydantic.PositiveTimeVaryingScalar = (
-      torax_pydantic.ValidatedDefault(1.0)
-  )
-  chi_i_gyrobohm_multiplier: torax_pydantic.PositiveTimeVaryingScalar = (
-      torax_pydantic.ValidatedDefault(1.0)
-  )
-  D_face_c1: torax_pydantic.PositiveTimeVaryingScalar = (
-      torax_pydantic.ValidatedDefault(1.0)
-  )
-  D_face_c2: torax_pydantic.PositiveTimeVaryingScalar = (
-      torax_pydantic.ValidatedDefault(0.3)
-  )
-  V_face_coeff: torax_pydantic.TimeVaryingScalar = (
-      torax_pydantic.ValidatedDefault(-0.1)
-  )
-
-  def build_transport_model(
-      self,
-  ) -> bohm_gyrobohm.BohmGyroBohmTransportModel:
-    return bohm_gyrobohm.BohmGyroBohmTransportModel()
-
-  def build_runtime_params(
-      self, t: chex.Numeric
-  ) -> bohm_gyrobohm.RuntimeParams:
-    base_kwargs = dataclasses.asdict(super().build_runtime_params(t))
-    return bohm_gyrobohm.RuntimeParams(
-        chi_e_bohm_coeff=self.chi_e_bohm_coeff.get_value(t),
-        chi_e_gyrobohm_coeff=self.chi_e_gyrobohm_coeff.get_value(t),
-        chi_i_bohm_coeff=self.chi_i_bohm_coeff.get_value(t),
-        chi_i_gyrobohm_coeff=self.chi_i_gyrobohm_coeff.get_value(t),
-        chi_e_bohm_multiplier=self.chi_e_bohm_multiplier.get_value(t),
-        chi_e_gyrobohm_multiplier=self.chi_e_gyrobohm_multiplier.get_value(t),
-        chi_i_bohm_multiplier=self.chi_i_bohm_multiplier.get_value(t),
-        chi_i_gyrobohm_multiplier=self.chi_i_gyrobohm_multiplier.get_value(t),
-        D_face_c1=self.D_face_c1.get_value(t),
-        D_face_c2=self.D_face_c2.get_value(t),
-        V_face_coeff=self.V_face_coeff.get_value(t),
-        **base_kwargs,
-    )
-
-
 try:
   from torax._src.transport_model import qualikiz_transport_model  # pylint: disable=g-import-not-at-top
 
@@ -303,7 +217,6 @@ except ImportError:
   CombinedCompatibleTransportModel = (
       QLKNNTransportModel
       | ConstantTransportModel
-      | BohmGyroBohmTransportModel
   )
 
 
