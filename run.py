@@ -132,8 +132,7 @@ class QLKNNTransportModel(pydantic_model_base.TransportBase):
         )
 
 
-CombinedCompatibleTransportModel = QLKNNTransportModel
-TransportConfig = CombinedCompatibleTransportModel
+TransportConfig = QLKNNTransportModel
 
 
 @functools.partial(jax_utils.jit, static_argnums=(0, 1, 2))
