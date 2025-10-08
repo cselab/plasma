@@ -13,7 +13,7 @@ class ZerosModelConfig(base.BootstrapCurrentModelConfig):
                           torax_pydantic.JAX_STATIC] = 'zeros'
 
     def build_runtime_params(self):
-        return bootstrap_runtime_params.RuntimeParams()
+      pass
 
     def build_model(self):
-        return ZerosModel()
+      pass
