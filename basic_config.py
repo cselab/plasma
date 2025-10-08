@@ -1,8 +1,7 @@
 CONFIG = {
-    'profile_conditions': {},  # use default profile conditions
-    'plasma_composition': {},  # use default plasma composition
-    'numerics': {},  # use default numerics
-    # circular geometry is only for testing and prototyping
+    'profile_conditions': {},  
+    'plasma_composition': {},  
+    'numerics': {},  
     'geometry': {
         'geometry_type': 'circular',
     },
@@ -10,13 +9,10 @@ CONFIG = {
         'bootstrap_current': {},
     },
     'sources': {
-        # Current sources (for psi equation)
         'generic_current': {},
-        # Electron density sources/sink (for the n_e equation).
         'generic_particle': {},
         'gas_puff': {},
         'pellet': {},
-        # Ion and electron heat sources (for the temp-ion and temp-el eqs).
         'generic_heat': {},
         'fusion': {},
         'ei_exchange': {},
