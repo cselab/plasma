@@ -11,7 +11,6 @@ from collections.abc import Callable
 from collections.abc import Mapping
 from collections.abc import Sequence
 from collections.abc import Set
-from imas import ids_toplevel
 from jax import numpy as jnp
 from torax._src import array_typing
 from torax._src import constants
