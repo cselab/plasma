@@ -25,7 +25,6 @@ from torax._src.sources import gas_puff_source as gas_puff_source_lib
 from torax._src.sources import generic_current_source as generic_current_source_lib
 from torax._src.sources import generic_ion_el_heat_source as generic_ion_el_heat_source_lib
 from torax._src.sources import generic_particle_source as generic_particle_source_lib
-from torax._src.sources import ohmic_heat_source as ohmic_heat_source_lib
 from torax._src.sources import pellet_source as pellet_source_lib
 from torax._src.sources import qei_source as qei_source_lib
 from torax._src.sources import runtime_params
@@ -83,10 +82,6 @@ class Sources(torax_pydantic.BaseModelFrozen):
   impurity_radiation: (
       None
   ) = pydantic.Field(
-      discriminator='model_name',
-      default=None,
-  )
-  ohmic: ohmic_heat_source_lib.OhmicHeatSourceConfig | None = pydantic.Field(
       discriminator='model_name',
       default=None,
   )
