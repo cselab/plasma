@@ -41,7 +41,6 @@ __version_info__ = version.TORAX_VERSION_INFO
 __all__ = [
     'build_torax_config_from_file',
     'import_module',
-    'run_simulation',
     'CoreProfiles',
     'CoreTransport',
     'Geometry',
