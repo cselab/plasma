@@ -30,7 +30,6 @@ from torax._src.output_tools import post_processing
 from torax._src.pedestal_model import pedestal_model as pedestal_model_lib
 from torax._src.pedestal_model import pydantic_model as pedestal_pydantic_model
 from torax._src.physics import formulas
-from torax._src.solver import pydantic_model as solver_pydantic_model
 from torax._src.sources import pydantic_model as sources_pydantic_model
 from torax._src.sources import qei_source as qei_source_lib
 from torax._src.sources import source_models as source_models_lib
@@ -68,6 +67,99 @@ import torax
 import treelib
 import typing_extensions
 import xarray as xr
+import abc
+import functools
+from typing import Annotated, Any, Literal
+import pydantic
+from torax._src import physics_models as physics_models_lib
+from torax._src.fvm import enums
+from torax._src.solver import linear_theta_method
+from torax._src.solver import runtime_params
+from torax._src.solver import solver as solver_lib
+from torax._src.torax_pydantic import torax_pydantic
+
+class BaseSolver(torax_pydantic.BaseModelFrozen, abc.ABC):
+  theta_implicit: Annotated[
+      torax_pydantic.UnitInterval, torax_pydantic.JAX_STATIC
+  ] = 1.0
+  use_predictor_corrector: Annotated[bool, torax_pydantic.JAX_STATIC] = False
+  n_corrector_steps: Annotated[
+      pydantic.PositiveInt, torax_pydantic.JAX_STATIC
+  ] = 10
+  convection_dirichlet_mode: Annotated[
+      Literal['ghost', 'direct', 'semi-implicit'], torax_pydantic.JAX_STATIC
+  ] = 'ghost'
+  convection_neumann_mode: Annotated[
+      Literal['ghost', 'semi-implicit'], torax_pydantic.JAX_STATIC
+  ] = 'ghost'
+  use_pereverzev: Annotated[bool, torax_pydantic.JAX_STATIC] = False
+  chi_pereverzev: pydantic.PositiveFloat = 30.0
+  D_pereverzev: pydantic.NonNegativeFloat = 15.0
+
+  @property
+  @abc.abstractmethod
+  def build_runtime_params(self) -> runtime_params.RuntimeParams:
+    """Builds runtime params from the config."""
+
+  @abc.abstractmethod
+  def build_solver(
+      self,
+      physics_models: physics_models_lib.PhysicsModels,
+  ) -> solver_lib.Solver:
+    """Builds a solver from the config."""
+
+
+class LinearThetaMethod(BaseSolver):
+  solver_type: Annotated[Literal['linear'], torax_pydantic.JAX_STATIC] = (
+      'linear'
+  )
+
+  @pydantic.model_validator(mode='before')
+  @classmethod
+  def scrub_log_iterations(cls, x: dict[str, Any]) -> dict[str, Any]:
+    if 'log_iterations' in x:
+      del x['log_iterations']
+    return x
+
+  @functools.cached_property
+  def build_runtime_params(self) -> runtime_params.RuntimeParams:
+    return runtime_params.RuntimeParams(
+        theta_implicit=self.theta_implicit,
+        convection_dirichlet_mode=self.convection_dirichlet_mode,
+        convection_neumann_mode=self.convection_neumann_mode,
+        use_pereverzev=self.use_pereverzev,
+        use_predictor_corrector=self.use_predictor_corrector,
+        chi_pereverzev=self.chi_pereverzev,
+        D_pereverzev=self.D_pereverzev,
+        n_corrector_steps=self.n_corrector_steps,
+    )
+
+  def build_solver(
+      self,
+      physics_models: physics_models_lib.PhysicsModels,
+  ) -> solver_lib.Solver:
+    return linear_theta_method.LinearThetaMethod(
+        physics_models=physics_models,
+    )
+
+
+class NewtonRaphsonThetaMethod(BaseSolver):
+  solver_type: Annotated[
+      Literal['newton_raphson'], torax_pydantic.JAX_STATIC
+  ] = 'newton_raphson'
+  log_iterations: Annotated[bool, torax_pydantic.JAX_STATIC] = False
+  initial_guess_mode: Annotated[
+      enums.InitialGuessMode, torax_pydantic.JAX_STATIC
+  ] = enums.InitialGuessMode.LINEAR
+  n_max_iterations: pydantic.NonNegativeInt = 30
+  residual_tol: float = 1e-5
+  residual_coarse_tol: float = 1e-2
+  delta_reduction_factor: float = 0.5
+  tau_min: float = 0.01
+
+SolverConfig = (
+    LinearThetaMethod | NewtonRaphsonThetaMethod
+)
 
 
 class g:
@@ -1094,7 +1186,7 @@ class ToraxConfig(BaseModelFrozen):
     neoclassical: neoclassical_pydantic_model.Neoclassical = (
         neoclassical_pydantic_model.Neoclassical()  # pylint: disable=missing-kwoa
     )
-    solver: solver_pydantic_model.SolverConfig = pydantic.Field(
+    solver: SolverConfig = pydantic.Field(
         discriminator='solver_type')
     transport: transport_model_pydantic_model.TransportConfig = pydantic.Field(
         discriminator='model_name')
@@ -1127,7 +1219,7 @@ class ToraxConfig(BaseModelFrozen):
             'CGM',
         ]
         using_linear_solver = isinstance(
-            self.solver, solver_pydantic_model.LinearThetaMethod)
+            self.solver, LinearThetaMethod)
 
         # pylint: disable=g-long-ternary
         # pylint: disable=attribute-error
