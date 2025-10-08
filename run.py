@@ -1774,77 +1774,6 @@ def initial_core_profiles0(
     )
 
 
-def update_psi_from_j(
-    Ip: array_typing.FloatScalar,
-    geo: geometry.Geometry,
-    j_total_hires: jax.Array,
-    use_v_loop_lcfs_boundary_condition: bool = False,
-) -> cell_variable.CellVariable:
-    """Calculates poloidal flux (psi) consistent with plasma current.
-
-  For increased accuracy of psi, a hi-res grid is used, due to the double
-    integration. Presently used only for initialization. Therefore Ip is
-    a valid source of truth for Ip, even if use_v_loop_lcfs_boundary_condition
-    is True.
-
-  Args:
-    Ip: Total plasma current [A].
-    geo: Torus geometry.
-    j_total_hires: High resolution version of j_total [A/m^2].
-    use_v_loop_lcfs_boundary_condition: Whether to set the loop voltage from Ip.
-
-  Returns:
-    psi: Poloidal flux cell variable.
-  """
-    y = j_total_hires * geo.spr_hires
-    assert y.ndim == 1
-    assert geo.rho_hires.ndim == 1
-    Ip_profile = math_utils.cumulative_trapezoid(y=y,
-                                                 x=geo.rho_hires_norm,
-                                                 initial=0.0)
-    scale = jnp.concatenate((
-        jnp.zeros((1, )),
-        (16 * jnp.pi**3 * constants.CONSTANTS.mu_0 * geo.Phi_b) /
-        (geo.F_hires[1:] * geo.g2g3_over_rhon_hires[1:]),
-    ))
-    # dpsi_dr on hires cell grid
-    dpsi_drhon_hires = scale * Ip_profile
-
-    # psi on hires cell grid
-    psi_hires = math_utils.cumulative_trapezoid(y=dpsi_drhon_hires,
-                                                x=geo.rho_hires_norm,
-                                                initial=0.0)
-
-    psi_value = jnp.interp(geo.rho_norm, geo.rho_hires_norm, psi_hires)
-
-    # Set the BCs for psi to ensure the correct Ip
-    dpsi_drhonorm_edge = psi_calculations.calculate_psi_grad_constraint_from_Ip(
-        Ip,
-        geo,
-    )
-
-    if use_v_loop_lcfs_boundary_condition:
-        # For v_loop_lcfs, we will prescribe a rate of change of psi at the LCFS
-        # For the first timestep, we need an initial value for psi at the LCFS, so
-        # we set it to match the desired plasma current.
-        right_face_grad_constraint = None
-        right_face_constraint = (psi_value[-1] +
-                                 dpsi_drhonorm_edge * geo.drho_norm / 2)
-    else:
-        # Use the dpsi/drho calculated above as the right face gradient constraint
-        right_face_grad_constraint = dpsi_drhonorm_edge
-        right_face_constraint = None
-
-    psi = cell_variable.CellVariable(
-        value=psi_value,
-        dr=geo.drho_norm,
-        right_face_grad_constraint=right_face_grad_constraint,
-        right_face_constraint=right_face_constraint,
-    )
-
-    return psi
-
-
 def _get_initial_psi_mode(
     runtime_params: runtime_params_slice.RuntimeParams,
     geo: geometry.Geometry,
@@ -2850,47 +2779,6 @@ def cell_variable_tuple_to_vec(
   """
     x_vec = jnp.concatenate([x.value for x in x_tuple])
     return x_vec
-
-
-def vec_to_cell_variable_tuple(
-    x_vec: jax.Array,
-    core_profiles: state.CoreProfiles,
-    evolving_names: tuple[str, ...],
-) -> tuple[cell_variable.CellVariable, ...]:
-    """Converts a flat array of core profile state vars to CellVariable tuple.
-
-  Requires an input CoreProfiles to provide boundary condition information.
-
-  Args:
-    x_vec: A flat array of evolving core profile state variables. The order of
-      the variables in the array must match the order of the evolving_names.
-    core_profiles: CoreProfiles containing all CellVariables with appropriate
-      boundary conditions.
-    evolving_names: The names of the evolving cell variables.
-
-  Returns:
-    A tuple of updated CellVariables.
-  """
-    x_split = jnp.split(x_vec, len(evolving_names))
-
-    # First scale the core profiles to match the scaling in x_split, then
-    # update the values in the scaled core profiles with new values from x_split.
-    scaled_evolving_cp_list = [
-        scale_cell_variable(
-            getattr(core_profiles, name),
-            scaling_factor=1 / SCALING_FACTORS[name],
-        ) for name in evolving_names
-    ]
-
-    x_out = [
-        dataclasses.replace(
-            scaled_evolving_cp,
-            value=value,
-        )
-        for scaled_evolving_cp, value in zip(scaled_evolving_cp_list, x_split)
-    ]
-
-    return tuple(x_out)
 
 
 # pylint: disable=invalid-name
