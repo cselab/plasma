@@ -1,11 +1,3 @@
-import chex
-import pydantic
-import dataclasses
-import jax
-from torax._src.mhd.sawtooth import sawtooth_models as sawtooth_models_lib
-from torax._src.mhd import runtime_params as mhd_runtime_params
-from torax._src.mhd.sawtooth import pydantic_model as sawtooth_pydantic_model
-from torax._src.torax_pydantic import torax_pydantic
 from absl import logging
 from collections.abc import Callable
 from collections.abc import Mapping
@@ -31,6 +23,9 @@ from torax._src.geometry import geometry
 from torax._src.geometry import geometry as geometry_lib
 from torax._src.geometry import geometry_provider
 from torax._src.geometry import standard_geometry
+from torax._src.mhd import runtime_params as mhd_runtime_params
+from torax._src.mhd.sawtooth import pydantic_model as sawtooth_pydantic_model
+from torax._src.mhd.sawtooth import sawtooth_models as sawtooth_models_lib
 from torax._src.neoclassical import neoclassical_models
 from torax._src.neoclassical import neoclassical_models as neoclassical_models_lib
 from torax._src.neoclassical import runtime_params
@@ -51,13 +46,12 @@ from torax._src.sources import source_models as source_models_lib
 from torax._src.sources import source_profile_builders
 from torax._src.sources import source_profiles
 from torax._src.sources import source_profiles as source_profiles_lib
-import pydantic
-from torax._src.torax_pydantic import torax_pydantic
 from torax._src.torax_pydantic import interpolated_param_1d
 from torax._src.torax_pydantic import interpolated_param_2d
 from torax._src.torax_pydantic import model_base
 from torax._src.torax_pydantic import torax_pydantic
-from torax._src.transport_model import pydantic_model as transport_model_pydantic_model
+from torax._src.transport_model import pydantic_model_base
+from torax._src.transport_model import qlknn_transport_model
 from torax._src.transport_model import transport_coefficients_builder
 from torax._src.transport_model import transport_model as transport_model_lib
 from typing import Annotated, Any, Literal
@@ -86,6 +80,63 @@ import numpy as np
 import pydantic
 import typing_extensions
 import xarray as xr
+
+class QLKNNTransportModel(pydantic_model_base.TransportBase):
+    model_name: Annotated[Literal['qlknn'],
+                          torax_pydantic.JAX_STATIC] = 'qlknn'
+    model_path: Annotated[str, torax_pydantic.JAX_STATIC] = ''
+    qlknn_model_name: Annotated[str, torax_pydantic.JAX_STATIC] = ''
+    include_ITG: bool = True
+    include_TEM: bool = True
+    include_ETG: bool = True
+    ITG_flux_ratio_correction: float = 1.0
+    ETG_correction_factor: float = 1.0 / 3.0
+    clip_inputs: bool = False
+    clip_margin: float = 0.95
+    collisionality_multiplier: float = 1.0
+    avoid_big_negative_s: bool = True
+    smag_alpha_correction: bool = True
+    q_sawtooth_proxy: bool = True
+    DV_effective: bool = False
+    An_min: pydantic.PositiveFloat = 0.05
+
+    @pydantic.model_validator(mode='before')
+    @classmethod
+    def _conform_data(cls, data: dict[str, Any]) -> dict[str, Any]:
+        data = copy.deepcopy(data)
+        data['qlknn_model_name'] = data.get('qlknn_model_name', '')
+        if 'smoothing_width' not in data:
+            data['smoothing_width'] = 0.1
+        return data
+
+    def build_transport_model(
+            self) -> qlknn_transport_model.QLKNNTransportModel:
+        return qlknn_transport_model.QLKNNTransportModel(
+            path=self.model_path, name=self.qlknn_model_name)
+
+    def build_runtime_params(
+            self, t: chex.Numeric) -> qlknn_transport_model.RuntimeParams:
+        base_kwargs = dataclasses.asdict(super().build_runtime_params(t))
+        return qlknn_transport_model.RuntimeParams(
+            include_ITG=self.include_ITG,
+            include_TEM=self.include_TEM,
+            include_ETG=self.include_ETG,
+            ITG_flux_ratio_correction=self.ITG_flux_ratio_correction,
+            ETG_correction_factor=self.ETG_correction_factor,
+            clip_inputs=self.clip_inputs,
+            clip_margin=self.clip_margin,
+            collisionality_multiplier=self.collisionality_multiplier,
+            avoid_big_negative_s=self.avoid_big_negative_s,
+            smag_alpha_correction=self.smag_alpha_correction,
+            q_sawtooth_proxy=self.q_sawtooth_proxy,
+            DV_effective=self.DV_effective,
+            An_min=self.An_min,
+            **base_kwargs,
+        )
+
+
+CombinedCompatibleTransportModel = QLKNNTransportModel
+TransportConfig = CombinedCompatibleTransportModel
 
 
 class FileRestart(torax_pydantic.BaseModelFrozen):
@@ -3734,7 +3785,7 @@ class ToraxConfig(BaseModelFrozen):
     sources: sources_pydantic_model.Sources
     neoclassical: Neoclassical0 = (Neoclassical0())
     solver: SolverConfig = pydantic.Field(discriminator='solver_type')
-    transport: transport_model_pydantic_model.TransportConfig = pydantic.Field(
+    transport: TransportConfig = pydantic.Field(
         discriminator='model_name')
     pedestal: pedestal_pydantic_model.PedestalConfig = pydantic.Field(
         discriminator='model_name')
