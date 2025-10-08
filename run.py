@@ -1,22 +1,3 @@
-import functools
-from typing import TypeAlias
-
-import chex
-import jax
-from jax import numpy as jnp
-import jaxopt
-from torax._src import jax_utils
-from torax._src import physics_models as physics_models_lib
-from torax._src import state
-from torax._src.config import runtime_params_slice
-from torax._src.core_profiles import updaters
-from torax._src.fvm import block_1d_coeffs
-from torax._src.fvm import calc_coeffs
-from torax._src.fvm import cell_variable
-from torax._src.fvm import discrete_system
-from torax._src.fvm import fvm_conversions
-from torax._src.geometry import geometry
-from torax._src.sources import source_profiles
 from absl import logging
 from collections.abc import Sequence
 from collections.abc import Set
@@ -39,6 +20,8 @@ from torax._src.core_profiles.plasma_composition import plasma_composition as pl
 from torax._src.fvm import block_1d_coeffs
 from torax._src.fvm import calc_coeffs
 from torax._src.fvm import cell_variable
+from torax._src.fvm import convection_terms
+from torax._src.fvm import diffusion_terms
 from torax._src.fvm import enums
 from torax._src.fvm import fvm_conversions
 from torax._src.geometry import geometry
@@ -75,6 +58,7 @@ from torax._src.transport_model import transport_model as transport_model_lib
 from typing import Annotated, Any, Literal
 from typing import Any, Final, Mapping, Sequence, TypeAlias
 from typing import Final
+from typing import TypeAlias
 from typing_extensions import Annotated
 from typing_extensions import Self
 import abc
@@ -87,6 +71,7 @@ import inspect
 import itertools
 import jax
 import jax.numpy as jnp
+import jaxopt
 import logging
 import numpy as np
 import os
@@ -98,6 +83,116 @@ import typing_extensions
 import xarray as xr
 
 Block1DCoeffs: TypeAlias = block_1d_coeffs.Block1DCoeffs
+AuxiliaryOutput: TypeAlias = block_1d_coeffs.AuxiliaryOutput
+
+def calc_c(
+    x: tuple[cell_variable.CellVariable, ...],
+    coeffs: Block1DCoeffs,
+    convection_dirichlet_mode: str = 'ghost',
+    convection_neumann_mode: str = 'ghost',
+) -> tuple[jax.Array, jax.Array]:
+  """Calculate C and c such that F = C x + c.
+
+  See docstrings for `Block1DCoeff` and `implicit_solve_block` for
+  more detail.
+
+  Args:
+    x: Tuple containing CellVariables for each channel. This function uses only
+      their shape and their boundary conditions, not their values.
+    coeffs: Coefficients defining the differential equation.
+    convection_dirichlet_mode: See docstring of the `convection_terms` function,
+      `dirichlet_mode` argument.
+    convection_neumann_mode: See docstring of the `convection_terms` function,
+      `neumann_mode` argument.
+
+  Returns:
+    c_mat: matrix C, such that F = C x + c
+    c: the vector c
+  """
+
+  d_face = coeffs.d_face
+  v_face = coeffs.v_face
+  source_mat_cell = coeffs.source_mat_cell
+  source_cell = coeffs.source_cell
+
+  num_cells = x[0].value.shape[0]
+  num_channels = len(x)
+  for _, x_i in enumerate(x):
+    if x_i.value.shape != (num_cells,):
+      raise ValueError(
+          f'Expected each x channel to have shape ({num_cells},) '
+          f'but got {x_i.value.shape}.'
+      )
+
+  zero_block = jnp.zeros((num_cells, num_cells))
+  zero_row_of_blocks = [zero_block] * num_channels
+  zero_vec = jnp.zeros((num_cells))
+  zero_block_vec = [zero_vec] * num_channels
+
+  # Make a matrix C and vector c that will accumulate contributions from
+  # diffusion, convection, and source terms.
+  # C and c are both block structured, with one block per channel.
+  c_mat = [zero_row_of_blocks.copy() for _ in range(num_channels)]
+  c = zero_block_vec.copy()
+
+  # Add diffusion terms
+  if d_face is not None:
+    for i in range(num_channels):
+      (
+          diffusion_mat,
+          diffusion_vec,
+      ) = diffusion_terms.make_diffusion_terms(
+          d_face[i],
+          x[i],
+      )
+
+      c_mat[i][i] += diffusion_mat
+      c[i] += diffusion_vec
+
+  # Add convection terms
+  if v_face is not None:
+    for i in range(num_channels):
+      # Resolve diffusion to zeros if it is not specified
+      d_face_i = d_face[i] if d_face is not None else None
+      d_face_i = jnp.zeros_like(v_face[i]) if d_face_i is None else d_face_i
+
+      (
+          conv_mat,
+          conv_vec,
+      ) = convection_terms.make_convection_terms(
+          v_face[i],
+          d_face_i,
+          x[i],
+          dirichlet_mode=convection_dirichlet_mode,
+          neumann_mode=convection_neumann_mode,
+      )
+
+      c_mat[i][i] += conv_mat
+      c[i] += conv_vec
+
+  # Add implicit source terms
+  if source_mat_cell is not None:
+    for i in range(num_channels):
+      for j in range(num_channels):
+        source = source_mat_cell[i][j]
+        if source is not None:
+          c_mat[i][j] += jnp.diag(source)
+
+  # Add explicit source terms
+  def add(left: jax.Array, right: jax.Array | None):
+    """Addition with adding None treated as no-op."""
+    if right is not None:
+      return left + right
+    return left
+
+  if source_cell is not None:
+    c = [add(c_i, source_i) for c_i, source_i in zip(c, source_cell)]
+
+  # Form block structure
+  c_mat = jnp.block(c_mat)
+  c = jnp.block(c)
+
+  return c_mat, c
 
 
 @functools.partial(
@@ -208,7 +303,7 @@ def theta_method_matrix_equation(
   left_transient = jnp.identity(len(x_new_guess_vec))
   right_transient = jnp.diag(jnp.squeeze(tc_in_old / tc_in_new))
 
-  c_mat_new, c_new = discrete_system.calc_c(
+  c_mat_new, c_new = calc_c(
       x_new_guess,
       coeffs_new,
       convection_dirichlet_mode,
