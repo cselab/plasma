@@ -77,11 +77,7 @@ class BootstrapCurrent:
 class BootstrapCurrentModel(abc.ABC):
 
     @abc.abstractmethod
-    def calculate_bootstrap_current(
-        self,
-        geometry,
-        core_profiles
-    ):
+    def calculate_bootstrap_current(self, geometry, core_profiles):
         pass
 
 
@@ -91,13 +87,10 @@ class BootstrapCurrentModelConfig(torax_pydantic.BaseModelFrozen, abc.ABC):
     def build_model(self):
         pass
 
+
 class SauterModel(BootstrapCurrentModel):
 
-    def calculate_bootstrap_current(
-        self,
-        geometry,
-        core_profiles
-    ):
+    def calculate_bootstrap_current(self, geometry, core_profiles):
         result = _calculate_bootstrap_current(
             Z_eff_face=core_profiles.Z_eff_face,
             Z_i_face=core_profiles.Z_i_face,
@@ -131,18 +124,8 @@ class SauterModelConfig(BootstrapCurrentModelConfig):
 
 
 @jax_utils.jit
-def _calculate_bootstrap_current(
-        *,
-        Z_eff_face,
-        Z_i_face,
-        n_e,
-        n_i,
-        T_e,
-        T_i,
-        psi,
-        q_face,
-        geo
-):
+def _calculate_bootstrap_current(*, Z_eff_face, Z_i_face, n_e, n_i, T_e, T_i,
+                                 psi, q_face, geo):
     f_trap = formulas.calculate_f_trap(geo)
     log_lambda_ei = collisions.calculate_log_lambda_ei(T_e.face_value(),
                                                        n_e.face_value())
@@ -195,9 +178,9 @@ def _calculate_bootstrap_current(
 
 
 def _calculate_L34(
-        f_trap,
-        nu_e_star,
-        Z_eff,
+    f_trap,
+    nu_e_star,
+    Z_eff,
 ):
     ft34 = f_trap / (1.0 + (1 - 0.1 * f_trap) * jnp.sqrt(nu_e_star) + 0.5 *
                      (1.0 - 0.5 * f_trap) * nu_e_star / Z_eff)
@@ -205,10 +188,7 @@ def _calculate_L34(
             0.3 / (Z_eff + 1) * ft34**3 + 0.2 / (Z_eff + 1) * ft34**4)
 
 
-def _calculate_alpha(
-        f_trap,
-        nu_i_star
-):
+def _calculate_alpha(f_trap, nu_i_star):
     alpha0 = -1.17 * (1 - f_trap) / (1 - 0.22 * f_trap - 0.19 * f_trap**2)
     alpha = ((alpha0 + 0.25 * (1 - f_trap**2) * jnp.sqrt(nu_i_star)) /
              (1 + 0.5 * jnp.sqrt(nu_i_star)) + 0.315 * nu_i_star**2 *
@@ -223,8 +203,7 @@ class NeoclassicalModels:
     bootstrap_current: BootstrapCurrentModel
 
     def __hash__(self):
-        return hash(
-            (self.bootstrap_current, self.conductivity))
+        return hash((self.bootstrap_current, self.conductivity))
 
     def __eq__(self, other):
         return (isinstance(other, NeoclassicalModels)
@@ -232,13 +211,12 @@ class NeoclassicalModels:
                 and self.bootstrap_current == other.bootstrap_current)
 
 
-
 def exponential_profile(
-        geo,
-        *,
-        decay_start,
-        width,
-        total,
+    geo,
+    *,
+    decay_start,
+    width,
+    total,
 ):
     r = geo.rho_norm
     S = jnp.exp(-(decay_start - r) / width)
@@ -246,13 +224,7 @@ def exponential_profile(
     return C * S
 
 
-def gaussian_profile(
-        geo,
-        *,
-        center,
-        width,
-        total
-):
+def gaussian_profile(geo, *, center, width, total):
     r = geo.rho_norm
     S = jnp.exp(-((r - center)**2) / (2 * width**2))
     C = total / math_utils.volume_integration(S, geo)
@@ -295,9 +267,9 @@ class SourceProfiles:
 
     @classmethod
     def merge(
-            cls,
-            explicit_source_profiles: typing_extensions.Self,
-            implicit_source_profiles: typing_extensions.Self,
+        cls,
+        explicit_source_profiles: typing_extensions.Self,
+        implicit_source_profiles: typing_extensions.Self,
     ) -> typing_extensions.Self:
         sum_profiles = lambda a, b: a + b
         return jax.tree_util.tree_map(sum_profiles, explicit_source_profiles,
@@ -311,9 +283,9 @@ class SourceProfiles:
         return -total * prefactor
 
     def total_sources(
-            self,
-            source_type: Literal['n_e', 'T_i', 'T_e'],
-            geo: geometry.Geometry,
+        self,
+        source_type: Literal['n_e', 'T_i', 'T_e'],
+        geo: geometry.Geometry,
     ) -> jax.Array:
         source: dict[str, jax.Array] = getattr(self, source_type)
         total = sum(source.values())
@@ -364,13 +336,13 @@ class SourceModelBase(torax_pydantic.BaseModelFrozen, abc.ABC):
 class SourceProfileFunction(Protocol):
 
     def __call__(
-            self,
-            runtime_params: runtime_params_slice.RuntimeParams,
-            geo: geometry.Geometry,
-            source_name: str,
-            core_profiles: state.CoreProfiles,
-            calculated_source_profiles: SourceProfiles | None,
-            unused_conductivity: conductivity_base.Conductivity | None,
+        self,
+        runtime_params: runtime_params_slice.RuntimeParams,
+        geo: geometry.Geometry,
+        source_name: str,
+        core_profiles: state.CoreProfiles,
+        calculated_source_profiles: SourceProfiles | None,
+        unused_conductivity: conductivity_base.Conductivity | None,
     ) -> tuple[array_typing.FloatVectorCell, ...]:
         ...
 
@@ -420,13 +392,13 @@ class Source(abc.ABC):
 class SourceProfileFunction(Protocol):
 
     def __call__(
-            self,
-            runtime_params: runtime_params_slice.RuntimeParams,
-            geo: geometry.Geometry,
-            source_name: str,
-            core_profiles: state.CoreProfiles,
-            calculated_source_profiles: SourceProfiles | None,
-            unused_conductivity: conductivity_base.Conductivity | None,
+        self,
+        runtime_params: runtime_params_slice.RuntimeParams,
+        geo: geometry.Geometry,
+        source_name: str,
+        core_profiles: state.CoreProfiles,
+        calculated_source_profiles: SourceProfiles | None,
+        unused_conductivity: conductivity_base.Conductivity | None,
     ) -> tuple[array_typing.FloatVectorCell, ...]:
         ...
 
@@ -476,13 +448,13 @@ class Source(abc.ABC):
 class SourceProfileFunction(Protocol):
 
     def __call__(
-            self,
-            runtime_params: runtime_params_slice.RuntimeParams,
-            geo: geometry.Geometry,
-            source_name: str,
-            core_profiles: state.CoreProfiles,
-            calculated_source_profiles: SourceProfiles | None,
-            unused_conductivity: conductivity_base.Conductivity | None,
+        self,
+        runtime_params: runtime_params_slice.RuntimeParams,
+        geo: geometry.Geometry,
+        source_name: str,
+        core_profiles: state.CoreProfiles,
+        calculated_source_profiles: SourceProfiles | None,
+        unused_conductivity: conductivity_base.Conductivity | None,
     ) -> tuple[array_typing.FloatVectorCell, ...]:
         ...
 
@@ -596,8 +568,8 @@ class GenericCurrentSourceConfig(SourceModelBase):
         return calculate_generic_current
 
     def build_runtime_params(
-            self,
-            t,
+        self,
+        t,
     ):
         return RuntimeParamsGcS(
             prescribed_values=tuple(
@@ -627,12 +599,12 @@ class RuntimeParamsGeIO(RuntimeParamsSrc):
 
 
 def calc_generic_heat_source(
-        geo: geometry.Geometry,
-        gaussian_location: float,
-        gaussian_width: float,
-        P_total: float,
-        electron_heat_fraction: float,
-        absorption_fraction: float,
+    geo: geometry.Geometry,
+    gaussian_location: float,
+    gaussian_width: float,
+    P_total: float,
+    electron_heat_fraction: float,
+    absorption_fraction: float,
 ) -> tuple[array_typing.FloatVectorCell, array_typing.FloatVectorCell]:
     absorbed_power = P_total * absorption_fraction
     profile = gaussian_profile(geo,
@@ -645,12 +617,12 @@ def calc_generic_heat_source(
 
 
 def default_formula(
-        runtime_params: runtime_params_slice.RuntimeParams,
-        geo: geometry.Geometry,
-        source_name: str,
-        unused_core_profiles: state.CoreProfiles,
-        unused_calculated_source_profiles: SourceProfiles | None,
-        unused_conductivity: conductivity_base.Conductivity | None,
+    runtime_params: runtime_params_slice.RuntimeParams,
+    geo: geometry.Geometry,
+    source_name: str,
+    unused_core_profiles: state.CoreProfiles,
+    unused_calculated_source_profiles: SourceProfiles | None,
+    unused_conductivity: conductivity_base.Conductivity | None,
 ):
     source_params = runtime_params.sources[source_name]
     ion, el = calc_generic_heat_source(
@@ -701,8 +673,8 @@ class GenericIonElHeatSourceConfig(SourceModelBase):
         return default_formula
 
     def build_runtime_params(
-            self,
-            t: chex.Numeric,
+        self,
+        t: chex.Numeric,
     ):
         return RuntimeParamsGeIO(
             prescribed_values=tuple(
@@ -721,12 +693,12 @@ class GenericIonElHeatSourceConfig(SourceModelBase):
 
 
 def calc_generic_particle_source(
-        runtime_params: runtime_params_slice.RuntimeParams,
-        geo: geometry.Geometry,
-        source_name: str,
-        unused_state: state.CoreProfiles,
-        unused_calculated_source_profiles: SourceProfiles | None,
-        unused_conductivity: conductivity_base.Conductivity | None,
+    runtime_params: runtime_params_slice.RuntimeParams,
+    geo: geometry.Geometry,
+    source_name: str,
+    unused_state: state.CoreProfiles,
+    unused_calculated_source_profiles: SourceProfiles | None,
+    unused_conductivity: conductivity_base.Conductivity | None,
 ) -> tuple[array_typing.FloatVectorCell, ...]:
     source_params = runtime_params.sources[source_name]
     return (gaussian_profile(
@@ -775,8 +747,8 @@ class GenericParticleSourceConfig(SourceModelBase):
         return calc_generic_particle_source
 
     def build_runtime_params(
-            self,
-            t: chex.Numeric,
+        self,
+        t: chex.Numeric,
     ):
         return RuntimeParamsPaSo(
             prescribed_values=tuple(
@@ -793,12 +765,12 @@ class GenericParticleSourceConfig(SourceModelBase):
 
 
 def calc_pellet_source(
-        runtime_params: runtime_params_slice.RuntimeParams,
-        geo: geometry.Geometry,
-        source_name: str,
-        unused_state: state.CoreProfiles,
-        unused_calculated_source_profiles: SourceProfiles | None,
-        unused_conductivity: conductivity_base.Conductivity | None,
+    runtime_params: runtime_params_slice.RuntimeParams,
+    geo: geometry.Geometry,
+    source_name: str,
+    unused_state: state.CoreProfiles,
+    unused_calculated_source_profiles: SourceProfiles | None,
+    unused_conductivity: conductivity_base.Conductivity | None,
 ) -> tuple[array_typing.FloatVectorCell, ...]:
     source_params = runtime_params.sources[source_name]
     return (gaussian_profile(
@@ -862,11 +834,7 @@ class PelletSourceConfig(SourceModelBase):
         return PelletSource(model_func=self.model_func)
 
 
-def calc_fusion(
-        geo,
-        core_profiles,
-        runtime_params
-):
+def calc_fusion(geo, core_profiles, runtime_params):
     product = 1.0
     for fraction, symbol in zip(
             runtime_params.plasma_composition.main_ion.fractions,
@@ -886,11 +854,14 @@ def calc_fusion(
             C5 = 1.35e-2
             C6 = -1.0675e-4
             C7 = 1.366e-5
-            theta = t_face / (1.0 - (t_face * (C2 + t_face * (C4 + t_face * C6))) /
-                              (1.0 + t_face * (C3 + t_face * (C5 + t_face * C7))))
+            theta = t_face / (1.0 - (t_face * (C2 + t_face *
+                                               (C4 + t_face * C6))) /
+                              (1.0 + t_face * (C3 + t_face *
+                                               (C5 + t_face * C7))))
             xi = (BG**2 / (4 * theta))**(1 / 3)
-            logsigmav = (jnp.log(C1 * theta) + 0.5 * jnp.log(xi / (mrc2 * t_face**3)) -
-                         3 * xi - jnp.log(1e6))
+            logsigmav = (jnp.log(C1 * theta) +
+                         0.5 * jnp.log(xi / (mrc2 * t_face**3)) - 3 * xi -
+                         jnp.log(1e6))
             logPfus = (jnp.log(DT_fraction_product * Efus) +
                        2 * jnp.log(core_profiles.n_i.face_value()) + logsigmav)
             Pfus_face = jnp.exp(logPfus)
@@ -912,12 +883,12 @@ def calc_fusion(
 
 
 def fusion_heat_model_func(
-        runtime_params: runtime_params_slice.RuntimeParams,
-        geo: geometry.Geometry,
-        unused_source_name: str,
-        core_profiles: state.CoreProfiles,
-        unused_calculated_source_profiles: SourceProfiles | None,
-        unused_conductivity: conductivity_base.Conductivity | None,
+    runtime_params: runtime_params_slice.RuntimeParams,
+    geo: geometry.Geometry,
+    unused_source_name: str,
+    core_profiles: state.CoreProfiles,
+    unused_calculated_source_profiles: SourceProfiles | None,
+    unused_conductivity: conductivity_base.Conductivity | None,
 ) -> tuple[array_typing.FloatVectorCell, array_typing.FloatVectorCell]:
     _, Pfus_i, Pfus_e = calc_fusion(
         geo,
@@ -954,8 +925,8 @@ class FusionHeatSourceConfig(SourceModelBase):
         return fusion_heat_model_func
 
     def build_runtime_params(
-            self,
-            t: chex.Numeric,
+        self,
+        t: chex.Numeric,
     ) -> RuntimeParamsSrc:
         return RuntimeParamsSrc(
             prescribed_values=tuple(
@@ -976,12 +947,12 @@ class RuntimeParamsPS(RuntimeParamsSrc):
 
 
 def calc_puff_source(
-        runtime_params,
-        geo,
-        source_name,
-        unused_state,
-        unused_calculated_source_profiles,
-        unused_conductivity,
+    runtime_params,
+    geo,
+    source_name,
+    unused_state,
+    unused_calculated_source_profiles,
+    unused_conductivity,
 ):
     source_params = runtime_params.sources[source_name]
     return (exponential_profile(
@@ -1055,10 +1026,10 @@ class QeiSource(Source):
         )
 
     def get_qei(
-            self,
-            runtime_params: runtime_params_slice.RuntimeParams,
-            geo: geometry.Geometry,
-            core_profiles: state.CoreProfiles,
+        self,
+        runtime_params: runtime_params_slice.RuntimeParams,
+        geo: geometry.Geometry,
+        core_profiles: state.CoreProfiles,
     ):
         return jax.lax.cond(
             runtime_params.sources[self.source_name].mode == Mode.MODEL_BASED,
@@ -1071,20 +1042,20 @@ class QeiSource(Source):
         )
 
     def get_value(
-            self,
-            runtime_params: runtime_params_slice.RuntimeParams,
-            geo: geometry.Geometry,
-            core_profiles: state.CoreProfiles,
-            calculated_source_profiles: SourceProfiles | None,
-            conductivity: conductivity_base.Conductivity | None,
+        self,
+        runtime_params: runtime_params_slice.RuntimeParams,
+        geo: geometry.Geometry,
+        core_profiles: state.CoreProfiles,
+        calculated_source_profiles: SourceProfiles | None,
+        conductivity: conductivity_base.Conductivity | None,
     ):
         raise NotImplementedError('Call get_qei() instead.')
 
     def get_source_profile_for_affected_core_profile(
-            self,
-            profile: tuple[array_typing.Array, ...],
-            affected_mesh_state: int,
-            geo: geometry.Geometry,
+        self,
+        profile: tuple[array_typing.Array, ...],
+        affected_mesh_state: int,
+        geo: geometry.Geometry,
     ):
         raise NotImplementedError('This method is not valid for QeiSource.')
 
@@ -1120,8 +1091,8 @@ def _model_based_qei(runtime_params, geo, core_profiles):
     implicit_ee = -qei_coef
     if ((runtime_params.numerics.evolve_ion_heat
          and not runtime_params.numerics.evolve_electron_heat)
-        or (runtime_params.numerics.evolve_electron_heat
-            and not runtime_params.numerics.evolve_ion_heat)):
+            or (runtime_params.numerics.evolve_electron_heat
+                and not runtime_params.numerics.evolve_ion_heat)):
         explicit_i = qei_coef * core_profiles.T_e.value
         explicit_e = qei_coef * core_profiles.T_i.value
         implicit_ie = zeros
@@ -1151,8 +1122,8 @@ class QeiSourceConfig(SourceModelBase):
         return None
 
     def build_runtime_params(
-            self,
-            t: chex.Numeric,
+        self,
+        t: chex.Numeric,
     ):
         return RuntimeParamsQ(
             prescribed_values=tuple(
@@ -1333,16 +1304,16 @@ def build_source_profiles1(runtime_params,
 
 
 def build_standard_source_profiles(
-        *,
-        calculated_source_profiles: SourceProfiles,
-        runtime_params: runtime_params_slice.RuntimeParams,
-        geo: geometry.Geometry,
-        core_profiles: state.CoreProfiles,
-        source_models: SourceModels,
-        explicit: bool = True,
-        conductivity: conductivity_base.Conductivity | None = None,
-        calculate_anyway: bool = False,
-        psi_only: bool = False,
+    *,
+    calculated_source_profiles: SourceProfiles,
+    runtime_params: runtime_params_slice.RuntimeParams,
+    geo: geometry.Geometry,
+    core_profiles: state.CoreProfiles,
+    source_models: SourceModels,
+    explicit: bool = True,
+    conductivity: conductivity_base.Conductivity | None = None,
+    calculate_anyway: bool = False,
+    psi_only: bool = False,
 ):
 
     def calculate_source(source_name, source):
@@ -1378,10 +1349,10 @@ def build_standard_source_profiles(
 
 
 def _update_standard_source_profiles(
-        calculated_source_profiles: SourceProfiles,
-        source_name: str,
-        affected_core_profiles: tuple[AffectedCoreProfile, ...],
-        profile: tuple[array_typing.FloatVectorCell, ...],
+    calculated_source_profiles: SourceProfiles,
+    source_name: str,
+    affected_core_profiles: tuple[AffectedCoreProfile, ...],
+    profile: tuple[array_typing.FloatVectorCell, ...],
 ):
     for profile, affected_core_profile in zip(profile,
                                               affected_core_profiles,
@@ -1442,10 +1413,10 @@ class PedestalModel(abc.ABC):
         return super().__setattr__(attr, value)
 
     def __call__(
-            self,
-            runtime_params,
-            geo,
-            core_profiles,
+        self,
+        runtime_params,
+        geo,
+        core_profiles,
     ):
         return jax.lax.cond(
             runtime_params.pedestal.set_pedestal,
@@ -1462,10 +1433,10 @@ class PedestalModel(abc.ABC):
 
     @abc.abstractmethod
     def _call_implementation(
-            self,
-            runtime_params,
-            geo,
-            core_profiles,
+        self,
+        runtime_params,
+        geo,
+        core_profiles,
     ):
         pass
 
@@ -2191,10 +2162,10 @@ class NormalizedLogarithmicGradients:
 
     @classmethod
     def from_profiles(
-            cls,
-            core_profiles: state.CoreProfiles,
-            radial_coordinate: jnp.ndarray,
-            reference_length: jnp.ndarray,
+        cls,
+        core_profiles: state.CoreProfiles,
+        radial_coordinate: jnp.ndarray,
+        reference_length: jnp.ndarray,
     ):
         gradients = {}
         for name, profile in {
@@ -2213,10 +2184,10 @@ class NormalizedLogarithmicGradients:
 
 
 def calculate_chiGB(
-        reference_temperature: array_typing.Array,
-        reference_magnetic_field: chex.Numeric,
-        reference_mass: chex.Numeric,
-        reference_length: chex.Numeric,
+    reference_temperature: array_typing.Array,
+    reference_magnetic_field: chex.Numeric,
+    reference_mass: chex.Numeric,
+    reference_length: chex.Numeric,
 ):
     constants = constants_module.CONSTANTS
     return ((reference_mass * constants.m_amu)**0.5 /
@@ -2252,9 +2223,9 @@ class RuntimeParams00(RuntimeParamsX):
 
 
 def calculate_normalized_logarithmic_gradient(
-        var: cell_variable.CellVariable,
-        radial_coordinate: jax.Array,
-        reference_length: jax.Array,
+    var: cell_variable.CellVariable,
+    radial_coordinate: jax.Array,
+    reference_length: jax.Array,
 ):
     result = jnp.where(
         jnp.abs(var.face_value()) < constants_module.CONSTANTS.eps,
@@ -2286,16 +2257,16 @@ class QuasilinearInputs:
 class QuasilinearTransportModel(TransportModel):
 
     def _make_core_transport(
-            self,
-            qi: jax.Array,
-            qe: jax.Array,
-            pfe: jax.Array,
-            quasilinear_inputs: QuasilinearInputs,
-            transport,
-            geo: geometry.Geometry,
-            core_profiles: state.CoreProfiles,
-            gradient_reference_length: chex.Numeric,
-            gyrobohm_flux_reference_length: chex.Numeric,
+        self,
+        qi: jax.Array,
+        qe: jax.Array,
+        pfe: jax.Array,
+        quasilinear_inputs: QuasilinearInputs,
+        transport,
+        geo: geometry.Geometry,
+        core_profiles: state.CoreProfiles,
+        gradient_reference_length: chex.Numeric,
+        gyrobohm_flux_reference_length: chex.Numeric,
     ):
         constants = constants_module.CONSTANTS
         pfe_SI = (pfe * core_profiles.n_e.face_value() *
@@ -2566,10 +2537,10 @@ _FLUX_NAME_MAP: Final[Mapping[str, str]] = immutabledict.immutabledict({
 class QLKNNModelWrapper:
 
     def __init__(
-            self,
-            path: str,
-            name: str = '',
-            flux_name_map: Mapping[str, str] | None = None,
+        self,
+        path: str,
+        name: str = '',
+        flux_name_map: Mapping[str, str] | None = None,
     ):
         self.path = path
         self.name = name
@@ -2646,10 +2617,10 @@ class QLKNNRuntimeConfigInputs:
 
 
 def _filter_model_output(
-        model_output: None,
-        include_ITG: bool,
-        include_TEM: bool,
-        include_ETG: bool,
+    model_output: None,
+    include_ITG: bool,
+    include_TEM: bool,
+    include_ETG: bool,
 ):
     filter_map = {
         'qi_itg': include_ITG,
@@ -2692,9 +2663,9 @@ def clip_inputs(feature_scan, clip_margin, inputs_and_ranges):
 class QLKNNTransportModel0(QualikizBasedTransportModel):
 
     def __init__(
-            self,
-            path: str,
-            name: str,
+        self,
+        path: str,
+        name: str,
     ):
         super().__init__()
         self._path = path
@@ -2719,10 +2690,10 @@ class QLKNNTransportModel0(QualikizBasedTransportModel):
         return self._combined(runtime_config_inputs, geo, core_profiles)
 
     def _combined(
-            self,
-            runtime_config_inputs: QLKNNRuntimeConfigInputs,
-            geo: geometry.Geometry,
-            core_profiles: state.CoreProfiles,
+        self,
+        runtime_config_inputs: QLKNNRuntimeConfigInputs,
+        geo: geometry.Geometry,
+        core_profiles: state.CoreProfiles,
     ):
         qualikiz_inputs = self._prepare_qualikiz_inputs(
             transport=runtime_config_inputs.transport,
@@ -3864,11 +3835,11 @@ def _init_psi_and_psi_derived(runtime_params, geo, core_profiles,
     psi = cell_variable.CellVariable(
         value=geo.psi_from_Ip,
         right_face_grad_constraint=None
-        if runtime_params.profile_conditions.
-        use_v_loop_lcfs_boundary_condition else dpsi_drhonorm_edge,
+        if runtime_params.profile_conditions.use_v_loop_lcfs_boundary_condition
+        else dpsi_drhonorm_edge,
         right_face_constraint=geo.psi_from_Ip_face[-1]
-        if runtime_params.profile_conditions.
-        use_v_loop_lcfs_boundary_condition else None,
+        if runtime_params.profile_conditions.use_v_loop_lcfs_boundary_condition
+        else None,
         dr=geo.drho_norm,
     )
     core_profiles = _calculate_all_psi_dependent_profiles(
@@ -5241,8 +5212,8 @@ class PhysicsModels:
         static=True))
     pedestal_model: PedestalModel = dataclasses.field(metadata=dict(
         static=True))
-    neoclassical_models: NeoclassicalModels = (
-        dataclasses.field(metadata=dict(static=True)))
+    neoclassical_models: NeoclassicalModels = (dataclasses.field(metadata=dict(
+        static=True)))
 
 
 StaticKwargs: TypeAlias = dict[str, Any]
