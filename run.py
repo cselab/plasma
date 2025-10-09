@@ -37,6 +37,7 @@ from torax._src.physics import formulas as formulas_ph
 from torax._src.physics import psi_calculations
 from torax._src.physics import scaling_laws
 from torax._src.sources import base
+from torax._src.sources import base as source_base
 from torax._src.sources import formulas
 from torax._src.sources import runtime_params as runtime_params_lib
 from torax._src.sources import source as source_lib
@@ -81,22 +82,6 @@ import numpy as np
 import pydantic
 import typing_extensions
 import xarray as xr
-import dataclasses
-from typing import Annotated, ClassVar, Literal
-import chex
-import jax
-from jax import numpy as jnp
-from torax._src import array_typing
-from torax._src import math_utils
-from torax._src import state
-from torax._src.config import runtime_params_slice
-from torax._src.geometry import geometry
-from torax._src.neoclassical.conductivity import base as conductivity_base
-from torax._src.sources import base as source_base
-from torax._src.sources import runtime_params as runtime_params_lib
-from torax._src.sources import source
-from torax._src.sources import source_profiles
-from torax._src.torax_pydantic import torax_pydantic
 
 DEFAULT_MODEL_FUNCTION_NAME: str = 'gaussian'
 
@@ -145,17 +130,17 @@ def _calculate_I_generic(
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True, eq=True)
-class GenericCurrentSource(source.Source):
+class GenericCurrentSource(source_lib.Source):
     SOURCE_NAME: ClassVar[str] = 'generic_current'
-    model_func: source.SourceProfileFunction = calculate_generic_current
+    model_func: source_lib.SourceProfileFunction = calculate_generic_current
 
     @property
     def source_name(self) -> str:
         return self.SOURCE_NAME
 
     @property
-    def affected_core_profiles(self) -> tuple[source.AffectedCoreProfile, ...]:
-        return (source.AffectedCoreProfile.PSI, )
+    def affected_core_profiles(self) -> tuple[source_lib.AffectedCoreProfile, ...]:
+        return (source_lib.AffectedCoreProfile.PSI, )
 
 
 class GenericCurrentSourceConfig(source_base.SourceModelBase):
@@ -174,7 +159,7 @@ class GenericCurrentSourceConfig(source_base.SourceModelBase):
         runtime_params_lib.Mode.MODEL_BASED)
 
     @property
-    def model_func(self) -> source.SourceProfileFunction:
+    def model_func(self):
         return calculate_generic_current
 
     def build_runtime_params(
@@ -246,19 +231,19 @@ def default_formula(
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True, eq=True)
-class GenericIonElectronHeatSource(source.Source):
+class GenericIonElectronHeatSource(source_lib.Source):
     SOURCE_NAME: ClassVar[str] = 'generic_heat'
-    model_func: source.SourceProfileFunction = default_formula
+    model_func: source_lib.SourceProfileFunction = default_formula
 
     @property
     def source_name(self) -> str:
         return self.SOURCE_NAME
 
     @property
-    def affected_core_profiles(self) -> tuple[source.AffectedCoreProfile, ...]:
+    def affected_core_profiles(self):
         return (
-            source.AffectedCoreProfile.TEMP_ION,
-            source.AffectedCoreProfile.TEMP_EL,
+            source_lib.AffectedCoreProfile.TEMP_ION,
+            source_lib.AffectedCoreProfile.TEMP_EL,
         )
 
 
@@ -279,7 +264,7 @@ class GenericIonElHeatSourceConfig(base.SourceModelBase):
         runtime_params_lib.Mode.MODEL_BASED)
 
     @property
-    def model_func(self) -> source.SourceProfileFunction:
+    def model_func(self):
         return default_formula
 
     def build_runtime_params(
@@ -319,17 +304,17 @@ def calc_generic_particle_source(
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True, eq=True)
-class GenericParticleSource(source.Source):
+class GenericParticleSource(source_lib.Source):
     SOURCE_NAME: ClassVar[str] = 'generic_particle'
-    model_func: source.SourceProfileFunction = calc_generic_particle_source
+    model_func: source_lib.SourceProfileFunction = calc_generic_particle_source
 
     @property
     def source_name(self) -> str:
         return self.SOURCE_NAME
 
     @property
-    def affected_core_profiles(self) -> tuple[source.AffectedCoreProfile, ...]:
-        return (source.AffectedCoreProfile.NE, )
+    def affected_core_profiles(self):
+        return (source_lib.AffectedCoreProfile.NE, )
 
 
 @jax.tree_util.register_dataclass
@@ -353,7 +338,7 @@ class GenericParticleSourceConfig(base.SourceModelBase):
         runtime_params_lib.Mode.MODEL_BASED)
 
     @property
-    def model_func(self) -> source.SourceProfileFunction:
+    def model_func(self):
         return calc_generic_particle_source
 
     def build_runtime_params(
@@ -392,17 +377,17 @@ def calc_pellet_source(
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True, eq=True)
-class PelletSource(source.Source):
+class PelletSource(source_lib.Source):
     SOURCE_NAME: ClassVar[str] = 'pellet'
-    model_func: source.SourceProfileFunction = calc_pellet_source
+    model_func: source_lib.SourceProfileFunction = calc_pellet_source
 
     @property
-    def source_name(self) -> str:
+    def source_name(self):
         return self.SOURCE_NAME
 
     @property
-    def affected_core_profiles(self) -> tuple[source.AffectedCoreProfile, ...]:
-        return (source.AffectedCoreProfile.NE, )
+    def affected_core_profiles(self):
+        return (source_lib.AffectedCoreProfile.NE, )
 
 
 @jax.tree_util.register_dataclass
@@ -426,7 +411,7 @@ class PelletSourceConfig(base.SourceModelBase):
         runtime_params_lib.Mode.MODEL_BASED)
 
     @property
-    def model_func(self) -> source.SourceProfileFunction:
+    def model_func(self):
         return calc_pellet_source
 
     def build_runtime_params(self, t):
@@ -519,19 +504,19 @@ def fusion_heat_model_func(
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True, eq=True)
-class FusionHeatSource(source.Source):
+class FusionHeatSource(source_lib.Source):
     SOURCE_NAME: ClassVar[str] = 'fusion'
-    model_func: source.SourceProfileFunction = fusion_heat_model_func
+    model_func: source_lib.SourceProfileFunction = fusion_heat_model_func
 
     @property
     def source_name(self) -> str:
         return self.SOURCE_NAME
 
     @property
-    def affected_core_profiles(self) -> tuple[source.AffectedCoreProfile, ...]:
+    def affected_core_profiles(self):
         return (
-            source.AffectedCoreProfile.TEMP_ION,
-            source.AffectedCoreProfile.TEMP_EL,
+            source_lib.AffectedCoreProfile.TEMP_ION,
+            source_lib.AffectedCoreProfile.TEMP_EL,
         )
 
 
@@ -542,7 +527,7 @@ class FusionHeatSourceConfig(base.SourceModelBase):
         runtime_params_lib.Mode.MODEL_BASED)
 
     @property
-    def model_func(self) -> source.SourceProfileFunction:
+    def model_func(self):
         return fusion_heat_model_func
 
     def build_runtime_params(
@@ -585,17 +570,17 @@ def calc_puff_source(
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True, eq=True)
-class GasPuffSource(source.Source):
+class GasPuffSource(source_lib.Source):
     SOURCE_NAME: ClassVar[str] = 'gas_puff'
-    model_func: source.SourceProfileFunction = calc_puff_source
+    model_func: source_lib.SourceProfileFunction = calc_puff_source
 
     @property
     def source_name(self):
         return self.SOURCE_NAME
 
     @property
-    def affected_core_profiles(self) -> tuple[source.AffectedCoreProfile, ...]:
-        return (source.AffectedCoreProfile.NE, )
+    def affected_core_profiles(self):
+        return (source_lib.AffectedCoreProfile.NE, )
 
 
 class GasPuffSourceConfig(base.SourceModelBase):
@@ -609,7 +594,7 @@ class GasPuffSourceConfig(base.SourceModelBase):
         runtime_params_lib.Mode.MODEL_BASED)
 
     @property
-    def model_func(self) -> source.SourceProfileFunction:
+    def model_func(self):
         return calc_puff_source
 
     def build_runtime_params(self, t):
@@ -622,7 +607,7 @@ class GasPuffSourceConfig(base.SourceModelBase):
             S_total=self.S_total.get_value(t),
         )
 
-    def build_source(self) -> GasPuffSource:
+    def build_source(self):
         return GasPuffSource(model_func=self.model_func)
 
 
@@ -633,15 +618,15 @@ class RuntimeParamsQ(runtime_params_lib.RuntimeParams):
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True, eq=True)
-class QeiSource(source.Source):
+class QeiSource(source_lib.Source):
     SOURCE_NAME: ClassVar[str] = 'ei_exchange'
 
     @property
-    def source_name(self) -> str:
+    def source_name(self):
         return self.SOURCE_NAME
 
     @property
-    def affected_core_profiles(self) -> tuple[source.AffectedCoreProfile, ...]:
+    def affected_core_profiles(self):
         return (
             source.AffectedCoreProfile.TEMP_ION,
             source.AffectedCoreProfile.TEMP_EL,
@@ -652,7 +637,7 @@ class QeiSource(source.Source):
         runtime_params: runtime_params_slice.RuntimeParams,
         geo: geometry.Geometry,
         core_profiles: state.CoreProfiles,
-    ) -> source_profiles.QeiInfo:
+    ):
         return jax.lax.cond(
             runtime_params.sources[self.source_name].mode ==
             runtime_params_lib.Mode.MODEL_BASED,
@@ -671,7 +656,7 @@ class QeiSource(source.Source):
         core_profiles: state.CoreProfiles,
         calculated_source_profiles: source_profiles.SourceProfiles | None,
         conductivity: conductivity_base.Conductivity | None,
-    ) -> tuple[array_typing.FloatVectorCell, ...]:
+    ):
         raise NotImplementedError('Call get_qei() instead.')
 
     def get_source_profile_for_affected_core_profile(
@@ -679,7 +664,7 @@ class QeiSource(source.Source):
         profile: tuple[array_typing.Array, ...],
         affected_mesh_state: int,
         geo: geometry.Geometry,
-    ) -> jax.Array:
+    ):
         raise NotImplementedError('This method is not valid for QeiSource.')
 
 
@@ -691,14 +676,14 @@ class SourceModels:
 
     @functools.cached_property
     def psi_sources(
-            self) -> immutabledict.immutabledict[str, source_lib.Source]:
+            self):
         return immutabledict.immutabledict({
             name: source
             for name, source in self.standard_sources.items() if
             source_lib.AffectedCoreProfile.PSI in source.affected_core_profiles
         })
 
-    def __hash__(self) -> int:
+    def __hash__(self):
         hashes = [hash(self.standard_sources)]
         hashes.append(hash(self.qei_source))
         return hash(tuple(hashes))
@@ -743,7 +728,7 @@ class QeiSourceConfig(base.SourceModelBase):
         runtime_params_lib.Mode.MODEL_BASED)
 
     @property
-    def model_func(self) -> None:
+    def model_func(self):
         return None
 
     def build_runtime_params(
