@@ -1,6 +1,3 @@
-import scipy
-import os
-import torax
 from absl import logging
 from collections.abc import Callable
 from collections.abc import Mapping
@@ -46,7 +43,10 @@ import jax.numpy as jnp
 import jaxtyping as jt
 import logging
 import numpy as np
+import os
 import pydantic
+import scipy
+import torax
 import typing
 import typing_extensions
 import xarray as xr
