@@ -36,8 +36,15 @@ from torax._src.physics import collisions
 from torax._src.physics import formulas
 from torax._src.physics import psi_calculations
 from torax._src.physics import scaling_laws
+from torax._src.sources import fusion_heat_source as fusion_heat_source_lib
+from torax._src.sources import gas_puff_source as gas_puff_source_lib
+from torax._src.sources import generic_current_source as generic_current_source_lib
+from torax._src.sources import generic_ion_el_heat_source as generic_ion_el_heat_source_lib
+from torax._src.sources import generic_particle_source as generic_particle_source_lib
+from torax._src.sources import pellet_source as pellet_source_lib
 from torax._src.sources import qei_source as qei_source_lib
 from torax._src.sources import source as source_lib
+from torax._src.sources import source_models
 from torax._src.sources import source_models as source_models_lib
 from torax._src.sources import source_profiles
 from torax._src.sources import source_profiles as source_profiles_lib
@@ -79,20 +86,6 @@ import numpy as np
 import pydantic
 import typing_extensions
 import xarray as xr
-
-import copy
-from typing import Any
-import immutabledict
-import pydantic
-from torax._src.sources import fusion_heat_source as fusion_heat_source_lib
-from torax._src.sources import gas_puff_source as gas_puff_source_lib
-from torax._src.sources import generic_current_source as generic_current_source_lib
-from torax._src.sources import generic_ion_el_heat_source as generic_ion_el_heat_source_lib
-from torax._src.sources import generic_particle_source as generic_particle_source_lib
-from torax._src.sources import pellet_source as pellet_source_lib
-from torax._src.sources import qei_source as qei_source_lib
-from torax._src.sources import source_models
-from torax._src.torax_pydantic import torax_pydantic
 
 
 class Sources(torax_pydantic.BaseModelFrozen):
