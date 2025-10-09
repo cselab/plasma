@@ -74,6 +74,7 @@ NestedList: TypeAlias = (DataTypes
                          | list[list[list[DataTypes]]])
 NumpySerialized: TypeAlias = tuple[DtypeName, NestedList]
 
+
 def _numpy_array_is_rank_1(x: np.ndarray):
     return x
 
@@ -1688,7 +1689,7 @@ def calculate_scaling_law_confinement_time(
 def calc_q_face(
     geo: Geometry,
     psi: CellVariable,
-) -> FloatVectorFace:
+):
     inv_iota = jnp.abs(
         (2 * geo.Phi_b * geo.rho_face_norm[1:]) / psi.face_grad()[1:])
     inv_iota0 = jnp.expand_dims(
@@ -2131,7 +2132,7 @@ def get_average_charge_state(ion_symbols, T_e, fractions, Z_override):
     )
 
 
-def calculate_f_trap(geo: Geometry, ) -> FloatVectorFace:
+def calculate_f_trap(geo: Geometry, ):
     epsilon_effective = (
         0.67 * (1.0 - 1.4 * jnp.abs(geo.delta_face) * geo.delta_face) *
         geo.epsilon_face)
@@ -2144,7 +2145,7 @@ def calculate_L31(
     f_trap: FloatVectorFace,
     nu_e_star: FloatVectorFace,
     Z_eff: FloatVectorFace,
-) -> FloatVectorFace:
+):
     denom = (1.0 + (1 - 0.1 * f_trap) * jnp.sqrt(nu_e_star) + 0.5 *
              (1.0 - f_trap) * nu_e_star / Z_eff)
     ft31 = f_trap / denom
@@ -2159,7 +2160,7 @@ def calculate_L32(
     f_trap: FloatVectorFace,
     nu_e_star: FloatVectorFace,
     Z_eff: FloatVectorFace,
-) -> FloatVectorFace:
+):
     ft32ee = f_trap / (1 + 0.26 * (1 - f_trap) * jnp.sqrt(nu_e_star) + 0.18 *
                        (1 - 0.37 * f_trap) * nu_e_star / jnp.sqrt(Z_eff))
     ft32ei = f_trap / (1 + (1 + 0.6 * f_trap) * jnp.sqrt(nu_e_star) + 0.85 *
@@ -2182,7 +2183,7 @@ def calculate_nu_e_star(
     T_e: FloatVectorFace,
     Z_eff: FloatVectorFace,
     log_lambda_ei: FloatVectorFace,
-) -> FloatVectorFace:
+):
     return (6.921e-18 * q * geo.R_major * n_e * Z_eff * log_lambda_ei /
             (((T_e * 1e3)**2) * (geo.epsilon_face + CONSTANTS.eps)**1.5))
 
@@ -2194,7 +2195,7 @@ def calculate_nu_i_star(
     T_i: FloatVectorFace,
     Z_eff: FloatVectorFace,
     log_lambda_ii: FloatVectorFace,
-) -> FloatVectorFace:
+):
     return (4.9e-18 * q * geo.R_major * n_i * Z_eff**4 * log_lambda_ii /
             (((T_i * 1e3)**2) * (geo.epsilon_face + CONSTANTS.eps)**1.5))
 
@@ -7622,7 +7623,7 @@ EXCLUDED_GEOMETRY_NAMES = frozenset({
 def _extend_cell_grid_to_boundaries(
     cell_var: FloatVectorCell,
     face_var: FloatVectorFace,
-) -> FloatVectorCellPlusBoundaries:
+):
     left_value = np.expand_dims(face_var[:, 0], axis=-1)
     right_value = np.expand_dims(face_var[:, -1], axis=-1)
     return np.concatenate([left_value, cell_var, right_value], axis=-1)
@@ -7672,11 +7673,11 @@ class StateHistory:
         return self._rho_cell_norm
 
     @property
-    def rho_face_norm(self) -> FloatVectorFace:
+    def rho_face_norm(self):
         return self._rho_face_norm
 
     @property
-    def rho_norm(self) -> FloatVectorCellPlusBoundaries:
+    def rho_norm(self):
         return self._rho_norm
 
     @property
