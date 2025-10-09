@@ -5,8 +5,6 @@ from collections.abc import Sequence
 from fusion_surrogates.qlknn import qlknn_model
 from jax import numpy as jnp
 from torax._src import array_typing
-from torax._src import constants
-from torax._src import constants as constants_module
 from torax._src import jax_utils
 from torax._src import xnp
 from torax._src.torax_pydantic import interpolated_param_1d
@@ -48,10 +46,73 @@ import logging
 from typing import Annotated, Any, Final, TypeAlias
 import numpy as np
 import pydantic
-from torax._src import constants
 from torax._src.torax_pydantic import torax_pydantic
 
 _TOLERANCE: Final[float] = 1e-6
+
+import dataclasses
+from typing import Final, Mapping
+import chex
+import immutabledict
+import jax
+from jax import numpy as jnp
+
+
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(frozen=True)
+class IonProperties:
+    symbol: str
+    name: str
+    A: float
+    Z: float
+
+
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(frozen=True)
+class Constants:
+    keV_to_J: chex.Numeric
+    eV_to_J: chex.Numeric
+    m_amu: chex.Numeric
+    q_e: chex.Numeric
+    m_e: chex.Numeric
+    epsilon_0: chex.Numeric
+    mu_0: chex.Numeric
+    k_B: chex.Numeric
+    eps: chex.Numeric
+
+
+CONSTANTS: Final[Constants] = Constants(
+    keV_to_J=1e3 * 1.602176634e-19,
+    eV_to_J=1.602176634e-19,
+    m_amu=1.6605390666e-27,
+    q_e=1.602176634e-19,
+    m_e=9.1093837e-31,
+    epsilon_0=8.85418782e-12,
+    mu_0=4 * jnp.pi * 1e-7,
+    k_B=1.380649e-23,
+    eps=1e-7,
+)
+ION_PROPERTIES: Final[tuple[IonProperties, ...]] = (
+    IonProperties(symbol='H', name='Hydrogen', A=1.008, Z=1.0),
+    IonProperties(symbol='D', name='Deuterium', A=2.0141, Z=1.0),
+    IonProperties(symbol='T', name='Tritium', A=3.0160, Z=1.0),
+    IonProperties(symbol='He3', name='Helium-3', A=3.0160, Z=2.0),
+    IonProperties(symbol='He4', name='Helium-4', A=4.0026, Z=2.0),
+    IonProperties(symbol='Li', name='Lithium', A=5.3917, Z=3.0),
+    IonProperties(symbol='Be', name='Beryllium', A=9.0122, Z=4.0),
+    IonProperties(symbol='C', name='Carbon', A=12.011, Z=6.0),
+    IonProperties(symbol='N', name='Nitrogen', A=14.007, Z=7.0),
+    IonProperties(symbol='O', name='Oxygen', A=15.999, Z=8.0),
+    IonProperties(symbol='Ne', name='Neon', A=20.180, Z=10.0),
+    IonProperties(symbol='Ar', name='Argon', A=39.95, Z=18.0),
+    IonProperties(symbol='Kr', name='Krypton', A=83.798, Z=36.0),
+    IonProperties(symbol='Xe', name='Xenon', A=131.29, Z=54.0),
+    IonProperties(symbol='W', name='Tungsten', A=183.84, Z=74.0),
+)
+ION_PROPERTIES_DICT: Final[Mapping[str, IonProperties]] = (
+    immutabledict.immutabledict({v.symbol: v
+                                 for v in ION_PROPERTIES}))
+ION_SYMBOLS = frozenset(ION_PROPERTIES_DICT.keys())
 
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
@@ -112,7 +173,7 @@ def _ion_mixture_before_validator(value: Any) -> Any:
 def _ion_mixture_after_validator(
     value: Mapping[str, torax_pydantic.TimeVaryingScalar],
 ):
-    invalid_ion_symbols = set(value.keys()) - constants.ION_SYMBOLS
+    invalid_ion_symbols = set(value.keys()) - ION_SYMBOLS
     time_arrays = [v.time for v in value.values()]
     fraction_arrays = [v.value for v in value.values()]
     fraction_sum = np.sum(fraction_arrays, axis=0)
@@ -807,7 +868,7 @@ def calculate_plh_scaling_factor(
     line_avg_n_e = line_average(core_profiles.n_e.value, geo)
     P_LH_hi_dens_D = (2.15 * (line_avg_n_e / 1e20)**0.782 * geo.B_0**0.772 *
                       geo.a_minor**0.975 * geo.R_major**0.999 * 1e6)
-    A_deuterium = constants.ION_PROPERTIES_DICT['D'].A
+    A_deuterium = ION_PROPERTIES_DICT['D'].A
     P_LH_hi_dens = P_LH_hi_dens_D * A_deuterium / core_profiles.A_i
     Ip_total = core_profiles.Ip_profile_face[..., -1]
     n_e_min_P_LH = (0.7 * (Ip_total / 1e6)**0.34 * geo.a_minor**-0.95 *
@@ -921,9 +982,9 @@ def calc_j_total(
         array_typing.FloatVectorFace,
 ]:
     Ip_profile_face = (psi.face_grad() * geo.g2g3_over_rhon_face * geo.F_face /
-                       geo.Phi_b / (16 * jnp.pi**3 * constants.CONSTANTS.mu_0))
+                       geo.Phi_b / (16 * jnp.pi**3 * CONSTANTS.mu_0))
     Ip_profile = (psi.grad() * geo.g2g3_over_rhon * geo.F / geo.Phi_b /
-                  (16 * jnp.pi**3 * constants.CONSTANTS.mu_0))
+                  (16 * jnp.pi**3 * CONSTANTS.mu_0))
     dI_drhon_face = jnp.gradient(Ip_profile_face, geo.rho_face_norm)
     dI_drhon = jnp.gradient(Ip_profile, geo.rho_norm)
     j_total_bulk = dI_drhon[1:] / geo.spr[1:]
@@ -966,7 +1027,7 @@ def _calc_bpol2(geo: Geometry, psi: CellVariable) -> jax.Array:
 def calc_Wpol(geo: Geometry, psi: CellVariable) -> jax.Array:
     bpol2 = _calc_bpol2(geo, psi)
     Wpol = _trapz(bpol2 * geo.vpr_face,
-                  geo.rho_face_norm) / (2 * constants.CONSTANTS.mu_0)
+                  geo.rho_face_norm) / (2 * CONSTANTS.mu_0)
     return Wpol
 
 
@@ -975,7 +1036,7 @@ def calc_li3(
     Wpol: jax.Array,
     Ip_total: jax.Array,
 ) -> jax.Array:
-    return 4 * Wpol / (constants.CONSTANTS.mu_0 * Ip_total**2 * R_major)
+    return 4 * Wpol / (CONSTANTS.mu_0 * Ip_total**2 * R_major)
 
 
 def calc_q95(
@@ -990,7 +1051,7 @@ def calculate_psi_grad_constraint_from_Ip(
     Ip: array_typing.FloatScalar,
     geo: Geometry,
 ) -> jax.Array:
-    return (Ip * (16 * jnp.pi**3 * constants.CONSTANTS.mu_0 * geo.Phi_b) /
+    return (Ip * (16 * jnp.pi**3 * CONSTANTS.mu_0 * geo.Phi_b) /
             (geo.g2g3_over_rhon_face[-1] * geo.F_face[-1]))
 
 
@@ -1002,7 +1063,7 @@ def calculate_psidot_from_psi_sources(
     psi: CellVariable,
     geo: Geometry,
 ) -> jax.Array:
-    consts = constants.CONSTANTS
+    consts = CONSTANTS
     toc_psi = (1.0 / resistivity_multiplier * geo.rho_norm * sigma *
                consts.mu_0 * 16 * jnp.pi**2 * geo.Phi_b**2 / geo.F**2)
     d_face_psi = geo.g2g3_over_rhon_face
@@ -1030,18 +1091,18 @@ def calculate_pressure(
     core_profiles: CoreProfiles, ) -> tuple[CellVariable, ...]:
     pressure_thermal_el = CellVariable(
         value=core_profiles.n_e.value * core_profiles.T_e.value *
-        constants.CONSTANTS.keV_to_J,
+        CONSTANTS.keV_to_J,
         dr=core_profiles.n_e.dr,
         right_face_constraint=core_profiles.n_e.right_face_constraint *
-        core_profiles.T_e.right_face_constraint * constants.CONSTANTS.keV_to_J,
+        core_profiles.T_e.right_face_constraint * CONSTANTS.keV_to_J,
         right_face_grad_constraint=None,
     )
     pressure_thermal_ion = CellVariable(
-        value=core_profiles.T_i.value * constants.CONSTANTS.keV_to_J *
+        value=core_profiles.T_i.value * CONSTANTS.keV_to_J *
         (core_profiles.n_i.value + core_profiles.n_impurity.value),
         dr=core_profiles.n_i.dr,
         right_face_constraint=core_profiles.T_i.right_face_constraint *
-        constants.CONSTANTS.keV_to_J *
+        CONSTANTS.keV_to_J *
         (core_profiles.n_i.right_face_constraint +
          core_profiles.n_impurity.right_face_constraint),
         right_face_grad_constraint=None,
@@ -1074,7 +1135,7 @@ def calc_pprime(core_profiles: CoreProfiles, ) -> array_typing.FloatVector:
     dti_drhon = core_profiles.T_i.face_grad()
     dte_drhon = core_profiles.T_e.face_grad()
     dpsi_drhon = core_profiles.psi.face_grad()
-    dptot_drhon = constants.CONSTANTS.keV_to_J * (
+    dptot_drhon = CONSTANTS.keV_to_J * (
         n_e * dte_drhon + n_i * dti_drhon + n_impurity * dti_drhon +
         dne_drhon * T_e + dni_drhon * T_i + dnimp_drhon * T_i)
     p_total_face = p_total.face_value()
@@ -1092,7 +1153,7 @@ def calc_FFprime(
     core_profiles: CoreProfiles,
     geo: Geometry,
 ) -> array_typing.FloatVector:
-    mu0 = constants.CONSTANTS.mu_0
+    mu0 = CONSTANTS.mu_0
     pprime = calc_pprime(core_profiles)
     g3 = geo.g3_face
     jtor_over_R = core_profiles.j_total_face / geo.R_major
@@ -1129,16 +1190,16 @@ def calculate_betas(
 ) -> array_typing.FloatScalar:
     _, _, p_total = calculate_pressure(core_profiles)
     p_total_volume_avg = volume_average(p_total.value, geo)
-    magnetic_pressure_on_axis = geo.B_0**2 / (2 * constants.CONSTANTS.mu_0)
+    magnetic_pressure_on_axis = geo.B_0**2 / (2 * CONSTANTS.mu_0)
     beta_tor = p_total_volume_avg / (magnetic_pressure_on_axis +
-                                     constants.CONSTANTS.eps)
+                                     CONSTANTS.eps)
     beta_pol = (
         4.0 * geo.volume[-1] * p_total_volume_avg /
-        (constants.CONSTANTS.mu_0 * core_profiles.Ip_profile_face[-1]**2 *
-         geo.R_major + constants.CONSTANTS.eps))
+        (CONSTANTS.mu_0 * core_profiles.Ip_profile_face[-1]**2 *
+         geo.R_major + CONSTANTS.eps))
     beta_N = (1e8 * beta_tor *
               (geo.a_minor * geo.B_0 /
-               (core_profiles.Ip_profile_face[-1] + constants.CONSTANTS.eps)))
+               (core_profiles.Ip_profile_face[-1] + CONSTANTS.eps)))
     return beta_tor, beta_pol, beta_N
 
 
@@ -1156,8 +1217,8 @@ def coll_exchange(
     weighted_Z_eff = _calculate_weighted_Z_eff(core_profiles)
     log_Qei_coef = (
         jnp.log(Qei_multiplier * 1.5 * core_profiles.n_e.value) +
-        jnp.log(constants.CONSTANTS.keV_to_J / constants.CONSTANTS.m_amu) +
-        jnp.log(2 * constants.CONSTANTS.m_e) + jnp.log(weighted_Z_eff) -
+        jnp.log(CONSTANTS.keV_to_J / CONSTANTS.m_amu) +
+        jnp.log(2 * CONSTANTS.m_e) + jnp.log(weighted_Z_eff) -
         log_tau_e_Z1)
     Qei_coef = jnp.exp(log_Qei_coef)
     return Qei_coef
@@ -1180,12 +1241,12 @@ def calc_nu_star(
     nu_e = (1 / jnp.exp(log_tau_e_Z1) * core_profiles.Z_eff_face *
             collisionality_multiplier)
     epsilon = geo.rho_face / geo.R_major
-    epsilon = jnp.clip(epsilon, constants.CONSTANTS.eps)
+    epsilon = jnp.clip(epsilon, CONSTANTS.eps)
     tau_bounce = (
         core_profiles.q_face * geo.R_major /
         (epsilon**1.5 *
          jnp.sqrt(core_profiles.T_e.face_value() *
-                  constants.CONSTANTS.keV_to_J / constants.CONSTANTS.m_e)))
+                  CONSTANTS.keV_to_J / CONSTANTS.m_e)))
     tau_bounce = tau_bounce.at[0].set(tau_bounce[1])
     nustar = nu_e * tau_bounce
     return nustar
@@ -1237,10 +1298,10 @@ def _calculate_log_tau_e_Z1(
     log_lambda_ei: jax.Array,
 ) -> jax.Array:
     return (jnp.log(12 * jnp.pi**1.5 / (n_e * log_lambda_ei)) -
-            4 * jnp.log(constants.CONSTANTS.q_e) +
-            0.5 * jnp.log(constants.CONSTANTS.m_e / 2.0) +
-            2 * jnp.log(constants.CONSTANTS.epsilon_0) +
-            1.5 * jnp.log(T_e * constants.CONSTANTS.keV_to_J))
+            4 * jnp.log(CONSTANTS.q_e) +
+            0.5 * jnp.log(CONSTANTS.m_e / 2.0) +
+            2 * jnp.log(CONSTANTS.epsilon_0) +
+            1.5 * jnp.log(T_e * CONSTANTS.keV_to_J))
 
 
 _MAVRIN_Z_COEFFS: Final[Mapping[str, array_typing.FloatVector]] = (
@@ -1323,7 +1384,7 @@ def calculate_average_charge_state_single_species(
     ion_symbol: str,
 ):
     if ion_symbol not in _MAVRIN_Z_COEFFS:
-        return jnp.ones_like(T_e) * constants.ION_PROPERTIES_DICT[ion_symbol].Z
+        return jnp.ones_like(T_e) * ION_PROPERTIES_DICT[ion_symbol].Z
     T_e_allowed_range = (0.1, 100.0)
     T_e = jnp.clip(T_e, *T_e_allowed_range)
     interval_indices = jnp.searchsorted(_TEMPERATURE_INTERVALS[ion_symbol],
@@ -1405,7 +1466,7 @@ def calculate_nu_e_star(
 ) -> array_typing.FloatVectorFace:
     return (6.921e-18 * q * geo.R_major * n_e * Z_eff * log_lambda_ei /
             (((T_e * 1e3)**2) *
-             (geo.epsilon_face + constants.CONSTANTS.eps)**1.5))
+             (geo.epsilon_face + CONSTANTS.eps)**1.5))
 
 
 def calculate_nu_i_star(
@@ -1418,7 +1479,7 @@ def calculate_nu_i_star(
 ) -> array_typing.FloatVectorFace:
     return (4.9e-18 * q * geo.R_major * n_i * Z_eff**4 * log_lambda_ii /
             (((T_i * 1e3)**2) *
-             (geo.epsilon_face + constants.CONSTANTS.eps)**1.5))
+             (geo.epsilon_face + CONSTANTS.eps)**1.5))
 
 
 @jax.tree_util.register_dataclass
@@ -1731,7 +1792,7 @@ class SourceProfiles:
     def total_psi_sources(self, geo: Geometry) -> jax.Array:
         total = self.bootstrap_current.j_bootstrap
         total += sum(self.psi.values())
-        mu0 = constants.CONSTANTS.mu_0
+        mu0 = CONSTANTS.mu_0
         prefactor = 8 * geo.vpr * jnp.pi**2 * geo.B_0 * mu0 * geo.Phi_b / geo.F**2
         return -total * prefactor
 
@@ -2297,7 +2358,7 @@ def calc_fusion(geo, core_profiles, runtime_params):
             product *= fraction
             DT_fraction_product = product
             t_face = core_profiles.T_i.face_value()
-            Efus = 17.6 * 1e3 * constants.CONSTANTS.keV_to_J
+            Efus = 17.6 * 1e3 * CONSTANTS.keV_to_J
             mrc2 = 1124656
             BG = 34.3827
             C1 = 1.17302e-9
@@ -3005,7 +3066,7 @@ class IonMixture(torax_pydantic.BaseModelFrozen):
             t)
         if not self.A_override:
             As = jnp.array(
-                [constants.ION_PROPERTIES_DICT[ion].A for ion in ions])
+                [ION_PROPERTIES_DICT[ion].A for ion in ions])
             A_avg = jnp.sum(As * fractions)
         else:
             A_avg = self.A_override.get_value(t)
@@ -3063,7 +3124,7 @@ class ImpurityFractions(torax_pydantic.BaseModelFrozen):
             [self.species[ion].get_value(t, grid_type='face') for ion in ions])
         Z_override = None if not self.Z_override else self.Z_override.get_value(
             t)
-        As = jnp.array([constants.ION_PROPERTIES_DICT[ion].A for ion in ions])
+        As = jnp.array([ION_PROPERTIES_DICT[ion].A for ion in ions])
         A_avg = jnp.sum(As[..., jnp.newaxis] * fractions, axis=0)
         A_avg_face = jnp.sum(As[..., jnp.newaxis] * fractions_face, axis=0)
         return RuntimeParamsIF(
@@ -3438,7 +3499,7 @@ class TransportModel(abc.ABC):
 
     def _apply_transport_patches(self, transport_runtime_params,
                                  runtime_params, geo, transport_coeffs):
-        consts = constants.CONSTANTS
+        consts = CONSTANTS
         chi_face_ion = jnp.where(
             jnp.logical_and(
                 transport_runtime_params.apply_inner_patch,
@@ -3553,7 +3614,7 @@ class TransportModel(abc.ABC):
 def _build_smoothing_matrix(transport_runtime_params, runtime_params, geo,
                             pedestal_model_output):
     lower_cutoff = 0.01
-    consts = constants.CONSTANTS
+    consts = CONSTANTS
     kernel = jnp.exp(
         -jnp.log(2) *
         (geo.rho_face_norm[:, jnp.newaxis] - geo.rho_face_norm)**2 /
@@ -3636,7 +3697,7 @@ def calculate_chiGB(
     reference_mass: chex.Numeric,
     reference_length: chex.Numeric,
 ):
-    constants = constants_module.CONSTANTS
+    constants = CONSTANTS
     return ((reference_mass * constants.m_amu)**0.5 /
             (reference_magnetic_field * constants.q_e)**2 *
             (reference_temperature * constants.keV_to_J)**1.5 /
@@ -3645,7 +3706,7 @@ def calculate_chiGB(
 
 def calculate_alpha(core_profiles, q, reference_magnetic_field,
                     normalized_logarithmic_gradients):
-    constants = constants_module.CONSTANTS
+    constants = CONSTANTS
     factor_0 = (2 * constants.keV_to_J / reference_magnetic_field**2 *
                 constants.mu_0 * q**2)
     alpha = factor_0 * (
@@ -3675,14 +3736,14 @@ def calculate_normalized_logarithmic_gradient(
     reference_length: jax.Array,
 ):
     result = jnp.where(
-        jnp.abs(var.face_value()) < constants_module.CONSTANTS.eps,
-        constants_module.CONSTANTS.eps,
+        jnp.abs(var.face_value()) < CONSTANTS.eps,
+        CONSTANTS.eps,
         -reference_length * var.face_grad(radial_coordinate) /
         var.face_value(),
     )
     result = jnp.where(
-        jnp.abs(result) < constants_module.CONSTANTS.eps,
-        constants_module.CONSTANTS.eps,
+        jnp.abs(result) < CONSTANTS.eps,
+        CONSTANTS.eps,
         result,
     )
     return result
@@ -3715,7 +3776,7 @@ class QuasilinearTransportModel(TransportModel):
         gradient_reference_length: chex.Numeric,
         gyrobohm_flux_reference_length: chex.Numeric,
     ):
-        constants = constants_module.CONSTANTS
+        constants = CONSTANTS
         pfe_SI = (pfe * core_profiles.n_e.face_value() *
                   quasilinear_inputs.chiGB / gyrobohm_flux_reference_length)
         chi_face_ion = (
@@ -3807,7 +3868,7 @@ class QualikizInputs(QuasilinearInputs):
 class QualikizBasedTransportModel(QuasilinearTransportModel):
 
     def _prepare_qualikiz_inputs(self, transport, geo, core_profiles):
-        constants = constants_module.CONSTANTS
+        constants = CONSTANTS
         rmid = (geo.R_out - geo.R_in) * 0.5
         rmid_face = (geo.R_out_face - geo.R_in_face) * 0.5
         chiGB = calculate_chiGB(
@@ -4392,7 +4453,7 @@ class StandardGeometryIntermediates:
                                     GeometrySource.CHEASE)
         psiunnormfactor = R_major**2 * B_0
         psi = chease_data['PSIchease=psi/2pi'] * psiunnormfactor * 2 * np.pi
-        Ip_chease = (chease_data['Ipprofile'] / constants.CONSTANTS.mu_0 *
+        Ip_chease = (chease_data['Ipprofile'] / CONSTANTS.mu_0 *
                      R_major * B_0)
         Phi = (chease_data['RHO_TOR=sqrt(Phi/pi/B0)'] *
                R_major)**2 * B_0 * np.pi
@@ -4460,7 +4521,7 @@ def build_standard_geometry(
     g2g3_over_rhon = np.concatenate((np.zeros(1), g2g3_over_rhon))
     dpsidrhon = (
         intermediate.Ip_profile[1:] *
-        (16 * constants.CONSTANTS.mu_0 * np.pi**3 * intermediate.Phi[-1]) /
+        (16 * CONSTANTS.mu_0 * np.pi**3 * intermediate.Phi[-1]) /
         (g2g3_over_rhon[1:] * intermediate.F[1:]))
     dpsidrhon = np.concatenate((np.zeros(1), dpsidrhon))
     psi_from_Ip = scipy.integrate.cumulative_trapezoid(
@@ -4470,7 +4531,7 @@ def build_standard_geometry(
     )
     psi_from_Ip += intermediate.psi[0]
     psi_from_Ip[-1] = psi_from_Ip[-2] + (
-        16 * constants.CONSTANTS.mu_0 * np.pi**3 *
+        16 * CONSTANTS.mu_0 * np.pi**3 *
         intermediate.Phi[-1]) * intermediate.Ip_profile[-1] / (
             g2g3_over_rhon[-1] * intermediate.F[-1]) * (
                 rho_norm_intermediate[-1] - rho_norm_intermediate[-2])
@@ -5099,12 +5160,12 @@ def make_post_processed_outputs(
     )
     Q_fusion = (
         integrated_sources['P_fusion'] /
-        (integrated_sources['P_external_total'] + constants.CONSTANTS.eps))
+        (integrated_sources['P_external_total'] + CONSTANTS.eps))
     P_LH_hi_dens, P_LH_min, P_LH, n_e_min_P_LH = (calculate_plh_scaling_factor(
         sim_state.geometry, sim_state.core_profiles))
     Ploss = (integrated_sources['P_alpha_total'] +
              integrated_sources['P_aux_total'] +
-             integrated_sources['P_ohmic_e'] + constants.CONSTANTS.eps)
+             integrated_sources['P_ohmic_e'] + CONSTANTS.eps)
     if previous_post_processed_outputs is not None:
         dW_th_dt = (
             W_thermal_tot -
@@ -6164,7 +6225,7 @@ class CoeffsCallback:
 
 def _calculate_pereverzev_flux(runtime_params, geo, core_profiles,
                                pedestal_model_output):
-    consts = constants.CONSTANTS
+    consts = CONSTANTS
     geo_factor = jnp.concatenate(
         [jnp.ones(1), geo.g1_over_vpr_face[1:] / geo.g0_face[1:]])
     chi_face_per_ion = (geo.g1_over_vpr_face * core_profiles.n_i.face_value() *
@@ -6250,7 +6311,7 @@ def _calc_coeffs_full(runtime_params,
                       physics_models,
                       evolving_names,
                       use_pereverzev=False):
-    consts = constants.CONSTANTS
+    consts = CONSTANTS
     pedestal_model_output = physics_models.pedestal_model(
         runtime_params, geo, core_profiles)
     mask = (jnp.zeros_like(
