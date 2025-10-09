@@ -40,10 +40,19 @@ import os
 import pydantic
 import scipy
 import threading
-import torax
 import typing
 import typing_extensions
 import xarray as xr
+import logging
+import os
+import jax
+os.environ['XLA_FLAGS'] = (
+    os.environ.get('XLA_FLAGS', '')
+    + ' --xla_backend_extra_options=xla_cpu_flatten_after_fusion'
+)
+precision = os.getenv('JAX_PRECISION', 'f64')
+if precision == 'f64':
+    jax.config.update('jax_enable_x64', True)
 
 T = TypeVar('T')
 @functools.cache
