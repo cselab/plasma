@@ -7531,13 +7531,11 @@ def _extend_cell_grid_to_boundaries(
 
 class StateHistory:
 
-    def __init__(self, state_history, post_processed_outputs_history,
-                 torax_config):
+    def __init__(self, state_history, post_processed_outputs_history):
         state_history[0].core_profiles = dataclasses.replace(
             state_history[0].core_profiles,
             v_loop_lcfs=state_history[1].core_profiles.v_loop_lcfs,
         )
-        self._torax_config = torax_config
         self._post_processed_outputs = post_processed_outputs_history
         self._solver_numeric_outputs = [
             state.solver_numeric_outputs for state in state_history
@@ -8378,9 +8376,9 @@ CONFIG = {
     },
 }
 g.tolerance = 1e-7
-torax_config = ToraxConfig.from_dict(CONFIG)
-mesh = torax_config.geometry.build_provider.torax_mesh
-for submodel in torax_config.submodels:
+g.torax_config = ToraxConfig.from_dict(CONFIG)
+mesh = g.torax_config.geometry.build_provider.torax_mesh
+for submodel in g.torax_config.submodels:
     if isinstance(submodel, TimeVaryingArray):
         new_grid = Grid1D.model_construct(
             nx=mesh.nx,
@@ -8389,20 +8387,20 @@ for submodel in torax_config.submodels:
         )
         submodel.__dict__['grid'] = new_grid
 
-geometry_provider = torax_config.geometry.build_provider
-g.pedestal_model = torax_config.pedestal.build_pedestal_model()
-g.source_models=torax_config.sources.build_models()
-g.transport_model=torax_config.transport.build_transport_model()
-g.neoclassical_models=torax_config.neoclassical.build_models()
-g.solver = torax_config.solver.build_solver(None)
-runtime_params_provider = (RuntimeParamsProvider.from_config(torax_config))
+geometry_provider = g.torax_config.geometry.build_provider
+g.pedestal_model = g.torax_config.pedestal.build_pedestal_model()
+g.source_models=g.torax_config.sources.build_models()
+g.transport_model=g.torax_config.transport.build_transport_model()
+g.neoclassical_models=g.torax_config.neoclassical.build_models()
+g.solver = g.torax_config.solver.build_solver(None)
+runtime_params_provider = (RuntimeParamsProvider.from_config(g.torax_config))
 step_fn = SimulationStepFn(
     geometry_provider=geometry_provider,
     runtime_params_provider=runtime_params_provider,
 )
 runtime_params_for_init, geo_for_init = (
     get_consistent_runtime_params_and_geometry(
-        t=torax_config.numerics.t_initial,
+        t=g.torax_config.numerics.t_initial,
         runtime_params_provider=runtime_params_provider,
         geometry_provider=geometry_provider,
     ))
@@ -8427,8 +8425,7 @@ while not_done(current_state.t, runtime_params_provider.numerics.t_final):
     post_processing_history.append(post_processed_outputs)
 state_history = StateHistory(
     state_history=state_history,
-    post_processed_outputs_history=post_processing_history,
-    torax_config=torax_config,
+    post_processed_outputs_history=post_processing_history
 )
 data_tree = state_history.simulation_output_to_xr()
 data_tree.to_netcdf("run.nc")
