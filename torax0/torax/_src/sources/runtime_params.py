@@ -2,10 +2,6 @@ import dataclasses
 import enum
 import jax
 from torax._src import array_typing
-from torax._src import interpolated_param
-
-TimeInterpolatedInput = interpolated_param.TimeInterpolatedInput
-
 
 @enum.unique
 class Mode(enum.Enum):
