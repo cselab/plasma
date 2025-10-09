@@ -22,7 +22,6 @@ from torax._src.geometry import geometry
 from torax._src.geometry import geometry as geometry_lib
 from torax._src.geometry import geometry_provider
 from torax._src.geometry import standard_geometry
-from torax._src.neoclassical import runtime_params
 from torax._src.neoclassical.bootstrap_current import base as bootstrap_current_base
 from torax._src.neoclassical.bootstrap_current import sauter as sauter_current
 from torax._src.neoclassical.conductivity import base as conductivity_base
@@ -59,6 +58,17 @@ import pydantic
 import typing
 import typing_extensions
 import xarray as xr
+import dataclasses
+import jax
+from torax._src.neoclassical.bootstrap_current import runtime_params as bootstrap_current_runtime_params
+from torax._src.neoclassical.conductivity import runtime_params as conductivity_runtime_params
+
+
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(frozen=True)
+class RuntimeParamsNeo:
+    bootstrap_current: bootstrap_current_runtime_params.RuntimeParams
+    conductivity: conductivity_runtime_params.RuntimeParams
 
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass
@@ -2706,7 +2716,7 @@ class Neoclassical0(torax_pydantic.BaseModelFrozen):
         return configurable_data
 
     def build_runtime_params(self):
-        return runtime_params.RuntimeParamsNeo(
+        return RuntimeParamsNeo(
             bootstrap_current=self.bootstrap_current.build_runtime_params(),
             conductivity=self.conductivity.build_runtime_params(),
         )
