@@ -769,7 +769,7 @@ BooleanNumeric = Any
 thread_context = threading.local()
 
 
-def jit(*args, **kwargs):
+def jit0(*args, **kwargs):
     func = args[0]
     return func
 
@@ -8397,7 +8397,7 @@ class SimulationStepFn:
         self._geometry_provider = geometry_provider
         self._runtime_params_provider = runtime_params_provider
 
-    @jit
+    @jit0
     def __call__(
         self,
         input_state,
