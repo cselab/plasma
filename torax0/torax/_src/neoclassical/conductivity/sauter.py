@@ -12,43 +12,8 @@ from torax._src.neoclassical.conductivity import base
 from torax._src.physics import collisions
 from torax._src.torax_pydantic import torax_pydantic
 
-
-class SauterModel(base.ConductivityModel):
-
-    def calculate_conductivity(
-        self,
-        geometry: geometry_lib.Geometry,
-        core_profiles: state.CoreProfiles,
-    ) -> base.Conductivity:
-        result = _calculate_conductivity(
-            Z_eff_face=core_profiles.Z_eff_face,
-            n_e=core_profiles.n_e,
-            T_e=core_profiles.T_e,
-            q_face=core_profiles.q_face,
-            geo=geometry,
-        )
-        return base.Conductivity(
-            sigma=result.sigma,
-            sigma_face=result.sigma_face,
-        )
-
-    def __eq__(self, other) -> bool:
-        return isinstance(other, self.__class__)
-
-    def __hash__(self) -> int:
-        return hash(self.__class__)
-
-
-class SauterModelConfig(base.ConductivityModelConfig):
-    model_name: Annotated[Literal['sauter'],
-                          torax_pydantic.JAX_STATIC] = 'sauter'
-
-    def build_model(self) -> SauterModel:
-        return SauterModel()
-
-
 @jax_utils.jit
-def _calculate_conductivity(
+def _calculate_conductivity0(
     *,
     Z_eff_face: array_typing.FloatVectorFace,
     n_e: cell_variable.CellVariable,
@@ -81,3 +46,39 @@ def _calculate_conductivity(
         sigma=sigmaneo_cell,
         sigma_face=sigma_face,
     )
+
+
+class SauterModel(base.ConductivityModel):
+
+    def calculate_conductivity(
+        self,
+        geometry,
+        core_profiles,
+    ):
+        result = _calculate_conductivity0(
+            Z_eff_face=core_profiles.Z_eff_face,
+            n_e=core_profiles.n_e,
+            T_e=core_profiles.T_e,
+            q_face=core_profiles.q_face,
+            geo=geometry,
+        )
+        return base.Conductivity(
+            sigma=result.sigma,
+            sigma_face=result.sigma_face,
+        )
+
+    def __eq__(self, other) -> bool:
+        return isinstance(other, self.__class__)
+
+    def __hash__(self) -> int:
+        return hash(self.__class__)
+
+
+class SauterModelConfig(base.ConductivityModelConfig):
+    model_name: Annotated[Literal['sauter'],
+                          torax_pydantic.JAX_STATIC] = 'sauter'
+
+    def build_model(self) -> SauterModel:
+        return SauterModel()
+
+
