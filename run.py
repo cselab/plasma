@@ -15,7 +15,6 @@ from torax._src.config import runtime_params_slice
 from torax._src.config import runtime_validation_utils
 from torax._src.fvm import cell_variable
 from torax._src.fvm import convection_terms
-from torax._src.fvm import diffusion_terms
 from torax._src.fvm import enums
 from torax._src.torax_pydantic import interpolated_param_1d
 from torax._src.torax_pydantic import interpolated_param_2d
@@ -49,8 +48,47 @@ import torax
 import typing
 import typing_extensions
 import xarray as xr
+import chex
+from jax import numpy as jnp
+from torax._src import array_typing
+from torax._src import math_utils
+from torax._src.fvm import cell_variable
+
 
 _trapz = jax.scipy.integrate.trapezoid
+
+def make_diffusion_terms(
+    d_face: array_typing.FloatVectorFace, var: cell_variable.CellVariable
+) -> tuple[array_typing.FloatMatrixCell, array_typing.FloatVectorCell]:
+    denom = var.dr**2
+    diag = jnp.asarray(-d_face[1:] - d_face[:-1])
+    off = d_face[1:-1]
+    vec = jnp.zeros_like(diag)
+    if vec.shape[0] < 2:
+        raise NotImplementedError(
+            'We do not support the case where a single cell'
+            ' is affected by both boundary conditions.')
+    chex.assert_exactly_one_is_none(var.left_face_grad_constraint,
+                                    var.left_face_constraint)
+    chex.assert_exactly_one_is_none(var.right_face_grad_constraint,
+                                    var.right_face_constraint)
+    if var.left_face_constraint is not None:
+        diag = diag.at[0].set(-2 * d_face[0] - d_face[1])
+        vec = vec.at[0].set(2 * d_face[0] * var.left_face_constraint / denom)
+    else:
+        diag = diag.at[0].set(-d_face[1])
+        vec = vec.at[0].set(-d_face[0] * var.left_face_grad_constraint /
+                            var.dr)
+    if var.right_face_constraint is not None:
+        diag = diag.at[-1].set(-2 * d_face[-1] - d_face[-2])
+        vec = vec.at[-1].set(2 * d_face[-1] * var.right_face_constraint /
+                             denom)
+    else:
+        diag = diag.at[-1].set(-d_face[-2])
+        vec = vec.at[-1].set(d_face[-1] * var.right_face_grad_constraint /
+                             var.dr)
+    mat = math_utils.tridiag(diag, off, off) / denom
+    return mat, vec
 
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True, eq=False)
@@ -579,7 +617,7 @@ def calculate_psidot_from_psi_sources(
     v_face_psi = jnp.zeros_like(d_face_psi)
     psi_sources += (8.0 * jnp.pi**2 * consts.mu_0 * geo.Phi_b_dot * geo.Phi_b *
                     geo.rho_norm**2 * sigma / geo.F**2 * psi.grad())
-    diffusion_mat, diffusion_vec = diffusion_terms.make_diffusion_terms(
+    diffusion_mat, diffusion_vec = make_diffusion_terms(
         d_face_psi, psi)
     conv_mat, conv_vec = convection_terms.make_convection_terms(
         v_face_psi, d_face_psi, psi)
@@ -6057,7 +6095,7 @@ def calc_c(
             (
                 diffusion_mat,
                 diffusion_vec,
-            ) = diffusion_terms.make_diffusion_terms(
+            ) = make_diffusion_terms(
                 d_face[i],
                 x[i],
             )
