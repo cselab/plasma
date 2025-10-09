@@ -70,8 +70,8 @@ def _array_is_unit_interval(array: np.ndarray):
 NumpyArray1DUnitInterval = Any
 TIME_INVARIANT: Final[str] = '_pydantic_time_invariant_field'
 JAX_STATIC: Final[str] = '_pydantic_jax_static_field'
-StaticKwargs: TypeAlias = dict[str, Any]
-DynamicArgs: TypeAlias = list[Any]
+StaticKwargs: TypeAlias = Any
+DynamicArgs: TypeAlias = Any
 
 RHO_NORM: Final[str] = 'rho_norm'
 _interp_fn = jax.jit(jnp.interp)
