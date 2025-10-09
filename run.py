@@ -36,12 +36,15 @@ from torax._src.physics import collisions
 from torax._src.physics import formulas
 from torax._src.physics import psi_calculations
 from torax._src.physics import scaling_laws
+from torax._src.sources import base
 from torax._src.sources import fusion_heat_source as fusion_heat_source_lib
 from torax._src.sources import gas_puff_source as gas_puff_source_lib
 from torax._src.sources import generic_current_source as generic_current_source_lib
 from torax._src.sources import generic_ion_el_heat_source as generic_ion_el_heat_source_lib
 from torax._src.sources import generic_particle_source as generic_particle_source_lib
 from torax._src.sources import pellet_source as pellet_source_lib
+from torax._src.sources import runtime_params as runtime_params_lib
+from torax._src.sources import source
 from torax._src.sources import source as source_lib
 from torax._src.sources import source_profiles
 from torax._src.sources import source_profiles as source_profiles_lib
@@ -54,6 +57,7 @@ from typing import Annotated, Any
 from typing import Annotated, Any, Literal
 from typing import Annotated, Any, Literal, TypeAlias
 from typing import Annotated, Any, Literal, TypeAlias, TypeVar
+from typing import Annotated, ClassVar
 from typing import Annotated, Final
 from typing import Annotated, Literal
 from typing import Any
@@ -83,29 +87,6 @@ import numpy as np
 import pydantic
 import typing_extensions
 import xarray as xr
-
-import dataclasses
-from typing import Annotated, ClassVar
-import chex
-import jax
-from jax import numpy as jnp
-from torax._src import array_typing
-from torax._src import state
-from torax._src.config import runtime_params_slice
-from torax._src.geometry import geometry
-from torax._src.neoclassical.conductivity import base as conductivity_base
-from torax._src.physics import collisions
-from torax._src.sources import base
-from torax._src.sources import runtime_params as runtime_params_lib
-from torax._src.sources import source
-from torax._src.sources import source_profiles
-from torax._src.torax_pydantic import torax_pydantic
-
-import dataclasses
-import functools
-import immutabledict
-import jax
-from torax._src.sources import source as source_lib
 
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
