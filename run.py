@@ -58,6 +58,7 @@ from typing import Annotated, Literal
 from typing import Any
 from typing import Any, Final, Mapping, Sequence, TypeAlias
 from typing import Callable
+from typing import ClassVar, Protocol
 from typing import Final
 from typing import Final, Mapping
 from typing import Mapping
@@ -80,21 +81,9 @@ import jaxtyping as jt
 import logging
 import numpy as np
 import pydantic
+import typing
 import typing_extensions
 import xarray as xr
-
-import abc
-import dataclasses
-import enum
-import typing
-from typing import ClassVar, Protocol
-from torax._src import array_typing
-from torax._src import state
-from torax._src.config import runtime_params_slice
-from torax._src.geometry import geometry
-from torax._src.neoclassical.conductivity import base as conductivity_base
-from torax._src.sources import runtime_params as runtime_params_lib
-from torax._src.sources import source_profiles
 
 
 @typing.runtime_checkable
