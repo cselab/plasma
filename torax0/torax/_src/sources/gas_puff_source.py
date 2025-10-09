@@ -19,21 +19,20 @@ DEFAULT_MODEL_FUNCTION_NAME: str = 'exponential'
 
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
-class RuntimeParams(runtime_params_lib.RuntimeParams):
+class RuntimeParamsPS(runtime_params_lib.RuntimeParams):
     puff_decay_length: array_typing.FloatScalar
     S_total: array_typing.FloatScalar
 
 
 def calc_puff_source(
-    runtime_params: runtime_params_slice.RuntimeParams,
-    geo: geometry.Geometry,
-    source_name: str,
-    unused_state: state.CoreProfiles,
-    unused_calculated_source_profiles: source_profiles.SourceProfiles | None,
-    unused_conductivity: conductivity_base.Conductivity | None,
-) -> tuple[array_typing.FloatVectorCell, ...]:
+    runtime_params,
+    geo,
+    source_name,
+    unused_state,
+    unused_calculated_source_profiles,
+    unused_conductivity,
+):
     source_params = runtime_params.sources[source_name]
-    assert isinstance(source_params, RuntimeParams)
     return (formulas.exponential_profile(
         decay_start=1.0,
         width=source_params.puff_decay_length,
@@ -48,7 +47,7 @@ class GasPuffSource(source.Source):
     model_func: source.SourceProfileFunction = calc_puff_source
 
     @property
-    def source_name(self) -> str:
+    def source_name(self):
         return self.SOURCE_NAME
 
     @property
@@ -72,9 +71,9 @@ class GasPuffSourceConfig(base.SourceModelBase):
 
     def build_runtime_params(
         self,
-        t: chex.Numeric,
-    ) -> RuntimeParams:
-        return RuntimeParams(
+        t
+    ):
+        return RuntimeParamsPS(
             prescribed_values=tuple(
                 [v.get_value(t) for v in self.prescribed_values]),
             mode=self.mode,
