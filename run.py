@@ -56,26 +56,6 @@ import typing
 import typing_extensions
 import xarray as xr
 
-import abc
-import dataclasses
-import jax
-from torax._src import array_typing
-from torax._src import state
-from torax._src.geometry import geometry as geometry_lib
-from torax._src.torax_pydantic import torax_pydantic
-from typing import Annotated, Literal
-import jax.numpy as jnp
-from torax._src import array_typing
-from torax._src import jax_utils
-from torax._src.fvm import cell_variable
-from torax._src.geometry import geometry as geometry_lib
-from torax._src.physics import collisions
-from torax._src.torax_pydantic import torax_pydantic
-import jax.numpy as jnp
-from torax._src import array_typing
-from torax._src import constants
-from torax._src.geometry import geometry as geometry_lib
-
 def calculate_f_trap(
     geo: geometry_lib.Geometry, ) -> array_typing.FloatVectorFace:
     epsilon_effective = (
