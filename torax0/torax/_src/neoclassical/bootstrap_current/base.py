@@ -38,9 +38,5 @@ class BootstrapCurrentModel(abc.ABC):
 class BootstrapCurrentModelConfig(torax_pydantic.BaseModelFrozen, abc.ABC):
 
     @abc.abstractmethod
-    def build_runtime_params(self) -> bootstrap_runtime_params.RuntimeParams:
-        pass
-
-    @abc.abstractmethod
     def build_model(self) -> BootstrapCurrentModel:
         pass

@@ -6,7 +6,6 @@ from typing import Any
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class RuntimeParams:
-    neoclassical: Any
     numerics: Any
     pedestal: Any
     plasma_composition: Any

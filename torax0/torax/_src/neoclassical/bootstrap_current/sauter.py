@@ -29,10 +29,7 @@ class SauterModel(base.BootstrapCurrentModel):
         geometry: geometry_lib.Geometry,
         core_profiles: state.CoreProfiles,
     ) -> base.BootstrapCurrent:
-        bootstrap_params = runtime_params.neoclassical.bootstrap_current
-        assert isinstance(bootstrap_params, RuntimeParams)
         result = _calculate_bootstrap_current(
-            bootstrap_multiplier=bootstrap_params.bootstrap_multiplier,
             Z_eff_face=core_profiles.Z_eff_face,
             Z_i_face=core_profiles.Z_i_face,
             n_e=core_profiles.n_e,
@@ -60,9 +57,6 @@ class SauterModelConfig(base.BootstrapCurrentModelConfig):
                           torax_pydantic.JAX_STATIC] = 'sauter'
     bootstrap_multiplier: float = 1.0
 
-    def build_runtime_params(self) -> RuntimeParams:
-        return RuntimeParams(bootstrap_multiplier=self.bootstrap_multiplier)
-
     def build_model(self) -> SauterModel:
         return SauterModel()
 
@@ -70,7 +64,6 @@ class SauterModelConfig(base.BootstrapCurrentModelConfig):
 @jax_utils.jit
 def _calculate_bootstrap_current(
     *,
-    bootstrap_multiplier: float,
     Z_eff_face: array_typing.FloatVectorFace,
     Z_i_face: array_typing.FloatVectorFace,
     n_e: cell_variable.CellVariable,
@@ -103,6 +96,7 @@ def _calculate_bootstrap_current(
         Z_eff=Z_eff_face,
         log_lambda_ii=log_lambda_ii,
     )
+    bootstrap_multiplier = 1.0
     L31 = formulas.calculate_L31(f_trap, nu_e_star, Z_eff_face)
     L32 = formulas.calculate_L32(f_trap, nu_e_star, Z_eff_face)
     L34 = _calculate_L34(f_trap, nu_e_star, Z_eff_face)

@@ -2713,11 +2713,6 @@ class Neoclassical0(torax_pydantic.BaseModelFrozen):
         configurable_data["bootstrap_current"] = {"model_name": "sauter"}
         return configurable_data
 
-    def build_runtime_params(self):
-        return RuntimeParamsNeo(
-            bootstrap_current=self.bootstrap_current.build_runtime_params(),
-        )
-
     def build_models(self):
         return NeoclassicalModels(
             conductivity=self.conductivity.build_model(),
@@ -5079,7 +5074,6 @@ class RuntimeParamsProvider:
             plasma_composition=self.plasma_composition.build_runtime_params(t),
             profile_conditions=self.profile_conditions.build_runtime_params(t),
             numerics=self.numerics.build_runtime_params(t),
-            neoclassical=self.neoclassical.build_runtime_params(),
             pedestal=self.pedestal.build_runtime_params(t),
         )
 
