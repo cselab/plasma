@@ -62,9 +62,9 @@ class CoreTransport:
     ):
         return jnp.maximum(
             jnp.max(
-                (self.chi_face_ion + self.chi_neo_i) * geo.g1_over_vpr2_face),
+                self.chi_face_ion * geo.g1_over_vpr2_face),
             jnp.max(
-                (self.chi_face_el + self.chi_neo_e) * geo.g1_over_vpr2_face),
+                self.chi_face_el * geo.g1_over_vpr2_face),
         )
 
 

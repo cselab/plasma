@@ -30,7 +30,6 @@ from torax._src.neoclassical.bootstrap_current import sauter as sauter_current
 from torax._src.neoclassical.bootstrap_current import zeros as bootstrap_current_zeros
 from torax._src.neoclassical.conductivity import base as conductivity_base
 from torax._src.neoclassical.conductivity import sauter as sauter_conductivity
-from torax._src.neoclassical.transport import zeros as transport_zeros
 from torax._src.physics import charge_states
 from torax._src.physics import collisions
 from torax._src.physics import formulas as formulas_ph
@@ -2654,15 +2653,7 @@ def calculate_total_transport_coeffs(pedestal_model, transport_model,
         core_profiles=core_profiles,
         pedestal_model_output=pedestal_model_output,
     )
-    neoclassical_transport_coeffs = neoclassical_models.transport(
-        runtime_params,
-        geo,
-        core_profiles,
-    )
-    return state.CoreTransport(
-        **dataclasses.asdict(turbulent_transport),
-        **dataclasses.asdict(neoclassical_transport_coeffs),
-    )
+    return state.CoreTransport(**dataclasses.asdict(turbulent_transport))
 
 
 class Neoclassical0(torax_pydantic.BaseModelFrozen):
@@ -2672,8 +2663,6 @@ class Neoclassical0(torax_pydantic.BaseModelFrozen):
     conductivity: sauter_conductivity.SauterModelConfig = (
         torax_pydantic.ValidatedDefault(
             sauter_conductivity.SauterModelConfig()))
-    transport: (transport_zeros.ZerosModelConfig) = pydantic.Field(
-        discriminator="model_name")
 
     @pydantic.model_validator(mode="before")
     @classmethod
@@ -2681,8 +2670,6 @@ class Neoclassical0(torax_pydantic.BaseModelFrozen):
         configurable_data = copy.deepcopy(data)
         if "bootstrap_current" not in configurable_data:
             configurable_data["bootstrap_current"] = {"model_name": "zeros"}
-        if "transport" not in configurable_data:
-            configurable_data["transport"] = {"model_name": "zeros"}
         if "model_name" not in configurable_data["bootstrap_current"]:
             configurable_data["bootstrap_current"]["model_name"] = "sauter"
         return configurable_data
@@ -2691,14 +2678,12 @@ class Neoclassical0(torax_pydantic.BaseModelFrozen):
         return runtime_params.RuntimeParams(
             bootstrap_current=self.bootstrap_current.build_runtime_params(),
             conductivity=self.conductivity.build_runtime_params(),
-            transport=self.transport.build_runtime_params(),
         )
 
     def build_models(self):
         return neoclassical_models.NeoclassicalModels(
             conductivity=self.conductivity.build_model(),
             bootstrap_current=self.bootstrap_current.build_model(),
-            transport=self.transport.build_model(),
         )
 
 
@@ -4449,17 +4434,10 @@ def _calc_coeffs_full(runtime_params,
     tic_dens_el = geo.vpr
     turbulent_transport = physics_models.transport_model(
         runtime_params, geo, core_profiles, pedestal_model_output)
-    neoclassical_transport = physics_models.neoclassical_models.transport(
-        runtime_params, geo, core_profiles)
-    chi_face_ion_total = (turbulent_transport.chi_face_ion +
-                          neoclassical_transport.chi_neo_i)
-    chi_face_el_total = (turbulent_transport.chi_face_el +
-                         neoclassical_transport.chi_neo_e)
-    d_face_el_total = (turbulent_transport.d_face_el +
-                       neoclassical_transport.D_neo_e)
-    v_face_el_total = (turbulent_transport.v_face_el +
-                       neoclassical_transport.V_neo_e +
-                       neoclassical_transport.V_neo_ware_e)
+    chi_face_ion_total = turbulent_transport.chi_face_ion
+    chi_face_el_total = turbulent_transport.chi_face_el
+    d_face_el_total = turbulent_transport.d_face_el
+    v_face_el_total = turbulent_transport.v_face_el
     d_face_psi = geo.g2g3_over_rhon_face
     v_face_psi = jnp.zeros_like(d_face_psi)
     full_chi_face_ion = (geo.g1_over_vpr_face *
@@ -4592,12 +4570,9 @@ def _calc_coeffs_full(runtime_params,
         v_face=v_face,
         source_mat_cell=source_mat_cell,
         source_cell=source_cell,
-        auxiliary_outputs=(
-            merged_source_profiles,
-            conductivity,
-            state.CoreTransport(**dataclasses.asdict(turbulent_transport),
-                                **dataclasses.asdict(neoclassical_transport)),
-        ),
+        auxiliary_outputs=(merged_source_profiles, conductivity,
+                           state.CoreTransport(
+                               **dataclasses.asdict(turbulent_transport))),
     )
     return coeffs
 
@@ -6153,6 +6128,7 @@ data_tree = state_history.simulation_output_to_xr()
 data_tree.to_netcdf("run.nc")
 print(data_tree)
 import matplotlib.pyplot as plt
+
 t = data_tree.time.to_numpy()
 rho = data_tree.rho_norm.to_numpy()
 nt, = np.shape(t)
