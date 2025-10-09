@@ -30,7 +30,6 @@ from torax._src.neoclassical.bootstrap_current import zeros as bootstrap_current
 from torax._src.neoclassical.conductivity import base as conductivity_base
 from torax._src.neoclassical.conductivity import sauter as sauter_conductivity
 from torax._src.neoclassical.transport import zeros as transport_zeros
-from torax._src.pedestal_model import pedestal_model as pedestal_model_lib
 from torax._src.physics import charge_states
 from torax._src.physics import collisions
 from torax._src.physics import formulas
@@ -51,6 +50,7 @@ from typing import Annotated, Any, Literal
 from typing import Annotated, Any, Literal, TypeAlias
 from typing import Annotated, Any, Literal, TypeAlias, TypeVar
 from typing import Annotated, Final
+from typing import Annotated, Literal
 from typing import Any
 from typing import Any, Final, Mapping, Sequence, TypeAlias
 from typing import Callable
@@ -60,6 +60,7 @@ from typing import Mapping
 from typing import TypeAlias
 from typing_extensions import Annotated
 from typing_extensions import Final
+from typing_extensions import override
 import abc
 import chex
 import copy
@@ -77,12 +78,101 @@ import numpy as np
 import pydantic
 import typing_extensions
 import xarray as xr
-import abc
-from typing import Annotated, Literal
-import chex
-from torax._src.pedestal_model import pedestal_model
-from torax._src.pedestal_model import set_tped_nped
-from torax._src.torax_pydantic import torax_pydantic
+
+
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(frozen=True)
+class PedestalModelOutput:
+    rho_norm_ped_top: array_typing.FloatScalar
+    rho_norm_ped_top_idx: array_typing.IntScalar
+    T_i_ped: array_typing.FloatScalar
+    T_e_ped: array_typing.FloatScalar
+    n_e_ped: array_typing.FloatScalar
+
+
+class PedestalModel(abc.ABC):
+
+    def __setattr__(self, attr, value):
+        return super().__setattr__(attr, value)
+
+    def __call__(
+        self,
+        runtime_params,
+        geo,
+        core_profiles,
+    ):
+        return jax.lax.cond(
+            runtime_params.pedestal.set_pedestal,
+            lambda: self._call_implementation(runtime_params, geo,
+                                              core_profiles),
+            lambda: PedestalModelOutput(
+                rho_norm_ped_top=jnp.inf,
+                T_i_ped=0.0,
+                T_e_ped=0.0,
+                n_e_ped=0.0,
+                rho_norm_ped_top_idx=geo.torax_mesh.nx,
+            ),
+        )
+
+    @abc.abstractmethod
+    def _call_implementation(
+        self,
+        runtime_params,
+        geo,
+        core_profiles,
+    ):
+        pass
+
+    @abc.abstractmethod
+    def __hash__(self) -> int:
+        ...
+
+    @abc.abstractmethod
+    def __eq__(self, other) -> bool:
+        ...
+
+
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(frozen=True)
+class RuntimeParamsPED:
+    set_pedestal: array_typing.BoolScalar
+    n_e_ped: array_typing.FloatScalar
+    T_i_ped: array_typing.FloatScalar
+    T_e_ped: array_typing.FloatScalar
+    rho_norm_ped_top: array_typing.FloatScalar
+    n_e_ped_is_fGW: array_typing.BoolScalar
+
+
+class SetTemperatureDensityPedestalModel(PedestalModel):
+
+    def __init__(self, ):
+        super().__init__()
+        self._frozen = True
+
+    @override
+    def _call_implementation(self, runtime_params, geo, core_profiles):
+        pedestal_params = runtime_params.pedestal
+        nGW = (runtime_params.profile_conditions.Ip / 1e6 /
+               (jnp.pi * geo.a_minor**2) * 1e20)
+        n_e_ped = jnp.where(
+            pedestal_params.n_e_ped_is_fGW,
+            pedestal_params.n_e_ped * nGW,
+            pedestal_params.n_e_ped,
+        )
+        return PedestalModelOutput(
+            n_e_ped=n_e_ped,
+            T_i_ped=pedestal_params.T_i_ped,
+            T_e_ped=pedestal_params.T_e_ped,
+            rho_norm_ped_top=pedestal_params.rho_norm_ped_top,
+            rho_norm_ped_top_idx=jnp.abs(
+                geo.rho_norm - pedestal_params.rho_norm_ped_top).argmin(),
+        )
+
+    def __hash__(self) -> int:
+        return hash('SetTemperatureDensityPedestalModel')
+
+    def __eq__(self, other) -> bool:
+        return isinstance(other, SetTemperatureDensityPedestalModel)
 
 
 class BasePedestal(torax_pydantic.BaseModelFrozen, abc.ABC):
@@ -111,13 +201,11 @@ class SetTpedNped(BasePedestal):
     rho_norm_ped_top: torax_pydantic.TimeVaryingScalar = (
         torax_pydantic.ValidatedDefault(0.91))
 
-    def build_pedestal_model(
-        self, ) -> set_tped_nped.SetTemperatureDensityPedestalModel:
-        return set_tped_nped.SetTemperatureDensityPedestalModel()
+    def build_pedestal_model(self):
+        return SetTemperatureDensityPedestalModel()
 
-    def build_runtime_params(self,
-                             t: chex.Numeric) -> set_tped_nped.RuntimeParams:
-        return set_tped_nped.RuntimeParams(
+    def build_runtime_params(self, t):
+        return RuntimeParamsPED(
             set_pedestal=self.set_pedestal.get_value(t),
             n_e_ped=self.n_e_ped.get_value(t),
             n_e_ped_is_fGW=self.n_e_ped_is_fGW,
@@ -126,9 +214,12 @@ class SetTpedNped(BasePedestal):
             rho_norm_ped_top=self.rho_norm_ped_top.get_value(t),
         )
 
+
 PedestalConfig = SetTpedNped
 
 _IMPURITY_MODE_FRACTIONS: Final[str] = 'fractions'
+
+
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class RuntimeParamsIM:
@@ -3118,12 +3209,8 @@ class CoeffsCallback:
         )
 
 
-def _calculate_pereverzev_flux(
-    runtime_params: runtime_params_slice.RuntimeParams,
-    geo: geometry.Geometry,
-    core_profiles: state.CoreProfiles,
-    pedestal_model_output: pedestal_model_lib.PedestalModelOutput,
-) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
+def _calculate_pereverzev_flux(runtime_params, geo, core_profiles,
+                               pedestal_model_output):
     consts = constants.CONSTANTS
     geo_factor = jnp.concatenate(
         [jnp.ones(1), geo.g1_over_vpr_face[1:] / geo.g0_face[1:]])
@@ -3961,8 +4048,8 @@ class PhysicsModels:
         metadata=dict(static=True))
     transport_model: TransportModel = dataclasses.field(metadata=dict(
         static=True))
-    pedestal_model: pedestal_model_lib.PedestalModel = dataclasses.field(
-        metadata=dict(static=True))
+    pedestal_model: PedestalModel = dataclasses.field(metadata=dict(
+        static=True))
     neoclassical_models: neoclassical_models_lib.NeoclassicalModels = (
         dataclasses.field(metadata=dict(static=True)))
 
