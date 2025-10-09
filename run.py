@@ -45,13 +45,10 @@ def jaxtyped(fn):
     return fn
 
 
-DataTypes: TypeAlias = float | int | bool
-DtypeName: TypeAlias = str
-NestedList: TypeAlias = (DataTypes
-                         | list[DataTypes]
-                         | list[list[DataTypes]]
-                         | list[list[list[DataTypes]]])
-NumpySerialized: TypeAlias = tuple[DtypeName, NestedList]
+DataTypes: TypeAlias = Any
+DtypeName: TypeAlias = Any
+NestedList: TypeAlias = Any
+NumpySerialized: TypeAlias = Any
 
 
 def _numpy_array_is_rank_1(x: np.ndarray):
@@ -63,19 +60,14 @@ def _numpy_array_is_sorted(x: np.ndarray):
 
 
 NumpyArray = Any
-NumpyArray1D = Annotated[NumpyArray,
-                         pydantic.AfterValidator(_numpy_array_is_rank_1)]
+NumpyArray1D = Any
 
 
 def _array_is_unit_interval(array: np.ndarray):
     return array
 
 
-NumpyArray1DUnitInterval = Annotated[
-    NumpyArray1D,
-    pydantic.AfterValidator(_array_is_unit_interval),
-]
-
+NumpyArray1DUnitInterval = Any
 TIME_INVARIANT: Final[str] = '_pydantic_time_invariant_field'
 JAX_STATIC: Final[str] = '_pydantic_jax_static_field'
 StaticKwargs: TypeAlias = dict[str, Any]
@@ -92,36 +84,12 @@ class InterpolationMode(enum.Enum):
     STEP = 'step'
 
 
-InterpolationModeLiteral: TypeAlias = Literal['step', 'STEP',
-                                              'piecewise_linear',
-                                              'PIECEWISE_LINEAR']
-_ArrayOrListOfFloats: TypeAlias = Array | list[float]
-InterpolatedVarSingleAxisInput: TypeAlias = (float
-                                             | dict[float, float]
-                                             | bool
-                                             | dict[float, bool]
-                                             | tuple[_ArrayOrListOfFloats,
-                                                     _ArrayOrListOfFloats]
-                                             | xr.DataArray)
-InterpolatedVarTimeRhoInput: TypeAlias = (
-    Mapping[float, InterpolatedVarSingleAxisInput]
-    | float
-    | xr.DataArray
-    | tuple[_ArrayOrListOfFloats, _ArrayOrListOfFloats, _ArrayOrListOfFloats]
-    | tuple[_ArrayOrListOfFloats, _ArrayOrListOfFloats])
-TimeInterpolatedInput: TypeAlias = (InterpolatedVarSingleAxisInput
-                                    | tuple[InterpolatedVarSingleAxisInput,
-                                            InterpolationModeLiteral])
-TimeRhoInterpolatedInput: TypeAlias = (
-    InterpolatedVarTimeRhoInput
-    | tuple[
-        InterpolatedVarTimeRhoInput,
-        Mapping[
-            Literal['time_interpolation_mode', 'rho_interpolation_mode'],
-            InterpolationModeLiteral,
-        ],
-    ])
-
+InterpolationModeLiteral: TypeAlias = Any
+_ArrayOrListOfFloats: TypeAlias = Any
+InterpolatedVarSingleAxisInput: TypeAlias = Any
+InterpolatedVarTimeRhoInput: TypeAlias = Any
+TimeInterpolatedInput: TypeAlias = Any
+TimeRhoInterpolatedInput: TypeAlias = Any
 
 class _PiecewiseLinearInterpolatedParam:
 
