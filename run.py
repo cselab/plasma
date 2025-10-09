@@ -48,6 +48,7 @@ from torax._src.torax_pydantic import interpolated_param_2d
 from torax._src.torax_pydantic import model_base
 from torax._src.torax_pydantic import torax_pydantic
 from typing import Annotated, Any, Literal, TypeAlias, TypeVar, ClassVar, Final, Mapping, Protocol, Callable
+from typing import ClassVar, Protocol
 from typing_extensions import Annotated, Final, override
 import abc
 import chex
@@ -123,18 +124,6 @@ class Source(abc.ABC):
                 )
             case _:
                 raise ValueError(f'Unknown mode: {mode}')
-import abc
-import dataclasses
-import enum
-import typing
-from typing import ClassVar, Protocol
-from torax._src import array_typing
-from torax._src import state
-from torax._src.config import runtime_params_slice
-from torax._src.geometry import geometry
-from torax._src.neoclassical.conductivity import base as conductivity_base
-from torax._src.sources import runtime_params as runtime_params_lib
-from torax._src.sources import source_profiles
 
 
 @typing.runtime_checkable
