@@ -4,21 +4,13 @@ from collections.abc import Sequence
 from collections.abc import Set
 from fusion_surrogates.qlknn import qlknn_model
 from jax import numpy as jnp
-from typing import Annotated, Any, Literal, TypeAlias, TypeVar, ClassVar, Final, Mapping, Protocol, Callable
 from typing import Annotated, Literal
 from typing import Annotated, TypeAlias
 from typing import Any, Callable, TypeVar
 from typing import Any, Final, Mapping, Sequence, TypeAlias
 from typing import Any, Literal, TypeAlias
 from typing import Any, TypeAlias, TypeVar
-from typing import ClassVar, Protocol
-from typing import Final, Mapping
-from typing import Literal
-from typing import TypeAlias
-from typing import TypeAlias, TypeVar
-from typing_extensions import Annotated
 from typing_extensions import Annotated, Final, override
-from typing_extensions import Self
 import abc
 import chex
 import copy
@@ -422,7 +414,7 @@ class BaseModelFrozen(pydantic.BaseModel):
 
     @classmethod
     def tree_unflatten(cls, aux_data: StaticKwargs,
-                       children: DynamicArgs) -> Self:
+                       children: DynamicArgs):
         dynamic_kwargs = {
             name: value
             for name, value in zip(
@@ -431,11 +423,11 @@ class BaseModelFrozen(pydantic.BaseModel):
         return cls.model_construct(**(dynamic_kwargs | aux_data))
 
     @classmethod
-    def from_dict(cls: type[Self], cfg: Mapping[str, Any]) -> Self:
+    def from_dict(cls, cfg):
         return cls.model_validate(cfg)
 
     @property
-    def _direct_submodels(self) -> tuple[Self, ...]:
+    def _direct_submodels(self):
 
         def is_leaf(x):
             if isinstance(x, (Mapping, Sequence, Set)):
@@ -450,7 +442,7 @@ class BaseModelFrozen(pydantic.BaseModel):
         return tuple(i for i in leaves if isinstance(i, BaseModelFrozen))
 
     @property
-    def submodels(self) -> tuple[Self, ...]:
+    def submodels(self):
         all_submodels = [self]
         new_submodels = self._direct_submodels
         while new_submodels:
@@ -1136,7 +1128,7 @@ class Numerics(BaseModelFrozen):
     adaptive_n_source_prefactor: pydantic.PositiveFloat = 2.0e8
 
     @pydantic.model_validator(mode='after')
-    def model_validation(self) -> Self:
+    def model_validation(self):
         return self
 
     def build_runtime_params(self, t):
@@ -1670,7 +1662,7 @@ def load_geo_data(geometry_dir, geometry_file, geometry_source):
     return _load_CHEASE_data(file_path=filepath)
 
 
-class GeometryProvider(Protocol):
+class GeometryProvider(typing.Protocol):
 
     def __call__(
         self,
@@ -2675,7 +2667,7 @@ class SourceModelBase(BaseModelFrozen, abc.ABC):
 
 
 @typing.runtime_checkable
-class SourceProfileFunction(Protocol):
+class SourceProfileFunction(typing.Protocol):
 
     def __call__(
         self,
@@ -2699,7 +2691,7 @@ class AffectedCoreProfile(enum.IntEnum):
 
 @dataclasses.dataclass(kw_only=True, frozen=True, eq=True)
 class Source(abc.ABC):
-    SOURCE_NAME: ClassVar[str] = 'source'
+    SOURCE_NAME: typing.ClassVar[str] = 'source'
     model_func: SourceProfileFunction | None = None
 
     @property
@@ -2731,7 +2723,7 @@ class Source(abc.ABC):
 
 
 @typing.runtime_checkable
-class SourceProfileFunction(Protocol):
+class SourceProfileFunction(typing.Protocol):
 
     def __call__(
         self,
@@ -2755,7 +2747,7 @@ class AffectedCoreProfile(enum.IntEnum):
 
 @dataclasses.dataclass(kw_only=True, frozen=True, eq=True)
 class Source(abc.ABC):
-    SOURCE_NAME: ClassVar[str] = 'source'
+    SOURCE_NAME: typing.ClassVar[str] = 'source'
     model_func: SourceProfileFunction | None = None
 
     @property
@@ -2787,7 +2779,7 @@ class Source(abc.ABC):
 
 
 @typing.runtime_checkable
-class SourceProfileFunction(Protocol):
+class SourceProfileFunction(typing.Protocol):
 
     def __call__(
         self,
@@ -2811,7 +2803,7 @@ class AffectedCoreProfile(enum.IntEnum):
 
 @dataclasses.dataclass(kw_only=True, frozen=True, eq=True)
 class Source(abc.ABC):
-    SOURCE_NAME: ClassVar[str] = 'source'
+    SOURCE_NAME: typing.ClassVar[str] = 'source'
     model_func: SourceProfileFunction | None = None
 
     @property
@@ -2879,7 +2871,7 @@ def _calculate_I_generic(runtime_params, source_params):
 
 @dataclasses.dataclass(kw_only=True, frozen=True, eq=True)
 class GenericCurrentSource(Source):
-    SOURCE_NAME: ClassVar[str] = 'generic_current'
+    SOURCE_NAME: typing.ClassVar[str] = 'generic_current'
     model_func: SourceProfileFunction = calculate_generic_current
 
     @property
@@ -2980,7 +2972,7 @@ def default_formula(
 
 @dataclasses.dataclass(kw_only=True, frozen=True, eq=True)
 class GenericIonElectronHeatSource(Source):
-    SOURCE_NAME: ClassVar[str] = 'generic_heat'
+    SOURCE_NAME: typing.ClassVar[str] = 'generic_heat'
     model_func: SourceProfileFunction = default_formula
 
     @property
@@ -3053,7 +3045,7 @@ def calc_generic_particle_source(
 
 @dataclasses.dataclass(kw_only=True, frozen=True, eq=True)
 class GenericParticleSource(Source):
-    SOURCE_NAME: ClassVar[str] = 'generic_particle'
+    SOURCE_NAME: typing.ClassVar[str] = 'generic_particle'
     model_func: SourceProfileFunction = calc_generic_particle_source
 
     @property
@@ -3125,7 +3117,7 @@ def calc_pellet_source(
 
 @dataclasses.dataclass(kw_only=True, frozen=True, eq=True)
 class PelletSource(Source):
-    SOURCE_NAME: ClassVar[str] = 'pellet'
+    SOURCE_NAME: typing.ClassVar[str] = 'pellet'
     model_func: SourceProfileFunction = calc_pellet_source
 
     @property
@@ -3242,7 +3234,7 @@ def fusion_heat_model_func(
 
 @dataclasses.dataclass(kw_only=True, frozen=True, eq=True)
 class FusionHeatSource(Source):
-    SOURCE_NAME: ClassVar[str] = 'fusion'
+    SOURCE_NAME: typing.ClassVar[str] = 'fusion'
     model_func: SourceProfileFunction = fusion_heat_model_func
 
     @property
@@ -3307,7 +3299,7 @@ def calc_puff_source(
 
 @dataclasses.dataclass(kw_only=True, frozen=True, eq=True)
 class GasPuffSource(Source):
-    SOURCE_NAME: ClassVar[str] = 'gas_puff'
+    SOURCE_NAME: typing.ClassVar[str] = 'gas_puff'
     model_func: SourceProfileFunction = calc_puff_source
 
     @property
@@ -3354,7 +3346,7 @@ class RuntimeParamsQ(RuntimeParamsSrc):
 
 @dataclasses.dataclass(kw_only=True, frozen=True, eq=True)
 class QeiSource(Source):
-    SOURCE_NAME: ClassVar[str] = 'ei_exchange'
+    SOURCE_NAME: typing.ClassVar[str] = 'ei_exchange'
 
     @property
     def source_name(self):
