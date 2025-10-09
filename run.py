@@ -33,12 +33,11 @@ from torax._src.neoclassical.conductivity import sauter as sauter_conductivity
 from torax._src.neoclassical.transport import zeros as transport_zeros
 from torax._src.physics import charge_states
 from torax._src.physics import collisions
-from torax._src.physics import formulas
+from torax._src.physics import formulas as formulas_ph
 from torax._src.physics import psi_calculations
 from torax._src.physics import scaling_laws
 from torax._src.sources import base
 from torax._src.sources import fusion_heat_source as fusion_heat_source_lib
-from torax._src.sources import gas_puff_source as gas_puff_source_lib
 from torax._src.sources import generic_current_source as generic_current_source_lib
 from torax._src.sources import generic_ion_el_heat_source as generic_ion_el_heat_source_lib
 from torax._src.sources import generic_particle_source as generic_particle_source_lib
@@ -87,6 +86,90 @@ import numpy as np
 import pydantic
 import typing_extensions
 import xarray as xr
+import dataclasses
+from typing import Annotated, ClassVar, Literal
+import chex
+import jax
+from torax._src import array_typing
+from torax._src import state
+from torax._src.config import runtime_params_slice
+from torax._src.geometry import geometry
+from torax._src.neoclassical.conductivity import base as conductivity_base
+from torax._src.sources import base
+from torax._src.sources import formulas
+from torax._src.sources import runtime_params as runtime_params_lib
+from torax._src.sources import source
+from torax._src.sources import source_profiles
+from torax._src.torax_pydantic import torax_pydantic
+
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(frozen=True)
+class RuntimeParamsPS(runtime_params_lib.RuntimeParams):
+    puff_decay_length: array_typing.FloatScalar
+    S_total: array_typing.FloatScalar
+
+
+def calc_puff_source(
+    runtime_params,
+    geo,
+    source_name,
+    unused_state,
+    unused_calculated_source_profiles,
+    unused_conductivity,
+):
+    source_params = runtime_params.sources[source_name]
+    return (formulas.exponential_profile(
+        decay_start=1.0,
+        width=source_params.puff_decay_length,
+        total=source_params.S_total,
+        geo=geo,
+    ), )
+
+
+@dataclasses.dataclass(kw_only=True, frozen=True, eq=True)
+class GasPuffSource(source.Source):
+    SOURCE_NAME: ClassVar[str] = 'gas_puff'
+    model_func: source.SourceProfileFunction = calc_puff_source
+
+    @property
+    def source_name(self):
+        return self.SOURCE_NAME
+
+    @property
+    def affected_core_profiles(self) -> tuple[source.AffectedCoreProfile, ...]:
+        return (source.AffectedCoreProfile.NE, )
+
+
+class GasPuffSourceConfig(base.SourceModelBase):
+    model_name: Annotated[Literal['exponential'],
+                          torax_pydantic.JAX_STATIC] = ('exponential')
+    puff_decay_length: torax_pydantic.TimeVaryingScalar = (
+        torax_pydantic.ValidatedDefault(0.05))
+    S_total: torax_pydantic.TimeVaryingScalar = torax_pydantic.ValidatedDefault(
+        1e22)
+    mode: Annotated[runtime_params_lib.Mode, torax_pydantic.JAX_STATIC] = (
+        runtime_params_lib.Mode.MODEL_BASED)
+
+    @property
+    def model_func(self) -> source.SourceProfileFunction:
+        return calc_puff_source
+
+    def build_runtime_params(
+        self,
+        t
+    ):
+        return RuntimeParamsPS(
+            prescribed_values=tuple(
+                [v.get_value(t) for v in self.prescribed_values]),
+            mode=self.mode,
+            is_explicit=self.is_explicit,
+            puff_decay_length=self.puff_decay_length.get_value(t),
+            S_total=self.S_total.get_value(t),
+        )
+
+    def build_source(self) -> GasPuffSource:
+        return GasPuffSource(model_func=self.model_func)
+
 
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
@@ -239,7 +322,7 @@ class Sources(torax_pydantic.BaseModelFrozen):
         discriminator='model_name',
         default=None,
     )
-    gas_puff: gas_puff_source_lib.GasPuffSourceConfig | None = pydantic.Field(
+    gas_puff: GasPuffSourceConfig | None = pydantic.Field(
         discriminator='model_name',
         default=None,
     )
@@ -273,7 +356,7 @@ class Sources(torax_pydantic.BaseModelFrozen):
                 case 'gas_puff':
                     if 'model_name' not in v:
                         constructor_data[k][
-                            'model_name'] = gas_puff_source_lib.DEFAULT_MODEL_FUNCTION_NAME
+                            'model_name'] = 'exponential'
                 case 'generic_particle':
                     if 'model_name' not in v:
                         constructor_data[k][
@@ -2401,16 +2484,16 @@ def make_post_processed_outputs(
         pressure_thermal_el,
         pressure_thermal_ion,
         pressure_thermal_tot,
-    ) = formulas.calculate_pressure(sim_state.core_profiles)
-    pprime_face = formulas.calc_pprime(sim_state.core_profiles)
+    ) = formulas_ph.calculate_pressure(sim_state.core_profiles)
+    pprime_face = formulas_ph.calc_pprime(sim_state.core_profiles)
     W_thermal_el, W_thermal_ion, W_thermal_tot = (
-        formulas.calculate_stored_thermal_energy(
+        formulas_ph.calculate_stored_thermal_energy(
             pressure_thermal_el,
             pressure_thermal_ion,
             pressure_thermal_tot,
             sim_state.geometry,
         ))
-    FFprime_face = formulas.calc_FFprime(sim_state.core_profiles,
+    FFprime_face = formulas_ph.calc_FFprime(sim_state.core_profiles,
                                          sim_state.geometry)
     psi_face = sim_state.core_profiles.psi.face_value()
     psi_norm_face = (psi_face - psi_face[0]) / (psi_face[-1] - psi_face[0])
@@ -2488,9 +2571,9 @@ def make_post_processed_outputs(
                                            sim_state.geometry)
     n_i_line_avg = math_utils.line_average(sim_state.core_profiles.n_i.value,
                                            sim_state.geometry)
-    fgw_n_e_volume_avg = formulas.calculate_greenwald_fraction(
+    fgw_n_e_volume_avg = formulas_ph.calculate_greenwald_fraction(
         n_e_volume_avg, sim_state.core_profiles, sim_state.geometry)
-    fgw_n_e_line_avg = formulas.calculate_greenwald_fraction(
+    fgw_n_e_line_avg = formulas_ph.calculate_greenwald_fraction(
         n_e_line_avg, sim_state.core_profiles, sim_state.geometry)
     Wpol = psi_calculations.calc_Wpol(sim_state.geometry,
                                       sim_state.core_profiles.psi)
@@ -2510,7 +2593,7 @@ def make_post_processed_outputs(
     psi_current = (j_external +
                    sim_state.core_sources.bootstrap_current.j_bootstrap)
     j_ohmic = sim_state.core_profiles.j_total - psi_current
-    beta_tor, beta_pol, beta_N = formulas.calculate_betas(
+    beta_tor, beta_pol, beta_N = formulas_ph.calculate_betas(
         sim_state.core_profiles, sim_state.geometry)
     return PostProcessedOutputs(
         pressure_thermal_i=pressure_thermal_ion,
@@ -2743,12 +2826,12 @@ def _get_ion_properties_from_fractions(impurity_symbols, impurity_params, T_e,
     dilution_factor = jnp.where(
         Z_eff == 1.0,
         1.0,
-        formulas.calculate_main_ion_dilution_factor(Z_i, Z_impurity, Z_eff),
+        formulas_ph.calculate_main_ion_dilution_factor(Z_i, Z_impurity, Z_eff),
     )
     dilution_factor_edge = jnp.where(
         Z_eff_edge == 1.0,
         1.0,
-        formulas.calculate_main_ion_dilution_factor(Z_i_face[-1],
+        formulas_ph.calculate_main_ion_dilution_factor(Z_i_face[-1],
                                                     Z_impurity_face[-1],
                                                     Z_eff_edge),
     )
@@ -3374,7 +3457,7 @@ def compute_boundary_conditions_for_t_plus_dt(
     )
     Z_i_edge = ions_edge.Z_i_face[-1]
     Z_impurity_edge = ions_edge.Z_impurity_face[-1]
-    dilution_factor_edge = formulas.calculate_main_ion_dilution_factor(
+    dilution_factor_edge = formulas_ph.calculate_main_ion_dilution_factor(
         Z_i_edge,
         Z_impurity_edge,
         runtime_params_t_plus_dt.plasma_composition.Z_eff_face[-1],
