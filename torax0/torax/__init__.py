@@ -19,9 +19,6 @@ import os
 
 # pylint: disable=g-importing-member
 import jax
-from torax._src.state import CoreProfiles
-from torax._src.state import CoreTransport
-from torax._src.state import SolverNumericOutputs
 
 # pylint: enable=g-importing-member
 

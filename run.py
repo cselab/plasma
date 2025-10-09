@@ -9,7 +9,6 @@ from torax._src import constants
 from torax._src import constants as constants_module
 from torax._src import jax_utils
 from torax._src import math_utils
-from torax._src import state
 from torax._src import xnp
 from torax._src.config import numerics as numerics_lib
 from torax._src.config import runtime_params_slice
@@ -52,6 +51,76 @@ import typing_extensions
 import xarray as xr
 
 _trapz = jax.scipy.integrate.trapezoid
+
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(frozen=True, eq=False)
+class CoreProfiles:
+    T_i: cell_variable.CellVariable
+    T_e: cell_variable.CellVariable
+    psi: cell_variable.CellVariable
+    psidot: cell_variable.CellVariable
+    n_e: cell_variable.CellVariable
+    n_i: cell_variable.CellVariable
+    n_impurity: cell_variable.CellVariable
+    impurity_fractions: Mapping[str, array_typing.FloatVector]
+    q_face: array_typing.FloatVectorFace
+    s_face: array_typing.FloatVectorFace
+    v_loop_lcfs: array_typing.FloatScalar
+    Z_i: array_typing.FloatVectorCell
+    Z_i_face: array_typing.FloatVectorFace
+    A_i: array_typing.FloatScalar
+    Z_impurity: array_typing.FloatVectorCell
+    Z_impurity_face: array_typing.FloatVectorFace
+    A_impurity: array_typing.FloatVectorCell
+    A_impurity_face: array_typing.FloatVectorFace
+    Z_eff: array_typing.FloatVectorCell
+    Z_eff_face: array_typing.FloatVectorFace
+    sigma: array_typing.FloatVectorCell
+    sigma_face: array_typing.FloatVectorFace
+    j_total: array_typing.FloatVectorCell
+    j_total_face: array_typing.FloatVectorFace
+    Ip_profile_face: array_typing.FloatVectorFace
+
+
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass
+class CoreTransport:
+    chi_face_ion: jax.Array
+    chi_face_el: jax.Array
+    d_face_el: jax.Array
+    v_face_el: jax.Array
+    chi_face_el_bohm: jax.Array | None = None
+    chi_face_el_gyrobohm: jax.Array | None = None
+    chi_face_ion_bohm: jax.Array | None = None
+    chi_face_ion_gyrobohm: jax.Array | None = None
+    chi_neo_i: jax.Array | None = None
+    chi_neo_e: jax.Array | None = None
+    D_neo_e: jax.Array | None = None
+    V_neo_e: jax.Array | None = None
+    V_neo_ware_e: jax.Array | None = None
+
+    def __post_init__(self):
+        template = self.chi_face_el
+
+    def chi_max(
+        self,
+        geo,
+    ):
+        return jnp.maximum(
+            jnp.max(
+                self.chi_face_ion * geo.g1_over_vpr2_face),
+            jnp.max(
+                self.chi_face_el * geo.g1_over_vpr2_face),
+        )
+
+
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass
+class SolverNumericOutputs:
+    outer_solver_iterations: array_typing.IntScalar = 0
+    solver_error_state: array_typing.IntScalar = 0
+    inner_solver_iterations: array_typing.IntScalar = 0
+    sawtooth_crash: array_typing.BoolScalar = False
 
 
 def face_to_cell(
@@ -303,7 +372,7 @@ class ConstantGeometryProvider(GeometryProvider):
 
 def calculate_plh_scaling_factor(
     geo: Geometry,
-    core_profiles: state.CoreProfiles,
+    core_profiles: CoreProfiles,
 ) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array]:
     line_avg_n_e = math_utils.line_average(core_profiles.n_e.value, geo)
     P_LH_hi_dens_D = (2.15 * (line_avg_n_e / 1e20)**0.782 * geo.B_0**0.772 *
@@ -322,7 +391,7 @@ def calculate_plh_scaling_factor(
 
 def calculate_scaling_law_confinement_time(
     geo: Geometry,
-    core_profiles: state.CoreProfiles,
+    core_profiles: CoreProfiles,
     Ploss: jax.Array,
     scaling_law: str,
 ) -> jax.Array:
@@ -530,7 +599,7 @@ def calculate_main_ion_dilution_factor(
 
 
 def calculate_pressure(
-    core_profiles: state.CoreProfiles,
+    core_profiles: CoreProfiles,
 ) -> tuple[cell_variable.CellVariable, ...]:
     pressure_thermal_el = cell_variable.CellVariable(
         value=core_profiles.n_e.value * core_profiles.T_e.value *
@@ -565,7 +634,7 @@ def calculate_pressure(
 
 
 def calc_pprime(
-    core_profiles: state.CoreProfiles, ) -> array_typing.FloatVector:
+    core_profiles: CoreProfiles, ) -> array_typing.FloatVector:
     _, _, p_total = calculate_pressure(core_profiles)
     psi = core_profiles.psi.face_value()
     n_e = core_profiles.n_e.face_value()
@@ -594,7 +663,7 @@ def calc_pprime(
 
 
 def calc_FFprime(
-    core_profiles: state.CoreProfiles,
+    core_profiles: CoreProfiles,
     geo: Geometry,
 ) -> array_typing.FloatVector:
     mu0 = constants.CONSTANTS.mu_0
@@ -619,7 +688,7 @@ def calculate_stored_thermal_energy(
 
 def calculate_greenwald_fraction(
     n_e_avg: array_typing.FloatScalar,
-    core_profiles: state.CoreProfiles,
+    core_profiles: CoreProfiles,
     geo: Geometry,
 ) -> array_typing.FloatScalar:
     gw_limit = (core_profiles.Ip_profile_face[-1] * 1e-6 /
@@ -629,7 +698,7 @@ def calculate_greenwald_fraction(
 
 
 def calculate_betas(
-    core_profiles: state.CoreProfiles,
+    core_profiles: CoreProfiles,
     geo: Geometry,
 ) -> array_typing.FloatScalar:
     _, _, p_total = calculate_pressure(core_profiles)
@@ -648,7 +717,7 @@ def calculate_betas(
 
 
 def coll_exchange(
-    core_profiles: state.CoreProfiles,
+    core_profiles: CoreProfiles,
     Qei_multiplier: float,
 ) -> jax.Array:
     log_lambda_ei = calculate_log_lambda_ei(core_profiles.T_e.value,
@@ -670,7 +739,7 @@ def coll_exchange(
 
 def calc_nu_star(
     geo: Geometry,
-    core_profiles: state.CoreProfiles,
+    core_profiles: CoreProfiles,
     collisionality_multiplier: float,
 ) -> jax.Array:
     log_lambda_ei_face = calculate_log_lambda_ei(
@@ -731,7 +800,7 @@ def calculate_log_lambda_ii(
 
 
 def _calculate_weighted_Z_eff(
-    core_profiles: state.CoreProfiles, ) -> jax.Array:
+    core_profiles: CoreProfiles, ) -> jax.Array:
     return (core_profiles.n_i.value * core_profiles.Z_i**2 / core_profiles.A_i
             + core_profiles.n_impurity.value * core_profiles.Z_impurity**2 /
             core_profiles.A_impurity) / core_profiles.n_e.value
@@ -940,7 +1009,7 @@ class ConductivityModel(abc.ABC):
     def calculate_conductivity(
         self,
         geometry: Geometry,
-        core_profiles: state.CoreProfiles,
+        core_profiles: CoreProfiles,
     ) -> Conductivity:
         pass
 
@@ -1299,7 +1368,7 @@ class SourceProfileFunction(Protocol):
         runtime_params: runtime_params_slice.RuntimeParams,
         geo: Geometry,
         source_name: str,
-        core_profiles: state.CoreProfiles,
+        core_profiles: CoreProfiles,
         calculated_source_profiles: SourceProfiles | None,
         unused_conductivity: Conductivity | None,
     ) -> tuple[array_typing.FloatVectorCell, ...]:
@@ -1355,7 +1424,7 @@ class SourceProfileFunction(Protocol):
         runtime_params: runtime_params_slice.RuntimeParams,
         geo: Geometry,
         source_name: str,
-        core_profiles: state.CoreProfiles,
+        core_profiles: CoreProfiles,
         calculated_source_profiles: SourceProfiles | None,
         unused_conductivity: Conductivity | None,
     ) -> tuple[array_typing.FloatVectorCell, ...]:
@@ -1411,7 +1480,7 @@ class SourceProfileFunction(Protocol):
         runtime_params: runtime_params_slice.RuntimeParams,
         geo: Geometry,
         source_name: str,
-        core_profiles: state.CoreProfiles,
+        core_profiles: CoreProfiles,
         calculated_source_profiles: SourceProfiles | None,
         unused_conductivity: Conductivity | None,
     ) -> tuple[array_typing.FloatVectorCell, ...]:
@@ -1579,7 +1648,7 @@ def default_formula(
     runtime_params: runtime_params_slice.RuntimeParams,
     geo: Geometry,
     source_name: str,
-    unused_core_profiles: state.CoreProfiles,
+    unused_core_profiles: CoreProfiles,
     unused_calculated_source_profiles: SourceProfiles | None,
     unused_conductivity: Conductivity | None,
 ):
@@ -1655,7 +1724,7 @@ def calc_generic_particle_source(
     runtime_params: runtime_params_slice.RuntimeParams,
     geo: Geometry,
     source_name: str,
-    unused_state: state.CoreProfiles,
+    unused_state: CoreProfiles,
     unused_calculated_source_profiles: SourceProfiles | None,
     unused_conductivity: Conductivity | None,
 ) -> tuple[array_typing.FloatVectorCell, ...]:
@@ -1727,7 +1796,7 @@ def calc_pellet_source(
     runtime_params: runtime_params_slice.RuntimeParams,
     geo: Geometry,
     source_name: str,
-    unused_state: state.CoreProfiles,
+    unused_state: CoreProfiles,
     unused_calculated_source_profiles: SourceProfiles | None,
     unused_conductivity: Conductivity | None,
 ) -> tuple[array_typing.FloatVectorCell, ...]:
@@ -1845,7 +1914,7 @@ def fusion_heat_model_func(
     runtime_params: runtime_params_slice.RuntimeParams,
     geo: Geometry,
     unused_source_name: str,
-    core_profiles: state.CoreProfiles,
+    core_profiles: CoreProfiles,
     unused_calculated_source_profiles: SourceProfiles | None,
     unused_conductivity: Conductivity | None,
 ):
@@ -1988,7 +2057,7 @@ class QeiSource(Source):
         self,
         runtime_params: runtime_params_slice.RuntimeParams,
         geo: Geometry,
-        core_profiles: state.CoreProfiles,
+        core_profiles: CoreProfiles,
     ):
         return jax.lax.cond(
             runtime_params.sources[self.source_name].mode == Mode.MODEL_BASED,
@@ -2001,7 +2070,7 @@ class QeiSource(Source):
         )
 
     def get_value(self, runtime_params: runtime_params_slice.RuntimeParams,
-                  geo: Geometry, core_profiles: state.CoreProfiles,
+                  geo: Geometry, core_profiles: CoreProfiles,
                   calculated_source_profiles, conductivity):
         raise NotImplementedError('Call get_qei() instead.')
 
@@ -2262,7 +2331,7 @@ def build_standard_source_profiles(
     calculated_source_profiles: SourceProfiles,
     runtime_params: runtime_params_slice.RuntimeParams,
     geo: Geometry,
-    core_profiles: state.CoreProfiles,
+    core_profiles: CoreProfiles,
     source_models: SourceModels,
     explicit: bool = True,
     conductivity=None,
@@ -3117,7 +3186,7 @@ class NormalizedLogarithmicGradients:
     @classmethod
     def from_profiles(
         cls,
-        core_profiles: state.CoreProfiles,
+        core_profiles: CoreProfiles,
         radial_coordinate: jnp.ndarray,
         reference_length: jnp.ndarray,
     ):
@@ -3218,7 +3287,7 @@ class QuasilinearTransportModel(TransportModel):
         quasilinear_inputs: QuasilinearInputs,
         transport,
         geo: Geometry,
-        core_profiles: state.CoreProfiles,
+        core_profiles: CoreProfiles,
         gradient_reference_length: chex.Numeric,
         gyrobohm_flux_reference_length: chex.Numeric,
     ):
@@ -3647,7 +3716,7 @@ class QLKNNTransportModel0(QualikizBasedTransportModel):
         self,
         runtime_config_inputs: QLKNNRuntimeConfigInputs,
         geo: Geometry,
-        core_profiles: state.CoreProfiles,
+        core_profiles: CoreProfiles,
     ):
         qualikiz_inputs = self._prepare_qualikiz_inputs(
             transport=runtime_config_inputs.transport,
@@ -3769,7 +3838,7 @@ def calculate_total_transport_coeffs(pedestal_model, transport_model,
         core_profiles=core_profiles,
         pedestal_model_output=pedestal_model_output,
     )
-    return state.CoreTransport(**dataclasses.asdict(turbulent_transport))
+    return CoreTransport(**dataclasses.asdict(turbulent_transport))
 
 
 class Neoclassical0(torax_pydantic.BaseModelFrozen):
@@ -4512,7 +4581,7 @@ def _get_integrated_source_value(
 
 def _calculate_integrated_sources(
     geo: Geometry,
-    core_profiles: state.CoreProfiles,
+    core_profiles: CoreProfiles,
     core_sources: SourceProfiles,
     runtime_params: runtime_params_slice.RuntimeParams,
 ):
@@ -5056,7 +5125,7 @@ def initial_core_profiles0(runtime_params, geo, source_models,
     )
     psi = cell_variable.CellVariable(value=np.zeros_like(geo.rho),
                                      dr=geo.drho_norm)
-    core_profiles = state.CoreProfiles(
+    core_profiles = CoreProfiles(
         T_i=T_i,
         T_e=T_e,
         n_e=n_e,
@@ -5368,7 +5437,7 @@ def update_core_and_source_profiles_after_step(
         geo,
         updated_core_profiles_t_plus_dt.psi,
     )
-    intermediate_core_profiles = state.CoreProfiles(
+    intermediate_core_profiles = CoreProfiles(
         T_i=updated_core_profiles_t_plus_dt.T_i,
         T_e=updated_core_profiles_t_plus_dt.T_e,
         psi=updated_core_profiles_t_plus_dt.psi,
@@ -5641,7 +5710,7 @@ class CoeffsCallback:
         self,
         runtime_params: runtime_params_slice.RuntimeParams,
         geo: Geometry,
-        core_profiles: state.CoreProfiles,
+        core_profiles: CoreProfiles,
         x: tuple[cell_variable.CellVariable, ...],
         explicit_source_profiles: SourceProfiles,
         allow_pereverzev: bool = False,
@@ -5928,7 +5997,7 @@ def _calc_coeffs_full(runtime_params,
         source_mat_cell=source_mat_cell,
         source_cell=source_cell,
         auxiliary_outputs=(merged_source_profiles, conductivity,
-                           state.CoreTransport(
+                           CoreTransport(
                                **dataclasses.asdict(turbulent_transport))),
     )
     return coeffs
@@ -5942,7 +6011,7 @@ def _calc_coeffs_full(runtime_params,
 )
 def _calc_coeffs_reduced(
     geo: Geometry,
-    core_profiles: state.CoreProfiles,
+    core_profiles: CoreProfiles,
     evolving_names: tuple[str, ...],
 ):
     tic_T_i = core_profiles.n_i.value * geo.vpr**(5.0 / 3.0)
@@ -6170,12 +6239,12 @@ class Solver(abc.ABC):
         runtime_params_t_plus_dt: runtime_params_slice.RuntimeParams,
         geo_t: Geometry,
         geo_t_plus_dt: Geometry,
-        core_profiles_t: state.CoreProfiles,
-        core_profiles_t_plus_dt: state.CoreProfiles,
+        core_profiles_t: CoreProfiles,
+        core_profiles_t_plus_dt: CoreProfiles,
         explicit_source_profiles: SourceProfiles,
     ) -> tuple[
             tuple[cell_variable.CellVariable, ...],
-            state.SolverNumericOutputs,
+            SolverNumericOutputs,
     ]:
         if runtime_params_t.numerics.evolving_names:
             (
@@ -6194,7 +6263,7 @@ class Solver(abc.ABC):
             )
         else:
             x_new = tuple()
-            solver_numeric_output = state.SolverNumericOutputs()
+            solver_numeric_output = SolverNumericOutputs()
         return (
             x_new,
             solver_numeric_output,
@@ -6207,13 +6276,13 @@ class Solver(abc.ABC):
         runtime_params_t_plus_dt: runtime_params_slice.RuntimeParams,
         geo_t: Geometry,
         geo_t_plus_dt: Geometry,
-        core_profiles_t: state.CoreProfiles,
-        core_profiles_t_plus_dt: state.CoreProfiles,
+        core_profiles_t: CoreProfiles,
+        core_profiles_t_plus_dt: CoreProfiles,
         explicit_source_profiles: SourceProfiles,
         evolving_names: tuple[str, ...],
     ) -> tuple[
             tuple[cell_variable.CellVariable, ...],
-            state.SolverNumericOutputs,
+            SolverNumericOutputs,
     ]:
         raise NotImplementedError(
             f'{type(self)} must implement `_x_new` or '
@@ -6233,7 +6302,7 @@ def predictor_corrector_method(
     geo_t_plus_dt: Geometry,
     x_old: tuple[cell_variable.CellVariable, ...],
     x_new_guess: tuple[cell_variable.CellVariable, ...],
-    core_profiles_t_plus_dt: state.CoreProfiles,
+    core_profiles_t_plus_dt: CoreProfiles,
     coeffs_exp,
     explicit_source_profiles: SourceProfiles,
     coeffs_callback: CoeffsCallback,
@@ -6289,13 +6358,13 @@ class LinearThetaMethod0(Solver):
         runtime_params_t_plus_dt: runtime_params_slice.RuntimeParams,
         geo_t: Geometry,
         geo_t_plus_dt: Geometry,
-        core_profiles_t: state.CoreProfiles,
-        core_profiles_t_plus_dt: state.CoreProfiles,
+        core_profiles_t: CoreProfiles,
+        core_profiles_t_plus_dt: CoreProfiles,
         explicit_source_profiles: SourceProfiles,
         evolving_names: tuple[str, ...],
     ) -> tuple[
             tuple[cell_variable.CellVariable, ...],
-            state.SolverNumericOutputs,
+            SolverNumericOutputs,
     ]:
         x_old = core_profiles_to_solver_x_tuple(core_profiles_t,
                                                 evolving_names)
@@ -6330,7 +6399,7 @@ class LinearThetaMethod0(Solver):
                 1 + runtime_params_t_plus_dt.solver.n_corrector_steps)
         else:
             inner_solver_iterations = 1
-        solver_numeric_outputs = state.SolverNumericOutputs(
+        solver_numeric_outputs = SolverNumericOutputs(
             inner_solver_iterations=inner_solver_iterations,
             outer_solver_iterations=1,
             solver_error_state=0,
@@ -6591,16 +6660,16 @@ class StateHistory:
         self._geometries = [state.geometry for state in state_history]
         self._stacked_geometry = stack_geometries(self.geometries)
         stack = lambda *ys: np.stack(ys)
-        self._stacked_core_profiles: state.CoreProfiles = jax.tree_util.tree_map(
+        self._stacked_core_profiles: CoreProfiles = jax.tree_util.tree_map(
             stack, *self._core_profiles)
         self._stacked_core_sources: SourceProfiles = (jax.tree_util.tree_map(
             stack, *self._core_sources))
-        self._stacked_core_transport: state.CoreTransport = jax.tree_util.tree_map(
+        self._stacked_core_transport: CoreTransport = jax.tree_util.tree_map(
             stack, *self._transport)
         self._stacked_post_processed_outputs: (
             PostProcessedOutputs) = jax.tree_util.tree_map(
                 stack, *post_processed_outputs_history)
-        self._stacked_solver_numeric_outputs: state.SolverNumericOutputs = (
+        self._stacked_solver_numeric_outputs: SolverNumericOutputs = (
             jax.tree_util.tree_map(stack, *self._solver_numeric_outputs))
         self._times = np.array([state.t for state in state_history])
         self._rho_cell_norm = state_history[0].geometry.rho_norm
@@ -6995,11 +7064,11 @@ def update_geometries_with_Phibdot(*, dt, geo_t, geo_t_plus_dt):
 class ToraxSimState:
     t: array_typing.FloatScalar
     dt: array_typing.FloatScalar
-    core_profiles: state.CoreProfiles
-    core_transport: state.CoreTransport
+    core_profiles: CoreProfiles
+    core_transport: CoreTransport
     core_sources: SourceProfiles
     geometry: Any
-    solver_numeric_outputs: state.SolverNumericOutputs
+    solver_numeric_outputs: SolverNumericOutputs
 
     def has_nan(self) -> bool:
         return any([np.any(np.isnan(x)) for x in jax.tree.leaves(self)])
@@ -7038,7 +7107,7 @@ def _get_initial_state(runtime_params, geo, step_fn):
         core_profiles=initial_core_profiles,
         core_sources=initial_core_sources,
         core_transport=transport_coeffs,
-        solver_numeric_outputs=state.SolverNumericOutputs(
+        solver_numeric_outputs=SolverNumericOutputs(
             solver_error_state=0,
             outer_solver_iterations=0,
             inner_solver_iterations=0,
@@ -7152,7 +7221,7 @@ class SimulationStepFn:
                 core_profiles_t_plus_dt=core_profiles_t_plus_dt,
                 explicit_source_profiles=explicit_source_profiles,
             )
-            solver_numeric_outputs = state.SolverNumericOutputs(
+            solver_numeric_outputs = SolverNumericOutputs(
                 solver_error_state=solver_numeric_outputs.solver_error_state,
                 outer_solver_iterations=old_solver_outputs.
                 outer_solver_iterations + 1,
@@ -7180,7 +7249,7 @@ class SimulationStepFn:
                     core_profiles_to_solver_x_tuple(input_state.core_profiles,
                                                     evolving_names),
                     initial_dt,
-                    state.SolverNumericOutputs(
+                    SolverNumericOutputs(
                         solver_error_state=1,
                         outer_solver_iterations=0,
                         inner_solver_iterations=0,
