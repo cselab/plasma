@@ -6,10 +6,6 @@ from jax import numpy as jnp
 import numpy as np
 
 T = TypeVar('T')
-BooleanNumeric: TypeAlias = Any
-_State = ParamSpec('_State')
-
-
 @functools.cache
 def get_dtype():
     precision = os.getenv('JAX_PRECISION', 'f64')
