@@ -8,7 +8,6 @@ from torax._src import array_typing
 from torax._src import constants
 from torax._src import constants as constants_module
 from torax._src import jax_utils
-from torax._src import math_utils
 from torax._src import xnp
 from torax._src.config import runtime_params_slice
 from torax._src.config import runtime_validation_utils
@@ -53,6 +52,70 @@ import pydantic
 from torax._src import array_typing
 from torax._src.torax_pydantic import torax_pydantic
 from typing_extensions import Self
+
+import enum
+from jax import numpy as jnp
+import jaxtyping as jt
+from torax._src import array_typing
+from torax._src import jax_utils
+
+
+@enum.unique
+class IntegralPreservationQuantity(enum.Enum):
+    VOLUME = 'volume'
+    SURFACE = 'surface'
+    VALUE = 'value'
+
+
+@array_typing.jaxtyped
+def tridiag(
+    diag: jt.Shaped[array_typing.Array, 'size'],
+    above: jt.Shaped[array_typing.Array, 'size-1'],
+    below: jt.Shaped[array_typing.Array, 'size-1'],
+) -> jt.Shaped[array_typing.Array, 'size size']:
+    return jnp.diag(diag) + jnp.diag(above, 1) + jnp.diag(below, -1)
+
+
+@jax_utils.jit
+@array_typing.jaxtyped
+def cell_integration(x, geo):
+    if x.shape != geo.rho_norm.shape:
+        raise ValueError(
+            'For cell_integration, input "x" must have same shape as the cell grid'
+            f'Got x.shape={x.shape}, expected {geo.rho_norm.shape}.')
+    return jnp.sum(x * geo.drho_norm)
+
+
+@array_typing.jaxtyped
+def area_integration(
+    value,
+    geo,
+):
+    return cell_integration(value * geo.spr, geo)
+
+
+@array_typing.jaxtyped
+def volume_integration(
+    value,
+    geo,
+):
+    return cell_integration(value * geo.vpr, geo)
+
+
+@array_typing.jaxtyped
+def line_average(
+    value,
+    geo,
+):
+    return cell_integration(value, geo)
+
+
+@array_typing.jaxtyped
+def volume_average(
+    value,
+    geo,
+):
+    return cell_integration(value * geo.vpr, geo) / geo.volume_face[-1]
 
 
 @jax.tree_util.register_dataclass
@@ -301,7 +364,7 @@ def make_convection_terms(v_face,
     above = above[:-1]
     below = (1.0 - left_alpha) * left_v / var.dr
     below = below[1:]
-    mat = math_utils.tridiag(diag, above, below)
+    mat = tridiag(diag, above, below)
     vec = jnp.zeros_like(diag)
     mat_value = (v_face[0] - right_alpha[0] * v_face[1]) / var.dr
     vec_value = (-v_face[0] * (1.0 - left_alpha[0]) *
@@ -352,7 +415,7 @@ def make_diffusion_terms(
         diag = diag.at[-1].set(-d_face[-2])
         vec = vec.at[-1].set(d_face[-1] * var.right_face_grad_constraint /
                              var.dr)
-    mat = math_utils.tridiag(diag, off, off) / denom
+    mat = tridiag(diag, off, off) / denom
     return mat, vec
 
 
@@ -676,7 +739,7 @@ def calculate_plh_scaling_factor(
     geo: Geometry,
     core_profiles: CoreProfiles,
 ) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array]:
-    line_avg_n_e = math_utils.line_average(core_profiles.n_e.value, geo)
+    line_avg_n_e = line_average(core_profiles.n_e.value, geo)
     P_LH_hi_dens_D = (2.15 * (line_avg_n_e / 1e20)**0.782 * geo.B_0**0.772 *
                       geo.a_minor**0.975 * geo.R_major**0.999 * 1e6)
     A_deuterium = constants.ION_PROPERTIES_DICT['D'].A
@@ -753,7 +816,7 @@ def calculate_scaling_law_confinement_time(
     scaled_Ip = core_profiles.Ip_profile_face[-1] / 1e6
     scaled_Ploss = Ploss / 1e6
     B = geo.B_0
-    line_avg_n_e = (math_utils.line_average(core_profiles.n_e.value, geo) /
+    line_avg_n_e = (line_average(core_profiles.n_e.value, geo) /
                     1e19)
     R = geo.R_major
     inverse_aspect_ratio = geo.a_minor / geo.R_major
@@ -978,9 +1041,9 @@ def calculate_stored_thermal_energy(
     p_tot: CellVariable,
     geo: Geometry,
 ) -> tuple[array_typing.FloatScalar, ...]:
-    wth_el = math_utils.volume_integration(1.5 * p_el.value, geo)
-    wth_ion = math_utils.volume_integration(1.5 * p_ion.value, geo)
-    wth_tot = math_utils.volume_integration(1.5 * p_tot.value, geo)
+    wth_el = volume_integration(1.5 * p_el.value, geo)
+    wth_ion = volume_integration(1.5 * p_ion.value, geo)
+    wth_tot = volume_integration(1.5 * p_tot.value, geo)
     return wth_el, wth_ion, wth_tot
 
 
@@ -1000,7 +1063,7 @@ def calculate_betas(
     geo: Geometry,
 ) -> array_typing.FloatScalar:
     _, _, p_total = calculate_pressure(core_profiles)
-    p_total_volume_avg = math_utils.volume_average(p_total.value, geo)
+    p_total_volume_avg = volume_average(p_total.value, geo)
     magnetic_pressure_on_axis = geo.B_0**2 / (2 * constants.CONSTANTS.mu_0)
     beta_tor = p_total_volume_avg / (magnetic_pressure_on_axis +
                                      constants.CONSTANTS.eps)
@@ -1545,14 +1608,14 @@ def exponential_profile(
 ):
     r = geo.rho_norm
     S = jnp.exp(-(decay_start - r) / width)
-    C = total / math_utils.volume_integration(S, geo)
+    C = total / volume_integration(S, geo)
     return C * S
 
 
 def gaussian_profile(geo, *, center, width, total):
     r = geo.rho_norm
     S = jnp.exp(-((r - center)**2) / (2 * width**2))
-    C = total / math_utils.volume_integration(S, geo)
+    C = total / volume_integration(S, geo)
     return C * S
 
 
@@ -1846,7 +1909,7 @@ def calculate_generic_current(runtime_params, geo, source_name, unused_state,
     generic_current_form = jnp.exp(
         -((geo.rho_norm - source_params.gaussian_location)**2) /
         (2 * source_params.gaussian_width**2))
-    Cext = I_generic / math_utils.area_integration(generic_current_form, geo)
+    Cext = I_generic / area_integration(generic_current_form, geo)
     generic_current_profile = Cext * generic_current_form
     return (generic_current_profile, )
 
@@ -4887,7 +4950,7 @@ def _calculate_integrated_sources(
     integrated['S_total'] = jnp.array(0.0, dtype=jax_utils.get_dtype())
     qei = core_sources.qei.qei_coef * (core_profiles.T_e.value -
                                        core_profiles.T_i.value)
-    integrated['P_ei_exchange_i'] = math_utils.volume_integration(qei, geo)
+    integrated['P_ei_exchange_i'] = volume_integration(qei, geo)
     integrated['P_ei_exchange_e'] = -integrated['P_ei_exchange_i']
     integrated['P_SOL_i'] = integrated['P_ei_exchange_i']
     integrated['P_SOL_e'] = integrated['P_ei_exchange_e']
@@ -4899,9 +4962,9 @@ def _calculate_integrated_sources(
         is_in_T_i = key in core_sources.T_i
         is_in_T_e = key in core_sources.T_e
         integrated[f'{value}_i'] = _get_integrated_source_value(
-            core_sources.T_i, key, geo, math_utils.volume_integration)
+            core_sources.T_i, key, geo, volume_integration)
         integrated[f'{value}_e'] = _get_integrated_source_value(
-            core_sources.T_e, key, geo, math_utils.volume_integration)
+            core_sources.T_e, key, geo, volume_integration)
         integrated[f'{value}_total'] = (integrated[f'{value}_i'] +
                                         integrated[f'{value}_e'])
         integrated['P_SOL_i'] += integrated[f'{value}_i']
@@ -4920,17 +4983,17 @@ def _calculate_integrated_sources(
                     f'{value}_total']
     for key, value in EL_HEAT_SOURCE_TRANSFORMATIONS.items():
         integrated[f'{value}'] = _get_integrated_source_value(
-            core_sources.T_e, key, geo, math_utils.volume_integration)
+            core_sources.T_e, key, geo, volume_integration)
         integrated['P_SOL_e'] += integrated[f'{value}']
         if key in EXTERNAL_HEATING_SOURCES:
             integrated['P_aux_e'] += integrated[f'{value}']
             integrated['P_external_injected'] += integrated[f'{value}']
     for key, value in CURRENT_SOURCE_TRANSFORMATIONS.items():
         integrated[f'{value}'] = _get_integrated_source_value(
-            core_sources.psi, key, geo, math_utils.area_integration)
+            core_sources.psi, key, geo, area_integration)
     for key, value in PARTICLE_SOURCE_TRANSFORMATIONS.items():
         integrated[f'{value}'] = _get_integrated_source_value(
-            core_sources.n_e, key, geo, math_utils.volume_integration)
+            core_sources.n_e, key, geo, volume_integration)
         integrated['S_total'] += integrated[f'{value}']
     integrated['P_SOL_total'] = integrated['P_SOL_i'] + integrated['P_SOL_e']
     integrated['P_aux_total'] = integrated['P_aux_i'] + integrated['P_aux_e']
@@ -5028,17 +5091,17 @@ def make_post_processed_outputs(
         E_external_injected = 0.0
         E_external_total = 0.0
     q95 = calc_q95(psi_norm_face, sim_state.core_profiles.q_face)
-    te_volume_avg = math_utils.volume_average(
+    te_volume_avg = volume_average(
         sim_state.core_profiles.T_e.value, sim_state.geometry)
-    ti_volume_avg = math_utils.volume_average(
+    ti_volume_avg = volume_average(
         sim_state.core_profiles.T_i.value, sim_state.geometry)
-    n_e_volume_avg = math_utils.volume_average(
+    n_e_volume_avg = volume_average(
         sim_state.core_profiles.n_e.value, sim_state.geometry)
-    n_i_volume_avg = math_utils.volume_average(
+    n_i_volume_avg = volume_average(
         sim_state.core_profiles.n_i.value, sim_state.geometry)
-    n_e_line_avg = math_utils.line_average(sim_state.core_profiles.n_e.value,
+    n_e_line_avg = line_average(sim_state.core_profiles.n_e.value,
                                            sim_state.geometry)
-    n_i_line_avg = math_utils.line_average(sim_state.core_profiles.n_i.value,
+    n_i_line_avg = line_average(sim_state.core_profiles.n_i.value,
                                            sim_state.geometry)
     fgw_n_e_volume_avg = calculate_greenwald_fraction(n_e_volume_avg,
                                                       sim_state.core_profiles,
@@ -5056,7 +5119,7 @@ def make_post_processed_outputs(
         sim_state.geometry.rho_face_norm,
         sim_state.core_profiles.q_face,
     ))
-    I_bootstrap = math_utils.area_integration(
+    I_bootstrap = area_integration(
         sim_state.core_sources.bootstrap_current.j_bootstrap,
         sim_state.geometry)
     j_external = sum(sim_state.core_sources.psi.values())
