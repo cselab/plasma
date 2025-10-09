@@ -1,3 +1,6 @@
+import scipy
+import os
+import torax
 from absl import logging
 from collections.abc import Callable
 from collections.abc import Mapping
@@ -18,10 +21,6 @@ from torax._src.fvm import cell_variable
 from torax._src.fvm import convection_terms
 from torax._src.fvm import diffusion_terms
 from torax._src.fvm import enums
-from torax._src.geometry import geometry
-from torax._src.geometry import geometry as geometry_lib
-from torax._src.geometry import geometry_provider
-from torax._src.geometry import standard_geometry
 from torax._src.torax_pydantic import interpolated_param_1d
 from torax._src.torax_pydantic import interpolated_param_2d
 from torax._src.torax_pydantic import model_base
@@ -54,8 +53,256 @@ import xarray as xr
 
 _trapz = jax.scipy.integrate.trapezoid
 
+
+def face_to_cell(
+    face: array_typing.FloatVectorFace, ) -> array_typing.FloatVectorCell:
+    return 0.5 * (face[:-1] + face[1:])
+
+
+@enum.unique
+class GeometryType(enum.IntEnum):
+    CIRCULAR = 0
+    CHEASE = 1
+    FBT = 2
+    EQDSK = 3
+    IMAS = 4
+
+
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(frozen=True)
+class Geometry:
+    geometry_type: GeometryType
+    torax_mesh: None
+    Phi: array_typing.Array
+    Phi_face: array_typing.Array
+    R_major: array_typing.FloatScalar
+    a_minor: array_typing.FloatScalar
+    B_0: array_typing.FloatScalar
+    volume: array_typing.Array
+    volume_face: array_typing.Array
+    area: array_typing.Array
+    area_face: array_typing.Array
+    vpr: array_typing.Array
+    vpr_face: array_typing.Array
+    spr: array_typing.Array
+    spr_face: array_typing.Array
+    delta_face: array_typing.Array
+    elongation: array_typing.Array
+    elongation_face: array_typing.Array
+    g0: array_typing.Array
+    g0_face: array_typing.Array
+    g1: array_typing.Array
+    g1_face: array_typing.Array
+    g2: array_typing.Array
+    g2_face: array_typing.Array
+    g3: array_typing.Array
+    g3_face: array_typing.Array
+    gm4: array_typing.Array
+    gm4_face: array_typing.Array
+    gm5: array_typing.Array
+    gm5_face: array_typing.Array
+    g2g3_over_rhon: array_typing.Array
+    g2g3_over_rhon_face: array_typing.Array
+    g2g3_over_rhon_hires: array_typing.Array
+    F: array_typing.Array
+    F_face: array_typing.Array
+    F_hires: array_typing.Array
+    R_in: array_typing.Array
+    R_in_face: array_typing.Array
+    R_out: array_typing.Array
+    R_out_face: array_typing.Array
+    spr_hires: array_typing.Array
+    rho_hires_norm: array_typing.Array
+    rho_hires: array_typing.Array
+    Phi_b_dot: array_typing.FloatScalar
+    _z_magnetic_axis: array_typing.FloatScalar | None
+
+    def __eq__(self, other: 'Geometry') -> bool:
+        try:
+            chex.assert_trees_all_equal(self, other)
+        except AssertionError:
+            return False
+        return True
+
+    @property
+    def q_correction_factor(self) -> chex.Numeric:
+        return jnp.where(
+            self.geometry_type == GeometryType.CIRCULAR.value,
+            1.25,
+            1,
+        )
+
+    @property
+    def rho_norm(self) -> array_typing.Array:
+        return self.torax_mesh.cell_centers
+
+    @property
+    def rho_face_norm(self) -> array_typing.Array:
+        return self.torax_mesh.face_centers
+
+    @property
+    def drho_norm(self) -> array_typing.Array:
+        return jnp.array(self.torax_mesh.dx)
+
+    @property
+    def rho_face(self) -> array_typing.Array:
+        return self.rho_face_norm * jnp.expand_dims(self.rho_b, axis=-1)
+
+    @property
+    def rho(self) -> array_typing.Array:
+        return self.rho_norm * jnp.expand_dims(self.rho_b, axis=-1)
+
+    @property
+    def r_mid(self) -> array_typing.Array:
+        return (self.R_out - self.R_in) / 2
+
+    @property
+    def r_mid_face(self) -> array_typing.Array:
+        return (self.R_out_face - self.R_in_face) / 2
+
+    @property
+    def epsilon(self) -> array_typing.Array:
+        return (self.R_out - self.R_in) / (self.R_out + self.R_in)
+
+    @property
+    def epsilon_face(self) -> array_typing.Array:
+        return (self.R_out_face - self.R_in_face) / (self.R_out_face +
+                                                     self.R_in_face)
+
+    @property
+    def drho(self) -> array_typing.Array:
+        return self.drho_norm * self.rho_b
+
+    @property
+    def rho_b(self) -> array_typing.FloatScalar:
+        return jnp.sqrt(self.Phi_b / np.pi / self.B_0)
+
+    @property
+    def Phi_b(self) -> array_typing.FloatScalar:
+        return self.Phi_face[..., -1]
+
+    @property
+    def g1_over_vpr(self) -> array_typing.Array:
+        return self.g1 / self.vpr
+
+    @property
+    def g1_over_vpr2(self) -> array_typing.Array:
+        return self.g1 / self.vpr**2
+
+    @property
+    def g0_over_vpr_face(self) -> jax.Array:
+        bulk = self.g0_face[..., 1:] / self.vpr_face[..., 1:]
+        first_element = jnp.ones_like(self.rho_b) / self.rho_b
+        return jnp.concatenate([jnp.expand_dims(first_element, axis=-1), bulk],
+                               axis=-1)
+
+    @property
+    def g1_over_vpr_face(self) -> jax.Array:
+        bulk = self.g1_face[..., 1:] / self.vpr_face[..., 1:]
+        first_element = jnp.zeros_like(self.rho_b)
+        return jnp.concatenate([jnp.expand_dims(first_element, axis=-1), bulk],
+                               axis=-1)
+
+    @property
+    def g1_over_vpr2_face(self) -> jax.Array:
+        bulk = self.g1_face[..., 1:] / self.vpr_face[..., 1:]**2
+        first_element = jnp.ones_like(self.rho_b) / self.rho_b**2
+        return jnp.concatenate([jnp.expand_dims(first_element, axis=-1), bulk],
+                               axis=-1)
+
+    @property
+    def gm9(self) -> jax.Array:
+        return 2 * jnp.pi * self.spr / self.vpr
+
+    @property
+    def gm9_face(self) -> jax.Array:
+        bulk = 2 * jnp.pi * self.spr_face[..., 1:] / self.vpr_face[..., 1:]
+        first_element = 1 / self.R_major
+        return jnp.concatenate([jnp.expand_dims(first_element, axis=-1), bulk],
+                               axis=-1)
+
+
+def stack_geometries(geometries: Sequence[Geometry]) -> Geometry:
+    first_geo = geometries[0]
+    torax_mesh = first_geo.torax_mesh
+    geometry_type = first_geo.geometry_type
+    stacked_data = {}
+    for field in dataclasses.fields(first_geo):
+        field_name = field.name
+        field_value = getattr(first_geo, field_name)
+        if isinstance(field_value,
+                      (array_typing.Array, array_typing.FloatScalar)):
+            field_values = [getattr(geo, field_name) for geo in geometries]
+            stacked_data[field_name] = np.stack(field_values)
+        else:
+            stacked_data[field_name] = field_value
+    return first_geo.__class__(**stacked_data)
+
+
+@enum.unique
+class GeometrySource(enum.Enum):
+    CHEASE = 0
+    FBT = 1
+    EQDSK = 2
+
+
+def _load_CHEASE_data(file_path):
+    with open(file_path, 'r') as file:
+        chease_data = {}
+        var_labels = file.readline().strip().split()[1:]
+        for var_label in var_labels:
+            chease_data[var_label] = []
+        for line in file:
+            values = line.strip().split()
+            for var_label, value in zip(var_labels, values):
+                chease_data[var_label].append(float(value))
+    return {
+        var_label: np.asarray(chease_data[var_label])
+        for var_label in chease_data
+    }
+
+
+def get_geometry_dir(geometry_dir):
+    if geometry_dir is None:
+        geometry_dir = os.path.join(torax.__path__[0], 'data/third_party/geo')
+    return geometry_dir
+
+
+def load_geo_data(geometry_dir, geometry_file, geometry_source):
+    geometry_dir = get_geometry_dir(geometry_dir)
+    filepath = os.path.join(geometry_dir, geometry_file)
+    return _load_CHEASE_data(file_path=filepath)
+
+
+class GeometryProvider(Protocol):
+
+    def __call__(
+        self,
+        t: chex.Numeric,
+    ):
+        pass
+
+    @property
+    def torax_mesh(self):
+        pass
+
+
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(frozen=True)
+class ConstantGeometryProvider(GeometryProvider):
+    geo: Geometry
+
+    def __call__(self, t: chex.Numeric):
+        del t
+        return self.geo
+
+    @property
+    def torax_mesh(self):
+        return self.geo.torax_mesh
+
+
 def calculate_plh_scaling_factor(
-    geo: geometry.Geometry,
+    geo: Geometry,
     core_profiles: state.CoreProfiles,
 ) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array]:
     line_avg_n_e = math_utils.line_average(core_profiles.n_e.value, geo)
@@ -74,7 +321,7 @@ def calculate_plh_scaling_factor(
 
 
 def calculate_scaling_law_confinement_time(
-    geo: geometry.Geometry,
+    geo: Geometry,
     core_profiles: state.CoreProfiles,
     Ploss: jax.Array,
     scaling_law: str,
@@ -155,7 +402,7 @@ def calculate_scaling_law_confinement_time(
 
 
 def calc_q_face(
-    geo: geometry.Geometry,
+    geo: Geometry,
     psi: cell_variable.CellVariable,
 ) -> array_typing.FloatVectorFace:
     inv_iota = jnp.abs(
@@ -167,7 +414,7 @@ def calc_q_face(
 
 
 def calc_j_total(
-    geo: geometry.Geometry,
+    geo: Geometry,
     psi: cell_variable.CellVariable,
 ) -> tuple[
         array_typing.FloatVectorCell,
@@ -189,8 +436,7 @@ def calc_j_total(
     return j_total, j_total_face, Ip_profile_face
 
 
-def calc_s_face(geo: geometry.Geometry,
-                psi: cell_variable.CellVariable) -> jax.Array:
+def calc_s_face(geo: Geometry, psi: cell_variable.CellVariable) -> jax.Array:
     iota_scaled = jnp.abs((psi.face_grad()[1:] / geo.rho_face_norm[1:]))
     iota_scaled0 = jnp.expand_dims(jnp.abs(psi.face_grad()[1] / geo.drho_norm),
                                    axis=0)
@@ -200,8 +446,7 @@ def calc_s_face(geo: geometry.Geometry,
     return s_face
 
 
-def calc_s_rmid(geo: geometry.Geometry,
-                psi: cell_variable.CellVariable) -> jax.Array:
+def calc_s_rmid(geo: Geometry, psi: cell_variable.CellVariable) -> jax.Array:
     iota_scaled = jnp.abs((psi.face_grad()[1:] / geo.rho_face_norm[1:]))
     iota_scaled0 = jnp.expand_dims(jnp.abs(psi.face_grad()[1] / geo.drho_norm),
                                    axis=0)
@@ -211,8 +456,7 @@ def calc_s_rmid(geo: geometry.Geometry,
     return s_face
 
 
-def _calc_bpol2(geo: geometry.Geometry,
-                psi: cell_variable.CellVariable) -> jax.Array:
+def _calc_bpol2(geo: Geometry, psi: cell_variable.CellVariable) -> jax.Array:
     bpol2_bulk = ((psi.face_grad()[1:] / (2 * jnp.pi))**2 * geo.g2_face[1:] /
                   geo.vpr_face[1:]**2)
     bpol2_axis = jnp.array([0.0], dtype=jax_utils.get_dtype())
@@ -220,8 +464,7 @@ def _calc_bpol2(geo: geometry.Geometry,
     return bpol2_face
 
 
-def calc_Wpol(geo: geometry.Geometry,
-              psi: cell_variable.CellVariable) -> jax.Array:
+def calc_Wpol(geo: Geometry, psi: cell_variable.CellVariable) -> jax.Array:
     bpol2 = _calc_bpol2(geo, psi)
     Wpol = _trapz(bpol2 * geo.vpr_face,
                   geo.rho_face_norm) / (2 * constants.CONSTANTS.mu_0)
@@ -246,7 +489,7 @@ def calc_q95(
 
 def calculate_psi_grad_constraint_from_Ip(
     Ip: array_typing.FloatScalar,
-    geo: geometry.Geometry,
+    geo: Geometry,
 ) -> jax.Array:
     return (Ip * (16 * jnp.pi**3 * constants.CONSTANTS.mu_0 * geo.Phi_b) /
             (geo.g2g3_over_rhon_face[-1] * geo.F_face[-1]))
@@ -258,7 +501,7 @@ def calculate_psidot_from_psi_sources(
     sigma: array_typing.FloatVector,
     resistivity_multiplier: float,
     psi: cell_variable.CellVariable,
-    geo: geometry.Geometry,
+    geo: Geometry,
 ) -> jax.Array:
     consts = constants.CONSTANTS
     toc_psi = (1.0 / resistivity_multiplier * geo.rho_norm * sigma *
@@ -276,6 +519,7 @@ def calculate_psidot_from_psi_sources(
     c += psi_sources
     psidot = (jnp.dot(c_mat, psi.value) + c) / toc_psi
     return psidot
+
 
 def calculate_main_ion_dilution_factor(
     Z_i: array_typing.FloatScalar,
@@ -351,7 +595,7 @@ def calc_pprime(
 
 def calc_FFprime(
     core_profiles: state.CoreProfiles,
-    geo: geometry.Geometry,
+    geo: Geometry,
 ) -> array_typing.FloatVector:
     mu0 = constants.CONSTANTS.mu_0
     pprime = calc_pprime(core_profiles)
@@ -365,7 +609,7 @@ def calculate_stored_thermal_energy(
     p_el: cell_variable.CellVariable,
     p_ion: cell_variable.CellVariable,
     p_tot: cell_variable.CellVariable,
-    geo: geometry.Geometry,
+    geo: Geometry,
 ) -> tuple[array_typing.FloatScalar, ...]:
     wth_el = math_utils.volume_integration(1.5 * p_el.value, geo)
     wth_ion = math_utils.volume_integration(1.5 * p_ion.value, geo)
@@ -376,7 +620,7 @@ def calculate_stored_thermal_energy(
 def calculate_greenwald_fraction(
     n_e_avg: array_typing.FloatScalar,
     core_profiles: state.CoreProfiles,
-    geo: geometry.Geometry,
+    geo: Geometry,
 ) -> array_typing.FloatScalar:
     gw_limit = (core_profiles.Ip_profile_face[-1] * 1e-6 /
                 (jnp.pi * geo.a_minor**2))
@@ -386,7 +630,7 @@ def calculate_greenwald_fraction(
 
 def calculate_betas(
     core_profiles: state.CoreProfiles,
-    geo: geometry.Geometry,
+    geo: Geometry,
 ) -> array_typing.FloatScalar:
     _, _, p_total = calculate_pressure(core_profiles)
     p_total_volume_avg = math_utils.volume_average(p_total.value, geo)
@@ -425,7 +669,7 @@ def coll_exchange(
 
 
 def calc_nu_star(
-    geo: geometry.Geometry,
+    geo: Geometry,
     core_profiles: state.CoreProfiles,
     collisionality_multiplier: float,
 ) -> jax.Array:
@@ -503,6 +747,7 @@ def _calculate_log_tau_e_Z1(
             0.5 * jnp.log(constants.CONSTANTS.m_e / 2.0) +
             2 * jnp.log(constants.CONSTANTS.epsilon_0) +
             1.5 * jnp.log(T_e * constants.CONSTANTS.keV_to_J))
+
 
 _MAVRIN_Z_COEFFS: Final[Mapping[str, array_typing.FloatVector]] = (
     immutabledict.immutabledict({
@@ -597,11 +842,7 @@ def calculate_average_charge_state_single_species(
     return Zavg
 
 
-def get_average_charge_state(
-    ion_symbols,
-    T_e,
-    fractions,
-    Z_override):
+def get_average_charge_state(ion_symbols, T_e, fractions, Z_override):
     Z_per_species = jnp.stack([
         calculate_average_charge_state_single_species(T_e, ion_symbol)
         for ion_symbol in ion_symbols
@@ -616,8 +857,7 @@ def get_average_charge_state(
     )
 
 
-def calculate_f_trap(
-    geo: geometry_lib.Geometry, ) -> array_typing.FloatVectorFace:
+def calculate_f_trap(geo: Geometry, ) -> array_typing.FloatVectorFace:
     epsilon_effective = (
         0.67 * (1.0 - 1.4 * jnp.abs(geo.delta_face) * geo.delta_face) *
         geo.epsilon_face)
@@ -663,7 +903,7 @@ def calculate_L32(
 
 def calculate_nu_e_star(
     q: array_typing.FloatVectorFace,
-    geo: geometry_lib.Geometry,
+    geo: Geometry,
     n_e: array_typing.FloatVectorFace,
     T_e: array_typing.FloatVectorFace,
     Z_eff: array_typing.FloatVectorFace,
@@ -676,7 +916,7 @@ def calculate_nu_e_star(
 
 def calculate_nu_i_star(
     q: array_typing.FloatVectorFace,
-    geo: geometry_lib.Geometry,
+    geo: Geometry,
     n_i: array_typing.FloatVectorFace,
     T_i: array_typing.FloatVectorFace,
     Z_eff: array_typing.FloatVectorFace,
@@ -685,6 +925,7 @@ def calculate_nu_i_star(
     return (4.9e-18 * q * geo.R_major * n_i * Z_eff**4 * log_lambda_ii /
             (((T_i * 1e3)**2) *
              (geo.epsilon_face + constants.CONSTANTS.eps)**1.5))
+
 
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(kw_only=True, frozen=True)
@@ -698,7 +939,7 @@ class ConductivityModel(abc.ABC):
     @abc.abstractmethod
     def calculate_conductivity(
         self,
-        geometry: geometry_lib.Geometry,
+        geometry: Geometry,
         core_profiles: state.CoreProfiles,
     ) -> Conductivity:
         pass
@@ -718,12 +959,11 @@ def _calculate_conductivity0(
     n_e: cell_variable.CellVariable,
     T_e: cell_variable.CellVariable,
     q_face: array_typing.FloatVectorFace,
-    geo: geometry_lib.Geometry,
+    geo: Geometry,
 ):
     f_trap = calculate_f_trap(geo)
     NZ = 0.58 + 0.74 / (0.76 + Z_eff_face)
-    log_lambda_ei = calculate_log_lambda_ei(T_e.face_value(),
-                                                       n_e.face_value())
+    log_lambda_ei = calculate_log_lambda_ei(T_e.face_value(), n_e.face_value())
     sigsptz = (1.9012e04 * (T_e.face_value() * 1e3)**1.5 / Z_eff_face / NZ /
                log_lambda_ei)
     nu_e_star_face = calculate_nu_e_star(
@@ -740,7 +980,7 @@ def _calculate_conductivity0(
     signeo_face = 1.0 - ft33 * (1.0 + 0.36 / Z_eff_face - ft33 *
                                 (0.59 / Z_eff_face - 0.23 / Z_eff_face * ft33))
     sigma_face = sigsptz * signeo_face
-    sigmaneo_cell = geometry_lib.face_to_cell(sigma_face)
+    sigmaneo_cell = face_to_cell(sigma_face)
     return Conductivity(
         sigma=sigmaneo_cell,
         sigma_face=sigma_face,
@@ -780,7 +1020,7 @@ class SauterModelConfigCond(ConductivityModelConfig):
     def build_model(self):
         return SauterModelCond()
 
-    
+
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(kw_only=True, frozen=True)
 class BootstrapCurrent:
@@ -848,11 +1088,9 @@ class SauterModelConfig(BootstrapCurrentModelConfig):
 def _calculate_bootstrap_current(*, Z_eff_face, Z_i_face, n_e, n_i, T_e, T_i,
                                  psi, q_face, geo):
     f_trap = calculate_f_trap(geo)
-    log_lambda_ei = calculate_log_lambda_ei(T_e.face_value(),
-                                                       n_e.face_value())
-    log_lambda_ii = calculate_log_lambda_ii(T_i.face_value(),
-                                                       n_i.face_value(),
-                                                       Z_i_face)
+    log_lambda_ei = calculate_log_lambda_ei(T_e.face_value(), n_e.face_value())
+    log_lambda_ii = calculate_log_lambda_ii(T_i.face_value(), n_i.face_value(),
+                                            Z_i_face)
     nu_e_star = calculate_nu_e_star(
         q=q_face,
         geo=geo,
@@ -891,7 +1129,7 @@ def _calculate_bootstrap_current(*, Z_eff_face, Z_i_face, n_e, n_i, T_e, T_i,
     j_bootstrap_face = global_coeff * (
         necoeff * dlnne_drnorm + nicoeff * dlnni_drnorm +
         tecoeff * dlnte_drnorm + ticoeff * dlnti_drnorm)
-    j_bootstrap = geometry_lib.face_to_cell(j_bootstrap_face)
+    j_bootstrap = face_to_cell(j_bootstrap_face)
     return BootstrapCurrent(
         j_bootstrap=j_bootstrap,
         j_bootstrap_face=j_bootstrap_face,
@@ -996,7 +1234,7 @@ class SourceProfiles:
         return jax.tree_util.tree_map(sum_profiles, explicit_source_profiles,
                                       implicit_source_profiles)
 
-    def total_psi_sources(self, geo: geometry.Geometry) -> jax.Array:
+    def total_psi_sources(self, geo: Geometry) -> jax.Array:
         total = self.bootstrap_current.j_bootstrap
         total += sum(self.psi.values())
         mu0 = constants.CONSTANTS.mu_0
@@ -1006,7 +1244,7 @@ class SourceProfiles:
     def total_sources(
         self,
         source_type: Literal['n_e', 'T_i', 'T_e'],
-        geo: geometry.Geometry,
+        geo: Geometry,
     ) -> jax.Array:
         source: dict[str, jax.Array] = getattr(self, source_type)
         total = sum(source.values())
@@ -1059,7 +1297,7 @@ class SourceProfileFunction(Protocol):
     def __call__(
         self,
         runtime_params: runtime_params_slice.RuntimeParams,
-        geo: geometry.Geometry,
+        geo: Geometry,
         source_name: str,
         core_profiles: state.CoreProfiles,
         calculated_source_profiles: SourceProfiles | None,
@@ -1115,7 +1353,7 @@ class SourceProfileFunction(Protocol):
     def __call__(
         self,
         runtime_params: runtime_params_slice.RuntimeParams,
-        geo: geometry.Geometry,
+        geo: Geometry,
         source_name: str,
         core_profiles: state.CoreProfiles,
         calculated_source_profiles: SourceProfiles | None,
@@ -1171,7 +1409,7 @@ class SourceProfileFunction(Protocol):
     def __call__(
         self,
         runtime_params: runtime_params_slice.RuntimeParams,
-        geo: geometry.Geometry,
+        geo: Geometry,
         source_name: str,
         core_profiles: state.CoreProfiles,
         calculated_source_profiles: SourceProfiles | None,
@@ -1320,7 +1558,7 @@ class RuntimeParamsGeIO(RuntimeParamsSrc):
 
 
 def calc_generic_heat_source(
-    geo: geometry.Geometry,
+    geo: Geometry,
     gaussian_location: float,
     gaussian_width: float,
     P_total: float,
@@ -1339,7 +1577,7 @@ def calc_generic_heat_source(
 
 def default_formula(
     runtime_params: runtime_params_slice.RuntimeParams,
-    geo: geometry.Geometry,
+    geo: Geometry,
     source_name: str,
     unused_core_profiles: state.CoreProfiles,
     unused_calculated_source_profiles: SourceProfiles | None,
@@ -1415,7 +1653,7 @@ class GenericIonElHeatSourceConfig(SourceModelBase):
 
 def calc_generic_particle_source(
     runtime_params: runtime_params_slice.RuntimeParams,
-    geo: geometry.Geometry,
+    geo: Geometry,
     source_name: str,
     unused_state: state.CoreProfiles,
     unused_calculated_source_profiles: SourceProfiles | None,
@@ -1487,7 +1725,7 @@ class GenericParticleSourceConfig(SourceModelBase):
 
 def calc_pellet_source(
     runtime_params: runtime_params_slice.RuntimeParams,
-    geo: geometry.Geometry,
+    geo: Geometry,
     source_name: str,
     unused_state: state.CoreProfiles,
     unused_calculated_source_profiles: SourceProfiles | None,
@@ -1605,7 +1843,7 @@ def calc_fusion(geo, core_profiles, runtime_params):
 
 def fusion_heat_model_func(
     runtime_params: runtime_params_slice.RuntimeParams,
-    geo: geometry.Geometry,
+    geo: Geometry,
     unused_source_name: str,
     core_profiles: state.CoreProfiles,
     unused_calculated_source_profiles: SourceProfiles | None,
@@ -1749,7 +1987,7 @@ class QeiSource(Source):
     def get_qei(
         self,
         runtime_params: runtime_params_slice.RuntimeParams,
-        geo: geometry.Geometry,
+        geo: Geometry,
         core_profiles: state.CoreProfiles,
     ):
         return jax.lax.cond(
@@ -1762,21 +2000,16 @@ class QeiSource(Source):
             lambda: QeiInfo.zeros(geo),
         )
 
-    def get_value(
-        self,
-        runtime_params: runtime_params_slice.RuntimeParams,
-        geo: geometry.Geometry,
-        core_profiles: state.CoreProfiles,
-        calculated_source_profiles,
-        conductivity
-    ):
+    def get_value(self, runtime_params: runtime_params_slice.RuntimeParams,
+                  geo: Geometry, core_profiles: state.CoreProfiles,
+                  calculated_source_profiles, conductivity):
         raise NotImplementedError('Call get_qei() instead.')
 
     def get_source_profile_for_affected_core_profile(
         self,
         profile: tuple[array_typing.Array, ...],
         affected_mesh_state: int,
-        geo: geometry.Geometry,
+        geo: Geometry,
     ):
         raise NotImplementedError('This method is not valid for QeiSource.')
 
@@ -2028,13 +2261,13 @@ def build_standard_source_profiles(
     *,
     calculated_source_profiles: SourceProfiles,
     runtime_params: runtime_params_slice.RuntimeParams,
-    geo: geometry.Geometry,
+    geo: Geometry,
     core_profiles: state.CoreProfiles,
     source_models: SourceModels,
     explicit: bool = True,
-    conductivity = None,
-    calculate_anyway = False,
-    psi_only = False,
+    conductivity=None,
+    calculate_anyway=False,
+    psi_only=False,
 ):
 
     def calculate_source(source_name, source):
@@ -2984,7 +3217,7 @@ class QuasilinearTransportModel(TransportModel):
         pfe: jax.Array,
         quasilinear_inputs: QuasilinearInputs,
         transport,
-        geo: geometry.Geometry,
+        geo: Geometry,
         core_profiles: state.CoreProfiles,
         gradient_reference_length: chex.Numeric,
         gyrobohm_flux_reference_length: chex.Numeric,
@@ -3413,7 +3646,7 @@ class QLKNNTransportModel0(QualikizBasedTransportModel):
     def _combined(
         self,
         runtime_config_inputs: QLKNNRuntimeConfigInputs,
-        geo: geometry.Geometry,
+        geo: Geometry,
         core_profiles: state.CoreProfiles,
     ):
         qualikiz_inputs = self._prepare_qualikiz_inputs(
@@ -3542,9 +3775,8 @@ def calculate_total_transport_coeffs(pedestal_model, transport_model,
 class Neoclassical0(torax_pydantic.BaseModelFrozen):
     bootstrap_current: SauterModelConfig = pydantic.Field(
         discriminator="model_name")
-    conductivity: SauterModelConfigCond = (
-        torax_pydantic.ValidatedDefault(
-            SauterModelConfigCond()))
+    conductivity: SauterModelConfigCond = (torax_pydantic.ValidatedDefault(
+        SauterModelConfigCond()))
 
     @pydantic.model_validator(mode="before")
     @classmethod
@@ -3558,6 +3790,345 @@ class Neoclassical0(torax_pydantic.BaseModelFrozen):
             conductivity=self.conductivity.build_model(),
             bootstrap_current=self.bootstrap_current.build_model(),
         )
+
+
+_RHO_SMOOTHING_LIMIT = 0.1
+
+
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(frozen=True)
+class StandardGeometry(Geometry):
+    Ip_from_parameters: bool = dataclasses.field(metadata=dict(static=True))
+    Ip_profile_face: array_typing.FloatVectorFace
+    psi: array_typing.FloatVectorCell
+    psi_from_Ip: array_typing.FloatVectorCell
+    psi_from_Ip_face: array_typing.FloatVectorFace
+    j_total: array_typing.Array
+    j_total_face: array_typing.FloatVectorFace
+    delta_upper_face: array_typing.FloatVectorFace
+    delta_lower_face: array_typing.FloatVectorFace
+
+
+@dataclasses.dataclass(frozen=True)
+class StandardGeometryIntermediates:
+    geometry_type: GeometryType
+    Ip_from_parameters: bool
+    R_major: array_typing.FloatScalar
+    a_minor: array_typing.FloatScalar
+    B_0: array_typing.FloatScalar
+    psi: array_typing.Array
+    Ip_profile: array_typing.Array
+    Phi: array_typing.Array
+    R_in: array_typing.Array
+    R_out: array_typing.Array
+    F: array_typing.Array
+    int_dl_over_Bp: array_typing.Array
+    flux_surf_avg_1_over_R: array_typing.Array
+    flux_surf_avg_1_over_R2: array_typing.Array
+    flux_surf_avg_Bp2: array_typing.Array
+    flux_surf_avg_RBp: array_typing.Array
+    flux_surf_avg_R2Bp2: array_typing.Array
+    flux_surf_avg_B2: array_typing.Array
+    flux_surf_avg_1_over_B2: array_typing.Array
+    delta_upper_face: array_typing.Array
+    delta_lower_face: array_typing.Array
+    elongation: array_typing.Array
+    vpr: array_typing.Array
+    n_rho: int
+    hires_factor: int
+    z_magnetic_axis: array_typing.FloatScalar | None
+
+    def __post_init__(self):
+        if self.flux_surf_avg_Bp2[-1] < 1e-10:
+            rhon = np.sqrt(self.Phi / self.Phi[-1])
+            spline = lambda rho, data, x, bc_type: scipy.interpolate.CubicSpline(
+                rho[:-1],
+                data[:-1],
+                bc_type=bc_type,
+            )(x)
+            flux_surf_avg_Bp2_edge = spline(
+                rhon,
+                self.flux_surf_avg_Bp2,
+                1.0,
+                bc_type='not-a-knot',
+            )
+            int_dl_over_Bp_edge = spline(
+                rhon,
+                self.int_dl_over_Bp,
+                1.0,
+                bc_type='not-a-knot',
+            )
+            g2_edge_ratio = (flux_surf_avg_Bp2_edge * int_dl_over_Bp_edge**
+                             2) / (self.flux_surf_avg_Bp2[-2] *
+                                   self.int_dl_over_Bp[-2]**2)
+            if g2_edge_ratio > 1.0:
+                bc_type = 'not-a-knot'
+            else:
+                bc_type = 'natural'
+            set_edge = lambda array: spline(rhon, array, 1.0, bc_type)
+            self.int_dl_over_Bp[-1] = set_edge(self.int_dl_over_Bp)
+            self.flux_surf_avg_Bp2[-1] = set_edge(self.flux_surf_avg_Bp2)
+            self.flux_surf_avg_1_over_R2[-1] = set_edge(
+                self.flux_surf_avg_1_over_R2)
+            self.flux_surf_avg_RBp[-1] = set_edge(self.flux_surf_avg_RBp)
+            self.flux_surf_avg_R2Bp2[-1] = set_edge(self.flux_surf_avg_R2Bp2)
+            self.vpr[-1] = set_edge(self.vpr)
+        rhon = np.sqrt(self.Phi / self.Phi[-1])
+        idx_limit = np.argmin(np.abs(rhon - _RHO_SMOOTHING_LIMIT))
+        self.flux_surf_avg_Bp2[:] = _smooth_savgol(self.flux_surf_avg_Bp2,
+                                                   idx_limit, 2)
+        self.flux_surf_avg_R2Bp2[:] = _smooth_savgol(self.flux_surf_avg_R2Bp2,
+                                                     idx_limit, 2)
+        self.flux_surf_avg_RBp[:] = _smooth_savgol(self.flux_surf_avg_RBp,
+                                                   idx_limit, 1)
+        self.vpr[:] = _smooth_savgol(self.vpr, idx_limit, 1)
+
+    @classmethod
+    def from_chease(
+        cls,
+        geometry_directory: str | None,
+        geometry_file: str,
+        Ip_from_parameters: bool,
+        n_rho: int,
+        R_major: float,
+        a_minor: float,
+        B_0: float,
+        hires_factor: int,
+    ) -> typing_extensions.Self:
+        chease_data = load_geo_data(geometry_directory, geometry_file,
+                                    GeometrySource.CHEASE)
+        psiunnormfactor = R_major**2 * B_0
+        psi = chease_data['PSIchease=psi/2pi'] * psiunnormfactor * 2 * np.pi
+        Ip_chease = (chease_data['Ipprofile'] / constants.CONSTANTS.mu_0 *
+                     R_major * B_0)
+        Phi = (chease_data['RHO_TOR=sqrt(Phi/pi/B0)'] *
+               R_major)**2 * B_0 * np.pi
+        R_in_chease = chease_data['R_INBOARD'] * R_major
+        R_out_chease = chease_data['R_OUTBOARD'] * R_major
+        F = chease_data['T=RBphi'] * R_major * B_0
+        int_dl_over_Bp = (chease_data['Int(Rdlp/|grad(psi)|)=Int(Jdchi)'] *
+                          R_major / B_0)
+        flux_surf_avg_1_over_R = chease_data['<1/R>profile'] / R_major
+        flux_surf_avg_1_over_R2 = chease_data['<1/R**2>'] / R_major**2
+        flux_surf_avg_Bp2 = chease_data['<Bp**2>'] * B_0**2
+        flux_surf_avg_RBp = chease_data[
+            '<|grad(psi)|>'] * psiunnormfactor / R_major
+        flux_surf_avg_R2Bp2 = (chease_data['<|grad(psi)|**2>'] *
+                               psiunnormfactor**2 / R_major**2)
+        flux_surf_avg_B2 = chease_data['<B**2>'] * B_0**2
+        flux_surf_avg_1_over_B2 = chease_data['<1/B**2>'] / B_0**2
+        rhon = np.sqrt(Phi / Phi[-1])
+        vpr = 4 * np.pi * Phi[-1] * rhon / (F * flux_surf_avg_1_over_R2)
+        return cls(
+            geometry_type=GeometryType.CHEASE,
+            Ip_from_parameters=Ip_from_parameters,
+            R_major=np.array(R_major),
+            a_minor=np.array(a_minor),
+            B_0=np.array(B_0),
+            psi=psi,
+            Ip_profile=Ip_chease,
+            Phi=Phi,
+            R_in=R_in_chease,
+            R_out=R_out_chease,
+            F=F,
+            int_dl_over_Bp=int_dl_over_Bp,
+            flux_surf_avg_1_over_R=flux_surf_avg_1_over_R,
+            flux_surf_avg_1_over_R2=flux_surf_avg_1_over_R2,
+            flux_surf_avg_Bp2=flux_surf_avg_Bp2,
+            flux_surf_avg_RBp=flux_surf_avg_RBp,
+            flux_surf_avg_R2Bp2=flux_surf_avg_R2Bp2,
+            flux_surf_avg_B2=flux_surf_avg_B2,
+            flux_surf_avg_1_over_B2=flux_surf_avg_1_over_B2,
+            delta_upper_face=chease_data['delta_upper'],
+            delta_lower_face=chease_data['delta_bottom'],
+            elongation=chease_data['elongation'],
+            vpr=vpr,
+            n_rho=n_rho,
+            hires_factor=hires_factor,
+            z_magnetic_axis=None,
+        )
+
+
+def build_standard_geometry(
+    intermediate: StandardGeometryIntermediates, ) -> StandardGeometry:
+    rho_intermediate = np.sqrt(intermediate.Phi / (np.pi * intermediate.B_0))
+    rho_norm_intermediate = rho_intermediate / rho_intermediate[-1]
+    C1 = intermediate.int_dl_over_Bp
+    C0 = intermediate.flux_surf_avg_RBp * C1
+    C2 = intermediate.flux_surf_avg_1_over_R2 * C1
+    C3 = intermediate.flux_surf_avg_Bp2 * C1
+    C4 = intermediate.flux_surf_avg_R2Bp2 * C1
+    g0 = C0 * 2 * np.pi
+    g1 = C1 * C4 * 4 * np.pi**2
+    g2 = C1 * C3 * 4 * np.pi**2
+    g3 = C2[1:] / C1[1:]
+    g3 = np.concatenate((np.array([1 / intermediate.R_in[0]**2]), g3))
+    g2g3_over_rhon = g2[1:] * g3[1:] / rho_norm_intermediate[1:]
+    g2g3_over_rhon = np.concatenate((np.zeros(1), g2g3_over_rhon))
+    dpsidrhon = (
+        intermediate.Ip_profile[1:] *
+        (16 * constants.CONSTANTS.mu_0 * np.pi**3 * intermediate.Phi[-1]) /
+        (g2g3_over_rhon[1:] * intermediate.F[1:]))
+    dpsidrhon = np.concatenate((np.zeros(1), dpsidrhon))
+    psi_from_Ip = scipy.integrate.cumulative_trapezoid(
+        y=dpsidrhon,
+        x=rho_norm_intermediate,
+        initial=0.0,
+    )
+    psi_from_Ip += intermediate.psi[0]
+    psi_from_Ip[-1] = psi_from_Ip[-2] + (
+        16 * constants.CONSTANTS.mu_0 * np.pi**3 *
+        intermediate.Phi[-1]) * intermediate.Ip_profile[-1] / (
+            g2g3_over_rhon[-1] * intermediate.F[-1]) * (
+                rho_norm_intermediate[-1] - rho_norm_intermediate[-2])
+    vpr = intermediate.vpr
+    spr = vpr * intermediate.flux_surf_avg_1_over_R / (2 * np.pi)
+    volume_intermediate = scipy.integrate.cumulative_trapezoid(
+        y=vpr, x=rho_norm_intermediate, initial=0.0)
+    area_intermediate = scipy.integrate.cumulative_trapezoid(
+        y=spr, x=rho_norm_intermediate, initial=0.0)
+    dI_tot_drhon = np.gradient(intermediate.Ip_profile, rho_norm_intermediate)
+    j_total_face_bulk = dI_tot_drhon[1:] / spr[1:]
+    j_total_face_axis = j_total_face_bulk[0]
+    j_total = np.concatenate(
+        [np.array([j_total_face_axis]), j_total_face_bulk])
+    mesh = interpolated_param_2d.Grid1D(nx=intermediate.n_rho)
+    rho_b = rho_intermediate[-1]
+    rho_face_norm = mesh.face_centers
+    rho_norm = mesh.cell_centers
+    rho_hires_norm = np.linspace(
+        0, 1, intermediate.n_rho * intermediate.hires_factor)
+    rho_hires = rho_hires_norm * rho_b
+    rhon_interpolation_func = lambda x, y: np.interp(x, rho_norm_intermediate,
+                                                     y)
+    vpr_face = rhon_interpolation_func(rho_face_norm, vpr)
+    vpr = rhon_interpolation_func(rho_norm, vpr)
+    spr_face = rhon_interpolation_func(rho_face_norm, spr)
+    spr_cell = rhon_interpolation_func(rho_norm, spr)
+    spr_hires = rhon_interpolation_func(rho_hires_norm, spr)
+    delta_upper_face = rhon_interpolation_func(rho_face_norm,
+                                               intermediate.delta_upper_face)
+    delta_lower_face = rhon_interpolation_func(rho_face_norm,
+                                               intermediate.delta_lower_face)
+    delta_face = 0.5 * (delta_upper_face + delta_lower_face)
+    elongation = rhon_interpolation_func(rho_norm, intermediate.elongation)
+    elongation_face = rhon_interpolation_func(rho_face_norm,
+                                              intermediate.elongation)
+    Phi_face = rhon_interpolation_func(rho_face_norm, intermediate.Phi)
+    Phi = rhon_interpolation_func(rho_norm, intermediate.Phi)
+    F_face = rhon_interpolation_func(rho_face_norm, intermediate.F)
+    F = rhon_interpolation_func(rho_norm, intermediate.F)
+    F_hires = rhon_interpolation_func(rho_hires_norm, intermediate.F)
+    psi = rhon_interpolation_func(rho_norm, intermediate.psi)
+    psi_from_Ip_face = rhon_interpolation_func(rho_face_norm, psi_from_Ip)
+    psi_from_Ip = rhon_interpolation_func(rho_norm, psi_from_Ip)
+    j_total_face = rhon_interpolation_func(rho_face_norm, j_total)
+    j_total = rhon_interpolation_func(rho_norm, j_total)
+    Ip_profile_face = rhon_interpolation_func(rho_face_norm,
+                                              intermediate.Ip_profile)
+    Rin_face = rhon_interpolation_func(rho_face_norm, intermediate.R_in)
+    Rin = rhon_interpolation_func(rho_norm, intermediate.R_in)
+    Rout_face = rhon_interpolation_func(rho_face_norm, intermediate.R_out)
+    Rout = rhon_interpolation_func(rho_norm, intermediate.R_out)
+    g0_face = rhon_interpolation_func(rho_face_norm, g0)
+    g0 = rhon_interpolation_func(rho_norm, g0)
+    g1_face = rhon_interpolation_func(rho_face_norm, g1)
+    g1 = rhon_interpolation_func(rho_norm, g1)
+    g2_face = rhon_interpolation_func(rho_face_norm, g2)
+    g2 = rhon_interpolation_func(rho_norm, g2)
+    g3_face = rhon_interpolation_func(rho_face_norm, g3)
+    g3 = rhon_interpolation_func(rho_norm, g3)
+    g2g3_over_rhon_face = rhon_interpolation_func(rho_face_norm,
+                                                  g2g3_over_rhon)
+    g2g3_over_rhon_hires = rhon_interpolation_func(rho_hires_norm,
+                                                   g2g3_over_rhon)
+    g2g3_over_rhon = rhon_interpolation_func(rho_norm, g2g3_over_rhon)
+    gm4 = rhon_interpolation_func(rho_norm,
+                                  intermediate.flux_surf_avg_1_over_B2)
+    gm4_face = rhon_interpolation_func(rho_face_norm,
+                                       intermediate.flux_surf_avg_1_over_B2)
+    gm5 = rhon_interpolation_func(rho_norm, intermediate.flux_surf_avg_B2)
+    gm5_face = rhon_interpolation_func(rho_face_norm,
+                                       intermediate.flux_surf_avg_B2)
+    volume_face = rhon_interpolation_func(rho_face_norm, volume_intermediate)
+    volume = rhon_interpolation_func(rho_norm, volume_intermediate)
+    area_face = rhon_interpolation_func(rho_face_norm, area_intermediate)
+    area = rhon_interpolation_func(rho_norm, area_intermediate)
+    return StandardGeometry(
+        geometry_type=intermediate.geometry_type,
+        torax_mesh=mesh,
+        Phi=Phi,
+        Phi_face=Phi_face,
+        R_major=intermediate.R_major,
+        a_minor=intermediate.a_minor,
+        B_0=intermediate.B_0,
+        volume=volume,
+        volume_face=volume_face,
+        area=area,
+        area_face=area_face,
+        vpr=vpr,
+        vpr_face=vpr_face,
+        spr=spr_cell,
+        spr_face=spr_face,
+        delta_face=delta_face,
+        g0=g0,
+        g0_face=g0_face,
+        g1=g1,
+        g1_face=g1_face,
+        g2=g2,
+        g2_face=g2_face,
+        g3=g3,
+        g3_face=g3_face,
+        g2g3_over_rhon=g2g3_over_rhon,
+        g2g3_over_rhon_face=g2g3_over_rhon_face,
+        g2g3_over_rhon_hires=g2g3_over_rhon_hires,
+        gm4=gm4,
+        gm4_face=gm4_face,
+        gm5=gm5,
+        gm5_face=gm5_face,
+        F=F,
+        F_face=F_face,
+        F_hires=F_hires,
+        R_in=Rin,
+        R_in_face=Rin_face,
+        R_out=Rout,
+        R_out_face=Rout_face,
+        Ip_from_parameters=intermediate.Ip_from_parameters,
+        Ip_profile_face=Ip_profile_face,
+        psi=psi,
+        psi_from_Ip=psi_from_Ip,
+        psi_from_Ip_face=psi_from_Ip_face,
+        j_total=j_total,
+        j_total_face=j_total_face,
+        delta_upper_face=delta_upper_face,
+        delta_lower_face=delta_lower_face,
+        elongation=elongation,
+        elongation_face=elongation_face,
+        spr_hires=spr_hires,
+        rho_hires_norm=rho_hires_norm,
+        rho_hires=rho_hires,
+        Phi_b_dot=np.asarray(0.0),
+        _z_magnetic_axis=intermediate.z_magnetic_axis,
+    )
+
+
+def _smooth_savgol(
+    data: np.ndarray,
+    idx_limit: int,
+    polyorder: int,
+    window_length: int = 5,
+    preserve_first: bool = True,
+) -> np.ndarray:
+    if idx_limit == 0:
+        return data
+    smoothed_data = scipy.signal.savgol_filter(data,
+                                               window_length,
+                                               polyorder,
+                                               mode='nearest')
+    first_point = data[0] if preserve_first else smoothed_data[0]
+    return np.concatenate([
+        np.array([first_point]), smoothed_data[1:idx_limit], data[idx_limit:]
+    ])
 
 
 T = TypeVar('T')
@@ -3582,9 +4153,9 @@ class CheaseConfig(torax_pydantic.BaseModelFrozen):
         return self
 
     def build_geometry(self):
-        return standard_geometry.build_standard_geometry(
+        return build_standard_geometry(
             _apply_relevant_kwargs(
-                standard_geometry.StandardGeometryIntermediates.from_chease,
+                StandardGeometryIntermediates.from_chease,
                 self.__dict__,
             ))
 
@@ -3594,7 +4165,7 @@ class GeometryConfig(torax_pydantic.BaseModelFrozen):
 
 
 class Geometry0(torax_pydantic.BaseModelFrozen):
-    geometry_type: geometry.GeometryType
+    geometry_type: GeometryType
     geometry_configs: GeometryConfig | dict[torax_pydantic.Second,
                                             GeometryConfig]
 
@@ -3607,15 +4178,14 @@ class Geometry0(torax_pydantic.BaseModelFrozen):
     @functools.cached_property
     def build_provider(self):
         geometries = self.geometry_configs.config.build_geometry()
-        provider = geometry_provider.ConstantGeometryProvider
+        provider = ConstantGeometryProvider
         return provider(geometries)
 
 
 def _conform_user_data(data):
     data_copy = data.copy()
     data_copy['geometry_type'] = data['geometry_type'].lower()
-    geometry_type = getattr(geometry.GeometryType,
-                            data['geometry_type'].upper())
+    geometry_type = getattr(GeometryType, data['geometry_type'].upper())
     constructor_args = {'geometry_type': geometry_type}
     configs_time_dependent = data_copy.pop('geometry_configs', None)
     constructor_args['geometry_configs'] = {'config': data_copy}
@@ -3931,9 +4501,8 @@ PARTICLE_SOURCE_TRANSFORMATIONS = {
 def _get_integrated_source_value(
     source_profiles_dict: dict[str, array_typing.FloatVector],
     internal_source_name: str,
-    geo: geometry.Geometry,
-    integration_fn: Callable[[array_typing.FloatVector, geometry.Geometry],
-                             jax.Array],
+    geo: Geometry,
+    integration_fn: Callable[[array_typing.FloatVector, Geometry], jax.Array],
 ):
     if internal_source_name in source_profiles_dict:
         return integration_fn(source_profiles_dict[internal_source_name], geo)
@@ -3942,7 +4511,7 @@ def _get_integrated_source_value(
 
 
 def _calculate_integrated_sources(
-    geo: geometry.Geometry,
+    geo: Geometry,
     core_profiles: state.CoreProfiles,
     core_sources: SourceProfiles,
     runtime_params: runtime_params_slice.RuntimeParams,
@@ -4026,8 +4595,7 @@ def make_post_processed_outputs(
             pressure_thermal_tot,
             sim_state.geometry,
         ))
-    FFprime_face = calc_FFprime(sim_state.core_profiles,
-                                            sim_state.geometry)
+    FFprime_face = calc_FFprime(sim_state.core_profiles, sim_state.geometry)
     psi_face = sim_state.core_profiles.psi.face_value()
     psi_norm_face = (psi_face - psi_face[0]) / (psi_face[-1] - psi_face[0])
     integrated_sources = _calculate_integrated_sources(
@@ -4039,9 +4607,8 @@ def make_post_processed_outputs(
     Q_fusion = (
         integrated_sources['P_fusion'] /
         (integrated_sources['P_external_total'] + constants.CONSTANTS.eps))
-    P_LH_hi_dens, P_LH_min, P_LH, n_e_min_P_LH = (
-        calculate_plh_scaling_factor(sim_state.geometry,
-                                                  sim_state.core_profiles))
+    P_LH_hi_dens, P_LH_min, P_LH, n_e_min_P_LH = (calculate_plh_scaling_factor(
+        sim_state.geometry, sim_state.core_profiles))
     Ploss = (integrated_sources['P_alpha_total'] +
              integrated_sources['P_aux_total'] +
              integrated_sources['P_ohmic_e'] + constants.CONSTANTS.eps)
@@ -4052,14 +4619,18 @@ def make_post_processed_outputs(
     else:
         dW_th_dt = 0.0
     tauE = W_thermal_tot / Ploss
-    tauH89P = calculate_scaling_law_confinement_time(
-        sim_state.geometry, sim_state.core_profiles, Ploss, 'H89P')
-    tauH98 = calculate_scaling_law_confinement_time(
-        sim_state.geometry, sim_state.core_profiles, Ploss, 'H98')
-    tauH97L = calculate_scaling_law_confinement_time(
-        sim_state.geometry, sim_state.core_profiles, Ploss, 'H97L')
-    tauH20 = calculate_scaling_law_confinement_time(
-        sim_state.geometry, sim_state.core_profiles, Ploss, 'H20')
+    tauH89P = calculate_scaling_law_confinement_time(sim_state.geometry,
+                                                     sim_state.core_profiles,
+                                                     Ploss, 'H89P')
+    tauH98 = calculate_scaling_law_confinement_time(sim_state.geometry,
+                                                    sim_state.core_profiles,
+                                                    Ploss, 'H98')
+    tauH97L = calculate_scaling_law_confinement_time(sim_state.geometry,
+                                                     sim_state.core_profiles,
+                                                     Ploss, 'H97L')
+    tauH20 = calculate_scaling_law_confinement_time(sim_state.geometry,
+                                                    sim_state.core_profiles,
+                                                    Ploss, 'H20')
     H89P = tauE / tauH89P
     H98 = tauE / tauH98
     H97L = tauE / tauH97L
@@ -4090,8 +4661,7 @@ def make_post_processed_outputs(
         E_ohmic_e = 0.0
         E_external_injected = 0.0
         E_external_total = 0.0
-    q95 = calc_q95(psi_norm_face,
-                                    sim_state.core_profiles.q_face)
+    q95 = calc_q95(psi_norm_face, sim_state.core_profiles.q_face)
     te_volume_avg = math_utils.volume_average(
         sim_state.core_profiles.T_e.value, sim_state.geometry)
     ti_volume_avg = math_utils.volume_average(
@@ -4104,12 +4674,13 @@ def make_post_processed_outputs(
                                            sim_state.geometry)
     n_i_line_avg = math_utils.line_average(sim_state.core_profiles.n_i.value,
                                            sim_state.geometry)
-    fgw_n_e_volume_avg = calculate_greenwald_fraction(
-        n_e_volume_avg, sim_state.core_profiles, sim_state.geometry)
-    fgw_n_e_line_avg = calculate_greenwald_fraction(
-        n_e_line_avg, sim_state.core_profiles, sim_state.geometry)
-    Wpol = calc_Wpol(sim_state.geometry,
-                                      sim_state.core_profiles.psi)
+    fgw_n_e_volume_avg = calculate_greenwald_fraction(n_e_volume_avg,
+                                                      sim_state.core_profiles,
+                                                      sim_state.geometry)
+    fgw_n_e_line_avg = calculate_greenwald_fraction(n_e_line_avg,
+                                                    sim_state.core_profiles,
+                                                    sim_state.geometry)
+    Wpol = calc_Wpol(sim_state.geometry, sim_state.core_profiles.psi)
     li3 = calc_li3(
         sim_state.geometry.R_major,
         Wpol,
@@ -4126,8 +4697,8 @@ def make_post_processed_outputs(
     psi_current = (j_external +
                    sim_state.core_sources.bootstrap_current.j_bootstrap)
     j_ohmic = sim_state.core_profiles.j_total - psi_current
-    beta_tor, beta_pol, beta_N = calculate_betas(
-        sim_state.core_profiles, sim_state.geometry)
+    beta_tor, beta_pol, beta_N = calculate_betas(sim_state.core_profiles,
+                                                 sim_state.geometry)
     return PostProcessedOutputs(
         pressure_thermal_i=pressure_thermal_ion,
         pressure_thermal_e=pressure_thermal_el,
@@ -4364,9 +4935,8 @@ def _get_ion_properties_from_fractions(impurity_symbols, impurity_params, T_e,
     dilution_factor_edge = jnp.where(
         Z_eff_edge == 1.0,
         1.0,
-        calculate_main_ion_dilution_factor(Z_i_face[-1],
-                                                       Z_impurity_face[-1],
-                                                       Z_eff_edge),
+        calculate_main_ion_dilution_factor(Z_i_face[-1], Z_impurity_face[-1],
+                                           Z_eff_edge),
     )
     return _IonProperties(
         A_impurity=impurity_params.A_avg,
@@ -4383,7 +4953,7 @@ def _get_ion_properties_from_fractions(impurity_symbols, impurity_params, T_e,
 @jax_utils.jit
 def get_updated_ions(
     runtime_params: runtime_params_slice.RuntimeParams,
-    geo: geometry.Geometry,
+    geo: Geometry,
     n_e: cell_variable.CellVariable,
     T_e: cell_variable.CellVariable,
 ):
@@ -4524,7 +5094,7 @@ def initial_core_profiles0(runtime_params, geo, source_models,
 
 def _get_initial_psi_mode(
     runtime_params: runtime_params_slice.RuntimeParams,
-    geo: geometry.Geometry,
+    geo: Geometry,
 ):
     psi_mode = runtime_params.profile_conditions.initial_psi_mode
     if psi_mode == InitialPsiMode.PROFILE_CONDITIONS:
@@ -4535,7 +5105,7 @@ def _get_initial_psi_mode(
                 'if `initial_psi_mode` is PROFILE_CONDITIONS. Use '
                 '`initial_psi_mode` to initialize psi from `j` or `geometry` and '
                 'avoid this warning.')
-            if (isinstance(geo, standard_geometry.StandardGeometry) and
+            if (isinstance(geo, StandardGeometry) and
                     not runtime_params.profile_conditions.initial_psi_from_j):
                 psi_mode = InitialPsiMode.GEOMETRY
             else:
@@ -4548,11 +5118,10 @@ def _init_psi_and_psi_derived(runtime_params, geo, core_profiles,
     sources_are_calculated = False
     source_profiles = build_all_zero_profiles(geo)
     initial_psi_mode = _get_initial_psi_mode(runtime_params, geo)
-    dpsi_drhonorm_edge = (
-        calculate_psi_grad_constraint_from_Ip(
-            runtime_params.profile_conditions.Ip,
-            geo,
-        ))
+    dpsi_drhonorm_edge = (calculate_psi_grad_constraint_from_Ip(
+        runtime_params.profile_conditions.Ip,
+        geo,
+    ))
     psi = cell_variable.CellVariable(
         value=geo.psi_from_Ip,
         right_face_grad_constraint=None
@@ -4580,8 +5149,7 @@ def _calculate_all_psi_dependent_profiles(runtime_params, geo, psi,
                                           core_profiles, source_profiles,
                                           source_models, neoclassical_models,
                                           sources_are_calculated):
-    j_total, j_total_face, Ip_profile_face = calc_j_total(
-        geo, psi)
+    j_total, j_total_face, Ip_profile_face = calc_j_total(geo, psi)
     core_profiles = dataclasses.replace(
         core_profiles,
         psi=psi,
@@ -4813,10 +5381,8 @@ def update_core_and_source_profiles_after_step(
         Z_impurity=ions.Z_impurity,
         Z_impurity_face=ions.Z_impurity_face,
         psidot=core_profiles_t_plus_dt.psidot,
-        q_face=calc_q_face(
-            geo, updated_core_profiles_t_plus_dt.psi),
-        s_face=calc_s_face(
-            geo, updated_core_profiles_t_plus_dt.psi),
+        q_face=calc_q_face(geo, updated_core_profiles_t_plus_dt.psi),
+        s_face=calc_s_face(geo, updated_core_profiles_t_plus_dt.psi),
         A_i=ions.A_i,
         A_impurity=ions.A_impurity,
         A_impurity_face=ions.A_impurity_face,
@@ -4931,12 +5497,12 @@ def compute_boundary_conditions_for_t_plus_dt(dt, runtime_params_t,
         ),
         'psi':
         dict(
-            right_face_grad_constraint=(
-                calculate_psi_grad_constraint_from_Ip(
-                    Ip=profile_conditions_t_plus_dt.Ip,
-                    geo=geo_t_plus_dt,
-                ) if not runtime_params_t.profile_conditions.
-                use_v_loop_lcfs_boundary_condition else None),
+            right_face_grad_constraint=(calculate_psi_grad_constraint_from_Ip(
+                Ip=profile_conditions_t_plus_dt.Ip,
+                geo=geo_t_plus_dt,
+            ) if not runtime_params_t.profile_conditions.
+                                        use_v_loop_lcfs_boundary_condition else
+                                        None),
             right_face_constraint=(_calculate_psi_value_constraint_from_v_loop(
                 dt=dt,
                 v_loop_lcfs_t=runtime_params_t.profile_conditions.v_loop_lcfs,
@@ -5074,7 +5640,7 @@ class CoeffsCallback:
     def __call__(
         self,
         runtime_params: runtime_params_slice.RuntimeParams,
-        geo: geometry.Geometry,
+        geo: Geometry,
         core_profiles: state.CoreProfiles,
         x: tuple[cell_variable.CellVariable, ...],
         explicit_source_profiles: SourceProfiles,
@@ -5375,7 +5941,7 @@ def _calc_coeffs_full(runtime_params,
     ],
 )
 def _calc_coeffs_reduced(
-    geo: geometry.Geometry,
+    geo: Geometry,
     core_profiles: state.CoreProfiles,
     evolving_names: tuple[str, ...],
 ):
@@ -5602,8 +6168,8 @@ class Solver(abc.ABC):
         dt: jax.Array,
         runtime_params_t: runtime_params_slice.RuntimeParams,
         runtime_params_t_plus_dt: runtime_params_slice.RuntimeParams,
-        geo_t: geometry.Geometry,
-        geo_t_plus_dt: geometry.Geometry,
+        geo_t: Geometry,
+        geo_t_plus_dt: Geometry,
         core_profiles_t: state.CoreProfiles,
         core_profiles_t_plus_dt: state.CoreProfiles,
         explicit_source_profiles: SourceProfiles,
@@ -5639,8 +6205,8 @@ class Solver(abc.ABC):
         dt: jax.Array,
         runtime_params_t: runtime_params_slice.RuntimeParams,
         runtime_params_t_plus_dt: runtime_params_slice.RuntimeParams,
-        geo_t: geometry.Geometry,
-        geo_t_plus_dt: geometry.Geometry,
+        geo_t: Geometry,
+        geo_t_plus_dt: Geometry,
         core_profiles_t: state.CoreProfiles,
         core_profiles_t_plus_dt: state.CoreProfiles,
         explicit_source_profiles: SourceProfiles,
@@ -5664,7 +6230,7 @@ class Solver(abc.ABC):
 def predictor_corrector_method(
     dt: jax.Array,
     runtime_params_t_plus_dt: runtime_params_slice.RuntimeParams,
-    geo_t_plus_dt: geometry.Geometry,
+    geo_t_plus_dt: Geometry,
     x_old: tuple[cell_variable.CellVariable, ...],
     x_new_guess: tuple[cell_variable.CellVariable, ...],
     core_profiles_t_plus_dt: state.CoreProfiles,
@@ -5721,8 +6287,8 @@ class LinearThetaMethod0(Solver):
         dt: jax.Array,
         runtime_params_t: runtime_params_slice.RuntimeParams,
         runtime_params_t_plus_dt: runtime_params_slice.RuntimeParams,
-        geo_t: geometry.Geometry,
-        geo_t_plus_dt: geometry.Geometry,
+        geo_t: Geometry,
+        geo_t_plus_dt: Geometry,
         core_profiles_t: state.CoreProfiles,
         core_profiles_t_plus_dt: state.CoreProfiles,
         explicit_source_profiles: SourceProfiles,
@@ -6023,7 +6589,7 @@ class StateHistory:
         self._core_sources = [state.core_sources for state in state_history]
         self._transport = [state.core_transport for state in state_history]
         self._geometries = [state.geometry for state in state_history]
-        self._stacked_geometry = geometry_lib.stack_geometries(self.geometries)
+        self._stacked_geometry = stack_geometries(self.geometries)
         stack = lambda *ys: np.stack(ys)
         self._stacked_core_profiles: state.CoreProfiles = jax.tree_util.tree_map(
             stack, *self._core_profiles)
@@ -6058,7 +6624,7 @@ class StateHistory:
         return self._rho_norm
 
     @property
-    def geometries(self) -> Sequence[geometry_lib.Geometry]:
+    def geometries(self) -> Sequence[Geometry]:
         return self._geometries
 
     def simulation_output_to_xr(self) -> xr.DataTree:

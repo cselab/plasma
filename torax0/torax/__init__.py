@@ -19,7 +19,6 @@ import os
 
 # pylint: disable=g-importing-member
 import jax
-from torax._src.geometry.geometry import Geometry
 from torax._src.state import CoreProfiles
 from torax._src.state import CoreTransport
 from torax._src.state import SolverNumericOutputs
@@ -36,7 +35,6 @@ __all__ = [
     'import_module',
     'CoreProfiles',
     'CoreTransport',
-    'Geometry',
     'SimError',
     'SolverNumericOutputs',
     'SourceProfiles',
