@@ -6760,17 +6760,17 @@ def _calc_coeffs_full(runtime_params,
                       evolving_names,
                       use_pereverzev=False):
     consts = CONSTANTS
-    pedestal_model_output = physics_models.pedestal_model(
+    pedestal_model_output = g.pedestal_model(
         runtime_params, geo, core_profiles)
     mask = (jnp.zeros_like(
         geo.rho,
         dtype=bool).at[pedestal_model_output.rho_norm_ped_top_idx].set(True))
     conductivity = (
-        physics_models.neoclassical_models.conductivity.calculate_conductivity(
+        g.neoclassical_models.conductivity.calculate_conductivity(
             geo, core_profiles))
     merged_source_profiles = build_source_profiles1(
-        source_models=physics_models.source_models,
-        neoclassical_models=physics_models.neoclassical_models,
+        source_models=g.source_models,
+        neoclassical_models=g.neoclassical_models,
         runtime_params=runtime_params,
         geo=geo,
         core_profiles=core_profiles,
@@ -6790,7 +6790,7 @@ def _calc_coeffs_full(runtime_params,
     tic_psi = jnp.ones_like(toc_psi)
     toc_dens_el = jnp.ones_like(geo.vpr)
     tic_dens_el = geo.vpr
-    turbulent_transport = physics_models.transport_model(
+    turbulent_transport = g.transport_model(
         runtime_params, geo, core_profiles, pedestal_model_output)
     chi_face_ion_total = turbulent_transport.chi_face_ion
     chi_face_el_total = turbulent_transport.chi_face_el
@@ -7460,19 +7460,6 @@ def get_consistent_runtime_params_and_geometry(*, t, runtime_params_provider,
     runtime_params = runtime_params_provider(t=t)
     return make_ip_consistent(runtime_params, geo)
 
-
-@jax.tree_util.register_dataclass
-@dataclasses.dataclass(frozen=True)
-class PhysicsModels:
-    source_models: SourceModels = dataclasses.field(metadata=dict(static=True))
-    transport_model: TransportModel = dataclasses.field(metadata=dict(
-        static=True))
-    pedestal_model: PedestalModel = dataclasses.field(metadata=dict(
-        static=True))
-    neoclassical_models: NeoclassicalModels = (dataclasses.field(metadata=dict(
-        static=True)))
-
-
 StaticKwargs: TypeAlias = dict[str, Any]
 DynamicArgs: TypeAlias = list[Any]
 PROFILES = "profiles"
@@ -7976,24 +7963,24 @@ def _get_initial_state(runtime_params, geo, step_fn):
     initial_core_profiles = initial_core_profiles0(
         runtime_params,
         geo,
-        source_models=physics_models.source_models,
-        neoclassical_models=physics_models.neoclassical_models,
+        source_models=g.source_models,
+        neoclassical_models=g.neoclassical_models,
     )
     initial_core_sources = get_all_source_profiles(
         runtime_params=runtime_params,
         geo=geo,
         core_profiles=initial_core_profiles,
-        source_models=physics_models.source_models,
-        neoclassical_models=physics_models.neoclassical_models,
+        source_models=g.source_models,
+        neoclassical_models=g.neoclassical_models,
         conductivity=Conductivity(
             sigma=initial_core_profiles.sigma,
             sigma_face=initial_core_profiles.sigma_face,
         ),
     )
     transport_coeffs = (calculate_total_transport_coeffs(
-        physics_models.pedestal_model,
-        physics_models.transport_model,
-        physics_models.neoclassical_models,
+        g.pedestal_model,
+        g.transport_model,
+        g.neoclassical_models,
         runtime_params,
         geo,
         initial_core_profiles,
@@ -8034,8 +8021,8 @@ class SimulationStepFn:
             runtime_params=runtime_params_t,
             geo=geo_t,
             core_profiles=input_state.core_profiles,
-            source_models=g.solver.physics_models.source_models,
-            neoclassical_models=g.solver.physics_models.neoclassical_models,
+            source_models=g.source_models,
+            neoclassical_models=g.neoclassical_models,
             explicit=True,
         )
 
@@ -8195,14 +8182,14 @@ def _finalize_outputs(t, dt, x_new, solver_numeric_outputs, geometry_t_plus_dt,
             core_profiles_t=core_profiles_t,
             core_profiles_t_plus_dt=core_profiles_t_plus_dt,
             explicit_source_profiles=explicit_source_profiles,
-            source_models=physics_models.source_models,
-            neoclassical_models=physics_models.neoclassical_models,
+            source_models=g.source_models,
+            neoclassical_models=g.neoclassical_models,
             evolving_names=evolving_names,
         ))
     final_total_transport = (calculate_total_transport_coeffs(
-        physics_models.pedestal_model,
-        physics_models.transport_model,
-        physics_models.neoclassical_models,
+        g.pedestal_model,
+        g.transport_model,
+        g.neoclassical_models,
         runtime_params_t_plus_dt,
         geometry_t_plus_dt,
         final_core_profiles,
@@ -8403,12 +8390,11 @@ for submodel in torax_config.submodels:
         submodel.__dict__['grid'] = new_grid
 
 geometry_provider = torax_config.geometry.build_provider
-g.physics_models = PhysicsModels(
-    pedestal_model=torax_config.pedestal.build_pedestal_model(),
-    source_models=torax_config.sources.build_models(),
-    transport_model=torax_config.transport.build_transport_model(),
-    neoclassical_models=torax_config.neoclassical.build_models(),
-)
+g.pedestal_model = torax_config.pedestal.build_pedestal_model()
+g.source_models=torax_config.sources.build_models()
+g.transport_model=torax_config.transport.build_transport_model()
+g.neoclassical_models=torax_config.neoclassical.build_models()
+g.physics_models = None
 g.solver = torax_config.solver.build_solver(physics_models=g.physics_models)
 runtime_params_provider = (RuntimeParamsProvider.from_config(torax_config))
 step_fn = SimulationStepFn(
