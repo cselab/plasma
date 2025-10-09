@@ -22,6 +22,7 @@ from typing import ClassVar, Protocol
 from typing import Final, Mapping
 from typing import Literal
 from typing_extensions import Annotated, Final, override
+from typing_extensions import Self
 import abc
 import chex
 import copy
@@ -43,21 +44,6 @@ import torax
 import typing
 import typing_extensions
 import xarray as xr
-import dataclasses
-import functools
-from typing import Annotated
-import chex
-import jax
-import pydantic
-from torax._src import array_typing
-from torax._src.torax_pydantic import torax_pydantic
-from typing_extensions import Self
-
-import enum
-from jax import numpy as jnp
-import jaxtyping as jt
-from torax._src import array_typing
-from torax._src import jax_utils
 
 
 @enum.unique
