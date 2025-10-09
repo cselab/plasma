@@ -93,12 +93,7 @@ def _numpy_array_is_sorted(x: np.ndarray) -> np.ndarray:
     return x
 
 
-NumpyArray = Annotated[
-    np.ndarray,
-    pydantic.BeforeValidator(_numpy_array_before_validator),
-    pydantic.
-    PlainSerializer(_numpy_array_serializer, return_type=NumpySerialized),
-]
+NumpyArray = Any
 NumpyArray1D = Annotated[NumpyArray,
                          pydantic.AfterValidator(_numpy_array_is_rank_1)]
 NumpyArray1DSorted = Annotated[NumpyArray,
