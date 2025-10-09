@@ -22,7 +22,6 @@ from torax._src.geometry import geometry
 from torax._src.geometry import geometry as geometry_lib
 from torax._src.geometry import geometry_provider
 from torax._src.geometry import standard_geometry
-from torax._src.physics import collisions
 from torax._src.physics import formulas as formulas_ph
 from torax._src.physics import psi_calculations
 from torax._src.physics import scaling_laws
@@ -63,6 +62,115 @@ from jax import numpy as jnp
 import numpy as np
 from torax._src import array_typing
 from torax._src import constants
+
+import jax
+from jax import numpy as jnp
+from torax._src import array_typing
+from torax._src import constants
+from torax._src import state
+from torax._src.geometry import geometry
+
+
+def coll_exchange(
+    core_profiles: state.CoreProfiles,
+    Qei_multiplier: float,
+) -> jax.Array:
+    log_lambda_ei = calculate_log_lambda_ei(core_profiles.T_e.value,
+                                            core_profiles.n_e.value)
+    log_tau_e_Z1 = _calculate_log_tau_e_Z1(
+        core_profiles.T_e.value,
+        core_profiles.n_e.value,
+        log_lambda_ei,
+    )
+    weighted_Z_eff = _calculate_weighted_Z_eff(core_profiles)
+    log_Qei_coef = (
+        jnp.log(Qei_multiplier * 1.5 * core_profiles.n_e.value) +
+        jnp.log(constants.CONSTANTS.keV_to_J / constants.CONSTANTS.m_amu) +
+        jnp.log(2 * constants.CONSTANTS.m_e) + jnp.log(weighted_Z_eff) -
+        log_tau_e_Z1)
+    Qei_coef = jnp.exp(log_Qei_coef)
+    return Qei_coef
+
+
+def calc_nu_star(
+    geo: geometry.Geometry,
+    core_profiles: state.CoreProfiles,
+    collisionality_multiplier: float,
+) -> jax.Array:
+    log_lambda_ei_face = calculate_log_lambda_ei(
+        core_profiles.T_e.face_value(),
+        core_profiles.n_e.face_value(),
+    )
+    log_tau_e_Z1 = _calculate_log_tau_e_Z1(
+        core_profiles.T_e.face_value(),
+        core_profiles.n_e.face_value(),
+        log_lambda_ei_face,
+    )
+    nu_e = (1 / jnp.exp(log_tau_e_Z1) * core_profiles.Z_eff_face *
+            collisionality_multiplier)
+    epsilon = geo.rho_face / geo.R_major
+    epsilon = jnp.clip(epsilon, constants.CONSTANTS.eps)
+    tau_bounce = (
+        core_profiles.q_face * geo.R_major /
+        (epsilon**1.5 *
+         jnp.sqrt(core_profiles.T_e.face_value() *
+                  constants.CONSTANTS.keV_to_J / constants.CONSTANTS.m_e)))
+    tau_bounce = tau_bounce.at[0].set(tau_bounce[1])
+    nustar = nu_e * tau_bounce
+    return nustar
+
+
+def fast_ion_fractional_heating_formula(
+    birth_energy: float | array_typing.FloatVector,
+    T_e: array_typing.FloatVector,
+    fast_ion_mass: float,
+) -> array_typing.FloatVector:
+    critical_energy = 10 * fast_ion_mass * T_e
+    energy_ratio = birth_energy / critical_energy
+    x_squared = energy_ratio
+    x = jnp.sqrt(x_squared)
+    frac_i = (2 * ((1 / 6) * jnp.log(
+        (1.0 - x + x_squared) / (1.0 + 2.0 * x + x_squared)) + (jnp.arctan(
+            (2.0 * x - 1.0) / jnp.sqrt(3)) + jnp.pi / 6) / jnp.sqrt(3)) /
+              x_squared)
+    return frac_i
+
+
+def calculate_log_lambda_ei(
+    T_e: jax.Array,
+    n_e: jax.Array,
+) -> jax.Array:
+    T_e_ev = T_e * 1e3
+    return 31.3 - 0.5 * jnp.log(n_e) + jnp.log(T_e_ev)
+
+
+def calculate_log_lambda_ii(
+    T_i: jax.Array,
+    n_i: jax.Array,
+    Z_i: jax.Array,
+) -> jax.Array:
+    T_i_ev = T_i * 1e3
+    return 30.0 - 0.5 * jnp.log(n_i) + 1.5 * jnp.log(T_i_ev) - 3.0 * jnp.log(
+        Z_i)
+
+
+def _calculate_weighted_Z_eff(
+    core_profiles: state.CoreProfiles, ) -> jax.Array:
+    return (core_profiles.n_i.value * core_profiles.Z_i**2 / core_profiles.A_i
+            + core_profiles.n_impurity.value * core_profiles.Z_impurity**2 /
+            core_profiles.A_impurity) / core_profiles.n_e.value
+
+
+def _calculate_log_tau_e_Z1(
+    T_e: jax.Array,
+    n_e: jax.Array,
+    log_lambda_ei: jax.Array,
+) -> jax.Array:
+    return (jnp.log(12 * jnp.pi**1.5 / (n_e * log_lambda_ei)) -
+            4 * jnp.log(constants.CONSTANTS.q_e) +
+            0.5 * jnp.log(constants.CONSTANTS.m_e / 2.0) +
+            2 * jnp.log(constants.CONSTANTS.epsilon_0) +
+            1.5 * jnp.log(T_e * constants.CONSTANTS.keV_to_J))
 
 _MAVRIN_Z_COEFFS: Final[Mapping[str, array_typing.FloatVector]] = (
     immutabledict.immutabledict({
@@ -282,7 +390,7 @@ def _calculate_conductivity0(
 ):
     f_trap = calculate_f_trap(geo)
     NZ = 0.58 + 0.74 / (0.76 + Z_eff_face)
-    log_lambda_ei = collisions.calculate_log_lambda_ei(T_e.face_value(),
+    log_lambda_ei = calculate_log_lambda_ei(T_e.face_value(),
                                                        n_e.face_value())
     sigsptz = (1.9012e04 * (T_e.face_value() * 1e3)**1.5 / Z_eff_face / NZ /
                log_lambda_ei)
@@ -408,9 +516,9 @@ class SauterModelConfig(BootstrapCurrentModelConfig):
 def _calculate_bootstrap_current(*, Z_eff_face, Z_i_face, n_e, n_i, T_e, T_i,
                                  psi, q_face, geo):
     f_trap = calculate_f_trap(geo)
-    log_lambda_ei = collisions.calculate_log_lambda_ei(T_e.face_value(),
+    log_lambda_ei = calculate_log_lambda_ei(T_e.face_value(),
                                                        n_e.face_value())
-    log_lambda_ii = collisions.calculate_log_lambda_ii(T_i.face_value(),
+    log_lambda_ii = calculate_log_lambda_ii(T_i.face_value(),
                                                        n_i.face_value(),
                                                        Z_i_face)
     nu_e_star = calculate_nu_e_star(
@@ -1152,7 +1260,7 @@ def calc_fusion(geo, core_profiles, runtime_params):
             alpha_fraction = 3.5 / 17.6
             birth_energy = 3520
             alpha_mass = 4.002602
-            frac_i = collisions.fast_ion_fractional_heating_formula(
+            frac_i = fast_ion_fractional_heating_formula(
                 birth_energy,
                 core_profiles.T_e.value,
                 alpha_mass,
@@ -1364,7 +1472,7 @@ class SourceModels:
 def _model_based_qei(runtime_params, geo, core_profiles):
     source_params = runtime_params.sources[QeiSource.SOURCE_NAME]
     zeros = jnp.zeros_like(geo.rho_norm)
-    qei_coef = collisions.coll_exchange(
+    qei_coef = coll_exchange(
         core_profiles=core_profiles,
         Qei_multiplier=source_params.Qei_multiplier,
     )
@@ -2664,7 +2772,7 @@ class QualikizBasedTransportModel(QuasilinearTransportModel):
         x = rmid_face / rmid_face[-1]
         x = jnp.where(jnp.abs(x) < constants.eps, constants.eps, x)
         Ti_Te = core_profiles.T_i.face_value() / core_profiles.T_e.face_value()
-        nu_star = collisions.calc_nu_star(
+        nu_star = calc_nu_star(
             geo=geo,
             core_profiles=core_profiles,
             collisionality_multiplier=transport.collisionality_multiplier,
