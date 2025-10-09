@@ -91,6 +91,7 @@ InterpolatedVarTimeRhoInput: TypeAlias = Any
 TimeInterpolatedInput: TypeAlias = Any
 TimeRhoInterpolatedInput: TypeAlias = Any
 
+
 class _PiecewiseLinearInterpolatedParam:
 
     def __init__(self, xs: Array, ys: Array):
@@ -502,28 +503,6 @@ def _load_from_primitives(
         x, y, _, _ = convert_input_to_xs_ys(v)
         loaded_values[t] = (x, y)
     return loaded_values
-
-
-def set_grid(
-    model: BaseModelFrozen,
-    grid: Grid1D,
-    mode: Literal['strict', 'force', 'relaxed'] = 'strict',
-):
-
-    def _update_rule(submodel):
-        new_grid = Grid1D.model_construct(
-            nx=grid.nx,
-            face_centers=grid.face_centers,
-            cell_centers=grid.cell_centers,
-        )
-        if submodel.grid is None:
-            submodel.__dict__['grid'] = new_grid
-        else:
-            assert False
-
-    for submodel in model.submodels:
-        if isinstance(submodel, TimeVaryingArray):
-            _update_rule(submodel)
 
 
 def _is_non_negative(
@@ -8414,7 +8393,15 @@ CONFIG = {
 g.tolerance = 1e-7
 torax_config = ToraxConfig.from_dict(CONFIG)
 mesh = torax_config.geometry.build_provider.torax_mesh
-set_grid(torax_config, mesh, mode='relaxed')
+for submodel in torax_config.submodels:
+    if isinstance(submodel, TimeVaryingArray):
+        new_grid = Grid1D.model_construct(
+            nx=mesh.nx,
+            face_centers=mesh.face_centers,
+            cell_centers=mesh.cell_centers,
+        )
+        submodel.__dict__['grid'] = new_grid
+
 geometry_provider = torax_config.geometry.build_provider
 g.physics_models = PhysicsModels(
     pedestal_model=torax_config.pedestal.build_pedestal_model(),
