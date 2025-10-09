@@ -10,7 +10,6 @@ from torax._src import constants as constants_module
 from torax._src import jax_utils
 from torax._src import xnp
 from torax._src.config import runtime_params_slice
-from torax._src.config import runtime_validation_utils
 from torax._src.torax_pydantic import interpolated_param_1d
 from torax._src.torax_pydantic import interpolated_param_2d
 from torax._src.torax_pydantic import model_base
@@ -44,7 +43,64 @@ import torax
 import typing
 import typing_extensions
 import xarray as xr
+from collections.abc import Mapping
+import functools
+import logging
+from typing import Annotated, Any, Final, TypeAlias
+import numpy as np
+import pydantic
+from torax._src import constants
+from torax._src.torax_pydantic import torax_pydantic
 
+_TOLERANCE: Final[float] = 1e-6
+
+def time_varying_array_defined_at_1(
+    time_varying_array: torax_pydantic.TimeVaryingArray,
+) -> torax_pydantic.TimeVaryingArray:
+    if not time_varying_array.right_boundary_conditions_defined:
+        logging.debug("""Not defined at rho=1.0.""")
+    return time_varying_array
+
+
+def time_varying_array_bounded(
+    time_varying_array: torax_pydantic.TimeVaryingArray,
+    lower_bound: float = -np.inf,
+    upper_bound: float = np.inf,
+):
+    return time_varying_array
+
+TimeVaryingArrayDefinedAtRightBoundaryAndBounded: TypeAlias = Annotated[
+    torax_pydantic.TimeVaryingArray,
+    pydantic.AfterValidator(time_varying_array_defined_at_1),
+    pydantic.AfterValidator(
+        functools.partial(
+            time_varying_array_bounded,
+            lower_bound=1.0,
+        )),
+]
+
+
+def _ion_mixture_before_validator(value: Any) -> Any:
+    if isinstance(value, str):
+        return {value: 1.0}
+    return value
+
+
+def _ion_mixture_after_validator(
+    value: Mapping[str, torax_pydantic.TimeVaryingScalar],
+):
+    invalid_ion_symbols = set(value.keys()) - constants.ION_SYMBOLS
+    time_arrays = [v.time for v in value.values()]
+    fraction_arrays = [v.value for v in value.values()]
+    fraction_sum = np.sum(fraction_arrays, axis=0)
+    return value
+
+
+IonMapping: TypeAlias = Annotated[
+    Mapping[str, torax_pydantic.TimeVaryingScalar],
+    pydantic.BeforeValidator(_ion_mixture_before_validator),
+    pydantic.AfterValidator(_ion_mixture_after_validator),
+]
 
 @enum.unique
 class IntegralPreservationQuantity(enum.Enum):
@@ -2915,7 +2971,7 @@ class RuntimeParamsIM:
 
 
 class IonMixture(torax_pydantic.BaseModelFrozen):
-    species: runtime_validation_utils.IonMapping
+    species: IonMapping
     Z_override: torax_pydantic.TimeVaryingScalar | None = None
     A_override: torax_pydantic.TimeVaryingScalar | None = None
 
@@ -3128,13 +3184,12 @@ class PlasmaComposition(torax_pydantic.BaseModelFrozen):
         ImpurityFractions,
         pydantic.Field(discriminator='impurity_mode'),
     ]
-    main_ion: runtime_validation_utils.IonMapping = (
+    main_ion: IonMapping = (
         torax_pydantic.ValidatedDefault({
             'D': 0.5,
             'T': 0.5
         }))
-    Z_eff: (runtime_validation_utils.
-            TimeVaryingArrayDefinedAtRightBoundaryAndBounded
+    Z_eff: (TimeVaryingArrayDefinedAtRightBoundaryAndBounded
             ) = torax_pydantic.ValidatedDefault(1.0)
     Z_i_override: torax_pydantic.TimeVaryingScalar | None = None
     A_i_override: torax_pydantic.TimeVaryingScalar | None = None
