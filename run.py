@@ -8394,8 +8394,7 @@ g.pedestal_model = torax_config.pedestal.build_pedestal_model()
 g.source_models=torax_config.sources.build_models()
 g.transport_model=torax_config.transport.build_transport_model()
 g.neoclassical_models=torax_config.neoclassical.build_models()
-g.physics_models = None
-g.solver = torax_config.solver.build_solver(physics_models=g.physics_models)
+g.solver = torax_config.solver.build_solver(None)
 runtime_params_provider = (RuntimeParamsProvider.from_config(torax_config))
 step_fn = SimulationStepFn(
     geometry_provider=geometry_provider,
