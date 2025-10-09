@@ -649,11 +649,6 @@ UnitIntervalTimeVaryingScalar: TypeAlias = typing_extensions.Annotated[
         functools.partial(_interval, lower_bound=0.0, upper_bound=1.0)),
 ]
 
-TIME_INVARIANT = TIME_INVARIANT
-JAX_STATIC = JAX_STATIC
-CubicMeter: TypeAlias = pydantic.PositiveFloat
-GreenwaldFraction: TypeAlias = pydantic.PositiveFloat
-KiloElectronVolt: TypeAlias = pydantic.PositiveFloat
 Meter: TypeAlias = pydantic.PositiveFloat
 MeterPerSecond: TypeAlias = float
 MeterSquaredPerSecond: TypeAlias = pydantic.NonNegativeFloat
@@ -661,7 +656,6 @@ Pascal: TypeAlias = pydantic.PositiveFloat
 PositiveMeterSquaredPerSecond: TypeAlias = pydantic.PositiveFloat
 Second: TypeAlias = pydantic.NonNegativeFloat
 Tesla: TypeAlias = pydantic.PositiveFloat
-Density: TypeAlias = CubicMeter | GreenwaldFraction
 UnitInterval: TypeAlias = Annotated[float, pydantic.Field(ge=0.0, le=1.0)]
 OpenUnitInterval: TypeAlias = Annotated[float, pydantic.Field(gt=0.0, lt=1.0)]
 NonNegativeTimeVaryingArray = NonNegativeTimeVaryingArray
