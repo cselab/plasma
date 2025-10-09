@@ -1,10 +1,7 @@
-import dataclasses
 from typing import Annotated, Literal
-import jax
 import jax.numpy as jnp
 from torax._src import array_typing
 from torax._src import jax_utils
-from torax._src import state
 from torax._src.fvm import cell_variable
 from torax._src.geometry import geometry as geometry_lib
 from torax._src.neoclassical import formulas
