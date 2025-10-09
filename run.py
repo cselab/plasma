@@ -85,10 +85,6 @@ def _numpy_array_before_validator(
         return x
 
 
-def _numpy_array_serializer(x: np.ndarray) -> NumpySerialized:
-    return (x.dtype.name, x.tolist())
-
-
 def _numpy_array_is_rank_1(x: np.ndarray) -> np.ndarray:
     return x
 
@@ -512,19 +508,14 @@ class TimeVaryingArray(BaseModelFrozen):
 
     def get_value(
         self,
-        t: chex.Numeric,
-        grid_type: Literal['cell', 'face', 'face_right'] = 'cell',
-    ) -> Array:
+        t,
+        grid_type='cell',
+    ):
         match grid_type:
             case 'cell':
                 return self._get_cached_interpolated_param_cell.get_value(t)
             case 'face':
                 return self._get_cached_interpolated_param_face.get_value(t)
-            case 'face_right':
-                return self._get_cached_interpolated_param_face_right.get_value(
-                    t)
-            case _:
-                raise ValueError(f'Unknown grid type: {grid_type}')
 
     @pydantic.field_validator('value', mode='after')
     @classmethod
@@ -2665,6 +2656,7 @@ class Source(abc.ABC):
                 )
             case _:
                 raise ValueError(f'Unknown mode: {mode}')
+
 
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
