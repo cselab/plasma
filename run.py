@@ -53,7 +53,6 @@ from torax._src.torax_pydantic import torax_pydantic
 from torax._src.transport_model import quasilinear_transport_model
 from torax._src.transport_model import runtime_params as runtime_params_lib
 from torax._src.transport_model import runtime_params as runtime_params0
-from torax._src.transport_model import transport_model
 from torax._src.transport_model import transport_model as transport_model_lib
 from typing import Annotated, Any, Literal
 from typing import Annotated, Any, Literal, TypeAlias, TypeVar
