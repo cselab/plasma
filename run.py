@@ -9,11 +9,11 @@ from torax._src import jax_utils
 from torax._src.torax_pydantic import interpolated_param_1d
 from torax._src.torax_pydantic import interpolated_param_2d
 from torax._src.torax_pydantic import model_base
-from torax._src.torax_pydantic import torax_pydantic
 from typing import Annotated
 from typing import Annotated, Any, Final, TypeAlias
 from typing import Annotated, Any, Literal, TypeAlias, TypeVar, ClassVar, Final, Mapping, Protocol, Callable
 from typing import Annotated, Literal
+from typing import Any, Callable, TYPE_CHECKING, TypeVar
 from typing import ClassVar, Protocol
 from typing import Final, Mapping
 from typing import Literal
@@ -36,18 +36,48 @@ import numpy as np
 import os
 import pydantic
 import scipy
+import threading
 import torax
 import typing
 import typing_extensions
 import xarray as xr
+import functools
+from typing import TypeAlias
+import pydantic
+from torax._src.torax_pydantic import interpolated_param_1d
+from torax._src.torax_pydantic import interpolated_param_2d
+from torax._src.torax_pydantic import model_base
+from torax._src.torax_pydantic import pydantic_types
+from typing_extensions import Annotated
 
-import threading
-from typing import Any, Callable, TYPE_CHECKING, TypeVar
-import jax
-import jax.numpy as jnp
-import numpy as np
-if TYPE_CHECKING:
-    from jax.numpy import *
+TIME_INVARIANT = model_base.TIME_INVARIANT
+JAX_STATIC = model_base.JAX_STATIC
+CubicMeter: TypeAlias = pydantic.PositiveFloat
+GreenwaldFraction: TypeAlias = pydantic.PositiveFloat
+KiloElectronVolt: TypeAlias = pydantic.PositiveFloat
+Meter: TypeAlias = pydantic.PositiveFloat
+MeterPerSecond: TypeAlias = float
+MeterSquaredPerSecond: TypeAlias = pydantic.NonNegativeFloat
+Pascal: TypeAlias = pydantic.PositiveFloat
+PositiveMeterSquaredPerSecond: TypeAlias = pydantic.PositiveFloat
+Second: TypeAlias = pydantic.NonNegativeFloat
+Tesla: TypeAlias = pydantic.PositiveFloat
+Density: TypeAlias = CubicMeter | GreenwaldFraction
+UnitInterval: TypeAlias = Annotated[float, pydantic.Field(ge=0.0, le=1.0)]
+OpenUnitInterval: TypeAlias = Annotated[float, pydantic.Field(gt=0.0, lt=1.0)]
+NumpyArray = pydantic_types.NumpyArray
+NumpyArray1D = pydantic_types.NumpyArray1D
+NumpyArray1DSorted = pydantic_types.NumpyArray1DSorted
+BaseModelFrozen = model_base.BaseModelFrozen
+TimeVaryingScalar = interpolated_param_1d.TimeVaryingScalar
+TimeVaryingArray = interpolated_param_2d.TimeVaryingArray
+NonNegativeTimeVaryingArray = interpolated_param_2d.NonNegativeTimeVaryingArray
+PositiveTimeVaryingScalar = interpolated_param_1d.PositiveTimeVaryingScalar
+UnitIntervalTimeVaryingScalar = (
+    interpolated_param_1d.UnitIntervalTimeVaryingScalar)
+PositiveTimeVaryingArray = interpolated_param_2d.PositiveTimeVaryingArray
+ValidatedDefault = functools.partial(pydantic.Field, validate_default=True)
+
 
 T = TypeVar('T')
 BooleanNumeric = Any
@@ -228,15 +258,15 @@ def make_ip_consistent(runtime_params, geo):
 
 
 def time_varying_array_defined_at_1(
-    time_varying_array: torax_pydantic.TimeVaryingArray,
-) -> torax_pydantic.TimeVaryingArray:
+    time_varying_array: TimeVaryingArray,
+) -> TimeVaryingArray:
     if not time_varying_array.right_boundary_conditions_defined:
         logging.debug("""Not defined at rho=1.0.""")
     return time_varying_array
 
 
 def time_varying_array_bounded(
-    time_varying_array: torax_pydantic.TimeVaryingArray,
+    time_varying_array: TimeVaryingArray,
     lower_bound: float = -np.inf,
     upper_bound: float = np.inf,
 ):
@@ -244,7 +274,7 @@ def time_varying_array_bounded(
 
 
 TimeVaryingArrayDefinedAtRightBoundaryAndBounded: TypeAlias = Annotated[
-    torax_pydantic.TimeVaryingArray,
+    TimeVaryingArray,
     pydantic.AfterValidator(time_varying_array_defined_at_1),
     pydantic.AfterValidator(
         functools.partial(
@@ -261,7 +291,7 @@ def _ion_mixture_before_validator(value: Any) -> Any:
 
 
 def _ion_mixture_after_validator(
-    value: Mapping[str, torax_pydantic.TimeVaryingScalar], ):
+    value: Mapping[str, TimeVaryingScalar], ):
     invalid_ion_symbols = set(value.keys()) - ION_SYMBOLS
     time_arrays = [v.time for v in value.values()]
     fraction_arrays = [v.value for v in value.values()]
@@ -270,7 +300,7 @@ def _ion_mixture_after_validator(
 
 
 IonMapping: TypeAlias = Annotated[
-    Mapping[str, torax_pydantic.TimeVaryingScalar],
+    Mapping[str, TimeVaryingScalar],
     pydantic.BeforeValidator(_ion_mixture_before_validator),
     pydantic.AfterValidator(_ion_mixture_after_validator),
 ]
@@ -369,23 +399,23 @@ class RuntimeParamsNumeric:
         return tuple(evolving_names)
 
 
-class Numerics(torax_pydantic.BaseModelFrozen):
-    t_initial: torax_pydantic.Second = 0.0
-    t_final: torax_pydantic.Second = 5.0
-    exact_t_final: Annotated[bool, torax_pydantic.JAX_STATIC] = True
-    max_dt: torax_pydantic.Second = 2.0
-    min_dt: torax_pydantic.Second = 1e-8
+class Numerics(BaseModelFrozen):
+    t_initial: Second = 0.0
+    t_final: Second = 5.0
+    exact_t_final: Annotated[bool, JAX_STATIC] = True
+    max_dt: Second = 2.0
+    min_dt: Second = 1e-8
     chi_timestep_prefactor: pydantic.PositiveFloat = 50.0
-    fixed_dt: torax_pydantic.Second = 1e-1
-    adaptive_dt: Annotated[bool, torax_pydantic.JAX_STATIC] = True
+    fixed_dt: Second = 1e-1
+    adaptive_dt: Annotated[bool, JAX_STATIC] = True
     dt_reduction_factor: pydantic.PositiveFloat = 3.0
-    evolve_ion_heat: Annotated[bool, torax_pydantic.JAX_STATIC] = True
-    evolve_electron_heat: Annotated[bool, torax_pydantic.JAX_STATIC] = True
-    evolve_current: Annotated[bool, torax_pydantic.JAX_STATIC] = False
-    evolve_density: Annotated[bool, torax_pydantic.JAX_STATIC] = False
-    calcphibdot: Annotated[bool, torax_pydantic.JAX_STATIC] = True
-    resistivity_multiplier: torax_pydantic.TimeVaryingScalar = (
-        torax_pydantic.ValidatedDefault(1.0))
+    evolve_ion_heat: Annotated[bool, JAX_STATIC] = True
+    evolve_electron_heat: Annotated[bool, JAX_STATIC] = True
+    evolve_current: Annotated[bool, JAX_STATIC] = False
+    evolve_density: Annotated[bool, JAX_STATIC] = False
+    calcphibdot: Annotated[bool, JAX_STATIC] = True
+    resistivity_multiplier: TimeVaryingScalar = (
+        ValidatedDefault(1.0))
     adaptive_T_source_prefactor: pydantic.PositiveFloat = 2.0e10
     adaptive_n_source_prefactor: pydantic.PositiveFloat = 2.0e8
 
@@ -1582,7 +1612,7 @@ class ConductivityModel(abc.ABC):
         pass
 
 
-class ConductivityModelConfig(torax_pydantic.BaseModelFrozen, abc.ABC):
+class ConductivityModelConfig(BaseModelFrozen, abc.ABC):
 
     @abc.abstractmethod
     def build_model(self) -> ConductivityModel:
@@ -1652,7 +1682,7 @@ class SauterModelCond(ConductivityModel):
 
 class SauterModelConfigCond(ConductivityModelConfig):
     model_name: Annotated[Literal['sauter'],
-                          torax_pydantic.JAX_STATIC] = 'sauter'
+                          JAX_STATIC] = 'sauter'
 
     def build_model(self):
         return SauterModelCond()
@@ -1679,7 +1709,7 @@ class BootstrapCurrentModel(abc.ABC):
         pass
 
 
-class BootstrapCurrentModelConfig(torax_pydantic.BaseModelFrozen, abc.ABC):
+class BootstrapCurrentModelConfig(BaseModelFrozen, abc.ABC):
 
     @abc.abstractmethod
     def build_model(self):
@@ -1714,7 +1744,7 @@ class SauterModel(BootstrapCurrentModel):
 
 class SauterModelConfig(BootstrapCurrentModelConfig):
     model_name: Annotated[Literal['sauter'],
-                          torax_pydantic.JAX_STATIC] = 'sauter'
+                          JAX_STATIC] = 'sauter'
     bootstrap_multiplier: float = 1.0
 
     def build_model(self):
@@ -1903,11 +1933,11 @@ class RuntimeParamsSrc:
     is_explicit: bool = dataclasses.field(metadata={"static": True})
 
 
-class SourceModelBase(torax_pydantic.BaseModelFrozen, abc.ABC):
-    mode: Annotated[Mode, torax_pydantic.JAX_STATIC] = (Mode.ZERO)
-    is_explicit: Annotated[bool, torax_pydantic.JAX_STATIC] = False
-    prescribed_values: tuple[torax_pydantic.TimeVaryingArray,
-                             ...] = (torax_pydantic.ValidatedDefault(({
+class SourceModelBase(BaseModelFrozen, abc.ABC):
+    mode: Annotated[Mode, JAX_STATIC] = (Mode.ZERO)
+    is_explicit: Annotated[bool, JAX_STATIC] = False
+    prescribed_values: tuple[TimeVaryingArray,
+                             ...] = (ValidatedDefault(({
                                  0: {
                                      0: 0,
                                      1: 0
@@ -2147,17 +2177,17 @@ class GenericCurrentSource(Source):
 
 class GenericCurrentSourceConfig(SourceModelBase):
     model_name: Annotated[Literal['gaussian'],
-                          torax_pydantic.JAX_STATIC] = ('gaussian')
-    I_generic: torax_pydantic.TimeVaryingScalar = torax_pydantic.ValidatedDefault(
+                          JAX_STATIC] = ('gaussian')
+    I_generic: TimeVaryingScalar = ValidatedDefault(
         3.0e6)
-    fraction_of_total_current: torax_pydantic.UnitIntervalTimeVaryingScalar = (
-        torax_pydantic.ValidatedDefault(0.2))
-    gaussian_width: torax_pydantic.PositiveTimeVaryingScalar = (
-        torax_pydantic.ValidatedDefault(0.05))
-    gaussian_location: torax_pydantic.UnitIntervalTimeVaryingScalar = (
-        torax_pydantic.ValidatedDefault(0.4))
+    fraction_of_total_current: UnitIntervalTimeVaryingScalar = (
+        ValidatedDefault(0.2))
+    gaussian_width: PositiveTimeVaryingScalar = (
+        ValidatedDefault(0.05))
+    gaussian_location: UnitIntervalTimeVaryingScalar = (
+        ValidatedDefault(0.4))
     use_absolute_current: bool = False
-    mode: Annotated[Mode, torax_pydantic.JAX_STATIC] = (Mode.MODEL_BASED)
+    mode: Annotated[Mode, JAX_STATIC] = (Mode.MODEL_BASED)
 
     @property
     def model_func(self):
@@ -2251,18 +2281,18 @@ class GenericIonElectronHeatSource(Source):
 
 class GenericIonElHeatSourceConfig(SourceModelBase):
     model_name: Annotated[Literal['gaussian'],
-                          torax_pydantic.JAX_STATIC] = ('gaussian')
-    gaussian_width: torax_pydantic.TimeVaryingScalar = (
-        torax_pydantic.ValidatedDefault(0.25))
-    gaussian_location: torax_pydantic.TimeVaryingScalar = (
-        torax_pydantic.ValidatedDefault(0.0))
-    P_total: torax_pydantic.TimeVaryingScalar = torax_pydantic.ValidatedDefault(
+                          JAX_STATIC] = ('gaussian')
+    gaussian_width: TimeVaryingScalar = (
+        ValidatedDefault(0.25))
+    gaussian_location: TimeVaryingScalar = (
+        ValidatedDefault(0.0))
+    P_total: TimeVaryingScalar = ValidatedDefault(
         120e6)
-    electron_heat_fraction: torax_pydantic.TimeVaryingScalar = (
-        torax_pydantic.ValidatedDefault(0.66666))
-    absorption_fraction: torax_pydantic.PositiveTimeVaryingScalar = (
-        torax_pydantic.ValidatedDefault(1.0))
-    mode: Annotated[Mode, torax_pydantic.JAX_STATIC] = (Mode.MODEL_BASED)
+    electron_heat_fraction: TimeVaryingScalar = (
+        ValidatedDefault(0.66666))
+    absorption_fraction: PositiveTimeVaryingScalar = (
+        ValidatedDefault(1.0))
+    mode: Annotated[Mode, JAX_STATIC] = (Mode.MODEL_BASED)
 
     @property
     def model_func(self):
@@ -2329,14 +2359,14 @@ class RuntimeParamsPaSo(RuntimeParamsSrc):
 
 class GenericParticleSourceConfig(SourceModelBase):
     model_name: Annotated[Literal['gaussian'],
-                          torax_pydantic.JAX_STATIC] = ('gaussian')
-    particle_width: torax_pydantic.TimeVaryingScalar = (
-        torax_pydantic.ValidatedDefault(0.25))
-    deposition_location: torax_pydantic.TimeVaryingScalar = (
-        torax_pydantic.ValidatedDefault(0.0))
-    S_total: torax_pydantic.TimeVaryingScalar = torax_pydantic.ValidatedDefault(
+                          JAX_STATIC] = ('gaussian')
+    particle_width: TimeVaryingScalar = (
+        ValidatedDefault(0.25))
+    deposition_location: TimeVaryingScalar = (
+        ValidatedDefault(0.0))
+    S_total: TimeVaryingScalar = ValidatedDefault(
         1e22)
-    mode: Annotated[Mode, torax_pydantic.JAX_STATIC] = (Mode.MODEL_BASED)
+    mode: Annotated[Mode, JAX_STATIC] = (Mode.MODEL_BASED)
 
     @property
     def model_func(self):
@@ -2401,14 +2431,14 @@ class RuntimeParamsPE(RuntimeParamsSrc):
 
 class PelletSourceConfig(SourceModelBase):
     model_name: Annotated[Literal['gaussian'],
-                          torax_pydantic.JAX_STATIC] = ('gaussian')
-    pellet_width: torax_pydantic.TimeVaryingScalar = (
-        torax_pydantic.ValidatedDefault(0.1))
-    pellet_deposition_location: torax_pydantic.TimeVaryingScalar = (
-        torax_pydantic.ValidatedDefault(0.85))
-    S_total: torax_pydantic.TimeVaryingScalar = torax_pydantic.ValidatedDefault(
+                          JAX_STATIC] = ('gaussian')
+    pellet_width: TimeVaryingScalar = (
+        ValidatedDefault(0.1))
+    pellet_deposition_location: TimeVaryingScalar = (
+        ValidatedDefault(0.85))
+    S_total: TimeVaryingScalar = ValidatedDefault(
         2e22)
-    mode: Annotated[Mode, torax_pydantic.JAX_STATIC] = (Mode.MODEL_BASED)
+    mode: Annotated[Mode, JAX_STATIC] = (Mode.MODEL_BASED)
 
     @property
     def model_func(self):
@@ -2513,8 +2543,8 @@ class FusionHeatSource(Source):
 
 class FusionHeatSourceConfig(SourceModelBase):
     model_name: Annotated[Literal['bosch_hale'],
-                          torax_pydantic.JAX_STATIC] = ('bosch_hale')
-    mode: Annotated[Mode, torax_pydantic.JAX_STATIC] = (Mode.MODEL_BASED)
+                          JAX_STATIC] = ('bosch_hale')
+    mode: Annotated[Mode, JAX_STATIC] = (Mode.MODEL_BASED)
 
     @property
     def model_func(self):
@@ -2575,12 +2605,12 @@ class GasPuffSource(Source):
 
 class GasPuffSourceConfig(SourceModelBase):
     model_name: Annotated[Literal['exponential'],
-                          torax_pydantic.JAX_STATIC] = ('exponential')
-    puff_decay_length: torax_pydantic.TimeVaryingScalar = (
-        torax_pydantic.ValidatedDefault(0.05))
-    S_total: torax_pydantic.TimeVaryingScalar = torax_pydantic.ValidatedDefault(
+                          JAX_STATIC] = ('exponential')
+    puff_decay_length: TimeVaryingScalar = (
+        ValidatedDefault(0.05))
+    S_total: TimeVaryingScalar = ValidatedDefault(
         1e22)
-    mode: Annotated[Mode, torax_pydantic.JAX_STATIC] = (Mode.MODEL_BASED)
+    mode: Annotated[Mode, JAX_STATIC] = (Mode.MODEL_BASED)
 
     @property
     def model_func(self):
@@ -2706,7 +2736,7 @@ def _model_based_qei(runtime_params, geo, core_profiles):
 
 class QeiSourceConfig(SourceModelBase):
     Qei_multiplier: float = 1.0
-    mode: Annotated[Mode, torax_pydantic.JAX_STATIC] = (Mode.MODEL_BASED)
+    mode: Annotated[Mode, JAX_STATIC] = (Mode.MODEL_BASED)
 
     @property
     def model_func(self):
@@ -2728,8 +2758,8 @@ class QeiSourceConfig(SourceModelBase):
         return QeiSource(model_func=self.model_func)
 
 
-class Sources(torax_pydantic.BaseModelFrozen):
-    ei_exchange: QeiSourceConfig = torax_pydantic.ValidatedDefault(
+class Sources(BaseModelFrozen):
+    ei_exchange: QeiSourceConfig = ValidatedDefault(
         {'mode': 'ZERO'})
     cyclotron_radiation: (None) = pydantic.Field(
         discriminator='model_name',
@@ -2744,7 +2774,7 @@ class Sources(torax_pydantic.BaseModelFrozen):
         default=None,
     )
     generic_current: GenericCurrentSourceConfig = (
-        torax_pydantic.ValidatedDefault({'mode': 'ZERO'}))
+        ValidatedDefault({'mode': 'ZERO'}))
     generic_heat: (GenericIonElHeatSourceConfig
                    | None) = pydantic.Field(
                        discriminator='model_name',
@@ -3083,9 +3113,9 @@ class SetTemperatureDensityPedestalModel(PedestalModel):
         return isinstance(other, SetTemperatureDensityPedestalModel)
 
 
-class BasePedestal(torax_pydantic.BaseModelFrozen, abc.ABC):
-    set_pedestal: torax_pydantic.TimeVaryingScalar = (
-        torax_pydantic.ValidatedDefault(False))
+class BasePedestal(BaseModelFrozen, abc.ABC):
+    set_pedestal: TimeVaryingScalar = (
+        ValidatedDefault(False))
 
     @abc.abstractmethod
     def build_pedestal_model(self):
@@ -3098,16 +3128,16 @@ class BasePedestal(torax_pydantic.BaseModelFrozen, abc.ABC):
 
 class SetTpedNped(BasePedestal):
     model_name: Annotated[Literal['set_T_ped_n_ped'],
-                          torax_pydantic.JAX_STATIC] = 'set_T_ped_n_ped'
-    n_e_ped: torax_pydantic.TimeVaryingScalar = torax_pydantic.ValidatedDefault(
+                          JAX_STATIC] = 'set_T_ped_n_ped'
+    n_e_ped: TimeVaryingScalar = ValidatedDefault(
         0.7e20)
     n_e_ped_is_fGW: bool = False
-    T_i_ped: torax_pydantic.TimeVaryingScalar = torax_pydantic.ValidatedDefault(
+    T_i_ped: TimeVaryingScalar = ValidatedDefault(
         5.0)
-    T_e_ped: torax_pydantic.TimeVaryingScalar = torax_pydantic.ValidatedDefault(
+    T_e_ped: TimeVaryingScalar = ValidatedDefault(
         5.0)
-    rho_norm_ped_top: torax_pydantic.TimeVaryingScalar = (
-        torax_pydantic.ValidatedDefault(0.91))
+    rho_norm_ped_top: TimeVaryingScalar = (
+        ValidatedDefault(0.91))
 
     def build_pedestal_model(self):
         return SetTemperatureDensityPedestalModel()
@@ -3136,10 +3166,10 @@ class RuntimeParamsIM:
     Z_override: array_typing.FloatScalar | None = None
 
 
-class IonMixture(torax_pydantic.BaseModelFrozen):
+class IonMixture(BaseModelFrozen):
     species: IonMapping
-    Z_override: torax_pydantic.TimeVaryingScalar | None = None
-    A_override: torax_pydantic.TimeVaryingScalar | None = None
+    Z_override: TimeVaryingScalar | None = None
+    A_override: TimeVaryingScalar | None = None
 
     def build_runtime_params(self, t):
         ions = self.species.keys()
@@ -3175,7 +3205,7 @@ def _impurity_after_validator(value):
 
 
 ImpurityMapping: TypeAlias = Annotated[
-    Mapping[str, torax_pydantic.NonNegativeTimeVaryingArray],
+    Mapping[str, NonNegativeTimeVaryingArray],
     pydantic.BeforeValidator(_impurity_before_validator),
     pydantic.AfterValidator(_impurity_after_validator),
 ]
@@ -3191,12 +3221,12 @@ class RuntimeParamsIF:
     Z_override: array_typing.FloatScalar | None = None
 
 
-class ImpurityFractions(torax_pydantic.BaseModelFrozen):
+class ImpurityFractions(BaseModelFrozen):
     impurity_mode: Annotated[Literal['fractions'],
-                             torax_pydantic.JAX_STATIC] = ('fractions')
-    species: ImpurityMapping = torax_pydantic.ValidatedDefault({'Ne': 1.0})
-    Z_override: torax_pydantic.TimeVaryingScalar | None = None
-    A_override: torax_pydantic.TimeVaryingScalar | None = None
+                             JAX_STATIC] = ('fractions')
+    species: ImpurityMapping = ValidatedDefault({'Ne': 1.0})
+    Z_override: TimeVaryingScalar | None = None
+    A_override: TimeVaryingScalar | None = None
 
     def build_runtime_params(self, t):
         ions = self.species.keys()
@@ -3265,42 +3295,42 @@ class RuntimeParamsPC:
         metadata={'static': True})
 
 
-class ProfileConditions(torax_pydantic.BaseModelFrozen):
-    Ip: torax_pydantic.TimeVaryingScalar = torax_pydantic.ValidatedDefault(
+class ProfileConditions(BaseModelFrozen):
+    Ip: TimeVaryingScalar = ValidatedDefault(
         15e6)
     use_v_loop_lcfs_boundary_condition: Annotated[
-        bool, torax_pydantic.JAX_STATIC] = False
-    v_loop_lcfs: torax_pydantic.TimeVaryingScalar = (
-        torax_pydantic.ValidatedDefault(0.0))
-    T_i_right_bc: torax_pydantic.PositiveTimeVaryingScalar | None = None
-    T_e_right_bc: torax_pydantic.PositiveTimeVaryingScalar | None = None
-    T_i: torax_pydantic.PositiveTimeVaryingArray = (
-        torax_pydantic.ValidatedDefault({0: {
+        bool, JAX_STATIC] = False
+    v_loop_lcfs: TimeVaryingScalar = (
+        ValidatedDefault(0.0))
+    T_i_right_bc: PositiveTimeVaryingScalar | None = None
+    T_e_right_bc: PositiveTimeVaryingScalar | None = None
+    T_i: PositiveTimeVaryingArray = (
+        ValidatedDefault({0: {
             0: 15.0,
             1: 1.0
         }}))
-    T_e: torax_pydantic.PositiveTimeVaryingArray = (
-        torax_pydantic.ValidatedDefault({0: {
+    T_e: PositiveTimeVaryingArray = (
+        ValidatedDefault({0: {
             0: 15.0,
             1: 1.0
         }}))
-    psi: torax_pydantic.TimeVaryingArray | None = None
-    psidot: torax_pydantic.TimeVaryingArray | None = None
-    n_e: torax_pydantic.PositiveTimeVaryingArray = (
-        torax_pydantic.ValidatedDefault({0: {
+    psi: TimeVaryingArray | None = None
+    psidot: TimeVaryingArray | None = None
+    n_e: PositiveTimeVaryingArray = (
+        ValidatedDefault({0: {
             0: 1.2e20,
             1: 0.8e20
         }}))
-    normalize_n_e_to_nbar: Annotated[bool, torax_pydantic.JAX_STATIC] = False
-    nbar: torax_pydantic.TimeVaryingScalar = torax_pydantic.ValidatedDefault(
+    normalize_n_e_to_nbar: Annotated[bool, JAX_STATIC] = False
+    nbar: TimeVaryingScalar = ValidatedDefault(
         0.85e20)
     n_e_nbar_is_fGW: bool = False
-    n_e_right_bc: torax_pydantic.TimeVaryingScalar | None = None
+    n_e_right_bc: TimeVaryingScalar | None = None
     n_e_right_bc_is_fGW: bool = False
     current_profile_nu: float = 1.0
     initial_j_is_total_current: bool = False
     initial_psi_from_j: bool = False
-    initial_psi_mode: Annotated[InitialPsiMode, torax_pydantic.JAX_STATIC] = (
+    initial_psi_mode: Annotated[InitialPsiMode, JAX_STATIC] = (
         InitialPsiMode.PROFILE_CONDITIONS)
 
     @pydantic.model_validator(mode='after')
@@ -3316,8 +3346,8 @@ class ProfileConditions(torax_pydantic.BaseModelFrozen):
         runtime_params['n_e_right_bc_is_absolute'] = True
 
         def _get_value(x):
-            if isinstance(x, (torax_pydantic.TimeVaryingScalar,
-                              torax_pydantic.TimeVaryingArray)):
+            if isinstance(x, (TimeVaryingScalar,
+                              TimeVaryingArray)):
                 return x.get_value(t)
             else:
                 return x
@@ -3344,21 +3374,21 @@ class RuntimeParamsP:
 
 
 @jax.tree_util.register_pytree_node_class
-class PlasmaComposition(torax_pydantic.BaseModelFrozen):
+class PlasmaComposition(BaseModelFrozen):
     impurity: Annotated[
         ImpurityFractions,
         pydantic.Field(discriminator='impurity_mode'),
     ]
-    main_ion: IonMapping = (torax_pydantic.ValidatedDefault({
+    main_ion: IonMapping = (ValidatedDefault({
         'D': 0.5,
         'T': 0.5
     }))
     Z_eff: (TimeVaryingArrayDefinedAtRightBoundaryAndBounded
-            ) = torax_pydantic.ValidatedDefault(1.0)
-    Z_i_override: torax_pydantic.TimeVaryingScalar | None = None
-    A_i_override: torax_pydantic.TimeVaryingScalar | None = None
-    Z_impurity_override: torax_pydantic.TimeVaryingScalar | None = None
-    A_impurity_override: torax_pydantic.TimeVaryingScalar | None = None
+            ) = ValidatedDefault(1.0)
+    Z_i_override: TimeVaryingScalar | None = None
+    A_i_override: TimeVaryingScalar | None = None
+    Z_impurity_override: TimeVaryingScalar | None = None
+    A_impurity_override: TimeVaryingScalar | None = None
 
     @pydantic.model_validator(mode='before')
     @classmethod
@@ -4035,41 +4065,41 @@ class QualikizBasedTransportModel(QuasilinearTransportModel):
         )
 
 
-class TransportBase(torax_pydantic.BaseModelFrozen, abc.ABC):
-    chi_min: torax_pydantic.MeterSquaredPerSecond = 0.05
-    chi_max: torax_pydantic.MeterSquaredPerSecond = 100.0
-    D_e_min: torax_pydantic.MeterSquaredPerSecond = 0.05
-    D_e_max: torax_pydantic.MeterSquaredPerSecond = 100.0
-    V_e_min: torax_pydantic.MeterPerSecond = -50.0
-    V_e_max: torax_pydantic.MeterPerSecond = 50.0
-    rho_min: torax_pydantic.UnitIntervalTimeVaryingScalar = (
-        torax_pydantic.ValidatedDefault(0.0))
-    rho_max: torax_pydantic.UnitIntervalTimeVaryingScalar = (
-        torax_pydantic.ValidatedDefault(1.0))
+class TransportBase(BaseModelFrozen, abc.ABC):
+    chi_min: MeterSquaredPerSecond = 0.05
+    chi_max: MeterSquaredPerSecond = 100.0
+    D_e_min: MeterSquaredPerSecond = 0.05
+    D_e_max: MeterSquaredPerSecond = 100.0
+    V_e_min: MeterPerSecond = -50.0
+    V_e_max: MeterPerSecond = 50.0
+    rho_min: UnitIntervalTimeVaryingScalar = (
+        ValidatedDefault(0.0))
+    rho_max: UnitIntervalTimeVaryingScalar = (
+        ValidatedDefault(1.0))
     apply_inner_patch: interpolated_param_1d.TimeVaryingScalar = (
-        torax_pydantic.ValidatedDefault(False))
-    D_e_inner: torax_pydantic.PositiveTimeVaryingScalar = (
-        torax_pydantic.ValidatedDefault(0.2))
+        ValidatedDefault(False))
+    D_e_inner: PositiveTimeVaryingScalar = (
+        ValidatedDefault(0.2))
     V_e_inner: interpolated_param_1d.TimeVaryingScalar = (
-        torax_pydantic.ValidatedDefault(0.0))
-    chi_i_inner: torax_pydantic.PositiveTimeVaryingScalar = (
-        torax_pydantic.ValidatedDefault(1.0))
-    chi_e_inner: torax_pydantic.PositiveTimeVaryingScalar = (
-        torax_pydantic.ValidatedDefault(1.0))
-    rho_inner: torax_pydantic.UnitIntervalTimeVaryingScalar = (
-        torax_pydantic.ValidatedDefault(0.3))
+        ValidatedDefault(0.0))
+    chi_i_inner: PositiveTimeVaryingScalar = (
+        ValidatedDefault(1.0))
+    chi_e_inner: PositiveTimeVaryingScalar = (
+        ValidatedDefault(1.0))
+    rho_inner: UnitIntervalTimeVaryingScalar = (
+        ValidatedDefault(0.3))
     apply_outer_patch: interpolated_param_1d.TimeVaryingScalar = (
-        torax_pydantic.ValidatedDefault(False))
+        ValidatedDefault(False))
     D_e_outer: interpolated_param_1d.PositiveTimeVaryingScalar = (
-        torax_pydantic.ValidatedDefault(0.2))
+        ValidatedDefault(0.2))
     V_e_outer: interpolated_param_1d.TimeVaryingScalar = (
-        torax_pydantic.ValidatedDefault(0.0))
+        ValidatedDefault(0.0))
     chi_i_outer: interpolated_param_1d.PositiveTimeVaryingScalar = (
-        torax_pydantic.ValidatedDefault(1.0))
+        ValidatedDefault(1.0))
     chi_e_outer: interpolated_param_1d.PositiveTimeVaryingScalar = (
-        torax_pydantic.ValidatedDefault(1.0))
-    rho_outer: torax_pydantic.UnitIntervalTimeVaryingScalar = (
-        torax_pydantic.ValidatedDefault(0.9))
+        ValidatedDefault(1.0))
+    rho_outer: UnitIntervalTimeVaryingScalar = (
+        ValidatedDefault(0.9))
     smoothing_width: pydantic.NonNegativeFloat = 0.0
     smooth_everywhere: bool = False
 
@@ -4342,9 +4372,9 @@ class QLKNNTransportModel0(QualikizBasedTransportModel):
 
 class QLKNNTransportModel(TransportBase):
     model_name: Annotated[Literal['qlknn'],
-                          torax_pydantic.JAX_STATIC] = 'qlknn'
-    model_path: Annotated[str, torax_pydantic.JAX_STATIC] = ''
-    qlknn_model_name: Annotated[str, torax_pydantic.JAX_STATIC] = ''
+                          JAX_STATIC] = 'qlknn'
+    model_path: Annotated[str, JAX_STATIC] = ''
+    qlknn_model_name: Annotated[str, JAX_STATIC] = ''
     include_ITG: bool = True
     include_TEM: bool = True
     include_ETG: bool = True
@@ -4406,10 +4436,10 @@ def calculate_total_transport_coeffs(pedestal_model, transport_model,
     return CoreTransport(**dataclasses.asdict(turbulent_transport))
 
 
-class Neoclassical0(torax_pydantic.BaseModelFrozen):
+class Neoclassical0(BaseModelFrozen):
     bootstrap_current: SauterModelConfig = pydantic.Field(
         discriminator="model_name")
-    conductivity: SauterModelConfigCond = (torax_pydantic.ValidatedDefault(
+    conductivity: SauterModelConfigCond = (ValidatedDefault(
         SauterModelConfigCond()))
 
     @pydantic.model_validator(mode="before")
@@ -4765,20 +4795,20 @@ def _smooth_savgol(
 
 T = TypeVar('T')
 LY_OBJECT_TYPE: TypeAlias = (str
-                             | Mapping[str, torax_pydantic.NumpyArray | float])
-TIME_INVARIANT = torax_pydantic.TIME_INVARIANT
+                             | Mapping[str, NumpyArray | float])
+TIME_INVARIANT = TIME_INVARIANT
 
 
-class CheaseConfig(torax_pydantic.BaseModelFrozen):
+class CheaseConfig(BaseModelFrozen):
     geometry_type: Annotated[Literal['chease'], TIME_INVARIANT] = 'chease'
     n_rho: Annotated[pydantic.PositiveInt, TIME_INVARIANT] = 25
     hires_factor: pydantic.PositiveInt = 4
     geometry_directory: Annotated[str | None, TIME_INVARIANT] = None
     Ip_from_parameters: Annotated[bool, TIME_INVARIANT] = True
     geometry_file: str = 'ITER_hybrid_citrin_equil_cheasedata.mat2cols'
-    R_major: torax_pydantic.Meter = 6.2
-    a_minor: torax_pydantic.Meter = 2.0
-    B_0: torax_pydantic.Tesla = 5.3
+    R_major: Meter = 6.2
+    a_minor: Meter = 2.0
+    B_0: Tesla = 5.3
 
     @pydantic.model_validator(mode='after')
     def _check_fields(self):
@@ -4792,13 +4822,13 @@ class CheaseConfig(torax_pydantic.BaseModelFrozen):
             ))
 
 
-class GeometryConfig(torax_pydantic.BaseModelFrozen):
+class GeometryConfig(BaseModelFrozen):
     config: (CheaseConfig) = pydantic.Field(discriminator='geometry_type')
 
 
-class Geometry0(torax_pydantic.BaseModelFrozen):
+class Geometry0(BaseModelFrozen):
     geometry_type: GeometryType
-    geometry_configs: GeometryConfig | dict[torax_pydantic.Second,
+    geometry_configs: GeometryConfig | dict[Second,
                                             GeometryConfig]
 
     @pydantic.model_validator(mode='before')
@@ -6971,18 +7001,18 @@ class LinearThetaMethod0(Solver):
         )
 
 
-class BaseSolver(torax_pydantic.BaseModelFrozen, abc.ABC):
-    theta_implicit: Annotated[torax_pydantic.UnitInterval,
-                              torax_pydantic.JAX_STATIC] = 1.0
-    use_predictor_corrector: Annotated[bool, torax_pydantic.JAX_STATIC] = False
+class BaseSolver(BaseModelFrozen, abc.ABC):
+    theta_implicit: Annotated[UnitInterval,
+                              JAX_STATIC] = 1.0
+    use_predictor_corrector: Annotated[bool, JAX_STATIC] = False
     n_corrector_steps: Annotated[pydantic.PositiveInt,
-                                 torax_pydantic.JAX_STATIC] = 10
+                                 JAX_STATIC] = 10
     convection_dirichlet_mode: Annotated[Literal['ghost', 'direct',
                                                  'semi-implicit'],
-                                         torax_pydantic.JAX_STATIC] = 'ghost'
+                                         JAX_STATIC] = 'ghost'
     convection_neumann_mode: Annotated[Literal['ghost', 'semi-implicit'],
-                                       torax_pydantic.JAX_STATIC] = 'ghost'
-    use_pereverzev: Annotated[bool, torax_pydantic.JAX_STATIC] = False
+                                       JAX_STATIC] = 'ghost'
+    use_pereverzev: Annotated[bool, JAX_STATIC] = False
     chi_pereverzev: pydantic.PositiveFloat = 30.0
     D_pereverzev: pydantic.NonNegativeFloat = 15.0
 
@@ -6998,7 +7028,7 @@ class BaseSolver(torax_pydantic.BaseModelFrozen, abc.ABC):
 
 class LinearThetaMethod(BaseSolver):
     solver_type: Annotated[Literal['linear'],
-                           torax_pydantic.JAX_STATIC] = ('linear')
+                           JAX_STATIC] = ('linear')
 
     @pydantic.model_validator(mode='before')
     @classmethod
@@ -7026,10 +7056,10 @@ class LinearThetaMethod(BaseSolver):
 
 class NewtonRaphsonThetaMethod(BaseSolver):
     solver_type: Annotated[Literal['newton_raphson'],
-                           torax_pydantic.JAX_STATIC] = 'newton_raphson'
-    log_iterations: Annotated[bool, torax_pydantic.JAX_STATIC] = False
+                           JAX_STATIC] = 'newton_raphson'
+    log_iterations: Annotated[bool, JAX_STATIC] = False
     initial_guess_mode: Annotated[
-        InitialGuessMode, torax_pydantic.JAX_STATIC] = InitialGuessMode.LINEAR
+        InitialGuessMode, JAX_STATIC] = InitialGuessMode.LINEAR
     n_max_iterations: pydantic.NonNegativeInt = 30
     residual_tol: float = 1e-5
     residual_coarse_tol: float = 1e-2
