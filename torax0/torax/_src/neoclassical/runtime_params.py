@@ -6,6 +6,6 @@ from torax._src.neoclassical.conductivity import runtime_params as conductivity_
 
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
-class RuntimeParams:
+class RuntimeParamsNeo:
     bootstrap_current: bootstrap_current_runtime_params.RuntimeParams
     conductivity: conductivity_runtime_params.RuntimeParams

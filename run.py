@@ -2706,7 +2706,7 @@ class Neoclassical0(torax_pydantic.BaseModelFrozen):
         return configurable_data
 
     def build_runtime_params(self):
-        return runtime_params.RuntimeParams(
+        return runtime_params.RuntimeParamsNeo(
             bootstrap_current=self.bootstrap_current.build_runtime_params(),
             conductivity=self.conductivity.build_runtime_params(),
         )
