@@ -25,6 +25,7 @@ from torax._src.geometry import standard_geometry
 from torax._src.neoclassical import neoclassical_models
 from torax._src.neoclassical import neoclassical_models as neoclassical_models_lib
 from torax._src.neoclassical import runtime_params
+from torax._src.neoclassical.bootstrap_current import base as bootstrap_current_base
 from torax._src.neoclassical.bootstrap_current import sauter as sauter_current
 from torax._src.neoclassical.bootstrap_current import zeros as bootstrap_current_zeros
 from torax._src.neoclassical.conductivity import base as conductivity_base
@@ -37,9 +38,11 @@ from torax._src.physics import psi_calculations
 from torax._src.physics import scaling_laws
 from torax._src.sources import pydantic_model as sources_pydantic_model
 from torax._src.sources import qei_source as qei_source_lib
+from torax._src.sources import source as source_lib
 from torax._src.sources import source_models as source_models_lib
 from torax._src.sources import source_profiles
 from torax._src.sources import source_profiles as source_profiles_lib
+from torax._src.sources.impurity_radiation_heat_sink import impurity_radiation_heat_sink
 from torax._src.torax_pydantic import interpolated_param_1d
 from torax._src.torax_pydantic import interpolated_param_2d
 from torax._src.torax_pydantic import model_base
@@ -77,20 +80,6 @@ import numpy as np
 import pydantic
 import typing_extensions
 import xarray as xr
-
-import functools
-from torax._src import array_typing
-from torax._src import jax_utils
-from torax._src import state
-from torax._src.config import runtime_params_slice
-from torax._src.geometry import geometry
-from torax._src.neoclassical import neoclassical_models as neoclassical_models_lib
-from torax._src.neoclassical.bootstrap_current import base as bootstrap_current_base
-from torax._src.neoclassical.conductivity import base as conductivity_base
-from torax._src.sources import source as source_lib
-from torax._src.sources import source_models as source_models_lib
-from torax._src.sources import source_profiles
-from torax._src.sources.impurity_radiation_heat_sink import impurity_radiation_heat_sink
 
 _FINAL_SOURCES = frozenset(
     [impurity_radiation_heat_sink.ImpurityRadiationHeatSink.SOURCE_NAME])
