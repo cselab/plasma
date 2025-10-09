@@ -3149,13 +3149,6 @@ class QeiSource(Source):
     def source_name(self):
         return self.SOURCE_NAME
 
-    @property
-    def affected_core_profiles(self):
-        return (
-            source.AffectedCoreProfile.TEMP_ION,
-            source.AffectedCoreProfile.TEMP_EL,
-        )
-
     def get_qei(
         self,
         runtime_params: RuntimeParamsSlice,
