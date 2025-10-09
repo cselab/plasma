@@ -78,13 +78,6 @@ NestedList: TypeAlias = (DataTypes
                          | list[list[list[DataTypes]]])
 NumpySerialized: TypeAlias = tuple[DtypeName, NestedList]
 
-
-def _numpy_array_before_validator(
-    x: np.ndarray | NumpySerialized, ) -> np.ndarray:
-    if isinstance(x, np.ndarray):
-        return x
-
-
 def _numpy_array_is_rank_1(x: np.ndarray) -> np.ndarray:
     return x
 
@@ -292,17 +285,6 @@ class InterpolatedVarSingleAxis(InterpolatedParamBase):
         if self._is_bool_param:
             return jnp.bool_(value > 0.5)
         return value
-
-    @property
-    def param(self) -> InterpolatedParamBase:
-        return self._param
-
-    def __eq__(self, other: 'InterpolatedVarSingleAxis') -> bool:
-        try:
-            chex.assert_trees_all_equal(self, other)
-        except AssertionError:
-            return False
-        return True
 
 
 @jax.tree_util.register_pytree_node_class
