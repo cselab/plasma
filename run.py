@@ -65,8 +65,6 @@ def _numpy_array_is_sorted(x: np.ndarray):
 NumpyArray = Any
 NumpyArray1D = Annotated[NumpyArray,
                          pydantic.AfterValidator(_numpy_array_is_rank_1)]
-NumpyArray1DSorted = Annotated[NumpyArray,
-                               pydantic.AfterValidator(_numpy_array_is_sorted)]
 
 
 def _array_is_unit_interval(array: np.ndarray):
@@ -584,7 +582,7 @@ NonNegativeTimeVaryingArray: TypeAlias = typing_extensions.Annotated[
 
 
 class TimeVaryingScalar(BaseModelFrozen):
-    time: NumpyArray1DSorted
+    time: Any
     value: NumpyArray
     is_bool_param: typing_extensions.Annotated[bool, JAX_STATIC] = (False)
     interpolation_mode: typing_extensions.Annotated[
