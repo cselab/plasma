@@ -1110,10 +1110,6 @@ def build_source_profiles(runtime_params,
                           explicit,
                           explicit_source_profiles=None,
                           conductivity=None):
-    if not explicit and explicit_source_profiles is None:
-        raise ValueError(
-            '`explicit_source_profiles` must be provided if explicit is False.'
-        )
     if explicit:
         qei = QeiInfo.zeros(geo)
         bootstrap_current = bootstrap_current_base.BootstrapCurrent.zeros(geo)
