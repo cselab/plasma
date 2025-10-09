@@ -60,7 +60,7 @@ from typing import Any
 from typing import Any, Final, Mapping, Sequence, TypeAlias
 from typing import Callable
 from typing import Final
-from typing import Final, Mapping, Tuple
+from typing import Final, Mapping
 from typing import Mapping
 from typing import TypeAlias
 from typing_extensions import Annotated
@@ -1351,7 +1351,7 @@ class Ions:
 def get_updated_ion_temperature(
     profile_conditions_params: profile_conditions.RuntimeParams,
     geo: geometry.Geometry,
-) -> cell_variable.CellVariable:
+):
     T_i = cell_variable.CellVariable(
         value=profile_conditions_params.T_i,
         left_face_grad_constraint=jnp.zeros(()),
@@ -1365,7 +1365,7 @@ def get_updated_ion_temperature(
 def get_updated_electron_temperature(
     profile_conditions_params: profile_conditions.RuntimeParams,
     geo: geometry.Geometry,
-) -> cell_variable.CellVariable:
+):
     T_e = cell_variable.CellVariable(
         value=profile_conditions_params.T_e,
         left_face_grad_constraint=jnp.zeros(()),
@@ -1379,7 +1379,7 @@ def get_updated_electron_temperature(
 def get_updated_electron_density(
     profile_conditions_params: profile_conditions.RuntimeParams,
     geo: geometry.Geometry,
-) -> cell_variable.CellVariable:
+):
     nGW = (profile_conditions_params.Ip / 1e6 / (jnp.pi * geo.a_minor**2) *
            1e20)
     n_e_value = jnp.where(
@@ -1438,7 +1438,7 @@ def _get_ion_properties_from_fractions(
     Z_i_face: array_typing.FloatVectorFace,
     Z_eff_from_config: array_typing.FloatVectorCell,
     Z_eff_face_from_config: array_typing.FloatVectorFace,
-) -> _IonProperties:
+):
     Z_impurity = charge_states.get_average_charge_state(
         ion_symbols=impurity_symbols,
         T_e=T_e.value,
@@ -1483,7 +1483,7 @@ def get_updated_ions(
     geo: geometry.Geometry,
     n_e: cell_variable.CellVariable,
     T_e: cell_variable.CellVariable,
-) -> Ions:
+):
     Z_i = charge_states.get_average_charge_state(
         ion_symbols=runtime_params.plasma_composition.main_ion_names,
         T_e=T_e.value,
@@ -1622,7 +1622,7 @@ def initial_core_profiles0(runtime_params, geo, source_models,
 def _get_initial_psi_mode(
     runtime_params: runtime_params_slice.RuntimeParams,
     geo: geometry.Geometry,
-) -> profile_conditions_lib.InitialPsiMode:
+):
     psi_mode = runtime_params.profile_conditions.initial_psi_mode
     if psi_mode == profile_conditions_lib.InitialPsiMode.PROFILE_CONDITIONS:
         if runtime_params.profile_conditions.psi is None:
@@ -1646,7 +1646,7 @@ def _init_psi_and_psi_derived(
     core_profiles: state.CoreProfiles,
     source_models: source_models_lib.SourceModels,
     neoclassical_models: neoclassical_models_lib.NeoclassicalModels,
-) -> state.CoreProfiles:
+):
     sources_are_calculated = False
     source_profiles = source_profile_builders.build_all_zero_profiles(geo)
     initial_psi_mode = _get_initial_psi_mode(runtime_params, geo)
@@ -1744,7 +1744,7 @@ def _calculate_all_psi_dependent_profiles(
     source_models: source_models_lib.SourceModels,
     neoclassical_models: neoclassical_models_lib.NeoclassicalModels,
     sources_are_calculated: bool,
-) -> state.CoreProfiles:
+):
     j_total, j_total_face, Ip_profile_face = psi_calculations.calc_j_total(
         geo, psi)
     core_profiles = dataclasses.replace(
@@ -1808,7 +1808,7 @@ def _get_bootstrap_and_standard_source_profiles(
     neoclassical_models: neoclassical_models_lib.NeoclassicalModels,
     source_models: source_models_lib.SourceModels,
     source_profiles: source_profiles_lib.SourceProfiles,
-) -> source_profiles_lib.SourceProfiles:
+):
     source_profile_builders.build_standard_source_profiles(
         runtime_params=runtime_params,
         geo=geo,
@@ -1827,9 +1827,9 @@ def _get_bootstrap_and_standard_source_profiles(
 
 
 def core_profiles_to_solver_x_tuple(
-    core_profiles: state.CoreProfiles,
-    evolving_names: Tuple[str, ...],
-) -> Tuple[cell_variable.CellVariable, ...]:
+    core_profiles,
+    evolving_names,
+):
     x_tuple_for_solver_list = []
     for name in evolving_names:
         original_units_cv = getattr(core_profiles, name)
@@ -1841,11 +1841,7 @@ def core_profiles_to_solver_x_tuple(
     return tuple(x_tuple_for_solver_list)
 
 
-def solver_x_tuple_to_core_profiles(
-    x_new: tuple[cell_variable.CellVariable, ...],
-    evolving_names: tuple[str, ...],
-    core_profiles: state.CoreProfiles,
-) -> state.CoreProfiles:
+def solver_x_tuple_to_core_profiles(x_new, evolving_names, core_profiles):
     updated_vars = {}
     for i, var_name in enumerate(evolving_names):
         solver_x_tuple_cv = x_new[i]
@@ -1857,10 +1853,7 @@ def solver_x_tuple_to_core_profiles(
     return dataclasses.replace(core_profiles, **updated_vars)
 
 
-def scale_cell_variable(
-    cv: cell_variable.CellVariable,
-    scaling_factor: float,
-) -> cell_variable.CellVariable:
+def scale_cell_variable(cv, scaling_factor):
     operation = lambda x, factor: x * factor if x is not None else None
     scaled_value = operation(cv.value, scaling_factor)
     scaled_left_face_constraint = operation(cv.left_face_constraint,
@@ -1886,24 +1879,16 @@ OptionalTupleMatrix: TypeAlias = tuple[tuple[jax.Array | None, ...],
 AuxiliaryOutput: TypeAlias = Any
 
 
-def _calculate_psi_value_constraint_from_v_loop(
-    dt: array_typing.FloatScalar,
-    theta: array_typing.FloatScalar,
-    v_loop_lcfs_t: array_typing.FloatScalar,
-    v_loop_lcfs_t_plus_dt: array_typing.FloatScalar,
-    psi_lcfs_t: array_typing.FloatScalar,
-) -> jax.Array:
+def _calculate_psi_value_constraint_from_v_loop(dt, theta, v_loop_lcfs_t,
+                                                v_loop_lcfs_t_plus_dt,
+                                                psi_lcfs_t):
     theta_weighted_v_loop_lcfs = (
         1 - theta) * v_loop_lcfs_t + theta * v_loop_lcfs_t_plus_dt
     return psi_lcfs_t + theta_weighted_v_loop_lcfs * dt
 
 
 @jax_utils.jit
-def get_prescribed_core_profile_values(
-    runtime_params: runtime_params_slice.RuntimeParams,
-    geo: geometry.Geometry,
-    core_profiles: state.CoreProfiles,
-) -> dict[str, array_typing.FloatVector]:
+def get_prescribed_core_profile_values(runtime_params, geo, core_profiles):
     if not runtime_params.numerics.evolve_ion_heat:
         T_i = get_updated_ion_temperature(runtime_params.profile_conditions,
                                           geo).value
@@ -1951,13 +1936,8 @@ def get_prescribed_core_profile_values(
 
 
 @functools.partial(jax_utils.jit, static_argnames=['evolving_names'])
-def update_core_profiles_during_step(
-    x_new: tuple[cell_variable.CellVariable, ...],
-    runtime_params: runtime_params_slice.RuntimeParams,
-    geo: geometry.Geometry,
-    core_profiles: state.CoreProfiles,
-    evolving_names: tuple[str, ...],
-) -> state.CoreProfiles:
+def update_core_profiles_during_step(x_new, runtime_params, geo, core_profiles,
+                                     evolving_names):
     updated_core_profiles = solver_x_tuple_to_core_profiles(
         x_new, evolving_names, core_profiles)
     ions = get_updated_ions(
@@ -1986,17 +1966,9 @@ def update_core_profiles_during_step(
 
 
 def update_core_and_source_profiles_after_step(
-    dt: array_typing.FloatScalar,
-    x_new: tuple[cell_variable.CellVariable, ...],
-    runtime_params_t_plus_dt: runtime_params_slice.RuntimeParams,
-    geo: geometry.Geometry,
-    core_profiles_t: state.CoreProfiles,
-    core_profiles_t_plus_dt: state.CoreProfiles,
-    explicit_source_profiles: source_profiles_lib.SourceProfiles,
-    source_models: source_models_lib.SourceModels,
-    neoclassical_models: neoclassical_models_lib.NeoclassicalModels,
-    evolving_names: tuple[str, ...],
-) -> tuple[state.CoreProfiles, source_profiles_lib.SourceProfiles]:
+        dt, x_new, runtime_params_t_plus_dt, geo, core_profiles_t,
+        core_profiles_t_plus_dt, explicit_source_profiles, source_models,
+        neoclassical_models, evolving_names):
     updated_core_profiles_t_plus_dt = solver_x_tuple_to_core_profiles(
         x_new, evolving_names, core_profiles_t_plus_dt)
     ions = get_updated_ions(
