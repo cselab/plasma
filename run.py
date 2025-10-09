@@ -2673,14 +2673,6 @@ class Source(abc.ABC):
                 raise ValueError(f'Unknown mode: {mode}')
 
 
-@enum.unique
-class AffectedCoreProfile(enum.IntEnum):
-    PSI = 1
-    NE = 2
-    TEMP_ION = 3
-    TEMP_EL = 4
-
-
 @dataclasses.dataclass(kw_only=True, frozen=True, eq=True)
 class Source(abc.ABC):
     SOURCE_NAME: typing.ClassVar[str] = 'source'
@@ -2712,14 +2704,6 @@ class Source(abc.ABC):
                 )
             case _:
                 raise ValueError(f'Unknown mode: {mode}')
-
-@enum.unique
-class AffectedCoreProfile(enum.IntEnum):
-    PSI = 1
-    NE = 2
-    TEMP_ION = 3
-    TEMP_EL = 4
-
 
 @dataclasses.dataclass(kw_only=True, frozen=True, eq=True)
 class Source(abc.ABC):
