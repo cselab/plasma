@@ -43,6 +43,7 @@ from torax._src.torax_pydantic import torax_pydantic
 from typing import Annotated
 from typing import Annotated, Any, Literal, TypeAlias, TypeVar, ClassVar, Final, Mapping, Protocol, Callable
 from typing import ClassVar, Protocol
+from typing import Literal
 from typing_extensions import Annotated, Final, override
 import abc
 import chex
@@ -62,15 +63,6 @@ import pydantic
 import typing
 import typing_extensions
 import xarray as xr
-
-import dataclasses
-from typing import Literal
-import jax
-import jax.numpy as jnp
-from torax._src import constants
-from torax._src.geometry import geometry
-from torax._src.neoclassical.bootstrap_current import base as bootstrap_current_base
-import typing_extensions
 
 
 def exponential_profile(
