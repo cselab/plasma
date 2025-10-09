@@ -82,6 +82,7 @@ import pydantic
 import typing_extensions
 import xarray as xr
 
+
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class RuntimeParams(quasilinear_transport_model.RuntimeParams):
@@ -105,35 +106,30 @@ class QualikizInputs(quasilinear_transport_model.QuasilinearInputs):
     epsilon_lcfs: array_typing.FloatScalar
 
     @property
-    def Ati(self) -> array_typing.FloatVectorFace:
+    def Ati(self):
         return self.lref_over_lti
 
     @property
-    def Ate(self) -> array_typing.FloatVectorFace:
+    def Ate(self):
         return self.lref_over_lte
 
     @property
-    def Ane(self) -> array_typing.Array:
+    def Ane(self):
         return self.lref_over_lne
 
     @property
-    def Ani0(self) -> array_typing.FloatVectorFace:
+    def Ani0(self):
         return self.lref_over_lni0
 
     @property
-    def Ani1(self) -> array_typing.FloatVectorFace:
+    def Ani1(self):
         return self.lref_over_lni1
 
 
 class QualikizBasedTransportModel(
         quasilinear_transport_model.QuasilinearTransportModel):
 
-    def _prepare_qualikiz_inputs(
-        self,
-        transport: RuntimeParams,
-        geo: geometry.Geometry,
-        core_profiles: state.CoreProfiles,
-    ) -> QualikizInputs:
+    def _prepare_qualikiz_inputs(self, transport, geo, core_profiles):
         constants = constants_module.CONSTANTS
         rmid = (geo.R_out - geo.R_in) * 0.5
         rmid_face = (geo.R_out_face - geo.R_in_face) * 0.5
@@ -220,6 +216,7 @@ class QualikizBasedTransportModel(
             epsilon_lcfs=epsilon_lcfs,
         )
 
+
 class TransportBase(torax_pydantic.BaseModelFrozen, abc.ABC):
     chi_min: torax_pydantic.MeterSquaredPerSecond = 0.05
     chi_max: torax_pydantic.MeterSquaredPerSecond = 100.0
@@ -285,8 +282,9 @@ class TransportBase(torax_pydantic.BaseModelFrozen, abc.ABC):
         )
 
     @abc.abstractmethod
-    def build_transport_model(self) -> transport_model.TransportModel:
+    def build_transport_model(self):
         pass
+
 
 _FLUX_NAME_MAP: Final[Mapping[str, str]] = immutabledict.immutabledict({
     'efiITG':
@@ -325,15 +323,13 @@ class QLKNNModelWrapper:
     def inputs_and_ranges(self):
         return self._model.inputs_and_ranges
 
-    def get_model_inputs_from_qualikiz_inputs(
-        self, qualikiz_inputs
-    ):
+    def get_model_inputs_from_qualikiz_inputs(self, qualikiz_inputs):
         input_map = {
             'Ani': lambda x: x.Ani0,
             'LogNuStar': lambda x: x.log_nu_star_face,
         }
 
-        def _get_input(key: str) -> jax.Array:
+        def _get_input(key):
             return jnp.array(
                 input_map.get(key, lambda x: getattr(x, key))(qualikiz_inputs),
                 dtype=jax_utils.get_dtype(),
@@ -344,7 +340,7 @@ class QLKNNModelWrapper:
             dtype=jax_utils.get_dtype(),
         ).T
 
-    def predict(self, inputs: jax.Array) -> dict[str, jax.Array]:
+    def predict(self, inputs: jax.Array):
         model_predictions = self._model.predict(inputs)
         return {
             self._flux_name_map.get(flux_name, flux_name): flux_value
@@ -384,7 +380,7 @@ class QLKNNRuntimeConfigInputs:
         transport_runtime_params: runtime_params_lib.RuntimeParams,
         runtime_params: runtime_params_slice.RuntimeParams,
         pedestal_model_output: pedestal_model_lib.PedestalModelOutput,
-    ) -> 'QLKNNRuntimeConfigInputs':
+    ):
         assert isinstance(transport_runtime_params, RuntimeParams0)
         return QLKNNRuntimeConfigInputs(
             transport=transport_runtime_params,
@@ -409,7 +405,7 @@ def _filter_model_output(
         'qe_etg': include_ETG,
     }
 
-    def filter_flux(flux_name: str, value: jax.Array) -> jax.Array:
+    def filter_flux(flux_name: str, value: jax.Array):
         return jax.lax.cond(
             filter_map.get(flux_name, True),
             lambda: value,
@@ -438,6 +434,7 @@ def clip_inputs(feature_scan, clip_margin, inputs_and_ranges):
 
 
 class QLKNNTransportModel0(QualikizBasedTransportModel):
+
     def __init__(
         self,
         path: str,
@@ -449,21 +446,15 @@ class QLKNNTransportModel0(QualikizBasedTransportModel):
         self._frozen = True
 
     @property
-    def path(self) -> str:
+    def path(self):
         return self._path
 
     @property
-    def name(self) -> str:
+    def name(self):
         return self._name
 
-    def _call_implementation(
-        self,
-        transport_runtime_params,
-        runtime_params,
-        geo,
-        core_profiles,
-        pedestal_model_output
-    ):
+    def _call_implementation(self, transport_runtime_params, runtime_params,
+                             geo, core_profiles, pedestal_model_output):
         runtime_config_inputs = QLKNNRuntimeConfigInputs.from_runtime_params_slice(
             transport_runtime_params,
             runtime_params,
@@ -476,7 +467,7 @@ class QLKNNTransportModel0(QualikizBasedTransportModel):
         runtime_config_inputs: QLKNNRuntimeConfigInputs,
         geo: geometry.Geometry,
         core_profiles: state.CoreProfiles,
-    ) -> transport_model_lib.TurbulentTransport:
+    ):
         qualikiz_inputs = self._prepare_qualikiz_inputs(
             transport=runtime_config_inputs.transport,
             geo=geo,
@@ -526,10 +517,10 @@ class QLKNNTransportModel0(QualikizBasedTransportModel):
             gyrobohm_flux_reference_length=geo.a_minor,
         )
 
-    def __hash__(self) -> int:
+    def __hash__(self):
         return hash(('QLKNNTransportModel' + self.path + self.name))
 
-    def __eq__(self, other: typing_extensions.Self) -> bool:
+    def __eq__(self, other):
         return (isinstance(other, QLKNNTransportModel)
                 and self.path == other.path and self.name == other.name)
 
@@ -555,7 +546,7 @@ class QLKNNTransportModel(TransportBase):
 
     @pydantic.model_validator(mode='before')
     @classmethod
-    def _conform_data(cls, data: dict[str, Any]) -> dict[str, Any]:
+    def _conform_data(cls, data):
         data = copy.deepcopy(data)
         data['qlknn_model_name'] = data.get('qlknn_model_name', '')
         if 'smoothing_width' not in data:
@@ -587,14 +578,9 @@ class QLKNNTransportModel(TransportBase):
 
 
 @functools.partial(jax_utils.jit, static_argnums=(0, 1, 2))
-def calculate_total_transport_coeffs(
-    pedestal_model: pedestal_model_lib.PedestalModel,
-    transport_model: transport_model_lib.TransportModel,
-    neoclassical_models: neoclassical_models_lib.NeoclassicalModels,
-    runtime_params: runtime_params_slice.RuntimeParams,
-    geo: geometry.Geometry,
-    core_profiles: state.CoreProfiles,
-) -> state.CoreTransport:
+def calculate_total_transport_coeffs(pedestal_model, transport_model,
+                                     neoclassical_models, runtime_params, geo,
+                                     core_profiles):
     pedestal_model_output = pedestal_model(runtime_params, geo, core_profiles)
     turbulent_transport = transport_model(
         runtime_params=runtime_params,
@@ -632,7 +618,7 @@ class Neoclassical0(torax_pydantic.BaseModelFrozen):
 
     @pydantic.model_validator(mode="before")
     @classmethod
-    def _defaults(cls, data: dict[str, Any]) -> dict[str, Any]:
+    def _defaults(cls, data):
         configurable_data = copy.deepcopy(data)
         if "bootstrap_current" not in configurable_data:
             configurable_data["bootstrap_current"] = {"model_name": "zeros"}
@@ -642,14 +628,14 @@ class Neoclassical0(torax_pydantic.BaseModelFrozen):
             configurable_data["bootstrap_current"]["model_name"] = "sauter"
         return configurable_data
 
-    def build_runtime_params(self) -> runtime_params.RuntimeParams:
+    def build_runtime_params(self):
         return runtime_params.RuntimeParams(
             bootstrap_current=self.bootstrap_current.build_runtime_params(),
             conductivity=self.conductivity.build_runtime_params(),
             transport=self.transport.build_runtime_params(),
         )
 
-    def build_models(self) -> neoclassical_models.NeoclassicalModels:
+    def build_models(self):
         return neoclassical_models.NeoclassicalModels(
             conductivity=self.conductivity.build_model(),
             bootstrap_current=self.bootstrap_current.build_model(),
@@ -678,7 +664,7 @@ class CheaseConfig(torax_pydantic.BaseModelFrozen):
     def _check_fields(self):
         return self
 
-    def build_geometry(self) -> standard_geometry.StandardGeometry:
+    def build_geometry(self):
         return standard_geometry.build_standard_geometry(
             _apply_relevant_kwargs(
                 standard_geometry.StandardGeometryIntermediates.from_chease,
@@ -708,7 +694,7 @@ class Geometry0(torax_pydantic.BaseModelFrozen):
         return provider(geometries)
 
 
-def _conform_user_data(data: dict[str, Any]) -> dict[str, Any]:
+def _conform_user_data(data):
     data_copy = data.copy()
     data_copy['geometry_type'] = data['geometry_type'].lower()
     geometry_type = getattr(geometry.GeometryType,
@@ -719,8 +705,7 @@ def _conform_user_data(data: dict[str, Any]) -> dict[str, Any]:
     return constructor_args
 
 
-def _apply_relevant_kwargs(f: Callable[..., T], kwargs: Mapping[str,
-                                                                Any]) -> T:
+def _apply_relevant_kwargs(f, kwargs):
     relevant_kwargs = [
         i.name for i in inspect.signature(f).parameters.values()
     ]
@@ -748,15 +733,14 @@ def _sliding_window_of_three(flat_array: jax.Array) -> jax.Array:
         flat_array, (start, ), (window_size, )))(starts)
 
 
-def _fit_polynomial_to_intervals_of_three(
-        rho_norm: jax.Array,
-        q_face: jax.Array) -> tuple[jax.Array, jax.Array, jax.Array]:
+def _fit_polynomial_to_intervals_of_three(rho_norm: jax.Array,
+                                          q_face: jax.Array):
     q_face_intervals = _sliding_window_of_three(q_face, )
     rho_norm_intervals = _sliding_window_of_three(rho_norm, )
 
     @jax.vmap
     def batch_polyfit(q_face_interval: jax.Array,
-                      rho_norm_interval: jax.Array) -> jax.Array:
+                      rho_norm_interval: jax.Array):
         chex.assert_shape(q_face_interval, (3, ))
         chex.assert_shape(rho_norm_interval, (3, ))
         rho_norm_squared = rho_norm_interval**2
@@ -778,9 +762,9 @@ def _fit_polynomial_to_intervals_of_three(
 
 
 @jax.vmap
-def _minimum_location_value_in_interval(
-        coeffs: jax.Array, rho_norm_interval: jax.Array,
-        q_interval: jax.Array) -> tuple[jax.Array, jax.Array]:
+def _minimum_location_value_in_interval(coeffs: jax.Array,
+                                        rho_norm_interval: jax.Array,
+                                        q_interval: jax.Array):
     min_interval, max_interval = rho_norm_interval[0], rho_norm_interval[1]
     q_min_interval, q_max_interval = (
         q_interval[0],
@@ -810,7 +794,7 @@ def _minimum_location_value_in_interval(
     return overall_minimum_location, overall_minimum_value
 
 
-def _find_roots_quadratic(coeffs: jax.Array) -> jax.Array:
+def _find_roots_quadratic(coeffs: jax.Array):
     a, b, c = coeffs[0], coeffs[1], coeffs[2]
     determinant = b**2 - 4.0 * a * c
     roots_exist = jnp.greater(determinant, 0)
@@ -829,7 +813,7 @@ def _find_roots_quadratic(coeffs: jax.Array) -> jax.Array:
 
 @functools.partial(jax.vmap, in_axes=(0, 0, None))
 def _root_in_interval(coeffs: jax.Array, interval: jax.Array,
-                      q_surface: float) -> jax.Array:
+                      q_surface: float):
     intercept_coeffs = coeffs - jnp.array([0.0, 0.0, q_surface])
     min_interval, max_interval = interval[0], interval[1]
     root_values = _find_roots_quadratic(intercept_coeffs)
@@ -1033,7 +1017,7 @@ def _get_integrated_source_value(
     geo: geometry.Geometry,
     integration_fn: Callable[[array_typing.FloatVector, geometry.Geometry],
                              jax.Array],
-) -> jax.Array:
+):
     if internal_source_name in source_profiles_dict:
         return integration_fn(source_profiles_dict[internal_source_name], geo)
     else:
@@ -1045,7 +1029,7 @@ def _calculate_integrated_sources(
     core_profiles: state.CoreProfiles,
     core_sources: source_profiles.SourceProfiles,
     runtime_params: runtime_params_slice.RuntimeParams,
-) -> dict[str, jax.Array]:
+):
     integrated = {}
     integrated['P_alpha_total'] = jnp.array(0.0, dtype=jax_utils.get_dtype())
     integrated['S_total'] = jnp.array(0.0, dtype=jax_utils.get_dtype())
@@ -1109,7 +1093,7 @@ def make_post_processed_outputs(
     sim_state,
     runtime_params: runtime_params_slice.RuntimeParams,
     previous_post_processed_outputs: PostProcessedOutputs | None = None,
-) -> PostProcessedOutputs:
+):
     impurity_radiation_outputs = (calculate_impurity_species_output(
         sim_state, runtime_params))
     (
@@ -1283,13 +1267,9 @@ def make_post_processed_outputs(
     )
 
 
-def construct_xarray_for_radiation_output(
-    impurity_radiation_outputs: dict[str, ImpuritySpeciesOutput],
-    times: jax.Array,
-    rho_cell_norm: jax.Array,
-    time_coord: str,
-    rho_cell_norm_coord: str,
-) -> dict[str, xr.DataArray]:
+def construct_xarray_for_radiation_output(impurity_radiation_outputs, times,
+                                          rho_cell_norm, time_coord,
+                                          rho_cell_norm_coord):
     radiation_data = []
     n_impurity_data = []
     Z_impurity_data = []
@@ -3278,7 +3258,8 @@ def _extend_cell_grid_to_boundaries(
 
 class StateHistory:
 
-    def __init__(self, state_history, post_processed_outputs_history, torax_config):
+    def __init__(self, state_history, post_processed_outputs_history,
+                 torax_config):
         state_history[0].core_profiles = dataclasses.replace(
             state_history[0].core_profiles,
             v_loop_lcfs=state_history[1].core_profiles.v_loop_lcfs,
@@ -3757,6 +3738,7 @@ def _get_initial_state(runtime_params, geo, step_fn):
         ),
         geometry=geo,
     )
+
 
 class SimulationStepFn:
 
