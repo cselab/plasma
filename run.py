@@ -2665,13 +2665,6 @@ def calculate_total_transport_coeffs(pedestal_model, transport_model,
     )
 
 
-class FileRestart(torax_pydantic.BaseModelFrozen):
-    filename: pydantic.FilePath
-    time: torax_pydantic.Second
-    do_restart: bool
-    stitch: bool
-
-
 class Neoclassical0(torax_pydantic.BaseModelFrozen):
     bootstrap_current: (bootstrap_current_zeros.ZerosModelConfig
                         | sauter_current.SauterModelConfig) = pydantic.Field(
