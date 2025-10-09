@@ -1925,9 +1925,8 @@ class Ions:
 
 
 def get_updated_ion_temperature(
-    profile_conditions_params: profile_conditions.RuntimeParams,
-    geo: geometry.Geometry,
-):
+    profile_conditions_params,
+    geo):
     T_i = cell_variable.CellVariable(
         value=profile_conditions_params.T_i,
         left_face_grad_constraint=jnp.zeros(()),
@@ -1939,8 +1938,8 @@ def get_updated_ion_temperature(
 
 
 def get_updated_electron_temperature(
-    profile_conditions_params: profile_conditions.RuntimeParams,
-    geo: geometry.Geometry,
+        profile_conditions_params,
+    geo
 ):
     T_e = cell_variable.CellVariable(
         value=profile_conditions_params.T_e,
@@ -1953,8 +1952,8 @@ def get_updated_electron_temperature(
 
 
 def get_updated_electron_density(
-    profile_conditions_params: profile_conditions.RuntimeParams,
-    geo: geometry.Geometry,
+        profile_conditions_params,
+    geo
 ):
     nGW = (profile_conditions_params.Ip / 1e6 / (jnp.pi * geo.a_minor**2) *
            1e20)

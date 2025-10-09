@@ -21,7 +21,7 @@ class InitialPsiMode(enum.StrEnum):
 
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass
-class RuntimeParams:
+class RuntimeParamsPC:
     Ip: array_typing.FloatScalar
     v_loop_lcfs: array_typing.FloatScalar
     T_i_right_bc: array_typing.FloatScalar
@@ -92,7 +92,7 @@ class ProfileConditions(torax_pydantic.BaseModelFrozen):
     def build_runtime_params(self, t):
         runtime_params = {
             x.name: getattr(self, x.name)
-            for x in dataclasses.fields(RuntimeParams)
+            for x in dataclasses.fields(RuntimeParamsPC)
             if x.name != 'n_e_right_bc_is_absolute'
         }
         runtime_params['n_e_right_bc_is_absolute'] = True
@@ -105,4 +105,4 @@ class ProfileConditions(torax_pydantic.BaseModelFrozen):
                 return x
 
         runtime_params = {k: _get_value(v) for k, v in runtime_params.items()}
-        return RuntimeParams(**runtime_params)
+        return RuntimeParamsPC(**runtime_params)
