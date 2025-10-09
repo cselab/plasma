@@ -6,12 +6,12 @@ from fusion_surrogates.qlknn import qlknn_model
 from jax import numpy as jnp
 from torax._src import array_typing
 from torax._src import jax_utils
-from torax._src import xnp
 from torax._src.torax_pydantic import interpolated_param_1d
 from torax._src.torax_pydantic import interpolated_param_2d
 from torax._src.torax_pydantic import model_base
 from torax._src.torax_pydantic import torax_pydantic
 from typing import Annotated
+from typing import Annotated, Any, Final, TypeAlias
 from typing import Annotated, Any, Literal, TypeAlias, TypeVar, ClassVar, Final, Mapping, Protocol, Callable
 from typing import Annotated, Literal
 from typing import ClassVar, Protocol
@@ -40,22 +40,108 @@ import torax
 import typing
 import typing_extensions
 import xarray as xr
-from collections.abc import Mapping
-import functools
-import logging
-from typing import Annotated, Any, Final, TypeAlias
+
+import threading
+from typing import Any, Callable, TYPE_CHECKING, TypeVar
+import jax
+import jax.numpy as jnp
 import numpy as np
-import pydantic
-from torax._src.torax_pydantic import torax_pydantic
+if TYPE_CHECKING:
+    from jax.numpy import *
+
+T = TypeVar('T')
+BooleanNumeric = Any
+thread_context = threading.local()
+
+
+def jit(*args, **kwargs):
+    func = args[0]
+    return func
+
+
+def py_while(
+    cond_fun: Callable[list[T], BooleanNumeric],
+    body_fun: Callable[list[T], T],
+    init_val: T,
+) -> T:
+    val = init_val
+    while cond_fun(val):
+        val = body_fun(val)
+    return val
+
+
+def while_loop(
+    cond_fun: Callable[list[T], BooleanNumeric],
+    body_fun: Callable[list[T], T],
+    init_val: T,
+):
+    is_jax = getattr(thread_context, 'is_jax', False)
+    if is_jax:
+        return jax.lax.while_loop(cond_fun, body_fun, init_val)
+    else:
+        return py_while(cond_fun, body_fun, init_val)
+
+
+def py_cond(
+    cond_val: bool,
+    true_fun: Callable,
+    false_fun: Callable,
+    *operands,
+) -> Any:
+    if cond_val:
+        return true_fun(*operands)
+    else:
+        return false_fun(*operands)
+
+
+def cond(
+    cond_val: bool,
+    true_fun: Callable[..., Any],
+    false_fun: Callable[..., Any],
+    *operands,
+) -> Any:
+    is_jax = getattr(thread_context, 'is_jax', False)
+    if is_jax:
+        return jax.lax.cond(cond_val, true_fun, false_fun, *operands)
+    else:
+        return py_cond(cond_val, true_fun, false_fun, *operands)
+
+
+def py_fori_loop(lower: int, upper: int, body_fun: Callable[[int, T], T],
+                 init_val: T) -> T:
+    val = init_val
+    for i in range(lower, upper):
+        val = body_fun(i, val)
+    return val
+
+
+def fori_loop(
+    lower: int,
+    upper: int,
+    body_fun: Callable[..., Any],
+    init_val: Any,
+):
+    is_jax = getattr(thread_context, 'is_jax', False)
+    if is_jax:
+        return jax.lax.fori_loop(lower, upper, body_fun, init_val)
+    else:
+        return py_fori_loop(lower, upper, body_fun, init_val)
+
+
+def _get_current_lib():
+    is_jax = getattr(thread_context, 'is_jax', False)
+    if is_jax:
+        return jnp
+    else:
+        return np
+
+
+def __getattr__(name):
+    current_lib = _get_current_lib()
+    return getattr(current_lib, name)
+
 
 _TOLERANCE: Final[float] = 1e-6
-
-import dataclasses
-from typing import Final, Mapping
-import chex
-import immutabledict
-import jax
-from jax import numpy as jnp
 
 
 @jax.tree_util.register_dataclass
@@ -114,6 +200,7 @@ ION_PROPERTIES_DICT: Final[Mapping[str, IonProperties]] = (
                                  for v in ION_PROPERTIES}))
 ION_SYMBOLS = frozenset(ION_PROPERTIES_DICT.keys())
 
+
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class RuntimeParamsSlice:
@@ -124,6 +211,7 @@ class RuntimeParamsSlice:
     solver: Any
     sources: Any
     transport: Any
+
 
 def make_ip_consistent(runtime_params, geo):
     param_Ip = runtime_params.profile_conditions.Ip
@@ -137,6 +225,7 @@ def make_ip_consistent(runtime_params, geo):
         j_total_face=geo.j_total_face * Ip_scale_factor,
     )
     return runtime_params, geo
+
 
 def time_varying_array_defined_at_1(
     time_varying_array: torax_pydantic.TimeVaryingArray,
@@ -152,6 +241,7 @@ def time_varying_array_bounded(
     upper_bound: float = np.inf,
 ):
     return time_varying_array
+
 
 TimeVaryingArrayDefinedAtRightBoundaryAndBounded: TypeAlias = Annotated[
     torax_pydantic.TimeVaryingArray,
@@ -171,8 +261,7 @@ def _ion_mixture_before_validator(value: Any) -> Any:
 
 
 def _ion_mixture_after_validator(
-    value: Mapping[str, torax_pydantic.TimeVaryingScalar],
-):
+    value: Mapping[str, torax_pydantic.TimeVaryingScalar], ):
     invalid_ion_symbols = set(value.keys()) - ION_SYMBOLS
     time_arrays = [v.time for v in value.values()]
     fraction_arrays = [v.value for v in value.values()]
@@ -185,6 +274,7 @@ IonMapping: TypeAlias = Annotated[
     pydantic.BeforeValidator(_ion_mixture_before_validator),
     pydantic.AfterValidator(_ion_mixture_after_validator),
 ]
+
 
 @enum.unique
 class IntegralPreservationQuantity(enum.Enum):
@@ -942,8 +1032,7 @@ def calculate_scaling_law_confinement_time(
     scaled_Ip = core_profiles.Ip_profile_face[-1] / 1e6
     scaled_Ploss = Ploss / 1e6
     B = geo.B_0
-    line_avg_n_e = (line_average(core_profiles.n_e.value, geo) /
-                    1e19)
+    line_avg_n_e = (line_average(core_profiles.n_e.value, geo) / 1e19)
     R = geo.R_major
     inverse_aspect_ratio = geo.a_minor / geo.R_major
     elongation = geo.area_face[-1] / (jnp.pi * geo.a_minor**2)
@@ -1102,9 +1191,8 @@ def calculate_pressure(
         (core_profiles.n_i.value + core_profiles.n_impurity.value),
         dr=core_profiles.n_i.dr,
         right_face_constraint=core_profiles.T_i.right_face_constraint *
-        CONSTANTS.keV_to_J *
-        (core_profiles.n_i.right_face_constraint +
-         core_profiles.n_impurity.right_face_constraint),
+        CONSTANTS.keV_to_J * (core_profiles.n_i.right_face_constraint +
+                              core_profiles.n_impurity.right_face_constraint),
         right_face_grad_constraint=None,
     )
     pressure_thermal_tot = CellVariable(
@@ -1191,12 +1279,11 @@ def calculate_betas(
     _, _, p_total = calculate_pressure(core_profiles)
     p_total_volume_avg = volume_average(p_total.value, geo)
     magnetic_pressure_on_axis = geo.B_0**2 / (2 * CONSTANTS.mu_0)
-    beta_tor = p_total_volume_avg / (magnetic_pressure_on_axis +
-                                     CONSTANTS.eps)
+    beta_tor = p_total_volume_avg / (magnetic_pressure_on_axis + CONSTANTS.eps)
     beta_pol = (
         4.0 * geo.volume[-1] * p_total_volume_avg /
-        (CONSTANTS.mu_0 * core_profiles.Ip_profile_face[-1]**2 *
-         geo.R_major + CONSTANTS.eps))
+        (CONSTANTS.mu_0 * core_profiles.Ip_profile_face[-1]**2 * geo.R_major +
+         CONSTANTS.eps))
     beta_N = (1e8 * beta_tor *
               (geo.a_minor * geo.B_0 /
                (core_profiles.Ip_profile_face[-1] + CONSTANTS.eps)))
@@ -1215,11 +1302,10 @@ def coll_exchange(
         log_lambda_ei,
     )
     weighted_Z_eff = _calculate_weighted_Z_eff(core_profiles)
-    log_Qei_coef = (
-        jnp.log(Qei_multiplier * 1.5 * core_profiles.n_e.value) +
-        jnp.log(CONSTANTS.keV_to_J / CONSTANTS.m_amu) +
-        jnp.log(2 * CONSTANTS.m_e) + jnp.log(weighted_Z_eff) -
-        log_tau_e_Z1)
+    log_Qei_coef = (jnp.log(Qei_multiplier * 1.5 * core_profiles.n_e.value) +
+                    jnp.log(CONSTANTS.keV_to_J / CONSTANTS.m_amu) +
+                    jnp.log(2 * CONSTANTS.m_e) + jnp.log(weighted_Z_eff) -
+                    log_tau_e_Z1)
     Qei_coef = jnp.exp(log_Qei_coef)
     return Qei_coef
 
@@ -1244,9 +1330,8 @@ def calc_nu_star(
     epsilon = jnp.clip(epsilon, CONSTANTS.eps)
     tau_bounce = (
         core_profiles.q_face * geo.R_major /
-        (epsilon**1.5 *
-         jnp.sqrt(core_profiles.T_e.face_value() *
-                  CONSTANTS.keV_to_J / CONSTANTS.m_e)))
+        (epsilon**1.5 * jnp.sqrt(core_profiles.T_e.face_value() *
+                                 CONSTANTS.keV_to_J / CONSTANTS.m_e)))
     tau_bounce = tau_bounce.at[0].set(tau_bounce[1])
     nustar = nu_e * tau_bounce
     return nustar
@@ -1298,8 +1383,7 @@ def _calculate_log_tau_e_Z1(
     log_lambda_ei: jax.Array,
 ) -> jax.Array:
     return (jnp.log(12 * jnp.pi**1.5 / (n_e * log_lambda_ei)) -
-            4 * jnp.log(CONSTANTS.q_e) +
-            0.5 * jnp.log(CONSTANTS.m_e / 2.0) +
+            4 * jnp.log(CONSTANTS.q_e) + 0.5 * jnp.log(CONSTANTS.m_e / 2.0) +
             2 * jnp.log(CONSTANTS.epsilon_0) +
             1.5 * jnp.log(T_e * CONSTANTS.keV_to_J))
 
@@ -1465,8 +1549,7 @@ def calculate_nu_e_star(
     log_lambda_ei: array_typing.FloatVectorFace,
 ) -> array_typing.FloatVectorFace:
     return (6.921e-18 * q * geo.R_major * n_e * Z_eff * log_lambda_ei /
-            (((T_e * 1e3)**2) *
-             (geo.epsilon_face + CONSTANTS.eps)**1.5))
+            (((T_e * 1e3)**2) * (geo.epsilon_face + CONSTANTS.eps)**1.5))
 
 
 def calculate_nu_i_star(
@@ -1478,8 +1561,7 @@ def calculate_nu_i_star(
     log_lambda_ii: array_typing.FloatVectorFace,
 ) -> array_typing.FloatVectorFace:
     return (4.9e-18 * q * geo.R_major * n_i * Z_eff**4 * log_lambda_ii /
-            (((T_i * 1e3)**2) *
-             (geo.epsilon_face + CONSTANTS.eps)**1.5))
+            (((T_i * 1e3)**2) * (geo.epsilon_face + CONSTANTS.eps)**1.5))
 
 
 @jax.tree_util.register_dataclass
@@ -2555,9 +2637,9 @@ class QeiSource(Source):
             lambda: QeiInfo.zeros(geo),
         )
 
-    def get_value(self, runtime_params: RuntimeParamsSlice,
-                  geo: Geometry, core_profiles: CoreProfiles,
-                  calculated_source_profiles, conductivity):
+    def get_value(self, runtime_params: RuntimeParamsSlice, geo: Geometry,
+                  core_profiles: CoreProfiles, calculated_source_profiles,
+                  conductivity):
         raise NotImplementedError('Call get_qei() instead.')
 
     def get_source_profile_for_affected_core_profile(
@@ -3065,8 +3147,7 @@ class IonMixture(torax_pydantic.BaseModelFrozen):
         Z_override = None if not self.Z_override else self.Z_override.get_value(
             t)
         if not self.A_override:
-            As = jnp.array(
-                [ION_PROPERTIES_DICT[ion].A for ion in ions])
+            As = jnp.array([ION_PROPERTIES_DICT[ion].A for ion in ions])
             A_avg = jnp.sum(As * fractions)
         else:
             A_avg = self.A_override.get_value(t)
@@ -3268,11 +3349,10 @@ class PlasmaComposition(torax_pydantic.BaseModelFrozen):
         ImpurityFractions,
         pydantic.Field(discriminator='impurity_mode'),
     ]
-    main_ion: IonMapping = (
-        torax_pydantic.ValidatedDefault({
-            'D': 0.5,
-            'T': 0.5
-        }))
+    main_ion: IonMapping = (torax_pydantic.ValidatedDefault({
+        'D': 0.5,
+        'T': 0.5
+    }))
     Z_eff: (TimeVaryingArrayDefinedAtRightBoundaryAndBounded
             ) = torax_pydantic.ValidatedDefault(1.0)
     Z_i_override: torax_pydantic.TimeVaryingScalar | None = None
@@ -4453,8 +4533,7 @@ class StandardGeometryIntermediates:
                                     GeometrySource.CHEASE)
         psiunnormfactor = R_major**2 * B_0
         psi = chease_data['PSIchease=psi/2pi'] * psiunnormfactor * 2 * np.pi
-        Ip_chease = (chease_data['Ipprofile'] / CONSTANTS.mu_0 *
-                     R_major * B_0)
+        Ip_chease = (chease_data['Ipprofile'] / CONSTANTS.mu_0 * R_major * B_0)
         Phi = (chease_data['RHO_TOR=sqrt(Phi/pi/B0)'] *
                R_major)**2 * B_0 * np.pi
         R_in_chease = chease_data['R_INBOARD'] * R_major
@@ -4519,10 +4598,9 @@ def build_standard_geometry(
     g3 = np.concatenate((np.array([1 / intermediate.R_in[0]**2]), g3))
     g2g3_over_rhon = g2[1:] * g3[1:] / rho_norm_intermediate[1:]
     g2g3_over_rhon = np.concatenate((np.zeros(1), g2g3_over_rhon))
-    dpsidrhon = (
-        intermediate.Ip_profile[1:] *
-        (16 * CONSTANTS.mu_0 * np.pi**3 * intermediate.Phi[-1]) /
-        (g2g3_over_rhon[1:] * intermediate.F[1:]))
+    dpsidrhon = (intermediate.Ip_profile[1:] *
+                 (16 * CONSTANTS.mu_0 * np.pi**3 * intermediate.Phi[-1]) /
+                 (g2g3_over_rhon[1:] * intermediate.F[1:]))
     dpsidrhon = np.concatenate((np.zeros(1), dpsidrhon))
     psi_from_Ip = scipy.integrate.cumulative_trapezoid(
         y=dpsidrhon,
@@ -5158,9 +5236,8 @@ def make_post_processed_outputs(
         sim_state.core_sources,
         runtime_params,
     )
-    Q_fusion = (
-        integrated_sources['P_fusion'] /
-        (integrated_sources['P_external_total'] + CONSTANTS.eps))
+    Q_fusion = (integrated_sources['P_fusion'] /
+                (integrated_sources['P_external_total'] + CONSTANTS.eps))
     P_LH_hi_dens, P_LH_min, P_LH, n_e_min_P_LH = (calculate_plh_scaling_factor(
         sim_state.geometry, sim_state.core_profiles))
     Ploss = (integrated_sources['P_alpha_total'] +
@@ -5216,18 +5293,18 @@ def make_post_processed_outputs(
         E_external_injected = 0.0
         E_external_total = 0.0
     q95 = calc_q95(psi_norm_face, sim_state.core_profiles.q_face)
-    te_volume_avg = volume_average(
-        sim_state.core_profiles.T_e.value, sim_state.geometry)
-    ti_volume_avg = volume_average(
-        sim_state.core_profiles.T_i.value, sim_state.geometry)
-    n_e_volume_avg = volume_average(
-        sim_state.core_profiles.n_e.value, sim_state.geometry)
-    n_i_volume_avg = volume_average(
-        sim_state.core_profiles.n_i.value, sim_state.geometry)
+    te_volume_avg = volume_average(sim_state.core_profiles.T_e.value,
+                                   sim_state.geometry)
+    ti_volume_avg = volume_average(sim_state.core_profiles.T_i.value,
+                                   sim_state.geometry)
+    n_e_volume_avg = volume_average(sim_state.core_profiles.n_e.value,
+                                    sim_state.geometry)
+    n_i_volume_avg = volume_average(sim_state.core_profiles.n_i.value,
+                                    sim_state.geometry)
     n_e_line_avg = line_average(sim_state.core_profiles.n_e.value,
-                                           sim_state.geometry)
+                                sim_state.geometry)
     n_i_line_avg = line_average(sim_state.core_profiles.n_i.value,
-                                           sim_state.geometry)
+                                sim_state.geometry)
     fgw_n_e_volume_avg = calculate_greenwald_fraction(n_e_volume_avg,
                                                       sim_state.core_profiles,
                                                       sim_state.geometry)
@@ -6815,7 +6892,7 @@ def predictor_corrector_method(
         )
 
     if solver_params.use_predictor_corrector:
-        x_new = xnp.fori_loop(
+        x_new = fori_loop(
             0,
             runtime_params_t_plus_dt.solver.n_corrector_steps + 1,
             loop_body,
@@ -7605,7 +7682,7 @@ class SimulationStepFn:
         self._geometry_provider = geometry_provider
         self._runtime_params_provider = runtime_params_provider
 
-    @xnp.jit
+    @jit
     def __call__(
         self,
         input_state,
@@ -7657,20 +7734,20 @@ class SimulationStepFn:
         def cond_fun(inputs):
             next_dt, output = inputs
             solver_outputs = output[2]
-            is_nan_next_dt = xnp.isnan(next_dt)
+            is_nan_next_dt = jnp.isnan(next_dt)
             solver_did_not_converge = solver_outputs.solver_error_state == 1
             if runtime_params_t.numerics.exact_t_final:
-                at_exact_t_final = xnp.allclose(
+                at_exact_t_final = jnp.allclose(
                     input_state.t + next_dt,
                     runtime_params_t.numerics.t_final,
                 )
             else:
-                at_exact_t_final = xnp.array(False)
+                at_exact_t_final = array(False)
             next_dt_too_small = next_dt < runtime_params_t.numerics.min_dt
-            take_another_step = xnp.cond(
+            take_another_step = cond(
                 solver_did_not_converge,
-                lambda: xnp.cond(at_exact_t_final, lambda: True, lambda:
-                                 ~next_dt_too_small),
+                lambda: cond(at_exact_t_final, lambda: True, lambda:
+                             ~next_dt_too_small),
                 lambda: False,
             )
             return take_another_step & ~is_nan_next_dt
@@ -7723,7 +7800,7 @@ class SimulationStepFn:
                 core_profiles_t_plus_dt,
             )
 
-        _, result = xnp.while_loop(
+        _, result = while_loop(
             cond_fun,
             body_fun,
             (
