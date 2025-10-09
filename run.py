@@ -1157,7 +1157,7 @@ def build_source_profiles1(runtime_params,
     )
     bootstrap_current = (
         neoclassical_models.bootstrap_current.calculate_bootstrap_current(
-            runtime_params, geo, core_profiles))
+            geo, core_profiles))
     profiles = SourceProfiles(
         bootstrap_current=bootstrap_current,
         qei=qei,
@@ -3806,7 +3806,7 @@ def _get_bootstrap_and_standard_source_profiles(runtime_params, geo,
     )
     bootstrap_current = (
         neoclassical_models.bootstrap_current.calculate_bootstrap_current(
-            runtime_params, geo, core_profiles))
+            geo, core_profiles))
     source_profiles = dataclasses.replace(source_profiles,
                                           bootstrap_current=bootstrap_current)
     return source_profiles

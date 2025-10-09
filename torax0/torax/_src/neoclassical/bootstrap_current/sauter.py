@@ -19,7 +19,6 @@ class SauterModel(base.BootstrapCurrentModel):
 
     def calculate_bootstrap_current(
         self,
-        runtime_params: runtime_params_slice.RuntimeParams,
         geometry: geometry_lib.Geometry,
         core_profiles: state.CoreProfiles,
     ) -> base.BootstrapCurrent:

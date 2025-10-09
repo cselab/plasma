@@ -28,7 +28,6 @@ class BootstrapCurrentModel(abc.ABC):
     @abc.abstractmethod
     def calculate_bootstrap_current(
         self,
-        runtime_params,
         geometry,
         core_profiles
     ):
