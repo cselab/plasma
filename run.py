@@ -7422,16 +7422,16 @@ class RuntimeParamsProvider:
     neoclassical: Any
 
     @classmethod
-    def from_config(cls, config):
+    def from_config(cls):
         return cls(
-            sources=config.sources,
-            numerics=config.numerics,
-            profile_conditions=config.profile_conditions,
-            plasma_composition=config.plasma_composition,
-            transport_model=config.transport,
-            solver=config.solver,
-            pedestal=config.pedestal,
-            neoclassical=config.neoclassical,
+            sources=g.torax_config.sources,
+            numerics=g.torax_config.numerics,
+            profile_conditions=g.torax_config.profile_conditions,
+            plasma_composition=g.torax_config.plasma_composition,
+            transport_model=g.torax_config.transport,
+            solver=g.torax_config.solver,
+            pedestal=g.torax_config.pedestal,
+            neoclassical=g.torax_config.neoclassical,
         )
 
     @jax.jit
@@ -8393,7 +8393,7 @@ g.source_models=g.torax_config.sources.build_models()
 g.transport_model=g.torax_config.transport.build_transport_model()
 g.neoclassical_models=g.torax_config.neoclassical.build_models()
 g.solver = g.torax_config.solver.build_solver(None)
-runtime_params_provider = (RuntimeParamsProvider.from_config(g.torax_config))
+runtime_params_provider = RuntimeParamsProvider.from_config()
 step_fn = SimulationStepFn(
     geometry_provider=geometry_provider,
     runtime_params_provider=runtime_params_provider,
