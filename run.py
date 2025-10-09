@@ -3838,33 +3838,12 @@ OptionalTupleMatrix: TypeAlias = tuple[tuple[jax.Array | None, ...],
 AuxiliaryOutput: TypeAlias = Any
 
 
-def _calculate_psi_value_constraint_from_v_loop(dt, theta, v_loop_lcfs_t,
-                                                v_loop_lcfs_t_plus_dt,
-                                                psi_lcfs_t):
-    theta_weighted_v_loop_lcfs = (
-        1 - theta) * v_loop_lcfs_t + theta * v_loop_lcfs_t_plus_dt
-    return psi_lcfs_t + theta_weighted_v_loop_lcfs * dt
-
-
 @jax_utils.jit
 def get_prescribed_core_profile_values(runtime_params, geo, core_profiles):
-    if not runtime_params.numerics.evolve_ion_heat:
-        T_i = get_updated_ion_temperature(runtime_params.profile_conditions,
-                                          geo).value
-    else:
-        T_i = core_profiles.T_i.value
-    if not runtime_params.numerics.evolve_electron_heat:
-        T_e_cell_variable = get_updated_electron_temperature(
-            runtime_params.profile_conditions, geo)
-        T_e = T_e_cell_variable.value
-    else:
-        T_e_cell_variable = core_profiles.T_e
-        T_e = T_e_cell_variable.value
-    if not runtime_params.numerics.evolve_density:
-        n_e_cell_variable = get_updated_electron_density(
-            runtime_params.profile_conditions, geo)
-    else:
-        n_e_cell_variable = core_profiles.n_e
+    T_i = core_profiles.T_i.value
+    T_e_cell_variable = core_profiles.T_e
+    T_e = T_e_cell_variable.value
+    n_e_cell_variable = core_profiles.n_e
     ions = get_updated_ions(
         runtime_params,
         geo,
