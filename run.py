@@ -13,9 +13,6 @@ from torax._src import xnp
 from torax._src.config import numerics as numerics_lib
 from torax._src.config import runtime_params_slice
 from torax._src.config import runtime_validation_utils
-from torax._src.fvm import cell_variable
-from torax._src.fvm import convection_terms
-from torax._src.fvm import enums
 from torax._src.torax_pydantic import interpolated_param_1d
 from torax._src.torax_pydantic import interpolated_param_2d
 from torax._src.torax_pydantic import model_base
@@ -52,13 +49,207 @@ import chex
 from jax import numpy as jnp
 from torax._src import array_typing
 from torax._src import math_utils
-from torax._src.fvm import cell_variable
+from jax import numpy as jnp
+from torax._src import jax_utils
+from torax._src import math_utils
+import enum
+import dataclasses
+import chex
+import jax
+from jax import numpy as jnp
+import jaxtyping as jt
+from torax._src import array_typing
+import typing_extensions
+
+
+@enum.unique
+class InitialGuessMode(enum.StrEnum):
+    X_OLD = 'x_old'
+    LINEAR = 'linear'
 
 
 _trapz = jax.scipy.integrate.trapezoid
 
+
+def _zero() -> array_typing.FloatScalar:
+    return jnp.zeros(())
+
+
+@chex.dataclass(frozen=True)
+class CellVariable:
+    value: jt.Float[chex.Array, 't* cell']
+    dr: jt.Float[chex.Array, 't*']
+    left_face_constraint: jt.Float[chex.Array, 't*'] | None = None
+    right_face_constraint: jt.Float[chex.Array, 't*'] | None = None
+    left_face_grad_constraint: jt.Float[chex.Array, 't*'] | None = (
+        dataclasses.field(default_factory=_zero))
+    right_face_grad_constraint: jt.Float[chex.Array, 't*'] | None = (
+        dataclasses.field(default_factory=_zero))
+
+    def __post_init__(self):
+        for field in dataclasses.fields(self):
+            value = getattr(self, field.name)
+            name = field.name
+        left_and = (self.left_face_constraint is not None
+                    and self.left_face_grad_constraint is not None)
+        left_or = (self.left_face_constraint is not None
+                   or self.left_face_grad_constraint is not None)
+        right_and = (self.right_face_constraint is not None
+                     and self.right_face_grad_constraint is not None)
+        right_or = (self.right_face_constraint is not None
+                    or self.right_face_grad_constraint is not None)
+
+    def _assert_unbatched(self):
+        pass
+
+    def face_grad(
+        self,
+        x: jt.Float[chex.Array, 'cell'] | None = None
+    ) -> jt.Float[chex.Array, 'face']:
+        self._assert_unbatched()
+        if x is None:
+            forward_difference = jnp.diff(self.value) / self.dr
+        else:
+            forward_difference = jnp.diff(self.value) / jnp.diff(x)
+
+        def constrained_grad(
+            face: jax.Array | None,
+            grad: jax.Array | None,
+            cell: jax.Array,
+            right: bool,
+        ) -> jax.Array:
+            if face is not None:
+                if x is None:
+                    dx = self.dr
+                else:
+                    dx = x[-1] - x[-2] if right else x[1] - x[0]
+                sign = -1 if right else 1
+                return sign * (cell - face) / (0.5 * dx)
+            else:
+                return grad
+
+        left_grad = constrained_grad(
+            self.left_face_constraint,
+            self.left_face_grad_constraint,
+            self.value[0],
+            right=False,
+        )
+        right_grad = constrained_grad(
+            self.right_face_constraint,
+            self.right_face_grad_constraint,
+            self.value[-1],
+            right=True,
+        )
+        left = jnp.expand_dims(left_grad, axis=0)
+        right = jnp.expand_dims(right_grad, axis=0)
+        return jnp.concatenate([left, forward_difference, right])
+
+    def _left_face_value(self) -> jt.Float[chex.Array, '#t']:
+        value = self.value[..., 0:1]
+        return value
+
+    def _right_face_value(self) -> jt.Float[chex.Array, '#t']:
+        if self.right_face_constraint is not None:
+            value = self.right_face_constraint
+            value = jnp.expand_dims(value, axis=-1)
+        else:
+            value = (
+                self.value[..., -1:] +
+                jnp.expand_dims(self.right_face_grad_constraint, axis=-1) *
+                jnp.expand_dims(self.dr, axis=-1) / 2)
+        return value
+
+    def face_value(self) -> jt.Float[jax.Array, 't* face']:
+        inner = (self.value[..., :-1] + self.value[..., 1:]) / 2.0
+        return jnp.concatenate(
+            [self._left_face_value(), inner,
+             self._right_face_value()],
+            axis=-1)
+
+    def grad(self) -> jt.Float[jax.Array, 't* face']:
+        face = self.face_value()
+        return jnp.diff(face) / jnp.expand_dims(self.dr, axis=-1)
+
+    def cell_plus_boundaries(self) -> jt.Float[jax.Array, 't* cell+2']:
+        right_value = self._right_face_value()
+        left_value = self._left_face_value()
+        return jnp.concatenate(
+            [left_value, self.value, right_value],
+            axis=-1,
+        )
+
+    def __eq__(self, other: typing_extensions.Self) -> bool:
+        try:
+            chex.assert_trees_all_equal(self, other)
+            return True
+        except AssertionError:
+            return False
+
+
+def make_convection_terms(v_face,
+                          d_face,
+                          var,
+                          dirichlet_mode='ghost',
+                          neumann_mode='ghost'):
+    eps = 1e-20
+    is_neg = d_face < 0.0
+    nonzero_sign = jnp.ones_like(is_neg) - 2 * is_neg
+    d_face = nonzero_sign * jnp.maximum(eps, jnp.abs(d_face))
+    half = jnp.array([0.5], dtype=jax_utils.get_dtype())
+    ones = jnp.ones_like(v_face[1:-1])
+    scale = jnp.concatenate((half, ones, half))
+    ratio = scale * var.dr * v_face / d_face
+    left_peclet = -ratio[:-1]
+    right_peclet = ratio[1:]
+
+    def peclet_to_alpha(p):
+        eps = 1e-3
+        p = jnp.where(jnp.abs(p) < eps, eps, p)
+        alpha_pg10 = (p - 1) / p
+        alpha_p0to10 = ((p - 1) + (1 - p / 10)**5) / p
+        alpha_pneg10to0 = ((1 + p / 10)**5 - 1) / p
+        alpha_plneg10 = -1 / p
+        alpha = 0.5 * jnp.ones_like(p)
+        alpha = jnp.where(p > 10.0, alpha_pg10, alpha)
+        alpha = jnp.where(jnp.logical_and(10.0 >= p, p > eps), alpha_p0to10,
+                          alpha)
+        alpha = jnp.where(jnp.logical_and(-eps > p, p >= -10), alpha_pneg10to0,
+                          alpha)
+        alpha = jnp.where(p < -10.0, alpha_plneg10, alpha)
+        return alpha
+
+    left_alpha = peclet_to_alpha(left_peclet)
+    right_alpha = peclet_to_alpha(right_peclet)
+    left_v = v_face[:-1]
+    right_v = v_face[1:]
+    diag = (left_alpha * left_v - right_alpha * right_v) / var.dr
+    above = -(1.0 - right_alpha) * right_v / var.dr
+    above = above[:-1]
+    below = (1.0 - left_alpha) * left_v / var.dr
+    below = below[1:]
+    mat = math_utils.tridiag(diag, above, below)
+    vec = jnp.zeros_like(diag)
+    mat_value = (v_face[0] - right_alpha[0] * v_face[1]) / var.dr
+    vec_value = (-v_face[0] * (1.0 - left_alpha[0]) *
+                 var.left_face_grad_constraint)
+    mat = mat.at[0, 0].set(mat_value)
+    vec = vec.at[0].set(vec_value)
+    if var.right_face_constraint is not None:
+        mat_value = (v_face[-2] * left_alpha[-1] + v_face[-1] *
+                     (1.0 - 2.0 * right_alpha[-1])) / var.dr
+        vec_value = (-2.0 * v_face[-1] * (1.0 - right_alpha[-1]) *
+                     var.right_face_constraint) / var.dr
+    else:
+        mat_value = -(v_face[-1] - v_face[-2] * left_alpha[-1]) / var.dr
+        vec_value = (-v_face[-1] * (1.0 - right_alpha[-1]) *
+                     var.right_face_grad_constraint)
+    mat = mat.at[-1, -1].set(mat_value)
+    vec = vec.at[-1].set(vec_value)
+    return mat, vec
+
+
 def make_diffusion_terms(
-    d_face: array_typing.FloatVectorFace, var: cell_variable.CellVariable
+    d_face: array_typing.FloatVectorFace, var: CellVariable
 ) -> tuple[array_typing.FloatMatrixCell, array_typing.FloatVectorCell]:
     denom = var.dr**2
     diag = jnp.asarray(-d_face[1:] - d_face[:-1])
@@ -90,16 +281,17 @@ def make_diffusion_terms(
     mat = math_utils.tridiag(diag, off, off) / denom
     return mat, vec
 
+
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True, eq=False)
 class CoreProfiles:
-    T_i: cell_variable.CellVariable
-    T_e: cell_variable.CellVariable
-    psi: cell_variable.CellVariable
-    psidot: cell_variable.CellVariable
-    n_e: cell_variable.CellVariable
-    n_i: cell_variable.CellVariable
-    n_impurity: cell_variable.CellVariable
+    T_i: CellVariable
+    T_e: CellVariable
+    psi: CellVariable
+    psidot: CellVariable
+    n_e: CellVariable
+    n_i: CellVariable
+    n_impurity: CellVariable
     impurity_fractions: Mapping[str, array_typing.FloatVector]
     q_face: array_typing.FloatVectorFace
     s_face: array_typing.FloatVectorFace
@@ -145,10 +337,8 @@ class CoreTransport:
         geo,
     ):
         return jnp.maximum(
-            jnp.max(
-                self.chi_face_ion * geo.g1_over_vpr2_face),
-            jnp.max(
-                self.chi_face_el * geo.g1_over_vpr2_face),
+            jnp.max(self.chi_face_ion * geo.g1_over_vpr2_face),
+            jnp.max(self.chi_face_el * geo.g1_over_vpr2_face),
         )
 
 
@@ -510,7 +700,7 @@ def calculate_scaling_law_confinement_time(
 
 def calc_q_face(
     geo: Geometry,
-    psi: cell_variable.CellVariable,
+    psi: CellVariable,
 ) -> array_typing.FloatVectorFace:
     inv_iota = jnp.abs(
         (2 * geo.Phi_b * geo.rho_face_norm[1:]) / psi.face_grad()[1:])
@@ -522,7 +712,7 @@ def calc_q_face(
 
 def calc_j_total(
     geo: Geometry,
-    psi: cell_variable.CellVariable,
+    psi: CellVariable,
 ) -> tuple[
         array_typing.FloatVectorCell,
         array_typing.FloatVectorFace,
@@ -543,7 +733,7 @@ def calc_j_total(
     return j_total, j_total_face, Ip_profile_face
 
 
-def calc_s_face(geo: Geometry, psi: cell_variable.CellVariable) -> jax.Array:
+def calc_s_face(geo: Geometry, psi: CellVariable) -> jax.Array:
     iota_scaled = jnp.abs((psi.face_grad()[1:] / geo.rho_face_norm[1:]))
     iota_scaled0 = jnp.expand_dims(jnp.abs(psi.face_grad()[1] / geo.drho_norm),
                                    axis=0)
@@ -553,7 +743,7 @@ def calc_s_face(geo: Geometry, psi: cell_variable.CellVariable) -> jax.Array:
     return s_face
 
 
-def calc_s_rmid(geo: Geometry, psi: cell_variable.CellVariable) -> jax.Array:
+def calc_s_rmid(geo: Geometry, psi: CellVariable) -> jax.Array:
     iota_scaled = jnp.abs((psi.face_grad()[1:] / geo.rho_face_norm[1:]))
     iota_scaled0 = jnp.expand_dims(jnp.abs(psi.face_grad()[1] / geo.drho_norm),
                                    axis=0)
@@ -563,7 +753,7 @@ def calc_s_rmid(geo: Geometry, psi: cell_variable.CellVariable) -> jax.Array:
     return s_face
 
 
-def _calc_bpol2(geo: Geometry, psi: cell_variable.CellVariable) -> jax.Array:
+def _calc_bpol2(geo: Geometry, psi: CellVariable) -> jax.Array:
     bpol2_bulk = ((psi.face_grad()[1:] / (2 * jnp.pi))**2 * geo.g2_face[1:] /
                   geo.vpr_face[1:]**2)
     bpol2_axis = jnp.array([0.0], dtype=jax_utils.get_dtype())
@@ -571,7 +761,7 @@ def _calc_bpol2(geo: Geometry, psi: cell_variable.CellVariable) -> jax.Array:
     return bpol2_face
 
 
-def calc_Wpol(geo: Geometry, psi: cell_variable.CellVariable) -> jax.Array:
+def calc_Wpol(geo: Geometry, psi: CellVariable) -> jax.Array:
     bpol2 = _calc_bpol2(geo, psi)
     Wpol = _trapz(bpol2 * geo.vpr_face,
                   geo.rho_face_norm) / (2 * constants.CONSTANTS.mu_0)
@@ -607,7 +797,7 @@ def calculate_psidot_from_psi_sources(
     psi_sources: array_typing.FloatVector,
     sigma: array_typing.FloatVector,
     resistivity_multiplier: float,
-    psi: cell_variable.CellVariable,
+    psi: CellVariable,
     geo: Geometry,
 ) -> jax.Array:
     consts = constants.CONSTANTS
@@ -617,10 +807,8 @@ def calculate_psidot_from_psi_sources(
     v_face_psi = jnp.zeros_like(d_face_psi)
     psi_sources += (8.0 * jnp.pi**2 * consts.mu_0 * geo.Phi_b_dot * geo.Phi_b *
                     geo.rho_norm**2 * sigma / geo.F**2 * psi.grad())
-    diffusion_mat, diffusion_vec = make_diffusion_terms(
-        d_face_psi, psi)
-    conv_mat, conv_vec = convection_terms.make_convection_terms(
-        v_face_psi, d_face_psi, psi)
+    diffusion_mat, diffusion_vec = make_diffusion_terms(d_face_psi, psi)
+    conv_mat, conv_vec = make_convection_terms(v_face_psi, d_face_psi, psi)
     c_mat = diffusion_mat + conv_mat
     c = diffusion_vec + conv_vec
     c += psi_sources
@@ -637,9 +825,8 @@ def calculate_main_ion_dilution_factor(
 
 
 def calculate_pressure(
-    core_profiles: CoreProfiles,
-) -> tuple[cell_variable.CellVariable, ...]:
-    pressure_thermal_el = cell_variable.CellVariable(
+    core_profiles: CoreProfiles, ) -> tuple[CellVariable, ...]:
+    pressure_thermal_el = CellVariable(
         value=core_profiles.n_e.value * core_profiles.T_e.value *
         constants.CONSTANTS.keV_to_J,
         dr=core_profiles.n_e.dr,
@@ -647,7 +834,7 @@ def calculate_pressure(
         core_profiles.T_e.right_face_constraint * constants.CONSTANTS.keV_to_J,
         right_face_grad_constraint=None,
     )
-    pressure_thermal_ion = cell_variable.CellVariable(
+    pressure_thermal_ion = CellVariable(
         value=core_profiles.T_i.value * constants.CONSTANTS.keV_to_J *
         (core_profiles.n_i.value + core_profiles.n_impurity.value),
         dr=core_profiles.n_i.dr,
@@ -657,7 +844,7 @@ def calculate_pressure(
          core_profiles.n_impurity.right_face_constraint),
         right_face_grad_constraint=None,
     )
-    pressure_thermal_tot = cell_variable.CellVariable(
+    pressure_thermal_tot = CellVariable(
         value=pressure_thermal_el.value + pressure_thermal_ion.value,
         dr=pressure_thermal_el.dr,
         right_face_constraint=pressure_thermal_el.right_face_constraint +
@@ -671,8 +858,7 @@ def calculate_pressure(
     )
 
 
-def calc_pprime(
-    core_profiles: CoreProfiles, ) -> array_typing.FloatVector:
+def calc_pprime(core_profiles: CoreProfiles, ) -> array_typing.FloatVector:
     _, _, p_total = calculate_pressure(core_profiles)
     psi = core_profiles.psi.face_value()
     n_e = core_profiles.n_e.face_value()
@@ -713,9 +899,9 @@ def calc_FFprime(
 
 
 def calculate_stored_thermal_energy(
-    p_el: cell_variable.CellVariable,
-    p_ion: cell_variable.CellVariable,
-    p_tot: cell_variable.CellVariable,
+    p_el: CellVariable,
+    p_ion: CellVariable,
+    p_tot: CellVariable,
     geo: Geometry,
 ) -> tuple[array_typing.FloatScalar, ...]:
     wth_el = math_utils.volume_integration(1.5 * p_el.value, geo)
@@ -837,8 +1023,7 @@ def calculate_log_lambda_ii(
         Z_i)
 
 
-def _calculate_weighted_Z_eff(
-    core_profiles: CoreProfiles, ) -> jax.Array:
+def _calculate_weighted_Z_eff(core_profiles: CoreProfiles, ) -> jax.Array:
     return (core_profiles.n_i.value * core_profiles.Z_i**2 / core_profiles.A_i
             + core_profiles.n_impurity.value * core_profiles.Z_impurity**2 /
             core_profiles.A_impurity) / core_profiles.n_e.value
@@ -1063,8 +1248,8 @@ class ConductivityModelConfig(torax_pydantic.BaseModelFrozen, abc.ABC):
 def _calculate_conductivity0(
     *,
     Z_eff_face: array_typing.FloatVectorFace,
-    n_e: cell_variable.CellVariable,
-    T_e: cell_variable.CellVariable,
+    n_e: CellVariable,
+    T_e: CellVariable,
     q_face: array_typing.FloatVectorFace,
     geo: Geometry,
 ):
@@ -3284,7 +3469,7 @@ class RuntimeParams00(RuntimeParamsX):
 
 
 def calculate_normalized_logarithmic_gradient(
-    var: cell_variable.CellVariable,
+    var: CellVariable,
     radial_coordinate: jax.Array,
     reference_length: jax.Array,
 ):
@@ -4493,9 +4678,9 @@ def calculate_impurity_species_output(sim_state, runtime_params):
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True, eq=False)
 class PostProcessedOutputs:
-    pressure_thermal_i: cell_variable.CellVariable
-    pressure_thermal_e: cell_variable.CellVariable
-    pressure_thermal_total: cell_variable.CellVariable
+    pressure_thermal_i: CellVariable
+    pressure_thermal_e: CellVariable
+    pressure_thermal_total: CellVariable
     pprime: array_typing.FloatVector
     W_thermal_i: array_typing.FloatScalar
     W_thermal_e: array_typing.FloatScalar
@@ -4930,8 +5115,8 @@ _trapz = jax.scipy.integrate.trapezoid
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class Ions:
-    n_i: cell_variable.CellVariable
-    n_impurity: cell_variable.CellVariable
+    n_i: CellVariable
+    n_impurity: CellVariable
     impurity_fractions: Mapping[str, array_typing.FloatVectorCell]
     Z_i: array_typing.FloatVectorCell
     Z_i_face: array_typing.FloatVectorFace
@@ -4945,7 +5130,7 @@ class Ions:
 
 
 def get_updated_ion_temperature(profile_conditions_params, geo):
-    T_i = cell_variable.CellVariable(
+    T_i = CellVariable(
         value=profile_conditions_params.T_i,
         left_face_grad_constraint=jnp.zeros(()),
         right_face_grad_constraint=None,
@@ -4956,7 +5141,7 @@ def get_updated_ion_temperature(profile_conditions_params, geo):
 
 
 def get_updated_electron_temperature(profile_conditions_params, geo):
-    T_e = cell_variable.CellVariable(
+    T_e = CellVariable(
         value=profile_conditions_params.T_e,
         left_face_grad_constraint=jnp.zeros(()),
         right_face_grad_constraint=None,
@@ -4996,7 +5181,7 @@ def get_updated_electron_density(profile_conditions_params, geo):
     C = (target_nbar - 0.5 * n_e_face[-1] * dr_edge / a_minor_out) / (
         nbar_from_n_e_face_inner + 0.5 * n_e_face[-2] * dr_edge / a_minor_out)
     n_e_value = C * n_e_value
-    n_e = cell_variable.CellVariable(
+    n_e = CellVariable(
         value=n_e_value,
         dr=geo.drho_norm,
         right_face_grad_constraint=None,
@@ -5061,8 +5246,8 @@ def _get_ion_properties_from_fractions(impurity_symbols, impurity_params, T_e,
 def get_updated_ions(
     runtime_params: runtime_params_slice.RuntimeParams,
     geo: Geometry,
-    n_e: cell_variable.CellVariable,
-    T_e: cell_variable.CellVariable,
+    n_e: CellVariable,
+    T_e: CellVariable,
 ):
     Z_i = get_average_charge_state(
         ion_symbols=runtime_params.plasma_composition.main_ion_names,
@@ -5090,7 +5275,7 @@ def get_updated_ions(
             )
         case _:
             raise ValueError("Unknown impurity mode.")
-    n_i = cell_variable.CellVariable(
+    n_i = CellVariable(
         value=n_e.value * ion_properties.dilution_factor,
         dr=geo.drho_norm,
         right_face_grad_constraint=None,
@@ -5108,7 +5293,7 @@ def get_updated_ions(
         (n_e.right_face_constraint - n_i.right_face_constraint * Z_i_face[-1])
         / ion_properties.Z_impurity_face[-1],
     )
-    n_impurity = cell_variable.CellVariable(
+    n_impurity = CellVariable(
         value=n_impurity_value,
         dr=geo.drho_norm,
         right_face_grad_constraint=None,
@@ -5157,12 +5342,11 @@ def initial_core_profiles0(runtime_params, geo, source_models,
         np.array(runtime_params.profile_conditions.v_loop_lcfs)
         if runtime_params.profile_conditions.use_v_loop_lcfs_boundary_condition
         else np.array(0.0, dtype=jax_utils.get_dtype()))
-    psidot = cell_variable.CellVariable(
+    psidot = CellVariable(
         value=np.zeros_like(geo.rho),
         dr=geo.drho_norm,
     )
-    psi = cell_variable.CellVariable(value=np.zeros_like(geo.rho),
-                                     dr=geo.drho_norm)
+    psi = CellVariable(value=np.zeros_like(geo.rho), dr=geo.drho_norm)
     core_profiles = CoreProfiles(
         T_i=T_i,
         T_e=T_e,
@@ -5229,7 +5413,7 @@ def _init_psi_and_psi_derived(runtime_params, geo, core_profiles,
         runtime_params.profile_conditions.Ip,
         geo,
     ))
-    psi = cell_variable.CellVariable(
+    psi = CellVariable(
         value=geo.psi_from_Ip,
         right_face_grad_constraint=None
         if runtime_params.profile_conditions.use_v_loop_lcfs_boundary_condition
@@ -5371,7 +5555,7 @@ def scale_cell_variable(cv, scaling_factor):
                                              scaling_factor)
     scaled_right_face_grad_constraint = operation(
         cv.right_face_grad_constraint, scaling_factor)
-    return cell_variable.CellVariable(
+    return CellVariable(
         value=scaled_value,
         left_face_constraint=scaled_left_face_constraint,
         left_face_grad_constraint=scaled_left_face_grad_constraint,
@@ -5723,7 +5907,7 @@ AuxiliaryOutput: TypeAlias = AuxiliaryOutput
 
 
 def cell_variable_tuple_to_vec(
-    x_tuple: tuple[cell_variable.CellVariable, ...], ) -> jax.Array:
+    x_tuple: tuple[CellVariable, ...], ) -> jax.Array:
     x_vec = jnp.concatenate([x.value for x in x_tuple])
     return x_vec
 
@@ -5749,7 +5933,7 @@ class CoeffsCallback:
         runtime_params: runtime_params_slice.RuntimeParams,
         geo: Geometry,
         core_profiles: CoreProfiles,
-        x: tuple[cell_variable.CellVariable, ...],
+        x: tuple[CellVariable, ...],
         explicit_source_profiles: SourceProfiles,
         allow_pereverzev: bool = False,
         explicit_call: bool = False,
@@ -6068,7 +6252,7 @@ def _calc_coeffs_reduced(
 
 
 def calc_c(
-    x: tuple[cell_variable.CellVariable, ...],
+    x: tuple[CellVariable, ...],
     coeffs: Block1DCoeffs,
     convection_dirichlet_mode: str = 'ghost',
     convection_neumann_mode: str = 'ghost',
@@ -6109,7 +6293,7 @@ def calc_c(
             (
                 conv_mat,
                 conv_vec,
-            ) = convection_terms.make_convection_terms(
+            ) = make_convection_terms(
                 v_face[i],
                 d_face_i,
                 x[i],
@@ -6147,8 +6331,8 @@ def calc_c(
 )
 def theta_method_matrix_equation(
     dt: jax.Array,
-    x_old: tuple[cell_variable.CellVariable, ...],
-    x_new_guess: tuple[cell_variable.CellVariable, ...],
+    x_old: tuple[CellVariable, ...],
+    x_new_guess: tuple[CellVariable, ...],
     coeffs_old: Block1DCoeffs,
     coeffs_new: Block1DCoeffs,
     theta_implicit: float = 1.0,
@@ -6207,14 +6391,14 @@ MIN_DELTA: Final[float] = 1e-7
 )
 def implicit_solve_block(
     dt: jax.Array,
-    x_old: tuple[cell_variable.CellVariable, ...],
-    x_new_guess: tuple[cell_variable.CellVariable, ...],
+    x_old: tuple[CellVariable, ...],
+    x_new_guess: tuple[CellVariable, ...],
     coeffs_old,
     coeffs_new,
     theta_implicit: float = 1.0,
     convection_dirichlet_mode: str = 'ghost',
     convection_neumann_mode: str = 'ghost',
-) -> tuple[cell_variable.CellVariable, ...]:
+) -> tuple[CellVariable, ...]:
     x_old_vec = cell_variable_tuple_to_vec(x_old)
     lhs_mat, lhs_vec, rhs_mat, rhs_vec = (theta_method_matrix_equation(
         dt=dt,
@@ -6281,7 +6465,7 @@ class Solver(abc.ABC):
         core_profiles_t_plus_dt: CoreProfiles,
         explicit_source_profiles: SourceProfiles,
     ) -> tuple[
-            tuple[cell_variable.CellVariable, ...],
+            tuple[CellVariable, ...],
             SolverNumericOutputs,
     ]:
         if runtime_params_t.numerics.evolving_names:
@@ -6319,7 +6503,7 @@ class Solver(abc.ABC):
         explicit_source_profiles: SourceProfiles,
         evolving_names: tuple[str, ...],
     ) -> tuple[
-            tuple[cell_variable.CellVariable, ...],
+            tuple[CellVariable, ...],
             SolverNumericOutputs,
     ]:
         raise NotImplementedError(
@@ -6338,13 +6522,13 @@ def predictor_corrector_method(
     dt: jax.Array,
     runtime_params_t_plus_dt: runtime_params_slice.RuntimeParams,
     geo_t_plus_dt: Geometry,
-    x_old: tuple[cell_variable.CellVariable, ...],
-    x_new_guess: tuple[cell_variable.CellVariable, ...],
+    x_old: tuple[CellVariable, ...],
+    x_new_guess: tuple[CellVariable, ...],
     core_profiles_t_plus_dt: CoreProfiles,
     coeffs_exp,
     explicit_source_profiles: SourceProfiles,
     coeffs_callback: CoeffsCallback,
-) -> tuple[cell_variable.CellVariable, ...]:
+) -> tuple[CellVariable, ...]:
     solver_params = runtime_params_t_plus_dt.solver
 
     def loop_body(i, x_new_guess):
@@ -6401,7 +6585,7 @@ class LinearThetaMethod0(Solver):
         explicit_source_profiles: SourceProfiles,
         evolving_names: tuple[str, ...],
     ) -> tuple[
-            tuple[cell_variable.CellVariable, ...],
+            tuple[CellVariable, ...],
             SolverNumericOutputs,
     ]:
         x_old = core_profiles_to_solver_x_tuple(core_profiles_t,
@@ -6506,8 +6690,7 @@ class NewtonRaphsonThetaMethod(BaseSolver):
                            torax_pydantic.JAX_STATIC] = 'newton_raphson'
     log_iterations: Annotated[bool, torax_pydantic.JAX_STATIC] = False
     initial_guess_mode: Annotated[
-        enums.InitialGuessMode,
-        torax_pydantic.JAX_STATIC] = enums.InitialGuessMode.LINEAR
+        InitialGuessMode, torax_pydantic.JAX_STATIC] = InitialGuessMode.LINEAR
     n_max_iterations: pydantic.NonNegativeInt = 30
     residual_tol: float = 1e-5
     residual_coarse_tol: float = 1e-2
