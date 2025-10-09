@@ -1,3 +1,10 @@
+import dataclasses
+import enum
+from typing import Annotated, Final
+import jax
+import pydantic
+from torax._src import array_typing
+from torax._src.torax_pydantic import torax_pydantic
 from absl import logging
 from collections.abc import Callable
 from collections.abc import Mapping
@@ -14,8 +21,6 @@ from torax._src import xnp
 from torax._src.config import numerics as numerics_lib
 from torax._src.config import runtime_params_slice
 from torax._src.config import runtime_validation_utils
-from torax._src.core_profiles import profile_conditions
-from torax._src.core_profiles import profile_conditions as profile_conditions_lib
 from torax._src.core_profiles.plasma_composition import impurity_fractions
 from torax._src.core_profiles.plasma_composition import ion_mixture
 from torax._src.fvm import cell_variable
@@ -79,6 +84,107 @@ import numpy as np
 import pydantic
 import typing_extensions
 import xarray as xr
+
+_MIN_IP_AMPS: Final[float] = 1e3
+_MIN_DENSITY_M3: Final[float] = 1e10
+_MAX_DENSITY_GW: Final[float] = 1e2
+_MAX_TEMPERATURE_KEV: Final[float] = 1e3
+_MAX_TEMPERATURE_BC_KEV: Final[float] = 5e1
+
+
+class InitialPsiMode(enum.StrEnum):
+    PROFILE_CONDITIONS = 'profile_conditions'
+    GEOMETRY = 'geometry'
+    J = 'j'
+
+
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass
+class RuntimeParamsPC:
+    Ip: array_typing.FloatScalar
+    v_loop_lcfs: array_typing.FloatScalar
+    T_i_right_bc: array_typing.FloatScalar
+    T_e_right_bc: array_typing.FloatScalar
+    T_e: array_typing.FloatVector
+    T_i: array_typing.FloatVector
+    psi: array_typing.FloatVector | None
+    psidot: array_typing.FloatVector | None
+    n_e: array_typing.FloatVector
+    nbar: array_typing.FloatScalar
+    n_e_nbar_is_fGW: bool
+    n_e_right_bc: array_typing.FloatScalar
+    n_e_right_bc_is_fGW: bool
+    current_profile_nu: float
+    initial_j_is_total_current: bool
+    initial_psi_from_j: bool
+    normalize_n_e_to_nbar: bool = dataclasses.field(metadata={'static': True})
+    use_v_loop_lcfs_boundary_condition: bool = dataclasses.field(
+        metadata={'static': True})
+    n_e_right_bc_is_absolute: bool = dataclasses.field(
+        metadata={'static': True})
+    initial_psi_mode: InitialPsiMode = dataclasses.field(
+        metadata={'static': True})
+
+
+class ProfileConditions(torax_pydantic.BaseModelFrozen):
+    Ip: torax_pydantic.TimeVaryingScalar = torax_pydantic.ValidatedDefault(
+        15e6)
+    use_v_loop_lcfs_boundary_condition: Annotated[
+        bool, torax_pydantic.JAX_STATIC] = False
+    v_loop_lcfs: torax_pydantic.TimeVaryingScalar = (
+        torax_pydantic.ValidatedDefault(0.0))
+    T_i_right_bc: torax_pydantic.PositiveTimeVaryingScalar | None = None
+    T_e_right_bc: torax_pydantic.PositiveTimeVaryingScalar | None = None
+    T_i: torax_pydantic.PositiveTimeVaryingArray = (
+        torax_pydantic.ValidatedDefault({0: {
+            0: 15.0,
+            1: 1.0
+        }}))
+    T_e: torax_pydantic.PositiveTimeVaryingArray = (
+        torax_pydantic.ValidatedDefault({0: {
+            0: 15.0,
+            1: 1.0
+        }}))
+    psi: torax_pydantic.TimeVaryingArray | None = None
+    psidot: torax_pydantic.TimeVaryingArray | None = None
+    n_e: torax_pydantic.PositiveTimeVaryingArray = (
+        torax_pydantic.ValidatedDefault({0: {
+            0: 1.2e20,
+            1: 0.8e20
+        }}))
+    normalize_n_e_to_nbar: Annotated[bool, torax_pydantic.JAX_STATIC] = False
+    nbar: torax_pydantic.TimeVaryingScalar = torax_pydantic.ValidatedDefault(
+        0.85e20)
+    n_e_nbar_is_fGW: bool = False
+    n_e_right_bc: torax_pydantic.TimeVaryingScalar | None = None
+    n_e_right_bc_is_fGW: bool = False
+    current_profile_nu: float = 1.0
+    initial_j_is_total_current: bool = False
+    initial_psi_from_j: bool = False
+    initial_psi_mode: Annotated[InitialPsiMode, torax_pydantic.JAX_STATIC] = (
+        InitialPsiMode.PROFILE_CONDITIONS)
+
+    @pydantic.model_validator(mode='after')
+    def after_validator(self):
+        return self
+
+    def build_runtime_params(self, t):
+        runtime_params = {
+            x.name: getattr(self, x.name)
+            for x in dataclasses.fields(RuntimeParamsPC)
+            if x.name != 'n_e_right_bc_is_absolute'
+        }
+        runtime_params['n_e_right_bc_is_absolute'] = True
+
+        def _get_value(x):
+            if isinstance(x, (torax_pydantic.TimeVaryingScalar,
+                              torax_pydantic.TimeVaryingArray)):
+                return x.get_value(t)
+            else:
+                return x
+
+        runtime_params = {k: _get_value(v) for k, v in runtime_params.items()}
+        return RuntimeParamsPC(**runtime_params)
 
 _IMPURITY_MODE_FRACTIONS: Final[str] = 'fractions'
 _IMPURITY_MODE_NE_RATIOS: Final[str] = 'n_e_ratios'
@@ -2199,7 +2305,7 @@ def _get_initial_psi_mode(
     geo: geometry.Geometry,
 ):
     psi_mode = runtime_params.profile_conditions.initial_psi_mode
-    if psi_mode == profile_conditions_lib.InitialPsiMode.PROFILE_CONDITIONS:
+    if psi_mode == InitialPsiMode.PROFILE_CONDITIONS:
         if runtime_params.profile_conditions.psi is None:
             logging.warning(
                 'Falling back to legacy behavior as `profile_conditions.psi` is '
@@ -2209,7 +2315,7 @@ def _get_initial_psi_mode(
                 'avoid this warning.')
             if (isinstance(geo, standard_geometry.StandardGeometry) and
                     not runtime_params.profile_conditions.initial_psi_from_j):
-                psi_mode = profile_conditions_lib.InitialPsiMode.GEOMETRY
+                psi_mode = InitialPsiMode.GEOMETRY
             else:
                 psi_mode = profile_conditions_lib.InitialPsiMode.J
     return psi_mode
@@ -2226,7 +2332,7 @@ def _init_psi_and_psi_derived(
     source_profiles = source_profile_builders.build_all_zero_profiles(geo)
     initial_psi_mode = _get_initial_psi_mode(runtime_params, geo)
     match initial_psi_mode:
-        case profile_conditions_lib.InitialPsiMode.PROFILE_CONDITIONS:
+        case InitialPsiMode.PROFILE_CONDITIONS:
             if runtime_params.profile_conditions.psi is None:
                 raise ValueError(
                     'psi is None, but initial_psi_mode is PROFILE_CONDITIONS.')
@@ -2249,7 +2355,7 @@ def _init_psi_and_psi_derived(
                 right_face_constraint=right_face_constraint,
                 dr=geo.drho_norm,
             )
-        case profile_conditions_lib.InitialPsiMode.GEOMETRY:
+        case InitialPsiMode.GEOMETRY:
             if not isinstance(geo, standard_geometry.StandardGeometry):
                 raise ValueError(
                     'GEOMETRY initial_psi_source is only supported for standard'
@@ -4524,7 +4630,7 @@ def _get_geo_and_runtime_params_at_t_plus_dt_and_phibdot(
 
 
 class ToraxConfig(model_base.BaseModelFrozen):
-    profile_conditions: profile_conditions_lib.ProfileConditions
+    profile_conditions: ProfileConditions
     numerics: numerics_lib.Numerics
     plasma_composition: PlasmaComposition
     geometry: Geometry0
