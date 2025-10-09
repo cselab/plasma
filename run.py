@@ -38,7 +38,6 @@ from torax._src.physics import psi_calculations
 from torax._src.physics import scaling_laws
 from torax._src.sources import base
 from torax._src.sources import formulas
-from torax._src.sources import generic_current_source as generic_current_source_lib
 from torax._src.sources import runtime_params as runtime_params_lib
 from torax._src.sources import source
 from torax._src.sources import source as source_lib
@@ -84,6 +83,121 @@ import numpy as np
 import pydantic
 import typing_extensions
 import xarray as xr
+import dataclasses
+from typing import Annotated, ClassVar, Literal
+import chex
+import jax
+from jax import numpy as jnp
+from torax._src import array_typing
+from torax._src import math_utils
+from torax._src import state
+from torax._src.config import runtime_params_slice
+from torax._src.geometry import geometry
+from torax._src.neoclassical.conductivity import base as conductivity_base
+from torax._src.sources import base as source_base
+from torax._src.sources import runtime_params as runtime_params_lib
+from torax._src.sources import source
+from torax._src.sources import source_profiles
+from torax._src.torax_pydantic import torax_pydantic
+
+DEFAULT_MODEL_FUNCTION_NAME: str = 'gaussian'
+
+
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(frozen=True)
+class RuntimeParamsGcS(runtime_params_lib.RuntimeParams):
+    I_generic: array_typing.FloatScalar
+    fraction_of_total_current: array_typing.FloatScalar
+    gaussian_width: array_typing.FloatScalar
+    gaussian_location: array_typing.FloatScalar
+    use_absolute_current: bool
+
+
+def calculate_generic_current(
+    runtime_params,
+    geo,
+    source_name,
+    unused_state,
+    unused_calculated_source_profiles,
+    unused_conductivity
+):
+    source_params = runtime_params.sources[source_name]
+    I_generic = _calculate_I_generic(
+        runtime_params,
+        source_params,
+    )
+    generic_current_form = jnp.exp(
+        -((geo.rho_norm - source_params.gaussian_location)**2) /
+        (2 * source_params.gaussian_width**2))
+    Cext = I_generic / math_utils.area_integration(generic_current_form, geo)
+    generic_current_profile = Cext * generic_current_form
+    return (generic_current_profile, )
+
+
+def _calculate_I_generic(
+    runtime_params,
+    source_params
+):
+    return jnp.where(
+        source_params.use_absolute_current,
+        source_params.I_generic,
+        (runtime_params.profile_conditions.Ip *
+         source_params.fraction_of_total_current),
+    )
+
+
+@dataclasses.dataclass(kw_only=True, frozen=True, eq=True)
+class GenericCurrentSource(source.Source):
+    SOURCE_NAME: ClassVar[str] = 'generic_current'
+    model_func: source.SourceProfileFunction = calculate_generic_current
+
+    @property
+    def source_name(self) -> str:
+        return self.SOURCE_NAME
+
+    @property
+    def affected_core_profiles(self) -> tuple[source.AffectedCoreProfile, ...]:
+        return (source.AffectedCoreProfile.PSI, )
+
+
+class GenericCurrentSourceConfig(source_base.SourceModelBase):
+    model_name: Annotated[Literal['gaussian'],
+                          torax_pydantic.JAX_STATIC] = ('gaussian')
+    I_generic: torax_pydantic.TimeVaryingScalar = torax_pydantic.ValidatedDefault(
+        3.0e6)
+    fraction_of_total_current: torax_pydantic.UnitIntervalTimeVaryingScalar = (
+        torax_pydantic.ValidatedDefault(0.2))
+    gaussian_width: torax_pydantic.PositiveTimeVaryingScalar = (
+        torax_pydantic.ValidatedDefault(0.05))
+    gaussian_location: torax_pydantic.UnitIntervalTimeVaryingScalar = (
+        torax_pydantic.ValidatedDefault(0.4))
+    use_absolute_current: bool = False
+    mode: Annotated[runtime_params_lib.Mode, torax_pydantic.JAX_STATIC] = (
+        runtime_params_lib.Mode.MODEL_BASED)
+
+    @property
+    def model_func(self) -> source.SourceProfileFunction:
+        return calculate_generic_current
+
+    def build_runtime_params(
+        self,
+        t,
+    ):
+        return RuntimeParamsGcS(
+            prescribed_values=tuple(
+                [v.get_value(t) for v in self.prescribed_values]),
+            mode=self.mode,
+            is_explicit=self.is_explicit,
+            I_generic=self.I_generic.get_value(t),
+            fraction_of_total_current=self.fraction_of_total_current.get_value(
+                t),
+            gaussian_width=self.gaussian_width.get_value(t),
+            gaussian_location=self.gaussian_location.get_value(t),
+            use_absolute_current=self.use_absolute_current,
+        )
+
+    def build_source(self) -> GenericCurrentSource:
+        return GenericCurrentSource(model_func=self.model_func)
 
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
@@ -665,7 +779,7 @@ class Sources(torax_pydantic.BaseModelFrozen):
         discriminator='model_name',
         default=None,
     )
-    generic_current: generic_current_source_lib.GenericCurrentSourceConfig = (
+    generic_current: GenericCurrentSourceConfig = (
         torax_pydantic.ValidatedDefault({'mode': 'ZERO'}))
     generic_heat: (GenericIonElHeatSourceConfig
                    | None) = pydantic.Field(
