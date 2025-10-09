@@ -329,14 +329,6 @@ class InterpolatedVarTimeRho(InterpolatedParamBase):
         obj._time_interpolation_mode = aux_data[1]
         return obj
 
-    @property
-    def time_interpolation_mode(self) -> InterpolationMode:
-        return self._time_interpolation_mode
-
-    @property
-    def rho_interpolation_mode(self) -> InterpolationMode:
-        return self._rho_interpolation_mode
-
     def get_value(self, x: chex.Numeric) -> Array:
         return self._time_interpolated_var.get_value(x)
 
