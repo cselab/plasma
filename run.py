@@ -1,18 +1,23 @@
+from typing import Annotated, TypeAlias
+import numpy as np
+import pydantic
 from absl import logging
 from collections.abc import Callable
 from collections.abc import Mapping
 from collections.abc import Sequence
+from collections.abc import Set
 from fusion_surrogates.qlknn import qlknn_model
 from jax import numpy as jnp
 from torax._src import array_typing
 from torax._src import interpolated_param
 from torax._src import jax_utils
-from torax._src.torax_pydantic import pydantic_types
 from typing import Annotated
 from typing import Annotated, Any, Final, TypeAlias
 from typing import Annotated, Any, Literal, TypeAlias, TypeVar, ClassVar, Final, Mapping, Protocol, Callable
 from typing import Annotated, Literal
 from typing import Any, Callable, TYPE_CHECKING, TypeVar
+from typing import Any, Final, Mapping, Sequence, TypeAlias
+from typing import Any, Literal, TypeAlias
 from typing import ClassVar, Protocol
 from typing import Final, Mapping
 from typing import Literal
@@ -42,24 +47,55 @@ import torax
 import typing
 import typing_extensions
 import xarray as xr
-from collections.abc import Mapping
-import functools
-from typing import Any, Literal, TypeAlias
-import chex
-import numpy as np
-import pydantic
-from torax._src import array_typing
-from torax._src import interpolated_param
-from torax._src.torax_pydantic import model_base
-from torax._src.torax_pydantic import pydantic_types
-import typing_extensions
 
-from collections.abc import Set
-import functools
-from typing import Any, Final, Mapping, Sequence, TypeAlias
-import jax
-import pydantic
-from typing_extensions import Self
+DataTypes: TypeAlias = float | int | bool
+DtypeName: TypeAlias = str
+NestedList: TypeAlias = (DataTypes
+                         | list[DataTypes]
+                         | list[list[DataTypes]]
+                         | list[list[list[DataTypes]]])
+NumpySerialized: TypeAlias = tuple[DtypeName, NestedList]
+
+
+def _numpy_array_before_validator(
+    x: np.ndarray | NumpySerialized, ) -> np.ndarray:
+    if isinstance(x, np.ndarray):
+        return x
+
+
+def _numpy_array_serializer(x: np.ndarray) -> NumpySerialized:
+    return (x.dtype.name, x.tolist())
+
+
+def _numpy_array_is_rank_1(x: np.ndarray) -> np.ndarray:
+    return x
+
+
+def _numpy_array_is_sorted(x: np.ndarray) -> np.ndarray:
+    return x
+
+
+NumpyArray = Annotated[
+    np.ndarray,
+    pydantic.BeforeValidator(_numpy_array_before_validator),
+    pydantic.
+    PlainSerializer(_numpy_array_serializer, return_type=NumpySerialized),
+]
+NumpyArray1D = Annotated[NumpyArray,
+                         pydantic.AfterValidator(_numpy_array_is_rank_1)]
+NumpyArray1DSorted = Annotated[NumpyArray,
+                               pydantic.AfterValidator(_numpy_array_is_sorted)]
+
+
+def _array_is_unit_interval(array: np.ndarray) -> np.ndarray:
+    return array
+
+
+NumpyArray1DUnitInterval = Annotated[
+    NumpyArray1D,
+    pydantic.AfterValidator(_array_is_unit_interval),
+]
+
 
 TIME_INVARIANT: Final[str] = '_pydantic_time_invariant_field'
 JAX_STATIC: Final[str] = '_pydantic_jax_static_field'
@@ -144,14 +180,14 @@ class BaseModelFrozen(pydantic.BaseModel):
 
 ValueType: TypeAlias = dict[
     float,
-    tuple[pydantic_types.NumpyArray1DUnitInterval,
-          pydantic_types.NumpyArray1D],
+    tuple[NumpyArray1DUnitInterval,
+          NumpyArray1D],
 ]
 
 
-class Grid1D(model_base.BaseModelFrozen):
+class Grid1D(BaseModelFrozen):
     nx: typing_extensions.Annotated[pydantic.conint(ge=4),
-                                    model_base.JAX_STATIC]
+                                    JAX_STATIC]
 
     @functools.cached_property
     def dx(self) -> float:
@@ -169,13 +205,13 @@ class Grid1D(model_base.BaseModelFrozen):
         return self.nx == other.nx and self.dx == other.dx
 
 
-class TimeVaryingArray(model_base.BaseModelFrozen):
+class TimeVaryingArray(BaseModelFrozen):
     value: ValueType
     rho_interpolation_mode: typing_extensions.Annotated[
-        interpolated_param.InterpolationMode, model_base.
+        interpolated_param.InterpolationMode, 
         JAX_STATIC] = interpolated_param.InterpolationMode.PIECEWISE_LINEAR
     time_interpolation_mode: typing_extensions.Annotated[
-        interpolated_param.InterpolationMode, model_base.
+        interpolated_param.InterpolationMode, 
         JAX_STATIC] = interpolated_param.InterpolationMode.PIECEWISE_LINEAR
     grid: Grid1D | None = None
 
@@ -319,7 +355,7 @@ def _load_from_primitives(
 
 
 def set_grid(
-    model: model_base.BaseModelFrozen,
+    model: BaseModelFrozen,
     grid: Grid1D,
     mode: Literal['strict', 'force', 'relaxed'] = 'strict',
 ):
@@ -363,13 +399,13 @@ NonNegativeTimeVaryingArray: TypeAlias = typing_extensions.Annotated[
     pydantic.AfterValidator(_is_non_negative)]
 
 
-class TimeVaryingScalar(model_base.BaseModelFrozen):
-    time: pydantic_types.NumpyArray1DSorted
-    value: pydantic_types.NumpyArray
+class TimeVaryingScalar(BaseModelFrozen):
+    time: NumpyArray1DSorted
+    value: NumpyArray
     is_bool_param: typing_extensions.Annotated[bool,
-                                               model_base.JAX_STATIC] = (False)
+                                               JAX_STATIC] = (False)
     interpolation_mode: typing_extensions.Annotated[
-        interpolated_param.InterpolationMode, model_base.
+        interpolated_param.InterpolationMode, 
         JAX_STATIC] = interpolated_param.InterpolationMode.PIECEWISE_LINEAR
 
     def get_value(self, t: chex.Numeric) -> array_typing.Array:
@@ -432,8 +468,8 @@ UnitIntervalTimeVaryingScalar: TypeAlias = typing_extensions.Annotated[
         functools.partial(_interval, lower_bound=0.0, upper_bound=1.0)),
 ]
 
-TIME_INVARIANT = model_base.TIME_INVARIANT
-JAX_STATIC = model_base.JAX_STATIC
+TIME_INVARIANT = TIME_INVARIANT
+JAX_STATIC = JAX_STATIC
 CubicMeter: TypeAlias = pydantic.PositiveFloat
 GreenwaldFraction: TypeAlias = pydantic.PositiveFloat
 KiloElectronVolt: TypeAlias = pydantic.PositiveFloat
@@ -447,10 +483,10 @@ Tesla: TypeAlias = pydantic.PositiveFloat
 Density: TypeAlias = CubicMeter | GreenwaldFraction
 UnitInterval: TypeAlias = Annotated[float, pydantic.Field(ge=0.0, le=1.0)]
 OpenUnitInterval: TypeAlias = Annotated[float, pydantic.Field(gt=0.0, lt=1.0)]
-NumpyArray = pydantic_types.NumpyArray
-NumpyArray1D = pydantic_types.NumpyArray1D
-NumpyArray1DSorted = pydantic_types.NumpyArray1DSorted
-BaseModelFrozen = model_base.BaseModelFrozen
+NumpyArray = NumpyArray
+NumpyArray1D = NumpyArray1D
+NumpyArray1DSorted = NumpyArray1DSorted
+BaseModelFrozen = BaseModelFrozen
 TimeVaryingScalar = TimeVaryingScalar
 TimeVaryingArray = TimeVaryingArray
 NonNegativeTimeVaryingArray = NonNegativeTimeVaryingArray
@@ -8325,7 +8361,7 @@ def _get_geo_and_runtime_params_at_t_plus_dt_and_phibdot(
     )
 
 
-class ToraxConfig(model_base.BaseModelFrozen):
+class ToraxConfig(BaseModelFrozen):
     profile_conditions: ProfileConditions
     numerics: Numerics
     plasma_composition: PlasmaComposition
