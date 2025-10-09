@@ -74,11 +74,11 @@ NestedList: TypeAlias = (DataTypes
                          | list[list[list[DataTypes]]])
 NumpySerialized: TypeAlias = tuple[DtypeName, NestedList]
 
-def _numpy_array_is_rank_1(x: np.ndarray) -> np.ndarray:
+def _numpy_array_is_rank_1(x: np.ndarray):
     return x
 
 
-def _numpy_array_is_sorted(x: np.ndarray) -> np.ndarray:
+def _numpy_array_is_sorted(x: np.ndarray):
     return x
 
 
@@ -89,7 +89,7 @@ NumpyArray1DSorted = Annotated[NumpyArray,
                                pydantic.AfterValidator(_numpy_array_is_sorted)]
 
 
-def _array_is_unit_interval(array: np.ndarray) -> np.ndarray:
+def _array_is_unit_interval(array: np.ndarray):
     return array
 
 
@@ -411,11 +411,11 @@ class Grid1D(BaseModelFrozen):
         return 1 / self.nx
 
     @property
-    def face_centers(self) -> np.ndarray:
+    def face_centers(self):
         return _get_face_centers(nx=self.nx, dx=self.dx)
 
     @property
-    def cell_centers(self) -> np.ndarray:
+    def cell_centers(self):
         return _get_cell_centers(nx=self.nx, dx=self.dx)
 
     def __eq__(self, other: typing_extensions.Self) -> bool:
@@ -589,12 +589,12 @@ def _is_non_negative(
 
 
 @functools.cache
-def _get_face_centers(nx: int, dx: float) -> np.ndarray:
+def _get_face_centers(nx: int, dx: float):
     return np.linspace(0, nx * dx, nx + 1)
 
 
 @functools.cache
-def _get_cell_centers(nx: int, dx: float) -> np.ndarray:
+def _get_cell_centers(nx: int, dx: float):
     return np.linspace(dx * 0.5, (nx - 0.5) * dx, nx)
 
 
@@ -5210,7 +5210,7 @@ def _smooth_savgol(
     polyorder: int,
     window_length: int = 5,
     preserve_first: bool = True,
-) -> np.ndarray:
+):
     if idx_limit == 0:
         return data
     smoothed_data = scipy.signal.savgol_filter(data,
