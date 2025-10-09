@@ -1,19 +1,3 @@
-import copy
-import dataclasses
-import functools
-from typing import Annotated, Any
-import chex
-import jax
-import pydantic
-from torax._src import array_typing
-from torax._src.config import runtime_validation_utils
-from torax._src.core_profiles.plasma_composition import impurity_fractions
-from torax._src.core_profiles.plasma_composition import ion_mixture
-from torax._src.torax_pydantic import torax_pydantic
-from typing_extensions import Final
-import dataclasses
-import jax
-from torax._src import array_typing
 from absl import logging
 from collections.abc import Callable
 from collections.abc import Mapping
@@ -29,9 +13,11 @@ from torax._src import state
 from torax._src import xnp
 from torax._src.config import numerics as numerics_lib
 from torax._src.config import runtime_params_slice
+from torax._src.config import runtime_validation_utils
 from torax._src.core_profiles import profile_conditions
 from torax._src.core_profiles import profile_conditions as profile_conditions_lib
 from torax._src.core_profiles.plasma_composition import impurity_fractions
+from torax._src.core_profiles.plasma_composition import ion_mixture
 from torax._src.fvm import cell_variable
 from torax._src.fvm import convection_terms
 from torax._src.fvm import diffusion_terms
@@ -65,6 +51,7 @@ from torax._src.torax_pydantic import interpolated_param_1d
 from torax._src.torax_pydantic import interpolated_param_2d
 from torax._src.torax_pydantic import model_base
 from torax._src.torax_pydantic import torax_pydantic
+from typing import Annotated, Any
 from typing import Annotated, Any, Literal
 from typing import Annotated, Any, Literal, TypeAlias, TypeVar
 from typing import Any
@@ -75,6 +62,7 @@ from typing import Final, Mapping
 from typing import Mapping
 from typing import TypeAlias
 from typing_extensions import Annotated
+from typing_extensions import Final
 import abc
 import chex
 import copy
