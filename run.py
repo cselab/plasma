@@ -5951,11 +5951,6 @@ CONFIG = {
         'a_minor': 2.0,
         'B_0': 5.3,
     },
-    'neoclassical': {
-        'bootstrap_current': {
-            'bootstrap_multiplier': 1.0,
-        },
-    },
     'sources': {
         'generic_current': {
             'fraction_of_total_current': 0.46,
