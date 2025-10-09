@@ -28,19 +28,7 @@ os.environ['XLA_FLAGS'] = (
     os.environ.get('XLA_FLAGS', '') +
     ' --xla_backend_extra_options=xla_cpu_flatten_after_fusion')
 jax.config.update('jax_enable_x64', True)
-
 T = TypeVar('T')
-
-@functools.cache
-def get_dtype():
-    return jnp.float64
-
-
-@functools.cache
-def get_np_dtype():
-    return np.float64
-
-
 Array: TypeAlias = jax.Array | np.ndarray
 FloatScalar: TypeAlias = jt.Float[Array | float, ""]
 BoolScalar: TypeAlias = jt.Bool[Array | bool, ""]
@@ -205,15 +193,15 @@ def convert_input_to_xs_ys(interp_input):
         is_bool_param = False
     if isinstance(interp_input, dict):
         return (
-            np.array(list(interp_input.keys()), dtype=get_np_dtype()),
-            np.array(list(interp_input.values()), dtype=get_np_dtype()),
+            np.array(list(interp_input.keys()), dtype=np.float64),
+            np.array(list(interp_input.values()), dtype=np.float64),
             interpolation_mode,
             is_bool_param,
         )
     else:
         return (
-            np.array([0.0], dtype=get_np_dtype()),
-            np.array([interp_input], dtype=get_np_dtype()),
+            np.array([0.0], dtype=np.float64),
+            np.array([interp_input], dtype=np.float64),
             interpolation_mode,
             is_bool_param,
         )
@@ -1177,7 +1165,7 @@ def make_convection_terms(v_face,
     is_neg = d_face < 0.0
     nonzero_sign = jnp.ones_like(is_neg) - 2 * is_neg
     d_face = nonzero_sign * jnp.maximum(eps, jnp.abs(d_face))
-    half = jnp.array([0.5], dtype=get_dtype())
+    half = jnp.array([0.5], dtype=jnp.float64)
     ones = jnp.ones_like(v_face[1:-1])
     scale = jnp.concatenate((half, ones, half))
     ratio = scale * var.dr * v_face / d_face
@@ -1735,7 +1723,7 @@ def calc_s_rmid(geo: Geometry, psi: CellVariable) -> jax.Array:
 def _calc_bpol2(geo: Geometry, psi: CellVariable) -> jax.Array:
     bpol2_bulk = ((psi.face_grad()[1:] / (2 * jnp.pi))**2 * geo.g2_face[1:] /
                   geo.vpr_face[1:]**2)
-    bpol2_axis = jnp.array([0.0], dtype=get_dtype())
+    bpol2_axis = jnp.array([0.0], dtype=jnp.float64)
     bpol2_face = jnp.concatenate([bpol2_axis, bpol2_bulk])
     return bpol2_face
 
@@ -4603,12 +4591,12 @@ class QLKNNModelWrapper:
         def _get_input(key):
             return jnp.array(
                 input_map.get(key, lambda x: getattr(x, key))(qualikiz_inputs),
-                dtype=get_dtype(),
+                dtype=jnp.float64,
             )
 
         return jnp.array(
             [_get_input(key) for key in self.inputs_and_ranges.keys()],
-            dtype=get_dtype(),
+            dtype=jnp.float64,
         ).T
 
     def predict(self, inputs: jax.Array):
@@ -5589,7 +5577,7 @@ def _get_integrated_source_value(
     if internal_source_name in source_profiles_dict:
         return integration_fn(source_profiles_dict[internal_source_name], geo)
     else:
-        return jnp.array(0.0, dtype=get_dtype())
+        return jnp.array(0.0, dtype=jnp.float64)
 
 
 def _calculate_integrated_sources(
@@ -5599,17 +5587,17 @@ def _calculate_integrated_sources(
     runtime_params: RuntimeParamsSlice,
 ):
     integrated = {}
-    integrated['P_alpha_total'] = jnp.array(0.0, dtype=get_dtype())
-    integrated['S_total'] = jnp.array(0.0, dtype=get_dtype())
+    integrated['P_alpha_total'] = jnp.array(0.0, dtype=jnp.float64)
+    integrated['S_total'] = jnp.array(0.0, dtype=jnp.float64)
     qei = core_sources.qei.qei_coef * (core_profiles.T_e.value -
                                        core_profiles.T_i.value)
     integrated['P_ei_exchange_i'] = volume_integration(qei, geo)
     integrated['P_ei_exchange_e'] = -integrated['P_ei_exchange_i']
     integrated['P_SOL_i'] = integrated['P_ei_exchange_i']
     integrated['P_SOL_e'] = integrated['P_ei_exchange_e']
-    integrated['P_aux_i'] = jnp.array(0.0, dtype=get_dtype())
-    integrated['P_aux_e'] = jnp.array(0.0, dtype=get_dtype())
-    integrated['P_external_injected'] = jnp.array(0.0, dtype=get_dtype())
+    integrated['P_aux_i'] = jnp.array(0.0, dtype=jnp.float64)
+    integrated['P_aux_e'] = jnp.array(0.0, dtype=jnp.float64)
+    integrated['P_external_injected'] = jnp.array(0.0, dtype=jnp.float64)
     for key, value in ION_EL_HEAT_SOURCE_TRANSFORMATIONS.items():
         is_in_T_i = key in core_sources.T_i
         is_in_T_e = key in core_sources.T_e
@@ -6129,7 +6117,7 @@ def initial_core_profiles0(runtime_params, geo, source_models,
     v_loop_lcfs = (
         np.array(runtime_params.profile_conditions.v_loop_lcfs)
         if runtime_params.profile_conditions.use_v_loop_lcfs_boundary_condition
-        else np.array(0.0, dtype=get_dtype()))
+        else np.array(0.0, dtype=jnp.float64))
     psidot = CellVariable(
         value=np.zeros_like(geo.rho),
         dr=geo.drho_norm,
