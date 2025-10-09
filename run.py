@@ -27,7 +27,6 @@ from torax._src.neoclassical import neoclassical_models as neoclassical_models_l
 from torax._src.neoclassical import runtime_params
 from torax._src.neoclassical.bootstrap_current import base as bootstrap_current_base
 from torax._src.neoclassical.bootstrap_current import sauter as sauter_current
-from torax._src.neoclassical.bootstrap_current import zeros as bootstrap_current_zeros
 from torax._src.neoclassical.conductivity import base as conductivity_base
 from torax._src.neoclassical.conductivity import sauter as sauter_conductivity
 from torax._src.physics import charge_states
