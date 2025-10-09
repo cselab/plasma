@@ -694,26 +694,18 @@ class PelletSourceConfig(SourceModelBase):
 
 
 def calc_fusion(
-    geo: geometry.Geometry,
-    core_profiles: state.CoreProfiles,
-    runtime_params: runtime_params_slice.RuntimeParams,
-) -> tuple[jax.Array, jax.Array, jax.Array]:
-    if not {'D', 'T'}.issubset(
-            runtime_params.plasma_composition.main_ion_names):
-        return (
-            jnp.array(0.0, dtype=jax_utils.get_dtype()),
-            jnp.zeros_like(core_profiles.T_i.value),
-            jnp.zeros_like(core_profiles.T_i.value),
-        )
-    else:
-        product = 1.0
-        for fraction, symbol in zip(
-                runtime_params.plasma_composition.main_ion.fractions,
-                runtime_params.plasma_composition.main_ion_names,
-        ):
-            if symbol == 'D' or symbol == 'T':
-                product *= fraction
-        DT_fraction_product = product
+    geo,
+    core_profiles,
+    runtime_params
+):
+    product = 1.0
+    for fraction, symbol in zip(
+            runtime_params.plasma_composition.main_ion.fractions,
+            runtime_params.plasma_composition.main_ion_names,
+    ):
+        if symbol == 'D' or symbol == 'T':
+            product *= fraction
+    DT_fraction_product = product
     t_face = core_profiles.T_i.face_value()
     Efus = 17.6 * 1e3 * constants.CONSTANTS.keV_to_J
     mrc2 = 1124656
@@ -2657,9 +2649,8 @@ def calculate_total_transport_coeffs(pedestal_model, transport_model,
 
 
 class Neoclassical0(torax_pydantic.BaseModelFrozen):
-    bootstrap_current: (bootstrap_current_zeros.ZerosModelConfig
-                        | sauter_current.SauterModelConfig) = pydantic.Field(
-                            discriminator="model_name")
+    bootstrap_current: sauter_current.SauterModelConfig = pydantic.Field(
+        discriminator="model_name")
     conductivity: sauter_conductivity.SauterModelConfig = (
         torax_pydantic.ValidatedDefault(
             sauter_conductivity.SauterModelConfig()))
@@ -2668,10 +2659,7 @@ class Neoclassical0(torax_pydantic.BaseModelFrozen):
     @classmethod
     def _defaults(cls, data):
         configurable_data = copy.deepcopy(data)
-        if "bootstrap_current" not in configurable_data:
-            configurable_data["bootstrap_current"] = {"model_name": "zeros"}
-        if "model_name" not in configurable_data["bootstrap_current"]:
-            configurable_data["bootstrap_current"]["model_name"] = "sauter"
+        configurable_data["bootstrap_current"] = {"model_name": "sauter"}
         return configurable_data
 
     def build_runtime_params(self):
@@ -3973,19 +3961,15 @@ def update_core_and_source_profiles_after_step(
         explicit_source_profiles=explicit_source_profiles,
         conductivity=conductivity,
     )
-    if (not runtime_params_t_plus_dt.numerics.evolve_current and
-            runtime_params_t_plus_dt.profile_conditions.psidot is not None):
-        psidot_value = (runtime_params_t_plus_dt.profile_conditions.psidot)
-    else:
-        psi_sources = total_source_profiles.total_psi_sources(geo)
-        psidot_value = psi_calculations.calculate_psidot_from_psi_sources(
-            psi_sources=psi_sources,
-            sigma=intermediate_core_profiles.sigma,
-            resistivity_multiplier=runtime_params_t_plus_dt.numerics.
-            resistivity_multiplier,
-            psi=intermediate_core_profiles.psi,
-            geo=geo,
-        )
+    psi_sources = total_source_profiles.total_psi_sources(geo)
+    psidot_value = psi_calculations.calculate_psidot_from_psi_sources(
+        psi_sources=psi_sources,
+        sigma=intermediate_core_profiles.sigma,
+        resistivity_multiplier=runtime_params_t_plus_dt.numerics.
+        resistivity_multiplier,
+        psi=intermediate_core_profiles.psi,
+        geo=geo,
+    )
     psidot = dataclasses.replace(
         core_profiles_t_plus_dt.psidot,
         value=psidot_value,
@@ -5172,10 +5156,6 @@ class StateHistory:
         self._rho_cell_norm = state_history[0].geometry.rho_norm
         self._rho_face_norm = state_history[0].geometry.rho_face_norm
         self._rho_norm = np.concatenate([[0.0], self.rho_cell_norm, [1.0]])
-
-    @property
-    def torax_config(self):
-        return self._torax_config
 
     @property
     def times(self) -> array_typing.Array:
