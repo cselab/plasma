@@ -19,7 +19,7 @@ DEFAULT_MODEL_FUNCTION_NAME: str = 'gaussian'
 
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
-class RuntimeParams(runtime_params_lib.RuntimeParams):
+class RuntimeParamsGeIO(runtime_params_lib.RuntimeParams):
     gaussian_width: array_typing.FloatScalar
     gaussian_location: array_typing.FloatScalar
     P_total: array_typing.FloatScalar
@@ -52,9 +52,8 @@ def default_formula(
     unused_core_profiles: state.CoreProfiles,
     unused_calculated_source_profiles: source_profiles.SourceProfiles | None,
     unused_conductivity: conductivity_base.Conductivity | None,
-) -> tuple[array_typing.Array, ...]:
+):
     source_params = runtime_params.sources[source_name]
-    assert isinstance(source_params, RuntimeParams)
     ion, el = calc_generic_heat_source(
         geo,
         source_params.gaussian_location,
@@ -106,8 +105,8 @@ class GenericIonElHeatSourceConfig(base.SourceModelBase):
     def build_runtime_params(
         self,
         t: chex.Numeric,
-    ) -> RuntimeParams:
-        return RuntimeParams(
+    ):
+        return RuntimeParamsGeIO(
             prescribed_values=tuple(
                 [v.get_value(t) for v in self.prescribed_values]),
             mode=self.mode,
