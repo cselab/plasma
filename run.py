@@ -9,7 +9,6 @@ from torax._src import constants
 from torax._src import constants as constants_module
 from torax._src import jax_utils
 from torax._src import xnp
-from torax._src.config import runtime_params_slice
 from torax._src.torax_pydantic import interpolated_param_1d
 from torax._src.torax_pydantic import interpolated_param_2d
 from torax._src.torax_pydantic import model_base
@@ -53,6 +52,30 @@ from torax._src import constants
 from torax._src.torax_pydantic import torax_pydantic
 
 _TOLERANCE: Final[float] = 1e-6
+
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(frozen=True)
+class RuntimeParamsSlice:
+    numerics: Any
+    pedestal: Any
+    plasma_composition: Any
+    profile_conditions: Any
+    solver: Any
+    sources: Any
+    transport: Any
+
+def make_ip_consistent(runtime_params, geo):
+    param_Ip = runtime_params.profile_conditions.Ip
+    Ip_scale_factor = param_Ip / geo.Ip_profile_face[-1]
+    geo = dataclasses.replace(
+        geo,
+        Ip_profile_face=geo.Ip_profile_face * Ip_scale_factor,
+        psi_from_Ip=geo.psi_from_Ip * Ip_scale_factor,
+        psi_from_Ip_face=geo.psi_from_Ip_face * Ip_scale_factor,
+        j_total=geo.j_total * Ip_scale_factor,
+        j_total_face=geo.j_total_face * Ip_scale_factor,
+    )
+    return runtime_params, geo
 
 def time_varying_array_defined_at_1(
     time_varying_array: torax_pydantic.TimeVaryingArray,
@@ -1767,7 +1790,7 @@ class SourceProfileFunction(Protocol):
 
     def __call__(
         self,
-        runtime_params: runtime_params_slice.RuntimeParams,
+        runtime_params: RuntimeParamsSlice,
         geo: Geometry,
         source_name: str,
         core_profiles: CoreProfiles,
@@ -1823,7 +1846,7 @@ class SourceProfileFunction(Protocol):
 
     def __call__(
         self,
-        runtime_params: runtime_params_slice.RuntimeParams,
+        runtime_params: RuntimeParamsSlice,
         geo: Geometry,
         source_name: str,
         core_profiles: CoreProfiles,
@@ -1879,7 +1902,7 @@ class SourceProfileFunction(Protocol):
 
     def __call__(
         self,
-        runtime_params: runtime_params_slice.RuntimeParams,
+        runtime_params: RuntimeParamsSlice,
         geo: Geometry,
         source_name: str,
         core_profiles: CoreProfiles,
@@ -2047,7 +2070,7 @@ def calc_generic_heat_source(
 
 
 def default_formula(
-    runtime_params: runtime_params_slice.RuntimeParams,
+    runtime_params: RuntimeParamsSlice,
     geo: Geometry,
     source_name: str,
     unused_core_profiles: CoreProfiles,
@@ -2123,7 +2146,7 @@ class GenericIonElHeatSourceConfig(SourceModelBase):
 
 
 def calc_generic_particle_source(
-    runtime_params: runtime_params_slice.RuntimeParams,
+    runtime_params: RuntimeParamsSlice,
     geo: Geometry,
     source_name: str,
     unused_state: CoreProfiles,
@@ -2195,7 +2218,7 @@ class GenericParticleSourceConfig(SourceModelBase):
 
 
 def calc_pellet_source(
-    runtime_params: runtime_params_slice.RuntimeParams,
+    runtime_params: RuntimeParamsSlice,
     geo: Geometry,
     source_name: str,
     unused_state: CoreProfiles,
@@ -2313,7 +2336,7 @@ def calc_fusion(geo, core_profiles, runtime_params):
 
 
 def fusion_heat_model_func(
-    runtime_params: runtime_params_slice.RuntimeParams,
+    runtime_params: RuntimeParamsSlice,
     geo: Geometry,
     unused_source_name: str,
     core_profiles: CoreProfiles,
@@ -2457,7 +2480,7 @@ class QeiSource(Source):
 
     def get_qei(
         self,
-        runtime_params: runtime_params_slice.RuntimeParams,
+        runtime_params: RuntimeParamsSlice,
         geo: Geometry,
         core_profiles: CoreProfiles,
     ):
@@ -2471,7 +2494,7 @@ class QeiSource(Source):
             lambda: QeiInfo.zeros(geo),
         )
 
-    def get_value(self, runtime_params: runtime_params_slice.RuntimeParams,
+    def get_value(self, runtime_params: RuntimeParamsSlice,
                   geo: Geometry, core_profiles: CoreProfiles,
                   calculated_source_profiles, conductivity):
         raise NotImplementedError('Call get_qei() instead.')
@@ -2731,7 +2754,7 @@ def build_source_profiles1(runtime_params,
 def build_standard_source_profiles(
     *,
     calculated_source_profiles: SourceProfiles,
-    runtime_params: runtime_params_slice.RuntimeParams,
+    runtime_params: RuntimeParamsSlice,
     geo: Geometry,
     core_profiles: CoreProfiles,
     source_models: SourceModels,
@@ -4984,7 +5007,7 @@ def _calculate_integrated_sources(
     geo: Geometry,
     core_profiles: CoreProfiles,
     core_sources: SourceProfiles,
-    runtime_params: runtime_params_slice.RuntimeParams,
+    runtime_params: RuntimeParamsSlice,
 ):
     integrated = {}
     integrated['P_alpha_total'] = jnp.array(0.0, dtype=jax_utils.get_dtype())
@@ -5047,7 +5070,7 @@ def _calculate_integrated_sources(
 @jax_utils.jit
 def make_post_processed_outputs(
     sim_state,
-    runtime_params: runtime_params_slice.RuntimeParams,
+    runtime_params: RuntimeParamsSlice,
     previous_post_processed_outputs: PostProcessedOutputs | None = None,
 ):
     impurity_radiation_outputs = (calculate_impurity_species_output(
@@ -5422,7 +5445,7 @@ def _get_ion_properties_from_fractions(impurity_symbols, impurity_params, T_e,
 
 @jax_utils.jit
 def get_updated_ions(
-    runtime_params: runtime_params_slice.RuntimeParams,
+    runtime_params: RuntimeParamsSlice,
     geo: Geometry,
     n_e: CellVariable,
     T_e: CellVariable,
@@ -5562,7 +5585,7 @@ def initial_core_profiles0(runtime_params, geo, source_models,
 
 
 def _get_initial_psi_mode(
-    runtime_params: runtime_params_slice.RuntimeParams,
+    runtime_params: RuntimeParamsSlice,
     geo: Geometry,
 ):
     psi_mode = runtime_params.profile_conditions.initial_psi_mode
@@ -6108,7 +6131,7 @@ class CoeffsCallback:
 
     def __call__(
         self,
-        runtime_params: runtime_params_slice.RuntimeParams,
+        runtime_params: RuntimeParamsSlice,
         geo: Geometry,
         core_profiles: CoreProfiles,
         x: tuple[CellVariable, ...],
@@ -6635,8 +6658,8 @@ class Solver(abc.ABC):
         self,
         t: jax.Array,
         dt: jax.Array,
-        runtime_params_t: runtime_params_slice.RuntimeParams,
-        runtime_params_t_plus_dt: runtime_params_slice.RuntimeParams,
+        runtime_params_t: RuntimeParamsSlice,
+        runtime_params_t_plus_dt: RuntimeParamsSlice,
         geo_t: Geometry,
         geo_t_plus_dt: Geometry,
         core_profiles_t: CoreProfiles,
@@ -6672,8 +6695,8 @@ class Solver(abc.ABC):
     def _x_new(
         self,
         dt: jax.Array,
-        runtime_params_t: runtime_params_slice.RuntimeParams,
-        runtime_params_t_plus_dt: runtime_params_slice.RuntimeParams,
+        runtime_params_t: RuntimeParamsSlice,
+        runtime_params_t_plus_dt: RuntimeParamsSlice,
         geo_t: Geometry,
         geo_t_plus_dt: Geometry,
         core_profiles_t: CoreProfiles,
@@ -6698,7 +6721,7 @@ class Solver(abc.ABC):
 )
 def predictor_corrector_method(
     dt: jax.Array,
-    runtime_params_t_plus_dt: runtime_params_slice.RuntimeParams,
+    runtime_params_t_plus_dt: RuntimeParamsSlice,
     geo_t_plus_dt: Geometry,
     x_old: tuple[CellVariable, ...],
     x_new_guess: tuple[CellVariable, ...],
@@ -6754,8 +6777,8 @@ class LinearThetaMethod0(Solver):
     def _x_new(
         self,
         dt: jax.Array,
-        runtime_params_t: runtime_params_slice.RuntimeParams,
-        runtime_params_t_plus_dt: runtime_params_slice.RuntimeParams,
+        runtime_params_t: RuntimeParamsSlice,
+        runtime_params_t_plus_dt: RuntimeParamsSlice,
         geo_t: Geometry,
         geo_t_plus_dt: Geometry,
         core_profiles_t: CoreProfiles,
@@ -6936,8 +6959,8 @@ class RuntimeParamsProvider:
     def __call__(
         self,
         t: chex.Numeric,
-    ) -> runtime_params_slice.RuntimeParams:
-        return runtime_params_slice.RuntimeParams(
+    ) -> RuntimeParamsSlice:
+        return RuntimeParamsSlice(
             transport=self.transport_model.build_runtime_params(t),
             solver=self.solver.build_runtime_params,
             sources={
@@ -6956,7 +6979,7 @@ def get_consistent_runtime_params_and_geometry(*, t, runtime_params_provider,
                                                geometry_provider):
     geo = geometry_provider(t)
     runtime_params = runtime_params_provider(t=t)
-    return runtime_params_slice.make_ip_consistent(runtime_params, geo)
+    return make_ip_consistent(runtime_params, geo)
 
 
 @jax.tree_util.register_dataclass
