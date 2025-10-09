@@ -30,6 +30,7 @@ from typing import Annotated
 from typing import Annotated, Any, Literal, TypeAlias, TypeVar, ClassVar, Final, Mapping, Protocol, Callable
 from typing import Annotated, Literal
 from typing import ClassVar, Protocol
+from typing import Final, Mapping
 from typing import Literal
 from typing_extensions import Annotated, Final, override
 import abc
@@ -50,36 +51,6 @@ import pydantic
 import typing
 import typing_extensions
 import xarray as xr
-import jax
-from jax import numpy as jnp
-from torax._src import constants
-from torax._src import math_utils
-from torax._src import state
-from torax._src.geometry import geometry
-
-import dataclasses
-from typing import Final, Mapping
-import immutabledict
-import jax
-from jax import numpy as jnp
-import numpy as np
-from torax._src import array_typing
-from torax._src import constants
-
-import jax
-from jax import numpy as jnp
-from torax._src import array_typing
-from torax._src import constants
-from torax._src import state
-from torax._src.geometry import geometry
-
-from jax import numpy as jnp
-from torax._src import array_typing
-from torax._src import constants
-from torax._src import math_utils
-from torax._src import state
-from torax._src.fvm import cell_variable
-from torax._src.geometry import geometry
 
 _trapz = jax.scipy.integrate.trapezoid
 
