@@ -1,3 +1,9 @@
+import functools
+import os
+from typing import Any, ParamSpec, TypeAlias, TypeVar
+import jax
+from jax import numpy as jnp
+import numpy as np
 from typing import Annotated, TypeAlias
 import numpy as np
 import pydantic
@@ -767,6 +773,21 @@ ValidatedDefault = functools.partial(pydantic.Field, validate_default=True)
 T = TypeVar('T')
 BooleanNumeric = Any
 thread_context = threading.local()
+
+@functools.cache
+def get_dtype():
+    precision = os.getenv('JAX_PRECISION', 'f64')
+    return jnp.float64 if precision == 'f64' else jnp.float32
+
+
+@functools.cache
+def get_np_dtype():
+    precision = os.getenv('JAX_PRECISION', 'f64')
+    return np.float64 if precision == 'f64' else np.float32
+
+
+def jit(*args, **kwargs):
+    return jax.jit(*args, **kwargs)
 
 
 def jit0(*args, **kwargs):
