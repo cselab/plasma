@@ -2112,14 +2112,13 @@ class _IonProperties:
 
 
 def _get_ion_properties_from_fractions(
-    impurity_symbols: tuple[str, ...],
-    impurity_params: impurity_fractions.RuntimeParams,
-    T_e: cell_variable.CellVariable,
-    Z_i: array_typing.FloatVectorCell,
-    Z_i_face: array_typing.FloatVectorFace,
-    Z_eff_from_config: array_typing.FloatVectorCell,
-    Z_eff_face_from_config: array_typing.FloatVectorFace,
-):
+        impurity_symbols,
+        impurity_params,
+        T_e,
+        Z_i,
+        Z_i_face,
+        Z_eff_from_config,
+        Z_eff_face_from_config):
     Z_impurity = charge_states.get_average_charge_state(
         ion_symbols=impurity_symbols,
         T_e=T_e.value,
@@ -2179,7 +2178,7 @@ def get_updated_ions(
     ).Z_mixture
     impurity_params = runtime_params.plasma_composition.impurity
     match impurity_params:
-        case impurity_fractions.RuntimeParams():
+        case impurity_fractions.RuntimeParamsIF():
             ion_properties = _get_ion_properties_from_fractions(
                 runtime_params.plasma_composition.impurity_names,
                 impurity_params,

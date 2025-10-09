@@ -40,7 +40,7 @@ ImpurityMapping: TypeAlias = Annotated[
 
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
-class RuntimeParams:
+class RuntimeParamsIF:
     fractions: jt.Float[array_typing.Array, 'ion_symbol rhon']
     fractions_face: jt.Float[array_typing.Array, 'ion_symbol rhon+1']
     A_avg: array_typing.FloatVectorCell
@@ -55,7 +55,7 @@ class ImpurityFractions(torax_pydantic.BaseModelFrozen):
     Z_override: torax_pydantic.TimeVaryingScalar | None = None
     A_override: torax_pydantic.TimeVaryingScalar | None = None
 
-    def build_runtime_params(self, t: chex.Numeric) -> RuntimeParams:
+    def build_runtime_params(self, t):
         ions = self.species.keys()
         fractions = jnp.array([self.species[ion].get_value(t) for ion in ions])
         fractions_face = jnp.array(
@@ -66,7 +66,7 @@ class ImpurityFractions(torax_pydantic.BaseModelFrozen):
             [constants.ION_PROPERTIES_DICT[ion].A for ion in ions])
         A_avg = jnp.sum(As[..., jnp.newaxis] * fractions, axis=0)
         A_avg_face = jnp.sum(As[..., jnp.newaxis] * fractions_face, axis=0)
-        return RuntimeParams(
+        return RuntimeParamsIF(
             fractions=fractions,
             fractions_face=fractions_face,
             A_avg=A_avg,
