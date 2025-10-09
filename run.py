@@ -1,3 +1,6 @@
+import dataclasses
+import jax
+from torax._src import array_typing
 from absl import logging
 from collections.abc import Callable
 from collections.abc import Mapping
@@ -50,9 +53,6 @@ from torax._src.torax_pydantic import interpolated_param_1d
 from torax._src.torax_pydantic import interpolated_param_2d
 from torax._src.torax_pydantic import model_base
 from torax._src.torax_pydantic import torax_pydantic
-from torax._src.transport_model import runtime_params as runtime_params_lib
-from torax._src.transport_model import runtime_params as runtime_params0
-from torax._src.transport_model import runtime_params as transport_runtime_params_lib
 from typing import Annotated, Any, Literal
 from typing import Annotated, Any, Literal, TypeAlias, TypeVar
 from typing import Any
@@ -80,6 +80,34 @@ import pydantic
 import typing_extensions
 import xarray as xr
 
+
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(frozen=True)
+class RuntimeParamsX:
+    chi_min: float
+    chi_max: float
+    D_e_min: float
+    D_e_max: float
+    V_e_min: float
+    V_e_max: float
+    rho_min: array_typing.FloatScalar
+    rho_max: array_typing.FloatScalar
+    apply_inner_patch: array_typing.BoolScalar
+    D_e_inner: array_typing.FloatScalar
+    V_e_inner: array_typing.FloatScalar
+    chi_i_inner: array_typing.FloatScalar
+    chi_e_inner: array_typing.FloatScalar
+    rho_inner: array_typing.FloatScalar
+    apply_outer_patch: array_typing.BoolScalar
+    D_e_outer: array_typing.FloatScalar
+    V_e_outer: array_typing.FloatScalar
+    chi_i_outer: array_typing.FloatScalar
+    chi_e_outer: array_typing.FloatScalar
+    rho_outer: array_typing.FloatScalar
+    smoothing_width: float
+    smooth_everywhere: bool
+
+
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass
 class TurbulentTransport:
@@ -100,13 +128,8 @@ class TransportModel(abc.ABC):
             raise AttributeError("TransportModels are immutable.")
         return super().__setattr__(attr, value)
 
-    def __call__(
-        self,
-        runtime_params: runtime_params_slice.RuntimeParams,
-        geo: geometry.Geometry,
-        core_profiles: state.CoreProfiles,
-        pedestal_model_output: pedestal_model_lib.PedestalModelOutput,
-    ) -> TurbulentTransport:
+    def __call__(self, runtime_params, geo, core_profiles,
+                 pedestal_model_output):
         if not getattr(self, "_frozen", False):
             raise RuntimeError(
                 f"Subclass implementation {type(self)} forgot to "
@@ -144,31 +167,20 @@ class TransportModel(abc.ABC):
         )
 
     @abc.abstractmethod
-    def _call_implementation(
-        self,
-        transport_runtime_params: transport_runtime_params_lib.RuntimeParams,
-        runtime_params: runtime_params_slice.RuntimeParams,
-        geo: geometry.Geometry,
-        core_profiles: state.CoreProfiles,
-        pedestal_model_output: pedestal_model_lib.PedestalModelOutput,
-    ) -> TurbulentTransport:
+    def _call_implementation(self, transport_runtime_params, runtime_params,
+                             geo, core_profiles, pedestal_model_output):
         pass
 
     @abc.abstractmethod
-    def __hash__(self) -> int:
+    def __hash__(self):
         pass
 
     @abc.abstractmethod
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other):
         pass
 
-    def _apply_domain_restriction(
-        self,
-        transport_runtime_params: transport_runtime_params_lib.RuntimeParams,
-        geo: geometry.Geometry,
-        transport_coeffs: TurbulentTransport,
-        pedestal_model_output: pedestal_model_lib.PedestalModelOutput,
-    ) -> TurbulentTransport:
+    def _apply_domain_restriction(self, transport_runtime_params, geo,
+                                  transport_coeffs, pedestal_model_output):
         active_mask = (
             (geo.rho_face_norm > transport_runtime_params.rho_min)
             & (geo.rho_face_norm <= transport_runtime_params.rho_max)
@@ -188,11 +200,7 @@ class TransportModel(abc.ABC):
             v_face_el=v_face_el,
         )
 
-    def _apply_clipping(
-        self,
-        transport_runtime_params: transport_runtime_params_lib.RuntimeParams,
-        transport_coeffs: TurbulentTransport,
-    ) -> TurbulentTransport:
+    def _apply_clipping(self, transport_runtime_params, transport_coeffs):
         chi_face_ion = jnp.clip(
             transport_coeffs.chi_face_ion,
             transport_runtime_params.chi_min,
@@ -221,13 +229,8 @@ class TransportModel(abc.ABC):
             v_face_el=v_face_el,
         )
 
-    def _apply_transport_patches(
-        self,
-        transport_runtime_params: transport_runtime_params_lib.RuntimeParams,
-        runtime_params: runtime_params_slice.RuntimeParams,
-        geo: geometry.Geometry,
-        transport_coeffs: TurbulentTransport,
-    ) -> TurbulentTransport:
+    def _apply_transport_patches(self, transport_runtime_params,
+                                 runtime_params, geo, transport_coeffs):
         consts = constants.CONSTANTS
         chi_face_ion = jnp.where(
             jnp.logical_and(
@@ -321,14 +324,8 @@ class TransportModel(abc.ABC):
             v_face_el=v_face_el,
         )
 
-    def _smooth_coeffs(
-        self,
-        transport_runtime_params: transport_runtime_params_lib.RuntimeParams,
-        runtime_params: runtime_params_slice.RuntimeParams,
-        geo: geometry.Geometry,
-        transport_coeffs: TurbulentTransport,
-        pedestal_model_output: pedestal_model_lib.PedestalModelOutput,
-    ) -> TurbulentTransport:
+    def _smooth_coeffs(self, transport_runtime_params, runtime_params, geo,
+                       transport_coeffs, pedestal_model_output):
         smoothing_matrix = _build_smoothing_matrix(
             transport_runtime_params,
             runtime_params,
@@ -346,12 +343,8 @@ class TransportModel(abc.ABC):
         return jax.tree_util.tree_map(smooth_single_coeff, transport_coeffs)
 
 
-def _build_smoothing_matrix(
-    transport_runtime_params: transport_runtime_params_lib.RuntimeParams,
-    runtime_params: runtime_params_slice.RuntimeParams,
-    geo: geometry.Geometry,
-    pedestal_model_output: pedestal_model_lib.PedestalModelOutput,
-) -> jax.Array:
+def _build_smoothing_matrix(transport_runtime_params, runtime_params, geo,
+                            pedestal_model_output):
     lower_cutoff = 0.01
     consts = constants.CONSTANTS
     kernel = jnp.exp(
@@ -413,7 +406,7 @@ class NormalizedLogarithmicGradients:
         core_profiles: state.CoreProfiles,
         radial_coordinate: jnp.ndarray,
         reference_length: jnp.ndarray,
-    ) -> typing_extensions.Self:
+    ):
         gradients = {}
         for name, profile in {
                 "lref_over_lti": core_profiles.T_i,
@@ -435,7 +428,7 @@ def calculate_chiGB(
     reference_magnetic_field: chex.Numeric,
     reference_mass: chex.Numeric,
     reference_length: chex.Numeric,
-) -> array_typing.Array:
+):
     constants = constants_module.CONSTANTS
     return ((reference_mass * constants.m_amu)**0.5 /
             (reference_magnetic_field * constants.q_e)**2 *
@@ -468,7 +461,7 @@ def calculate_alpha(
 
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
-class RuntimeParams00(runtime_params_lib.RuntimeParams):
+class RuntimeParams00(RuntimeParamsX):
     DV_effective: bool
     An_min: float
 
@@ -737,7 +730,7 @@ class TransportBase(torax_pydantic.BaseModelFrozen, abc.ABC):
     smooth_everywhere: bool = False
 
     def build_runtime_params(self, t):
-        return runtime_params0.RuntimeParams(
+        return RuntimeParamsX(
             chi_min=self.chi_min,
             chi_max=self.chi_max,
             D_e_min=self.D_e_min,
@@ -857,11 +850,8 @@ class QLKNNRuntimeConfigInputs:
     set_pedestal: bool
 
     @staticmethod
-    def from_runtime_params_slice(
-        transport_runtime_params: runtime_params_lib.RuntimeParams,
-        runtime_params: runtime_params_slice.RuntimeParams,
-        pedestal_model_output: pedestal_model_lib.PedestalModelOutput,
-    ):
+    def from_runtime_params_slice(transport_runtime_params, runtime_params,
+                                  pedestal_model_output):
         assert isinstance(transport_runtime_params, RuntimeParams0)
         return QLKNNRuntimeConfigInputs(
             transport=transport_runtime_params,
@@ -3632,8 +3622,8 @@ def get_consistent_runtime_params_and_geometry(*, t, runtime_params_provider,
 class PhysicsModels:
     source_models: source_models_lib.SourceModels = dataclasses.field(
         metadata=dict(static=True))
-    transport_model: TransportModel = dataclasses.field(
-        metadata=dict(static=True))
+    transport_model: TransportModel = dataclasses.field(metadata=dict(
+        static=True))
     pedestal_model: pedestal_model_lib.PedestalModel = dataclasses.field(
         metadata=dict(static=True))
     neoclassical_models: neoclassical_models_lib.NeoclassicalModels = (
