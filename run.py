@@ -27,15 +27,17 @@ import xarray as xr
 import logging
 import os
 import jax
+
 os.environ['XLA_FLAGS'] = (
-    os.environ.get('XLA_FLAGS', '')
-    + ' --xla_backend_extra_options=xla_cpu_flatten_after_fusion'
-)
+    os.environ.get('XLA_FLAGS', '') +
+    ' --xla_backend_extra_options=xla_cpu_flatten_after_fusion')
 precision = os.getenv('JAX_PRECISION', 'f64')
 if precision == 'f64':
     jax.config.update('jax_enable_x64', True)
 
 T = TypeVar('T')
+
+
 @functools.cache
 def get_dtype():
     precision = os.getenv('JAX_PRECISION', 'f64')
@@ -50,6 +52,7 @@ def get_np_dtype():
 
 def jit(*args, **kwargs):
     return jax.jit(*args, **kwargs)
+
 
 Array: TypeAlias = jax.Array | np.ndarray
 FloatScalar: TypeAlias = jt.Float[Array | float, ""]
@@ -114,7 +117,6 @@ NumpyArray1DUnitInterval = Annotated[
     NumpyArray1D,
     pydantic.AfterValidator(_array_is_unit_interval),
 ]
-
 
 TIME_INVARIANT: Final[str] = '_pydantic_time_invariant_field'
 JAX_STATIC: Final[str] = '_pydantic_jax_static_field'
@@ -229,9 +231,7 @@ def _convert_value_to_floats(
     return float(interp_input)
 
 
-def convert_input_to_xs_ys(
-    interp_input
-):
+def convert_input_to_xs_ys(interp_input):
     interpolation_mode = InterpolationMode.PIECEWISE_LINEAR
     if _is_bool(interp_input):
         interp_input = _convert_value_to_floats(interp_input)
@@ -240,10 +240,8 @@ def convert_input_to_xs_ys(
         is_bool_param = False
     if isinstance(interp_input, dict):
         return (
-            np.array(list(interp_input.keys()),
-                     dtype=get_np_dtype()),
-            np.array(list(interp_input.values()),
-                     dtype=get_np_dtype()),
+            np.array(list(interp_input.keys()), dtype=get_np_dtype()),
+            np.array(list(interp_input.values()), dtype=get_np_dtype()),
             interpolation_mode,
             is_bool_param,
         )
@@ -405,8 +403,7 @@ class BaseModelFrozen(pydantic.BaseModel):
         return (dynamic_children, static_children)
 
     @classmethod
-    def tree_unflatten(cls, aux_data: StaticKwargs,
-                       children: DynamicArgs):
+    def tree_unflatten(cls, aux_data: StaticKwargs, children: DynamicArgs):
         dynamic_kwargs = {
             name: value
             for name, value in zip(
@@ -445,16 +442,15 @@ class BaseModelFrozen(pydantic.BaseModel):
             new_submodels = new_submodels_temp
         return tuple(all_submodels)
 
+
 ValueType: TypeAlias = dict[
     float,
-    tuple[NumpyArray1DUnitInterval,
-          NumpyArray1D],
+    tuple[NumpyArray1DUnitInterval, NumpyArray1D],
 ]
 
 
 class Grid1D(BaseModelFrozen):
-    nx: typing_extensions.Annotated[pydantic.conint(ge=4),
-                                    JAX_STATIC]
+    nx: typing_extensions.Annotated[pydantic.conint(ge=4), JAX_STATIC]
 
     @functools.cached_property
     def dx(self) -> float:
@@ -475,11 +471,9 @@ class Grid1D(BaseModelFrozen):
 class TimeVaryingArray(BaseModelFrozen):
     value: ValueType
     rho_interpolation_mode: typing_extensions.Annotated[
-        InterpolationMode, 
-        JAX_STATIC] = InterpolationMode.PIECEWISE_LINEAR
+        InterpolationMode, JAX_STATIC] = InterpolationMode.PIECEWISE_LINEAR
     time_interpolation_mode: typing_extensions.Annotated[
-        InterpolationMode, 
-        JAX_STATIC] = InterpolationMode.PIECEWISE_LINEAR
+        InterpolationMode, JAX_STATIC] = InterpolationMode.PIECEWISE_LINEAR
     grid: Grid1D | None = None
 
     def tree_flatten(self):
@@ -532,7 +526,6 @@ class TimeVaryingArray(BaseModelFrozen):
             case _:
                 raise ValueError(f'Unknown grid type: {grid_type}')
 
-
     @pydantic.field_validator('value', mode='after')
     @classmethod
     def _valid_value(cls, value: ValueType) -> ValueType:
@@ -542,18 +535,16 @@ class TimeVaryingArray(BaseModelFrozen):
     @pydantic.model_validator(mode='before')
     @classmethod
     def _conform_data(
-        cls, data: TimeRhoInterpolatedInput | dict[str, Any]
-    ) -> dict[str, Any]:
+            cls,
+            data: TimeRhoInterpolatedInput | dict[str, Any]) -> dict[str, Any]:
         if isinstance(data, dict):
             data.pop('_get_cached_interpolated_param_cell_centers', None)
             data.pop('_get_cached_interpolated_param_face_centers', None)
             data.pop('_get_cached_interpolated_param_face_right_centers', None)
             if set(data.keys()).issubset(cls.model_fields.keys()):
                 return data
-        time_interpolation_mode = (
-            InterpolationMode.PIECEWISE_LINEAR)
-        rho_interpolation_mode = (
-            InterpolationMode.PIECEWISE_LINEAR)
+        time_interpolation_mode = (InterpolationMode.PIECEWISE_LINEAR)
+        rho_interpolation_mode = (InterpolationMode.PIECEWISE_LINEAR)
         value = _load_from_primitives(data)
         return dict(
             value=value,
@@ -562,8 +553,7 @@ class TimeVaryingArray(BaseModelFrozen):
         )
 
     @functools.cached_property
-    def _get_cached_interpolated_param_cell(
-        self, ) -> InterpolatedVarTimeRho:
+    def _get_cached_interpolated_param_cell(self, ) -> InterpolatedVarTimeRho:
         return InterpolatedVarTimeRho(
             self.value,
             rho_norm=self.grid.cell_centers,
@@ -572,8 +562,7 @@ class TimeVaryingArray(BaseModelFrozen):
         )
 
     @functools.cached_property
-    def _get_cached_interpolated_param_face(
-        self, ) -> InterpolatedVarTimeRho:
+    def _get_cached_interpolated_param_face(self, ) -> InterpolatedVarTimeRho:
         return InterpolatedVarTimeRho(
             self.value,
             rho_norm=self.grid.face_centers,
@@ -601,9 +590,8 @@ PositiveTimeVaryingArray = typing_extensions.Annotated[
 
 
 def _load_from_primitives(
-    primitive_values: (
-        Mapping[float, InterpolatedVarSingleAxisInput]
-        | float),
+    primitive_values: (Mapping[float, InterpolatedVarSingleAxisInput]
+                       | float),
 ) -> Mapping[float, tuple[Array, Array]]:
     if isinstance(primitive_values, (float, int)):
         primitive_values = {0.0: {0.0: primitive_values}}
@@ -669,11 +657,9 @@ NonNegativeTimeVaryingArray: TypeAlias = typing_extensions.Annotated[
 class TimeVaryingScalar(BaseModelFrozen):
     time: NumpyArray1DSorted
     value: NumpyArray
-    is_bool_param: typing_extensions.Annotated[bool,
-                                               JAX_STATIC] = (False)
+    is_bool_param: typing_extensions.Annotated[bool, JAX_STATIC] = (False)
     interpolation_mode: typing_extensions.Annotated[
-        InterpolationMode, 
-        JAX_STATIC] = InterpolationMode.PIECEWISE_LINEAR
+        InterpolationMode, JAX_STATIC] = InterpolationMode.PIECEWISE_LINEAR
 
     def get_value(self, t: chex.Numeric) -> Array:
         return self._get_cached_interpolated_param.get_value(t)
@@ -698,8 +684,7 @@ class TimeVaryingScalar(BaseModelFrozen):
         )
 
     @functools.cached_property
-    def _get_cached_interpolated_param(
-        self, ) -> InterpolatedVarSingleAxis:
+    def _get_cached_interpolated_param(self, ) -> InterpolatedVarSingleAxis:
         return InterpolatedVarSingleAxis(
             value=(self.time, self.value),
             interpolation_mode=self.interpolation_mode,
@@ -758,15 +743,14 @@ TimeVaryingScalar = TimeVaryingScalar
 TimeVaryingArray = TimeVaryingArray
 NonNegativeTimeVaryingArray = NonNegativeTimeVaryingArray
 PositiveTimeVaryingScalar = PositiveTimeVaryingScalar
-UnitIntervalTimeVaryingScalar = (
-    UnitIntervalTimeVaryingScalar)
+UnitIntervalTimeVaryingScalar = (UnitIntervalTimeVaryingScalar)
 PositiveTimeVaryingArray = PositiveTimeVaryingArray
 ValidatedDefault = functools.partial(pydantic.Field, validate_default=True)
-
 
 T = TypeVar('T')
 BooleanNumeric = Any
 thread_context = threading.local()
+
 
 @functools.cache
 def get_dtype():
@@ -958,8 +942,7 @@ def make_ip_consistent(runtime_params, geo):
 
 
 def time_varying_array_defined_at_1(
-    time_varying_array: TimeVaryingArray,
-) -> TimeVaryingArray:
+    time_varying_array: TimeVaryingArray, ) -> TimeVaryingArray:
     if not time_varying_array.right_boundary_conditions_defined:
         logging.debug("""Not defined at rho=1.0.""")
     return time_varying_array
@@ -990,8 +973,7 @@ def _ion_mixture_before_validator(value: Any) -> Any:
     return value
 
 
-def _ion_mixture_after_validator(
-    value: Mapping[str, TimeVaryingScalar], ):
+def _ion_mixture_after_validator(value: Mapping[str, TimeVaryingScalar], ):
     invalid_ion_symbols = set(value.keys()) - ION_SYMBOLS
     time_arrays = [v.time for v in value.values()]
     fraction_arrays = [v.value for v in value.values()]
@@ -1114,8 +1096,7 @@ class Numerics(BaseModelFrozen):
     evolve_current: Annotated[bool, JAX_STATIC] = False
     evolve_density: Annotated[bool, JAX_STATIC] = False
     calcphibdot: Annotated[bool, JAX_STATIC] = True
-    resistivity_multiplier: TimeVaryingScalar = (
-        ValidatedDefault(1.0))
+    resistivity_multiplier: TimeVaryingScalar = (ValidatedDefault(1.0))
     adaptive_T_source_prefactor: pydantic.PositiveFloat = 2.0e10
     adaptive_n_source_prefactor: pydantic.PositiveFloat = 2.0e8
 
@@ -1332,8 +1313,8 @@ def make_convection_terms(v_face,
 
 
 def make_diffusion_terms(
-    d_face: FloatVectorFace, var: CellVariable
-) -> tuple[FloatMatrixCell, FloatVectorCell]:
+        d_face: FloatVectorFace,
+        var: CellVariable) -> tuple[FloatMatrixCell, FloatVectorCell]:
     denom = var.dr**2
     diag = jnp.asarray(-d_face[1:] - d_face[:-1])
     off = d_face[1:-1]
@@ -1434,8 +1415,7 @@ class SolverNumericOutputs:
     sawtooth_crash: BoolScalar = False
 
 
-def face_to_cell(
-    face: FloatVectorFace, ) -> FloatVectorCell:
+def face_to_cell(face: FloatVectorFace, ) -> FloatVectorCell:
     return 0.5 * (face[:-1] + face[1:])
 
 
@@ -1610,8 +1590,7 @@ def stack_geometries(geometries: Sequence[Geometry]) -> Geometry:
     for field in dataclasses.fields(first_geo):
         field_name = field.name
         field_value = getattr(first_geo, field_name)
-        if isinstance(field_value,
-                      (Array, FloatScalar)):
+        if isinstance(field_value, (Array, FloatScalar)):
             field_values = [getattr(geo, field_name) for geo in geometries]
             stacked_data[field_name] = np.stack(field_values)
         else:
@@ -2381,8 +2360,7 @@ class SauterModelCond(ConductivityModel):
 
 
 class SauterModelConfigCond(ConductivityModelConfig):
-    model_name: Annotated[Literal['sauter'],
-                          JAX_STATIC] = 'sauter'
+    model_name: Annotated[Literal['sauter'], JAX_STATIC] = 'sauter'
 
     def build_model(self):
         return SauterModelCond()
@@ -2443,8 +2421,7 @@ class SauterModel(BootstrapCurrentModel):
 
 
 class SauterModelConfig(BootstrapCurrentModelConfig):
-    model_name: Annotated[Literal['sauter'],
-                          JAX_STATIC] = 'sauter'
+    model_name: Annotated[Literal['sauter'], JAX_STATIC] = 'sauter'
     bootstrap_multiplier: float = 1.0
 
     def build_model(self):
@@ -2636,13 +2613,12 @@ class RuntimeParamsSrc:
 class SourceModelBase(BaseModelFrozen, abc.ABC):
     mode: Annotated[Mode, JAX_STATIC] = (Mode.ZERO)
     is_explicit: Annotated[bool, JAX_STATIC] = False
-    prescribed_values: tuple[TimeVaryingArray,
-                             ...] = (ValidatedDefault(({
-                                 0: {
-                                     0: 0,
-                                     1: 0
-                                 }
-                             }, )))
+    prescribed_values: tuple[TimeVaryingArray, ...] = (ValidatedDefault(({
+        0: {
+            0: 0,
+            1: 0
+        }
+    }, )))
 
     @abc.abstractmethod
     def build_source(self):
@@ -2876,16 +2852,12 @@ class GenericCurrentSource(Source):
 
 
 class GenericCurrentSourceConfig(SourceModelBase):
-    model_name: Annotated[Literal['gaussian'],
-                          JAX_STATIC] = ('gaussian')
-    I_generic: TimeVaryingScalar = ValidatedDefault(
-        3.0e6)
+    model_name: Annotated[Literal['gaussian'], JAX_STATIC] = ('gaussian')
+    I_generic: TimeVaryingScalar = ValidatedDefault(3.0e6)
     fraction_of_total_current: UnitIntervalTimeVaryingScalar = (
         ValidatedDefault(0.2))
-    gaussian_width: PositiveTimeVaryingScalar = (
-        ValidatedDefault(0.05))
-    gaussian_location: UnitIntervalTimeVaryingScalar = (
-        ValidatedDefault(0.4))
+    gaussian_width: PositiveTimeVaryingScalar = (ValidatedDefault(0.05))
+    gaussian_location: UnitIntervalTimeVaryingScalar = (ValidatedDefault(0.4))
     use_absolute_current: bool = False
     mode: Annotated[Mode, JAX_STATIC] = (Mode.MODEL_BASED)
 
@@ -2980,18 +2952,12 @@ class GenericIonElectronHeatSource(Source):
 
 
 class GenericIonElHeatSourceConfig(SourceModelBase):
-    model_name: Annotated[Literal['gaussian'],
-                          JAX_STATIC] = ('gaussian')
-    gaussian_width: TimeVaryingScalar = (
-        ValidatedDefault(0.25))
-    gaussian_location: TimeVaryingScalar = (
-        ValidatedDefault(0.0))
-    P_total: TimeVaryingScalar = ValidatedDefault(
-        120e6)
-    electron_heat_fraction: TimeVaryingScalar = (
-        ValidatedDefault(0.66666))
-    absorption_fraction: PositiveTimeVaryingScalar = (
-        ValidatedDefault(1.0))
+    model_name: Annotated[Literal['gaussian'], JAX_STATIC] = ('gaussian')
+    gaussian_width: TimeVaryingScalar = (ValidatedDefault(0.25))
+    gaussian_location: TimeVaryingScalar = (ValidatedDefault(0.0))
+    P_total: TimeVaryingScalar = ValidatedDefault(120e6)
+    electron_heat_fraction: TimeVaryingScalar = (ValidatedDefault(0.66666))
+    absorption_fraction: PositiveTimeVaryingScalar = (ValidatedDefault(1.0))
     mode: Annotated[Mode, JAX_STATIC] = (Mode.MODEL_BASED)
 
     @property
@@ -3058,14 +3024,10 @@ class RuntimeParamsPaSo(RuntimeParamsSrc):
 
 
 class GenericParticleSourceConfig(SourceModelBase):
-    model_name: Annotated[Literal['gaussian'],
-                          JAX_STATIC] = ('gaussian')
-    particle_width: TimeVaryingScalar = (
-        ValidatedDefault(0.25))
-    deposition_location: TimeVaryingScalar = (
-        ValidatedDefault(0.0))
-    S_total: TimeVaryingScalar = ValidatedDefault(
-        1e22)
+    model_name: Annotated[Literal['gaussian'], JAX_STATIC] = ('gaussian')
+    particle_width: TimeVaryingScalar = (ValidatedDefault(0.25))
+    deposition_location: TimeVaryingScalar = (ValidatedDefault(0.0))
+    S_total: TimeVaryingScalar = ValidatedDefault(1e22)
     mode: Annotated[Mode, JAX_STATIC] = (Mode.MODEL_BASED)
 
     @property
@@ -3130,14 +3092,10 @@ class RuntimeParamsPE(RuntimeParamsSrc):
 
 
 class PelletSourceConfig(SourceModelBase):
-    model_name: Annotated[Literal['gaussian'],
-                          JAX_STATIC] = ('gaussian')
-    pellet_width: TimeVaryingScalar = (
-        ValidatedDefault(0.1))
-    pellet_deposition_location: TimeVaryingScalar = (
-        ValidatedDefault(0.85))
-    S_total: TimeVaryingScalar = ValidatedDefault(
-        2e22)
+    model_name: Annotated[Literal['gaussian'], JAX_STATIC] = ('gaussian')
+    pellet_width: TimeVaryingScalar = (ValidatedDefault(0.1))
+    pellet_deposition_location: TimeVaryingScalar = (ValidatedDefault(0.85))
+    S_total: TimeVaryingScalar = ValidatedDefault(2e22)
     mode: Annotated[Mode, JAX_STATIC] = (Mode.MODEL_BASED)
 
     @property
@@ -3242,8 +3200,7 @@ class FusionHeatSource(Source):
 
 
 class FusionHeatSourceConfig(SourceModelBase):
-    model_name: Annotated[Literal['bosch_hale'],
-                          JAX_STATIC] = ('bosch_hale')
+    model_name: Annotated[Literal['bosch_hale'], JAX_STATIC] = ('bosch_hale')
     mode: Annotated[Mode, JAX_STATIC] = (Mode.MODEL_BASED)
 
     @property
@@ -3304,12 +3261,9 @@ class GasPuffSource(Source):
 
 
 class GasPuffSourceConfig(SourceModelBase):
-    model_name: Annotated[Literal['exponential'],
-                          JAX_STATIC] = ('exponential')
-    puff_decay_length: TimeVaryingScalar = (
-        ValidatedDefault(0.05))
-    S_total: TimeVaryingScalar = ValidatedDefault(
-        1e22)
+    model_name: Annotated[Literal['exponential'], JAX_STATIC] = ('exponential')
+    puff_decay_length: TimeVaryingScalar = (ValidatedDefault(0.05))
+    S_total: TimeVaryingScalar = ValidatedDefault(1e22)
     mode: Annotated[Mode, JAX_STATIC] = (Mode.MODEL_BASED)
 
     @property
@@ -3459,8 +3413,7 @@ class QeiSourceConfig(SourceModelBase):
 
 
 class Sources(BaseModelFrozen):
-    ei_exchange: QeiSourceConfig = ValidatedDefault(
-        {'mode': 'ZERO'})
+    ei_exchange: QeiSourceConfig = ValidatedDefault({'mode': 'ZERO'})
     cyclotron_radiation: (None) = pydantic.Field(
         discriminator='model_name',
         default=None,
@@ -3473,8 +3426,8 @@ class Sources(BaseModelFrozen):
         discriminator='model_name',
         default=None,
     )
-    generic_current: GenericCurrentSourceConfig = (
-        ValidatedDefault({'mode': 'ZERO'}))
+    generic_current: GenericCurrentSourceConfig = (ValidatedDefault(
+        {'mode': 'ZERO'}))
     generic_heat: (GenericIonElHeatSourceConfig
                    | None) = pydantic.Field(
                        discriminator='model_name',
@@ -3814,8 +3767,7 @@ class SetTemperatureDensityPedestalModel(PedestalModel):
 
 
 class BasePedestal(BaseModelFrozen, abc.ABC):
-    set_pedestal: TimeVaryingScalar = (
-        ValidatedDefault(False))
+    set_pedestal: TimeVaryingScalar = (ValidatedDefault(False))
 
     @abc.abstractmethod
     def build_pedestal_model(self):
@@ -3829,15 +3781,11 @@ class BasePedestal(BaseModelFrozen, abc.ABC):
 class SetTpedNped(BasePedestal):
     model_name: Annotated[Literal['set_T_ped_n_ped'],
                           JAX_STATIC] = 'set_T_ped_n_ped'
-    n_e_ped: TimeVaryingScalar = ValidatedDefault(
-        0.7e20)
+    n_e_ped: TimeVaryingScalar = ValidatedDefault(0.7e20)
     n_e_ped_is_fGW: bool = False
-    T_i_ped: TimeVaryingScalar = ValidatedDefault(
-        5.0)
-    T_e_ped: TimeVaryingScalar = ValidatedDefault(
-        5.0)
-    rho_norm_ped_top: TimeVaryingScalar = (
-        ValidatedDefault(0.91))
+    T_i_ped: TimeVaryingScalar = ValidatedDefault(5.0)
+    T_e_ped: TimeVaryingScalar = ValidatedDefault(5.0)
+    rho_norm_ped_top: TimeVaryingScalar = (ValidatedDefault(0.91))
 
     def build_pedestal_model(self):
         return SetTemperatureDensityPedestalModel()
@@ -3922,8 +3870,7 @@ class RuntimeParamsIF:
 
 
 class ImpurityFractions(BaseModelFrozen):
-    impurity_mode: Annotated[Literal['fractions'],
-                             JAX_STATIC] = ('fractions')
+    impurity_mode: Annotated[Literal['fractions'], JAX_STATIC] = ('fractions')
     species: ImpurityMapping = ValidatedDefault({'Ne': 1.0})
     Z_override: TimeVaryingScalar | None = None
     A_override: TimeVaryingScalar | None = None
@@ -3996,34 +3943,22 @@ class RuntimeParamsPC:
 
 
 class ProfileConditions(BaseModelFrozen):
-    Ip: TimeVaryingScalar = ValidatedDefault(
-        15e6)
-    use_v_loop_lcfs_boundary_condition: Annotated[
-        bool, JAX_STATIC] = False
-    v_loop_lcfs: TimeVaryingScalar = (
-        ValidatedDefault(0.0))
+    Ip: TimeVaryingScalar = ValidatedDefault(15e6)
+    use_v_loop_lcfs_boundary_condition: Annotated[bool, JAX_STATIC] = False
+    v_loop_lcfs: TimeVaryingScalar = (ValidatedDefault(0.0))
     T_i_right_bc: PositiveTimeVaryingScalar | None = None
     T_e_right_bc: PositiveTimeVaryingScalar | None = None
-    T_i: PositiveTimeVaryingArray = (
-        ValidatedDefault({0: {
-            0: 15.0,
-            1: 1.0
-        }}))
-    T_e: PositiveTimeVaryingArray = (
-        ValidatedDefault({0: {
-            0: 15.0,
-            1: 1.0
-        }}))
+    T_i: PositiveTimeVaryingArray = (ValidatedDefault({0: {0: 15.0, 1: 1.0}}))
+    T_e: PositiveTimeVaryingArray = (ValidatedDefault({0: {0: 15.0, 1: 1.0}}))
     psi: TimeVaryingArray | None = None
     psidot: TimeVaryingArray | None = None
-    n_e: PositiveTimeVaryingArray = (
-        ValidatedDefault({0: {
+    n_e: PositiveTimeVaryingArray = (ValidatedDefault(
+        {0: {
             0: 1.2e20,
             1: 0.8e20
         }}))
     normalize_n_e_to_nbar: Annotated[bool, JAX_STATIC] = False
-    nbar: TimeVaryingScalar = ValidatedDefault(
-        0.85e20)
+    nbar: TimeVaryingScalar = ValidatedDefault(0.85e20)
     n_e_nbar_is_fGW: bool = False
     n_e_right_bc: TimeVaryingScalar | None = None
     n_e_right_bc_is_fGW: bool = False
@@ -4046,8 +3981,7 @@ class ProfileConditions(BaseModelFrozen):
         runtime_params['n_e_right_bc_is_absolute'] = True
 
         def _get_value(x):
-            if isinstance(x, (TimeVaryingScalar,
-                              TimeVaryingArray)):
+            if isinstance(x, (TimeVaryingScalar, TimeVaryingArray)):
                 return x.get_value(t)
             else:
                 return x
@@ -4079,10 +4013,7 @@ class PlasmaComposition(BaseModelFrozen):
         ImpurityFractions,
         pydantic.Field(discriminator='impurity_mode'),
     ]
-    main_ion: IonMapping = (ValidatedDefault({
-        'D': 0.5,
-        'T': 0.5
-    }))
+    main_ion: IonMapping = (ValidatedDefault({'D': 0.5, 'T': 0.5}))
     Z_eff: (TimeVaryingArrayDefinedAtRightBoundaryAndBounded
             ) = ValidatedDefault(1.0)
     Z_i_override: TimeVaryingScalar | None = None
@@ -4772,34 +4703,20 @@ class TransportBase(BaseModelFrozen, abc.ABC):
     D_e_max: MeterSquaredPerSecond = 100.0
     V_e_min: MeterPerSecond = -50.0
     V_e_max: MeterPerSecond = 50.0
-    rho_min: UnitIntervalTimeVaryingScalar = (
-        ValidatedDefault(0.0))
-    rho_max: UnitIntervalTimeVaryingScalar = (
-        ValidatedDefault(1.0))
-    apply_inner_patch: TimeVaryingScalar = (
-        ValidatedDefault(False))
-    D_e_inner: PositiveTimeVaryingScalar = (
-        ValidatedDefault(0.2))
-    V_e_inner: TimeVaryingScalar = (
-        ValidatedDefault(0.0))
-    chi_i_inner: PositiveTimeVaryingScalar = (
-        ValidatedDefault(1.0))
-    chi_e_inner: PositiveTimeVaryingScalar = (
-        ValidatedDefault(1.0))
-    rho_inner: UnitIntervalTimeVaryingScalar = (
-        ValidatedDefault(0.3))
-    apply_outer_patch: TimeVaryingScalar = (
-        ValidatedDefault(False))
-    D_e_outer: PositiveTimeVaryingScalar = (
-        ValidatedDefault(0.2))
-    V_e_outer: TimeVaryingScalar = (
-        ValidatedDefault(0.0))
-    chi_i_outer: PositiveTimeVaryingScalar = (
-        ValidatedDefault(1.0))
-    chi_e_outer: PositiveTimeVaryingScalar = (
-        ValidatedDefault(1.0))
-    rho_outer: UnitIntervalTimeVaryingScalar = (
-        ValidatedDefault(0.9))
+    rho_min: UnitIntervalTimeVaryingScalar = (ValidatedDefault(0.0))
+    rho_max: UnitIntervalTimeVaryingScalar = (ValidatedDefault(1.0))
+    apply_inner_patch: TimeVaryingScalar = (ValidatedDefault(False))
+    D_e_inner: PositiveTimeVaryingScalar = (ValidatedDefault(0.2))
+    V_e_inner: TimeVaryingScalar = (ValidatedDefault(0.0))
+    chi_i_inner: PositiveTimeVaryingScalar = (ValidatedDefault(1.0))
+    chi_e_inner: PositiveTimeVaryingScalar = (ValidatedDefault(1.0))
+    rho_inner: UnitIntervalTimeVaryingScalar = (ValidatedDefault(0.3))
+    apply_outer_patch: TimeVaryingScalar = (ValidatedDefault(False))
+    D_e_outer: PositiveTimeVaryingScalar = (ValidatedDefault(0.2))
+    V_e_outer: TimeVaryingScalar = (ValidatedDefault(0.0))
+    chi_i_outer: PositiveTimeVaryingScalar = (ValidatedDefault(1.0))
+    chi_e_outer: PositiveTimeVaryingScalar = (ValidatedDefault(1.0))
+    rho_outer: UnitIntervalTimeVaryingScalar = (ValidatedDefault(0.9))
     smoothing_width: pydantic.NonNegativeFloat = 0.0
     smooth_everywhere: bool = False
 
@@ -5071,8 +4988,7 @@ class QLKNNTransportModel0(QualikizBasedTransportModel):
 
 
 class QLKNNTransportModel(TransportBase):
-    model_name: Annotated[Literal['qlknn'],
-                          JAX_STATIC] = 'qlknn'
+    model_name: Annotated[Literal['qlknn'], JAX_STATIC] = 'qlknn'
     model_path: Annotated[str, JAX_STATIC] = ''
     qlknn_model_name: Annotated[str, JAX_STATIC] = ''
     include_ITG: bool = True
@@ -5494,8 +5410,7 @@ def _smooth_savgol(
 
 
 T = TypeVar('T')
-LY_OBJECT_TYPE: TypeAlias = (str
-                             | Mapping[str, NumpyArray | float])
+LY_OBJECT_TYPE: TypeAlias = (str | Mapping[str, NumpyArray | float])
 TIME_INVARIANT = TIME_INVARIANT
 
 
@@ -5528,8 +5443,7 @@ class GeometryConfig(BaseModelFrozen):
 
 class Geometry0(BaseModelFrozen):
     geometry_type: GeometryType
-    geometry_configs: GeometryConfig | dict[Second,
-                                            GeometryConfig]
+    geometry_configs: GeometryConfig | dict[Second, GeometryConfig]
 
     @pydantic.model_validator(mode='before')
     @classmethod
@@ -5889,8 +5803,7 @@ def _calculate_integrated_sources(
     integrated['P_SOL_e'] = integrated['P_ei_exchange_e']
     integrated['P_aux_i'] = jnp.array(0.0, dtype=get_dtype())
     integrated['P_aux_e'] = jnp.array(0.0, dtype=get_dtype())
-    integrated['P_external_injected'] = jnp.array(0.0,
-                                                  dtype=get_dtype())
+    integrated['P_external_injected'] = jnp.array(0.0, dtype=get_dtype())
     for key, value in ION_EL_HEAT_SOURCE_TRANSFORMATIONS.items():
         is_in_T_i = key in core_sources.T_i
         is_in_T_e = key in core_sources.T_e
@@ -7702,11 +7615,9 @@ class LinearThetaMethod0(Solver):
 
 
 class BaseSolver(BaseModelFrozen, abc.ABC):
-    theta_implicit: Annotated[UnitInterval,
-                              JAX_STATIC] = 1.0
+    theta_implicit: Annotated[UnitInterval, JAX_STATIC] = 1.0
     use_predictor_corrector: Annotated[bool, JAX_STATIC] = False
-    n_corrector_steps: Annotated[pydantic.PositiveInt,
-                                 JAX_STATIC] = 10
+    n_corrector_steps: Annotated[pydantic.PositiveInt, JAX_STATIC] = 10
     convection_dirichlet_mode: Annotated[Literal['ghost', 'direct',
                                                  'semi-implicit'],
                                          JAX_STATIC] = 'ghost'
@@ -7727,8 +7638,7 @@ class BaseSolver(BaseModelFrozen, abc.ABC):
 
 
 class LinearThetaMethod(BaseSolver):
-    solver_type: Annotated[Literal['linear'],
-                           JAX_STATIC] = ('linear')
+    solver_type: Annotated[Literal['linear'], JAX_STATIC] = ('linear')
 
     @pydantic.model_validator(mode='before')
     @classmethod
@@ -7758,8 +7668,8 @@ class NewtonRaphsonThetaMethod(BaseSolver):
     solver_type: Annotated[Literal['newton_raphson'],
                            JAX_STATIC] = 'newton_raphson'
     log_iterations: Annotated[bool, JAX_STATIC] = False
-    initial_guess_mode: Annotated[
-        InitialGuessMode, JAX_STATIC] = InitialGuessMode.LINEAR
+    initial_guess_mode: Annotated[InitialGuessMode,
+                                  JAX_STATIC] = InitialGuessMode.LINEAR
     n_max_iterations: pydantic.NonNegativeInt = 30
     residual_tol: float = 1e-5
     residual_coarse_tol: float = 1e-2
@@ -8241,8 +8151,7 @@ class StateHistory:
                  and field_name.removesuffix("_face") in geometry_attributes)
                     or field_name == "geometry_type"
                     or field_name == "Ip_from_parameters"
-                    or field_name == "j_total"
-                    or not isinstance(data, Array)):
+                    or field_name == "j_total" or not isinstance(data, Array)):
                 continue
             if f"{field_name}_face" in geometry_attributes:
                 data = _extend_cell_grid_to_boundaries(
