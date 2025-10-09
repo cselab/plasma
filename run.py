@@ -735,12 +735,6 @@ Tesla: TypeAlias = pydantic.PositiveFloat
 Density: TypeAlias = CubicMeter | GreenwaldFraction
 UnitInterval: TypeAlias = Annotated[float, pydantic.Field(ge=0.0, le=1.0)]
 OpenUnitInterval: TypeAlias = Annotated[float, pydantic.Field(gt=0.0, lt=1.0)]
-NumpyArray = NumpyArray
-NumpyArray1D = NumpyArray1D
-NumpyArray1DSorted = NumpyArray1DSorted
-BaseModelFrozen = BaseModelFrozen
-TimeVaryingScalar = TimeVaryingScalar
-TimeVaryingArray = TimeVaryingArray
 NonNegativeTimeVaryingArray = NonNegativeTimeVaryingArray
 PositiveTimeVaryingScalar = PositiveTimeVaryingScalar
 UnitIntervalTimeVaryingScalar = (UnitIntervalTimeVaryingScalar)
