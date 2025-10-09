@@ -1,14 +1,7 @@
-from collections.abc import Callable
-from collections.abc import Mapping
-from collections.abc import Sequence
-from collections.abc import Set
+from collections.abc import Callable, Mapping, Sequence, Set
 from fusion_surrogates.qlknn import qlknn_model
 from jax import numpy as jnp
-from typing import Annotated, Literal
-from typing import Annotated, TypeAlias
-from typing import Any, Callable, TypeVar
-from typing import Any, Final, Mapping, Sequence, TypeAlias
-from typing import Any, Literal, TypeAlias
+from typing import Annotated, Any, Callable, Final, Literal, Mapping, Sequence, TypeAlias, TypeVar
 from typing_extensions import Annotated, Final, override
 import abc
 import chex
