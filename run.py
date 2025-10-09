@@ -22,8 +22,6 @@ from torax._src.geometry import geometry
 from torax._src.geometry import geometry as geometry_lib
 from torax._src.geometry import geometry_provider
 from torax._src.geometry import standard_geometry
-from torax._src.physics import psi_calculations
-from torax._src.physics import scaling_laws
 from torax._src.torax_pydantic import interpolated_param_1d
 from torax._src.torax_pydantic import interpolated_param_2d
 from torax._src.torax_pydantic import model_base
@@ -52,6 +50,12 @@ import pydantic
 import typing
 import typing_extensions
 import xarray as xr
+import jax
+from jax import numpy as jnp
+from torax._src import constants
+from torax._src import math_utils
+from torax._src import state
+from torax._src.geometry import geometry
 
 import dataclasses
 from typing import Final, Mapping
@@ -77,6 +81,230 @@ from torax._src import state
 from torax._src.fvm import cell_variable
 from torax._src.geometry import geometry
 
+_trapz = jax.scipy.integrate.trapezoid
+
+def calculate_plh_scaling_factor(
+    geo: geometry.Geometry,
+    core_profiles: state.CoreProfiles,
+) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array]:
+    line_avg_n_e = math_utils.line_average(core_profiles.n_e.value, geo)
+    P_LH_hi_dens_D = (2.15 * (line_avg_n_e / 1e20)**0.782 * geo.B_0**0.772 *
+                      geo.a_minor**0.975 * geo.R_major**0.999 * 1e6)
+    A_deuterium = constants.ION_PROPERTIES_DICT['D'].A
+    P_LH_hi_dens = P_LH_hi_dens_D * A_deuterium / core_profiles.A_i
+    Ip_total = core_profiles.Ip_profile_face[..., -1]
+    n_e_min_P_LH = (0.7 * (Ip_total / 1e6)**0.34 * geo.a_minor**-0.95 *
+                    geo.B_0**0.62 * (geo.R_major / geo.a_minor)**0.4 * 1e19)
+    P_LH_min_D = (0.36 * (Ip_total / 1e6)**0.27 * geo.B_0**1.25 *
+                  geo.R_major**1.23 * (geo.R_major / geo.a_minor)**0.08 * 1e6)
+    P_LH_min = P_LH_min_D * A_deuterium / core_profiles.A_i
+    P_LH = jnp.maximum(P_LH_min, P_LH_hi_dens)
+    return P_LH_hi_dens, P_LH_min, P_LH, n_e_min_P_LH
+
+
+def calculate_scaling_law_confinement_time(
+    geo: geometry.Geometry,
+    core_profiles: state.CoreProfiles,
+    Ploss: jax.Array,
+    scaling_law: str,
+) -> jax.Array:
+    scaling_params = {
+        'H89P': {
+            'prefactor': 0.038128,
+            'Ip_exponent': 0.85,
+            'B_exponent': 0.2,
+            'line_avg_n_e_exponent': 0.1,
+            'Ploss_exponent': -0.5,
+            'R_exponent': 1.5,
+            'inverse_aspect_ratio_exponent': 0.3,
+            'elongation_exponent': 0.5,
+            'effective_mass_exponent': 0.50,
+            'triangularity_exponent': 0.0,
+        },
+        'H98': {
+            'prefactor': 0.0562,
+            'Ip_exponent': 0.93,
+            'B_exponent': 0.15,
+            'line_avg_n_e_exponent': 0.41,
+            'Ploss_exponent': -0.69,
+            'R_exponent': 1.97,
+            'inverse_aspect_ratio_exponent': 0.58,
+            'elongation_exponent': 0.78,
+            'effective_mass_exponent': 0.19,
+            'triangularity_exponent': 0.0,
+        },
+        'H97L': {
+            'prefactor': 0.023,
+            'Ip_exponent': 0.96,
+            'B_exponent': 0.03,
+            'line_avg_n_e_exponent': 0.4,
+            'Ploss_exponent': -0.73,
+            'R_exponent': 1.83,
+            'inverse_aspect_ratio_exponent': -0.06,
+            'elongation_exponent': 0.64,
+            'effective_mass_exponent': 0.20,
+            'triangularity_exponent': 0.0,
+        },
+        'H20': {
+            'prefactor': 0.053,
+            'Ip_exponent': 0.98,
+            'B_exponent': 0.22,
+            'line_avg_n_e_exponent': 0.24,
+            'Ploss_exponent': -0.669,
+            'R_exponent': 1.71,
+            'inverse_aspect_ratio_exponent': 0.35,
+            'elongation_exponent': 0.80,
+            'effective_mass_exponent': 0.20,
+            'triangularity_exponent': 0.36,
+        },
+    }
+    if scaling_law not in scaling_params:
+        raise ValueError(f'Unknown scaling law: {scaling_law}')
+    params = scaling_params[scaling_law]
+    scaled_Ip = core_profiles.Ip_profile_face[-1] / 1e6
+    scaled_Ploss = Ploss / 1e6
+    B = geo.B_0
+    line_avg_n_e = (math_utils.line_average(core_profiles.n_e.value, geo) /
+                    1e19)
+    R = geo.R_major
+    inverse_aspect_ratio = geo.a_minor / geo.R_major
+    elongation = geo.area_face[-1] / (jnp.pi * geo.a_minor**2)
+    effective_mass = core_profiles.A_i
+    triangularity = geo.delta_face[-1]
+    tau_scaling = (
+        params['prefactor'] * scaled_Ip**params['Ip_exponent'] *
+        B**params['B_exponent'] *
+        line_avg_n_e**params['line_avg_n_e_exponent'] *
+        scaled_Ploss**params['Ploss_exponent'] * R**params['R_exponent'] *
+        inverse_aspect_ratio**params['inverse_aspect_ratio_exponent'] *
+        elongation**params['elongation_exponent'] *
+        effective_mass**params['effective_mass_exponent'] *
+        (1 + triangularity)**params['triangularity_exponent'])
+    return tau_scaling
+
+
+def calc_q_face(
+    geo: geometry.Geometry,
+    psi: cell_variable.CellVariable,
+) -> array_typing.FloatVectorFace:
+    inv_iota = jnp.abs(
+        (2 * geo.Phi_b * geo.rho_face_norm[1:]) / psi.face_grad()[1:])
+    inv_iota0 = jnp.expand_dims(
+        jnp.abs((2 * geo.Phi_b * geo.drho_norm) / psi.face_grad()[1]), 0)
+    q_face = jnp.concatenate([inv_iota0, inv_iota])
+    return q_face * geo.q_correction_factor
+
+
+def calc_j_total(
+    geo: geometry.Geometry,
+    psi: cell_variable.CellVariable,
+) -> tuple[
+        array_typing.FloatVectorCell,
+        array_typing.FloatVectorFace,
+        array_typing.FloatVectorFace,
+]:
+    Ip_profile_face = (psi.face_grad() * geo.g2g3_over_rhon_face * geo.F_face /
+                       geo.Phi_b / (16 * jnp.pi**3 * constants.CONSTANTS.mu_0))
+    Ip_profile = (psi.grad() * geo.g2g3_over_rhon * geo.F / geo.Phi_b /
+                  (16 * jnp.pi**3 * constants.CONSTANTS.mu_0))
+    dI_drhon_face = jnp.gradient(Ip_profile_face, geo.rho_face_norm)
+    dI_drhon = jnp.gradient(Ip_profile, geo.rho_norm)
+    j_total_bulk = dI_drhon[1:] / geo.spr[1:]
+    j_total_face_bulk = dI_drhon_face[1:] / geo.spr_face[1:]
+    j_total_axis = j_total_bulk[0] - (j_total_bulk[1] - j_total_bulk[0])
+    j_total = jnp.concatenate([jnp.array([j_total_axis]), j_total_bulk])
+    j_total_face = jnp.concatenate(
+        [jnp.array([j_total_axis]), j_total_face_bulk])
+    return j_total, j_total_face, Ip_profile_face
+
+
+def calc_s_face(geo: geometry.Geometry,
+                psi: cell_variable.CellVariable) -> jax.Array:
+    iota_scaled = jnp.abs((psi.face_grad()[1:] / geo.rho_face_norm[1:]))
+    iota_scaled0 = jnp.expand_dims(jnp.abs(psi.face_grad()[1] / geo.drho_norm),
+                                   axis=0)
+    iota_scaled = jnp.concatenate([iota_scaled0, iota_scaled])
+    s_face = (-geo.rho_face_norm *
+              jnp.gradient(iota_scaled, geo.rho_face_norm) / iota_scaled)
+    return s_face
+
+
+def calc_s_rmid(geo: geometry.Geometry,
+                psi: cell_variable.CellVariable) -> jax.Array:
+    iota_scaled = jnp.abs((psi.face_grad()[1:] / geo.rho_face_norm[1:]))
+    iota_scaled0 = jnp.expand_dims(jnp.abs(psi.face_grad()[1] / geo.drho_norm),
+                                   axis=0)
+    iota_scaled = jnp.concatenate([iota_scaled0, iota_scaled])
+    rmid_face = (geo.R_out_face - geo.R_in_face) * 0.5
+    s_face = -rmid_face * jnp.gradient(iota_scaled, rmid_face) / iota_scaled
+    return s_face
+
+
+def _calc_bpol2(geo: geometry.Geometry,
+                psi: cell_variable.CellVariable) -> jax.Array:
+    bpol2_bulk = ((psi.face_grad()[1:] / (2 * jnp.pi))**2 * geo.g2_face[1:] /
+                  geo.vpr_face[1:]**2)
+    bpol2_axis = jnp.array([0.0], dtype=jax_utils.get_dtype())
+    bpol2_face = jnp.concatenate([bpol2_axis, bpol2_bulk])
+    return bpol2_face
+
+
+def calc_Wpol(geo: geometry.Geometry,
+              psi: cell_variable.CellVariable) -> jax.Array:
+    bpol2 = _calc_bpol2(geo, psi)
+    Wpol = _trapz(bpol2 * geo.vpr_face,
+                  geo.rho_face_norm) / (2 * constants.CONSTANTS.mu_0)
+    return Wpol
+
+
+def calc_li3(
+    R_major: jax.Array,
+    Wpol: jax.Array,
+    Ip_total: jax.Array,
+) -> jax.Array:
+    return 4 * Wpol / (constants.CONSTANTS.mu_0 * Ip_total**2 * R_major)
+
+
+def calc_q95(
+    psi_norm_face: array_typing.FloatVector,
+    q_face: array_typing.FloatVector,
+) -> array_typing.FloatScalar:
+    q95 = jnp.interp(0.95, psi_norm_face, q_face)
+    return q95
+
+
+def calculate_psi_grad_constraint_from_Ip(
+    Ip: array_typing.FloatScalar,
+    geo: geometry.Geometry,
+) -> jax.Array:
+    return (Ip * (16 * jnp.pi**3 * constants.CONSTANTS.mu_0 * geo.Phi_b) /
+            (geo.g2g3_over_rhon_face[-1] * geo.F_face[-1]))
+
+
+def calculate_psidot_from_psi_sources(
+    *,
+    psi_sources: array_typing.FloatVector,
+    sigma: array_typing.FloatVector,
+    resistivity_multiplier: float,
+    psi: cell_variable.CellVariable,
+    geo: geometry.Geometry,
+) -> jax.Array:
+    consts = constants.CONSTANTS
+    toc_psi = (1.0 / resistivity_multiplier * geo.rho_norm * sigma *
+               consts.mu_0 * 16 * jnp.pi**2 * geo.Phi_b**2 / geo.F**2)
+    d_face_psi = geo.g2g3_over_rhon_face
+    v_face_psi = jnp.zeros_like(d_face_psi)
+    psi_sources += (8.0 * jnp.pi**2 * consts.mu_0 * geo.Phi_b_dot * geo.Phi_b *
+                    geo.rho_norm**2 * sigma / geo.F**2 * psi.grad())
+    diffusion_mat, diffusion_vec = diffusion_terms.make_diffusion_terms(
+        d_face_psi, psi)
+    conv_mat, conv_vec = convection_terms.make_convection_terms(
+        v_face_psi, d_face_psi, psi)
+    c_mat = diffusion_mat + conv_mat
+    c = diffusion_vec + conv_vec
+    c += psi_sources
+    psidot = (jnp.dot(c_mat, psi.value) + c) / toc_psi
+    return psidot
 
 def calculate_main_ion_dilution_factor(
     Z_i: array_typing.FloatScalar,
@@ -2897,7 +3125,7 @@ class QualikizBasedTransportModel(QuasilinearTransportModel):
             reference_length=geo.R_major,
         )
         q = core_profiles.q_face
-        smag = psi_calculations.calc_s_rmid(
+        smag = calc_s_rmid(
             geo,
             core_profiles.psi,
         )
@@ -3841,7 +4069,7 @@ def make_post_processed_outputs(
         integrated_sources['P_fusion'] /
         (integrated_sources['P_external_total'] + constants.CONSTANTS.eps))
     P_LH_hi_dens, P_LH_min, P_LH, n_e_min_P_LH = (
-        scaling_laws.calculate_plh_scaling_factor(sim_state.geometry,
+        calculate_plh_scaling_factor(sim_state.geometry,
                                                   sim_state.core_profiles))
     Ploss = (integrated_sources['P_alpha_total'] +
              integrated_sources['P_aux_total'] +
@@ -3853,13 +4081,13 @@ def make_post_processed_outputs(
     else:
         dW_th_dt = 0.0
     tauE = W_thermal_tot / Ploss
-    tauH89P = scaling_laws.calculate_scaling_law_confinement_time(
+    tauH89P = calculate_scaling_law_confinement_time(
         sim_state.geometry, sim_state.core_profiles, Ploss, 'H89P')
-    tauH98 = scaling_laws.calculate_scaling_law_confinement_time(
+    tauH98 = calculate_scaling_law_confinement_time(
         sim_state.geometry, sim_state.core_profiles, Ploss, 'H98')
-    tauH97L = scaling_laws.calculate_scaling_law_confinement_time(
+    tauH97L = calculate_scaling_law_confinement_time(
         sim_state.geometry, sim_state.core_profiles, Ploss, 'H97L')
-    tauH20 = scaling_laws.calculate_scaling_law_confinement_time(
+    tauH20 = calculate_scaling_law_confinement_time(
         sim_state.geometry, sim_state.core_profiles, Ploss, 'H20')
     H89P = tauE / tauH89P
     H98 = tauE / tauH98
@@ -3891,7 +4119,7 @@ def make_post_processed_outputs(
         E_ohmic_e = 0.0
         E_external_injected = 0.0
         E_external_total = 0.0
-    q95 = psi_calculations.calc_q95(psi_norm_face,
+    q95 = calc_q95(psi_norm_face,
                                     sim_state.core_profiles.q_face)
     te_volume_avg = math_utils.volume_average(
         sim_state.core_profiles.T_e.value, sim_state.geometry)
@@ -3909,9 +4137,9 @@ def make_post_processed_outputs(
         n_e_volume_avg, sim_state.core_profiles, sim_state.geometry)
     fgw_n_e_line_avg = calculate_greenwald_fraction(
         n_e_line_avg, sim_state.core_profiles, sim_state.geometry)
-    Wpol = psi_calculations.calc_Wpol(sim_state.geometry,
+    Wpol = calc_Wpol(sim_state.geometry,
                                       sim_state.core_profiles.psi)
-    li3 = psi_calculations.calc_li3(
+    li3 = calc_li3(
         sim_state.geometry.R_major,
         Wpol,
         sim_state.core_profiles.Ip_profile_face[-1],
@@ -4350,7 +4578,7 @@ def _init_psi_and_psi_derived(runtime_params, geo, core_profiles,
     source_profiles = build_all_zero_profiles(geo)
     initial_psi_mode = _get_initial_psi_mode(runtime_params, geo)
     dpsi_drhonorm_edge = (
-        psi_calculations.calculate_psi_grad_constraint_from_Ip(
+        calculate_psi_grad_constraint_from_Ip(
             runtime_params.profile_conditions.Ip,
             geo,
         ))
@@ -4381,13 +4609,13 @@ def _calculate_all_psi_dependent_profiles(runtime_params, geo, psi,
                                           core_profiles, source_profiles,
                                           source_models, neoclassical_models,
                                           sources_are_calculated):
-    j_total, j_total_face, Ip_profile_face = psi_calculations.calc_j_total(
+    j_total, j_total_face, Ip_profile_face = calc_j_total(
         geo, psi)
     core_profiles = dataclasses.replace(
         core_profiles,
         psi=psi,
-        q_face=psi_calculations.calc_q_face(geo, psi),
-        s_face=psi_calculations.calc_s_face(geo, psi),
+        q_face=calc_q_face(geo, psi),
+        s_face=calc_s_face(geo, psi),
         j_total=j_total,
         j_total_face=j_total_face,
         Ip_profile_face=Ip_profile_face,
@@ -4410,7 +4638,7 @@ def _calculate_all_psi_dependent_profiles(runtime_params, geo, psi,
         psidot_value = runtime_params.profile_conditions.psidot
     else:
         psi_sources = source_profiles.total_psi_sources(geo)
-        psidot_value = psi_calculations.calculate_psidot_from_psi_sources(
+        psidot_value = calculate_psidot_from_psi_sources(
             psi_sources=psi_sources,
             sigma=conductivity.sigma,
             resistivity_multiplier=runtime_params.numerics.
@@ -4572,8 +4800,8 @@ def update_core_profiles_during_step(x_new, runtime_params, geo, core_profiles,
         A_impurity_face=ions.A_impurity_face,
         Z_eff=ions.Z_eff,
         Z_eff_face=ions.Z_eff_face,
-        q_face=psi_calculations.calc_q_face(geo, updated_core_profiles.psi),
-        s_face=psi_calculations.calc_s_face(geo, updated_core_profiles.psi),
+        q_face=calc_q_face(geo, updated_core_profiles.psi),
+        s_face=calc_s_face(geo, updated_core_profiles.psi),
     )
 
 
@@ -4597,7 +4825,7 @@ def update_core_and_source_profiles_after_step(
                        updated_core_profiles_t_plus_dt.psi,
                        dt,
                    ))
-    j_total, j_total_face, Ip_profile_face = psi_calculations.calc_j_total(
+    j_total, j_total_face, Ip_profile_face = calc_j_total(
         geo,
         updated_core_profiles_t_plus_dt.psi,
     )
@@ -4614,9 +4842,9 @@ def update_core_and_source_profiles_after_step(
         Z_impurity=ions.Z_impurity,
         Z_impurity_face=ions.Z_impurity_face,
         psidot=core_profiles_t_plus_dt.psidot,
-        q_face=psi_calculations.calc_q_face(
+        q_face=calc_q_face(
             geo, updated_core_profiles_t_plus_dt.psi),
-        s_face=psi_calculations.calc_s_face(
+        s_face=calc_s_face(
             geo, updated_core_profiles_t_plus_dt.psi),
         A_i=ions.A_i,
         A_impurity=ions.A_impurity,
@@ -4648,7 +4876,7 @@ def update_core_and_source_profiles_after_step(
         conductivity=conductivity,
     )
     psi_sources = total_source_profiles.total_psi_sources(geo)
-    psidot_value = psi_calculations.calculate_psidot_from_psi_sources(
+    psidot_value = calculate_psidot_from_psi_sources(
         psi_sources=psi_sources,
         sigma=intermediate_core_profiles.sigma,
         resistivity_multiplier=runtime_params_t_plus_dt.numerics.
@@ -4733,7 +4961,7 @@ def compute_boundary_conditions_for_t_plus_dt(dt, runtime_params_t,
         'psi':
         dict(
             right_face_grad_constraint=(
-                psi_calculations.calculate_psi_grad_constraint_from_Ip(
+                calculate_psi_grad_constraint_from_Ip(
                     Ip=profile_conditions_t_plus_dt.Ip,
                     geo=geo_t_plus_dt,
                 ) if not runtime_params_t.profile_conditions.
