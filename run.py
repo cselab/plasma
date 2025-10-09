@@ -1102,7 +1102,55 @@ _FINAL_SOURCES = frozenset([ImpurityRadiationHeatSink.SOURCE_NAME])
         'explicit',
     ],
 )
-def build_source_profiles(runtime_params,
+def build_source_profiles0(runtime_params,
+                          geo,
+                          core_profiles,
+                          source_models,
+                          neoclassical_models,
+                          explicit,
+                          explicit_source_profiles=None,
+                          conductivity=None):
+    if explicit:
+        qei = QeiInfo.zeros(geo)
+        bootstrap_current = bootstrap_current_base.BootstrapCurrent.zeros(geo)
+    else:
+        qei = source_models.qei_source.get_qei(
+            runtime_params=runtime_params,
+            geo=geo,
+            core_profiles=core_profiles,
+        )
+        bootstrap_current = (
+            neoclassical_models.bootstrap_current.calculate_bootstrap_current(
+                runtime_params, geo, core_profiles))
+    profiles = SourceProfiles(
+        bootstrap_current=bootstrap_current,
+        qei=qei,
+        T_e=explicit_source_profiles.T_e if explicit_source_profiles else {},
+        T_i=explicit_source_profiles.T_i if explicit_source_profiles else {},
+        n_e=explicit_source_profiles.n_e if explicit_source_profiles else {},
+        psi=explicit_source_profiles.psi if explicit_source_profiles else {},
+    )
+    build_standard_source_profiles(
+        calculated_source_profiles=profiles,
+        runtime_params=runtime_params,
+        geo=geo,
+        core_profiles=core_profiles,
+        source_models=source_models,
+        explicit=explicit,
+        conductivity=conductivity,
+    )
+    return profiles
+
+
+@functools.partial(
+    jax_utils.jit,
+    static_argnames=[
+        'source_models',
+        'neoclassical_models',
+        'explicit',
+    ],
+)
+def build_source_profiles1(runtime_params,
                           geo,
                           core_profiles,
                           source_models,
@@ -1216,7 +1264,7 @@ def build_all_zero_profiles(geo: geometry.Geometry, ):
 
 def get_all_source_profiles(runtime_params, geo, core_profiles, source_models,
                             neoclassical_models, conductivity):
-    explicit_source_profiles = build_source_profiles(
+    explicit_source_profiles = build_source_profiles0(
         runtime_params=runtime_params,
         geo=geo,
         core_profiles=core_profiles,
@@ -1224,7 +1272,7 @@ def get_all_source_profiles(runtime_params, geo, core_profiles, source_models,
         neoclassical_models=neoclassical_models,
         explicit=True,
     )
-    return build_source_profiles(
+    return build_source_profiles1(
         runtime_params=runtime_params,
         geo=geo,
         core_profiles=core_profiles,
@@ -3960,7 +4008,7 @@ def update_core_and_source_profiles_after_step(
         sigma=conductivity.sigma,
         sigma_face=conductivity.sigma_face,
     )
-    total_source_profiles = build_source_profiles(
+    total_source_profiles = build_source_profiles1(
         runtime_params=runtime_params_t_plus_dt,
         geo=geo,
         source_models=source_models,
@@ -4325,7 +4373,7 @@ def _calc_coeffs_full(runtime_params,
     conductivity = (
         physics_models.neoclassical_models.conductivity.calculate_conductivity(
             geo, core_profiles))
-    merged_source_profiles = build_source_profiles(
+    merged_source_profiles = build_source_profiles1(
         source_models=physics_models.source_models,
         neoclassical_models=physics_models.neoclassical_models,
         runtime_params=runtime_params,
@@ -5623,7 +5671,7 @@ class SimulationStepFn:
             runtime_params_provider=self._runtime_params_provider,
             geometry_provider=self._geometry_provider,
         ))
-        explicit_source_profiles = build_source_profiles(
+        explicit_source_profiles = build_source_profiles0(
             runtime_params=runtime_params_t,
             geo=geo_t,
             core_profiles=input_state.core_profiles,
