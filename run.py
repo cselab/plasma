@@ -13,7 +13,6 @@ import immutabledict
 import inspect
 import itertools
 import jax
-import jax.numpy as jnp
 import jaxtyping as jt
 import logging
 import numpy as np
@@ -24,9 +23,6 @@ import threading
 import typing
 import typing_extensions
 import xarray as xr
-import logging
-import os
-import jax
 
 os.environ['XLA_FLAGS'] = (
     os.environ.get('XLA_FLAGS', '') +
