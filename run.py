@@ -5,10 +5,9 @@ from collections.abc import Sequence
 from fusion_surrogates.qlknn import qlknn_model
 from jax import numpy as jnp
 from torax._src import array_typing
+from torax._src import interpolated_param
 from torax._src import jax_utils
-from torax._src.torax_pydantic import interpolated_param_1d
-from torax._src.torax_pydantic import interpolated_param_2d
-from torax._src.torax_pydantic import model_base
+from torax._src.torax_pydantic import pydantic_types
 from typing import Annotated
 from typing import Annotated, Any, Final, TypeAlias
 from typing import Annotated, Any, Literal, TypeAlias, TypeVar, ClassVar, Final, Mapping, Protocol, Callable
@@ -17,6 +16,8 @@ from typing import Any, Callable, TYPE_CHECKING, TypeVar
 from typing import ClassVar, Protocol
 from typing import Final, Mapping
 from typing import Literal
+from typing import TypeAlias
+from typing_extensions import Annotated
 from typing_extensions import Annotated, Final, override
 from typing_extensions import Self
 import abc
@@ -41,14 +42,395 @@ import torax
 import typing
 import typing_extensions
 import xarray as xr
+from collections.abc import Mapping
 import functools
-from typing import TypeAlias
+from typing import Any, Literal, TypeAlias
+import chex
+import numpy as np
 import pydantic
-from torax._src.torax_pydantic import interpolated_param_1d
-from torax._src.torax_pydantic import interpolated_param_2d
+from torax._src import array_typing
+from torax._src import interpolated_param
 from torax._src.torax_pydantic import model_base
 from torax._src.torax_pydantic import pydantic_types
-from typing_extensions import Annotated
+import typing_extensions
+
+from collections.abc import Set
+import functools
+from typing import Any, Final, Mapping, Sequence, TypeAlias
+import jax
+import pydantic
+from typing_extensions import Self
+
+TIME_INVARIANT: Final[str] = '_pydantic_time_invariant_field'
+JAX_STATIC: Final[str] = '_pydantic_jax_static_field'
+StaticKwargs: TypeAlias = dict[str, Any]
+DynamicArgs: TypeAlias = list[Any]
+
+
+class BaseModelFrozen(pydantic.BaseModel):
+    model_config = pydantic.ConfigDict(
+        frozen=True,
+        extra='forbid',
+        arbitrary_types_allowed=True,
+        validate_default=True,
+    )
+
+    def __new__(cls, *unused_args, **unused_kwargs):
+        try:
+            registered_cls = jax.tree_util.register_pytree_node_class(cls)
+        except ValueError:
+            registered_cls = cls
+        return super().__new__(registered_cls)
+
+    @classmethod
+    @functools.cache
+    def _jit_dynamic_kwarg_names(cls) -> tuple[str, ...]:
+        return tuple(name for name in cls.model_fields.keys()
+                     if JAX_STATIC not in cls.model_fields[name].metadata)
+
+    @classmethod
+    @functools.cache
+    def _jit_static_kwarg_names(cls) -> tuple[str, ...]:
+        return tuple(name for name in cls.model_fields.keys()
+                     if JAX_STATIC in cls.model_fields[name].metadata)
+
+    def tree_flatten(self) -> tuple[DynamicArgs, StaticKwargs]:
+        static_names = self._jit_static_kwarg_names()
+        dynamic_names = self._jit_dynamic_kwarg_names()
+        static_children = {name: getattr(self, name) for name in static_names}
+        dynamic_children = [getattr(self, name) for name in dynamic_names]
+        return (dynamic_children, static_children)
+
+    @classmethod
+    def tree_unflatten(cls, aux_data: StaticKwargs,
+                       children: DynamicArgs) -> Self:
+        dynamic_kwargs = {
+            name: value
+            for name, value in zip(
+                cls._jit_dynamic_kwarg_names(), children, strict=True)
+        }
+        return cls.model_construct(**(dynamic_kwargs | aux_data))
+
+    @classmethod
+    def from_dict(cls: type[Self], cfg: Mapping[str, Any]) -> Self:
+        return cls.model_validate(cfg)
+
+    @property
+    def _direct_submodels(self) -> tuple[Self, ...]:
+
+        def is_leaf(x):
+            if isinstance(x, (Mapping, Sequence, Set)):
+                return False
+            return True
+
+        leaves = {
+            k: self.__dict__[k]
+            for k in self.__class__.model_fields.keys()
+        }
+        leaves = jax.tree.flatten(leaves, is_leaf=is_leaf)[0]
+        return tuple(i for i in leaves if isinstance(i, BaseModelFrozen))
+
+    @property
+    def submodels(self) -> tuple[Self, ...]:
+        all_submodels = [self]
+        new_submodels = self._direct_submodels
+        while new_submodels:
+            new_submodels_temp = []
+            for model in new_submodels:
+                all_submodels.append(model)
+                new_submodels_temp += model._direct_submodels
+            new_submodels = new_submodels_temp
+        return tuple(all_submodels)
+
+ValueType: TypeAlias = dict[
+    float,
+    tuple[pydantic_types.NumpyArray1DUnitInterval,
+          pydantic_types.NumpyArray1D],
+]
+
+
+class Grid1D(model_base.BaseModelFrozen):
+    nx: typing_extensions.Annotated[pydantic.conint(ge=4),
+                                    model_base.JAX_STATIC]
+
+    @functools.cached_property
+    def dx(self) -> float:
+        return 1 / self.nx
+
+    @property
+    def face_centers(self) -> np.ndarray:
+        return _get_face_centers(nx=self.nx, dx=self.dx)
+
+    @property
+    def cell_centers(self) -> np.ndarray:
+        return _get_cell_centers(nx=self.nx, dx=self.dx)
+
+    def __eq__(self, other: typing_extensions.Self) -> bool:
+        return self.nx == other.nx and self.dx == other.dx
+
+
+class TimeVaryingArray(model_base.BaseModelFrozen):
+    value: ValueType
+    rho_interpolation_mode: typing_extensions.Annotated[
+        interpolated_param.InterpolationMode, model_base.
+        JAX_STATIC] = interpolated_param.InterpolationMode.PIECEWISE_LINEAR
+    time_interpolation_mode: typing_extensions.Annotated[
+        interpolated_param.InterpolationMode, model_base.
+        JAX_STATIC] = interpolated_param.InterpolationMode.PIECEWISE_LINEAR
+    grid: Grid1D | None = None
+
+    def tree_flatten(self):
+        children = (
+            self.value,
+            self._get_cached_interpolated_param_cell,
+            self._get_cached_interpolated_param_face,
+            self._get_cached_interpolated_param_face_right,
+        )
+        aux_data = (
+            self.rho_interpolation_mode,
+            self.time_interpolation_mode,
+            self.grid,
+        )
+        return children, aux_data
+
+    @classmethod
+    def tree_unflatten(cls, aux_data, children):
+        obj = cls.model_construct(
+            value=children[0],
+            rho_interpolation_mode=aux_data[0],
+            time_interpolation_mode=aux_data[1],
+            grid=aux_data[2],
+        )
+        obj._get_cached_interpolated_param_cell = children[1]
+        obj._get_cached_interpolated_param_face = children[2]
+        obj._get_cached_interpolated_param_face_right = children[3]
+        return obj
+
+    @functools.cached_property
+    def right_boundary_conditions_defined(self) -> bool:
+        for rho_norm, _ in self.value.values():
+            if 1.0 not in rho_norm:
+                return False
+        return True
+
+    def get_value(
+        self,
+        t: chex.Numeric,
+        grid_type: Literal['cell', 'face', 'face_right'] = 'cell',
+    ) -> array_typing.Array:
+        match grid_type:
+            case 'cell':
+                return self._get_cached_interpolated_param_cell.get_value(t)
+            case 'face':
+                return self._get_cached_interpolated_param_face.get_value(t)
+            case 'face_right':
+                return self._get_cached_interpolated_param_face_right.get_value(
+                    t)
+            case _:
+                raise ValueError(f'Unknown grid type: {grid_type}')
+
+
+    @pydantic.field_validator('value', mode='after')
+    @classmethod
+    def _valid_value(cls, value: ValueType) -> ValueType:
+        value = dict(sorted(value.items()))
+        return value
+
+    @pydantic.model_validator(mode='before')
+    @classmethod
+    def _conform_data(
+        cls, data: interpolated_param.TimeRhoInterpolatedInput | dict[str, Any]
+    ) -> dict[str, Any]:
+        if isinstance(data, dict):
+            data.pop('_get_cached_interpolated_param_cell_centers', None)
+            data.pop('_get_cached_interpolated_param_face_centers', None)
+            data.pop('_get_cached_interpolated_param_face_right_centers', None)
+            if set(data.keys()).issubset(cls.model_fields.keys()):
+                return data
+        time_interpolation_mode = (
+            interpolated_param.InterpolationMode.PIECEWISE_LINEAR)
+        rho_interpolation_mode = (
+            interpolated_param.InterpolationMode.PIECEWISE_LINEAR)
+        value = _load_from_primitives(data)
+        return dict(
+            value=value,
+            time_interpolation_mode=time_interpolation_mode,
+            rho_interpolation_mode=rho_interpolation_mode,
+        )
+
+    @functools.cached_property
+    def _get_cached_interpolated_param_cell(
+        self, ) -> interpolated_param.InterpolatedVarTimeRho:
+        return interpolated_param.InterpolatedVarTimeRho(
+            self.value,
+            rho_norm=self.grid.cell_centers,
+            time_interpolation_mode=self.time_interpolation_mode,
+            rho_interpolation_mode=self.rho_interpolation_mode,
+        )
+
+    @functools.cached_property
+    def _get_cached_interpolated_param_face(
+        self, ) -> interpolated_param.InterpolatedVarTimeRho:
+        return interpolated_param.InterpolatedVarTimeRho(
+            self.value,
+            rho_norm=self.grid.face_centers,
+            time_interpolation_mode=self.time_interpolation_mode,
+            rho_interpolation_mode=self.rho_interpolation_mode,
+        )
+
+    @functools.cached_property
+    def _get_cached_interpolated_param_face_right(
+        self, ) -> interpolated_param.InterpolatedVarTimeRho:
+        return interpolated_param.InterpolatedVarTimeRho(
+            self.value,
+            rho_norm=self.grid.face_centers[-1],
+            time_interpolation_mode=self.time_interpolation_mode,
+            rho_interpolation_mode=self.rho_interpolation_mode,
+        )
+
+
+def _is_positive(array: TimeVaryingArray) -> TimeVaryingArray:
+    return array
+
+
+PositiveTimeVaryingArray = typing_extensions.Annotated[
+    TimeVaryingArray, pydantic.AfterValidator(_is_positive)]
+
+
+def _load_from_primitives(
+    primitive_values: (
+        Mapping[float, interpolated_param.InterpolatedVarSingleAxisInput]
+        | float),
+) -> Mapping[float, tuple[array_typing.Array, array_typing.Array]]:
+    if isinstance(primitive_values, (float, int)):
+        primitive_values = {0.0: {0.0: primitive_values}}
+    if isinstance(primitive_values, Mapping) and all(
+            isinstance(v, float) for v in primitive_values.values()):
+        primitive_values = {0.0: primitive_values}
+    if len(set(primitive_values.keys())) != len(primitive_values):
+        raise ValueError('Indicies in values mapping must be unique.')
+    if not primitive_values:
+        raise ValueError('Values mapping must not be empty.')
+    loaded_values = {}
+    for t, v in primitive_values.items():
+        x, y, _, _ = interpolated_param.convert_input_to_xs_ys(v)
+        loaded_values[t] = (x, y)
+    return loaded_values
+
+
+def set_grid(
+    model: model_base.BaseModelFrozen,
+    grid: Grid1D,
+    mode: Literal['strict', 'force', 'relaxed'] = 'strict',
+):
+
+    def _update_rule(submodel):
+        new_grid = Grid1D.model_construct(
+            nx=grid.nx,
+            face_centers=grid.face_centers,
+            cell_centers=grid.cell_centers,
+        )
+        if submodel.grid is None:
+            submodel.__dict__['grid'] = new_grid
+        else:
+            assert False
+
+    for submodel in model.submodels:
+        if isinstance(submodel, TimeVaryingArray):
+            _update_rule(submodel)
+
+
+def _is_non_negative(
+    time_varying_array: TimeVaryingArray, ) -> TimeVaryingArray:
+    for _, value in time_varying_array.value.values():
+        if not np.all(value >= 0.0):
+            raise ValueError('All values must be non-negative.')
+    return time_varying_array
+
+
+@functools.cache
+def _get_face_centers(nx: int, dx: float) -> np.ndarray:
+    return np.linspace(0, nx * dx, nx + 1)
+
+
+@functools.cache
+def _get_cell_centers(nx: int, dx: float) -> np.ndarray:
+    return np.linspace(dx * 0.5, (nx - 0.5) * dx, nx)
+
+
+NonNegativeTimeVaryingArray: TypeAlias = typing_extensions.Annotated[
+    TimeVaryingArray,
+    pydantic.AfterValidator(_is_non_negative)]
+
+
+class TimeVaryingScalar(model_base.BaseModelFrozen):
+    time: pydantic_types.NumpyArray1DSorted
+    value: pydantic_types.NumpyArray
+    is_bool_param: typing_extensions.Annotated[bool,
+                                               model_base.JAX_STATIC] = (False)
+    interpolation_mode: typing_extensions.Annotated[
+        interpolated_param.InterpolationMode, model_base.
+        JAX_STATIC] = interpolated_param.InterpolationMode.PIECEWISE_LINEAR
+
+    def get_value(self, t: chex.Numeric) -> array_typing.Array:
+        return self._get_cached_interpolated_param.get_value(t)
+
+    @pydantic.model_validator(mode='after')
+    def _ensure_consistent_arrays(self) -> typing_extensions.Self:
+        return self
+
+    @pydantic.model_validator(mode='before')
+    @classmethod
+    def _conform_data(cls, data):
+        time, value, interpolation_mode, is_bool_param = (
+            interpolated_param.convert_input_to_xs_ys(data))
+        sort_order = np.argsort(time)
+        time = time[sort_order]
+        value = value[sort_order]
+        return dict(
+            time=time,
+            value=value,
+            interpolation_mode=interpolation_mode,
+            is_bool_param=is_bool_param,
+        )
+
+    @functools.cached_property
+    def _get_cached_interpolated_param(
+        self, ) -> interpolated_param.InterpolatedVarSingleAxis:
+        return interpolated_param.InterpolatedVarSingleAxis(
+            value=(self.time, self.value),
+            interpolation_mode=self.interpolation_mode,
+            is_bool_param=self.is_bool_param,
+        )
+
+
+def _is_positive(time_varying_scalar: TimeVaryingScalar) -> TimeVaryingScalar:
+    if not np.all(time_varying_scalar.value > 0):
+        raise ValueError('All values must be positive.')
+    return time_varying_scalar
+
+
+def _interval(
+    time_varying_scalar: TimeVaryingScalar,
+    lower_bound: float,
+    upper_bound: float,
+) -> TimeVaryingScalar:
+    if not np.all((time_varying_scalar.value >= lower_bound)
+                  & (time_varying_scalar.value <= upper_bound)):
+        raise ValueError(
+            'All values must be less than %f and greater than %f.' %
+            (upper_bound, lower_bound))
+    return time_varying_scalar
+
+
+PositiveTimeVaryingScalar: TypeAlias = typing_extensions.Annotated[
+    TimeVaryingScalar,
+    pydantic.AfterValidator(_is_positive)]
+UnitIntervalTimeVaryingScalar: TypeAlias = typing_extensions.Annotated[
+    TimeVaryingScalar,
+    pydantic.AfterValidator(
+        functools.partial(_interval, lower_bound=0.0, upper_bound=1.0)),
+]
 
 TIME_INVARIANT = model_base.TIME_INVARIANT
 JAX_STATIC = model_base.JAX_STATIC
@@ -69,13 +451,13 @@ NumpyArray = pydantic_types.NumpyArray
 NumpyArray1D = pydantic_types.NumpyArray1D
 NumpyArray1DSorted = pydantic_types.NumpyArray1DSorted
 BaseModelFrozen = model_base.BaseModelFrozen
-TimeVaryingScalar = interpolated_param_1d.TimeVaryingScalar
-TimeVaryingArray = interpolated_param_2d.TimeVaryingArray
-NonNegativeTimeVaryingArray = interpolated_param_2d.NonNegativeTimeVaryingArray
-PositiveTimeVaryingScalar = interpolated_param_1d.PositiveTimeVaryingScalar
+TimeVaryingScalar = TimeVaryingScalar
+TimeVaryingArray = TimeVaryingArray
+NonNegativeTimeVaryingArray = NonNegativeTimeVaryingArray
+PositiveTimeVaryingScalar = PositiveTimeVaryingScalar
 UnitIntervalTimeVaryingScalar = (
-    interpolated_param_1d.UnitIntervalTimeVaryingScalar)
-PositiveTimeVaryingArray = interpolated_param_2d.PositiveTimeVaryingArray
+    UnitIntervalTimeVaryingScalar)
+PositiveTimeVaryingArray = PositiveTimeVaryingArray
 ValidatedDefault = functools.partial(pydantic.Field, validate_default=True)
 
 
@@ -4076,11 +4458,11 @@ class TransportBase(BaseModelFrozen, abc.ABC):
         ValidatedDefault(0.0))
     rho_max: UnitIntervalTimeVaryingScalar = (
         ValidatedDefault(1.0))
-    apply_inner_patch: interpolated_param_1d.TimeVaryingScalar = (
+    apply_inner_patch: TimeVaryingScalar = (
         ValidatedDefault(False))
     D_e_inner: PositiveTimeVaryingScalar = (
         ValidatedDefault(0.2))
-    V_e_inner: interpolated_param_1d.TimeVaryingScalar = (
+    V_e_inner: TimeVaryingScalar = (
         ValidatedDefault(0.0))
     chi_i_inner: PositiveTimeVaryingScalar = (
         ValidatedDefault(1.0))
@@ -4088,15 +4470,15 @@ class TransportBase(BaseModelFrozen, abc.ABC):
         ValidatedDefault(1.0))
     rho_inner: UnitIntervalTimeVaryingScalar = (
         ValidatedDefault(0.3))
-    apply_outer_patch: interpolated_param_1d.TimeVaryingScalar = (
+    apply_outer_patch: TimeVaryingScalar = (
         ValidatedDefault(False))
-    D_e_outer: interpolated_param_1d.PositiveTimeVaryingScalar = (
+    D_e_outer: PositiveTimeVaryingScalar = (
         ValidatedDefault(0.2))
-    V_e_outer: interpolated_param_1d.TimeVaryingScalar = (
+    V_e_outer: TimeVaryingScalar = (
         ValidatedDefault(0.0))
-    chi_i_outer: interpolated_param_1d.PositiveTimeVaryingScalar = (
+    chi_i_outer: PositiveTimeVaryingScalar = (
         ValidatedDefault(1.0))
-    chi_e_outer: interpolated_param_1d.PositiveTimeVaryingScalar = (
+    chi_e_outer: PositiveTimeVaryingScalar = (
         ValidatedDefault(1.0))
     rho_outer: UnitIntervalTimeVaryingScalar = (
         ValidatedDefault(0.9))
@@ -4654,7 +5036,7 @@ def build_standard_geometry(
     j_total_face_axis = j_total_face_bulk[0]
     j_total = np.concatenate(
         [np.array([j_total_face_axis]), j_total_face_bulk])
-    mesh = interpolated_param_2d.Grid1D(nx=intermediate.n_rho)
+    mesh = Grid1D(nx=intermediate.n_rho)
     rho_b = rho_intermediate[-1]
     rho_face_norm = mesh.face_centers
     rho_norm = mesh.cell_centers
@@ -8086,7 +8468,7 @@ CONFIG = {
 g.tolerance = 1e-7
 torax_config = ToraxConfig.from_dict(CONFIG)
 mesh = torax_config.geometry.build_provider.torax_mesh
-interpolated_param_2d.set_grid(torax_config, mesh, mode='relaxed')
+set_grid(torax_config, mesh, mode='relaxed')
 geometry_provider = torax_config.geometry.build_provider
 g.physics_models = PhysicsModels(
     pedestal_model=torax_config.pedestal.build_pedestal_model(),
