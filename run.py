@@ -27,27 +27,18 @@ import xarray as xr
 os.environ['XLA_FLAGS'] = (
     os.environ.get('XLA_FLAGS', '') +
     ' --xla_backend_extra_options=xla_cpu_flatten_after_fusion')
-precision = os.getenv('JAX_PRECISION', 'f64')
-if precision == 'f64':
-    jax.config.update('jax_enable_x64', True)
+jax.config.update('jax_enable_x64', True)
 
 T = TypeVar('T')
 
-
 @functools.cache
 def get_dtype():
-    precision = os.getenv('JAX_PRECISION', 'f64')
-    return jnp.float64 if precision == 'f64' else jnp.float32
+    return jnp.float64
 
 
 @functools.cache
 def get_np_dtype():
-    precision = os.getenv('JAX_PRECISION', 'f64')
-    return np.float64 if precision == 'f64' else np.float32
-
-
-def jit(*args, **kwargs):
-    return jax.jit(*args, **kwargs)
+    return np.float64
 
 
 Array: TypeAlias = jax.Array | np.ndarray
@@ -105,8 +96,8 @@ StaticKwargs: TypeAlias = dict[str, Any]
 DynamicArgs: TypeAlias = list[Any]
 
 RHO_NORM: Final[str] = 'rho_norm'
-_interp_fn = jit(jnp.interp)
-_interp_fn_vmap = jit(jax.vmap(jnp.interp, in_axes=(None, None, 1)))
+_interp_fn = jax.jit(jnp.interp)
+_interp_fn_vmap = jax.jit(jax.vmap(jnp.interp, in_axes=(None, None, 1)))
 
 
 @enum.unique
@@ -931,7 +922,7 @@ def tridiag(
     return jnp.diag(diag) + jnp.diag(above, 1) + jnp.diag(below, -1)
 
 
-@jit
+@jax.jit
 @jaxtyped
 def cell_integration(x, geo):
     if x.shape != geo.rho_norm.shape:
@@ -2225,7 +2216,7 @@ class ConductivityModelConfig(BaseModelFrozen, abc.ABC):
         pass
 
 
-@jit
+@jax.jit
 def _calculate_conductivity0(
     *,
     Z_eff_face: FloatVectorFace,
@@ -2355,7 +2346,7 @@ class SauterModelConfig(BootstrapCurrentModelConfig):
         return SauterModel()
 
 
-@jit
+@jax.jit
 def _calculate_bootstrap_current(*, Z_eff_face, Z_i_face, n_e, n_i, T_e, T_i,
                                  psi, q_face, geo):
     f_trap = calculate_f_trap(geo)
@@ -3311,7 +3302,7 @@ _FINAL_SOURCES = frozenset([ImpurityRadiationHeatSink.SOURCE_NAME])
 
 
 @functools.partial(
-    jit,
+    jax.jit,
     static_argnames=[
         'source_models',
         'neoclassical_models',
@@ -3349,7 +3340,7 @@ def build_source_profiles0(runtime_params,
 
 
 @functools.partial(
-    jit,
+    jax.jit,
     static_argnames=[
         'source_models',
         'neoclassical_models',
@@ -4853,7 +4844,7 @@ class QLKNNTransportModel(TransportBase):
         )
 
 
-@functools.partial(jit, static_argnums=(0, 1, 2))
+@functools.partial(jax.jit, static_argnums=(0, 1, 2))
 def calculate_total_transport_coeffs(pedestal_model, transport_model,
                                      neoclassical_models, runtime_params, geo,
                                      core_profiles):
@@ -5400,7 +5391,7 @@ def _root_in_interval(coeffs: jax.Array, interval: jax.Array,
     return jnp.where(in_interval, root_values, -jnp.inf)
 
 
-@jit
+@jax.jit
 def find_min_q_and_q_surface_intercepts(rho_norm, q_face):
     sorted_indices = jnp.argsort(rho_norm)
     rho_norm = rho_norm[sorted_indices]
@@ -5664,7 +5655,7 @@ def _calculate_integrated_sources(
     return integrated
 
 
-@jit
+@jax.jit
 def make_post_processed_outputs(
     sim_state,
     runtime_params: RuntimeParamsSlice,
@@ -6039,7 +6030,7 @@ def _get_ion_properties_from_fractions(impurity_symbols, impurity_params, T_e,
     )
 
 
-@jit
+@jax.jit
 def get_updated_ions(
     runtime_params: RuntimeParamsSlice,
     geo: Geometry,
@@ -6367,7 +6358,7 @@ OptionalTupleMatrix: TypeAlias = tuple[tuple[jax.Array | None, ...],
 AuxiliaryOutput: TypeAlias = Any
 
 
-@jit
+@jax.jit
 def get_prescribed_core_profile_values(runtime_params, geo, core_profiles):
     T_i = core_profiles.T_i.value
     T_e_cell_variable = core_profiles.T_e
@@ -6402,7 +6393,7 @@ def get_prescribed_core_profile_values(runtime_params, geo, core_profiles):
     }
 
 
-@functools.partial(jit, static_argnames=['evolving_names'])
+@functools.partial(jax.jit, static_argnames=['evolving_names'])
 def update_core_profiles_during_step(x_new, runtime_params, geo, core_profiles,
                                      evolving_names):
     updated_core_profiles = solver_x_tuple_to_core_profiles(
@@ -6834,7 +6825,7 @@ def calc_coeffs(runtime_params,
 
 
 @functools.partial(
-    jit,
+    jax.jit,
     static_argnames=[
         'evolving_names',
     ],
@@ -7023,7 +7014,7 @@ def _calc_coeffs_full(runtime_params,
 
 
 @functools.partial(
-    jit,
+    jax.jit,
     static_argnames=[
         'evolving_names',
     ],
@@ -7119,7 +7110,7 @@ def calc_c(
 
 
 @functools.partial(
-    jit,
+    jax.jit,
     static_argnames=[
         'convection_dirichlet_mode',
         'convection_neumann_mode',
@@ -7179,7 +7170,7 @@ MIN_DELTA: Final[float] = 1e-7
 
 
 @functools.partial(
-    jit,
+    jax.jit,
     static_argnames=[
         'convection_dirichlet_mode',
         'convection_neumann_mode',
@@ -7242,7 +7233,7 @@ class Solver(abc.ABC):
         return hash(self.physics_models)
 
     @functools.partial(
-        jit,
+        jax.jit,
         static_argnames=[
             'self',
         ],
@@ -7283,7 +7274,7 @@ class Solver(abc.ABC):
 
 
 @functools.partial(
-    jit,
+    jax.jit,
     static_argnames=[
         'coeffs_callback',
     ],
@@ -7337,7 +7328,7 @@ def predictor_corrector_method(
 class LinearThetaMethod0(Solver):
 
     @functools.partial(
-        jit,
+        jax.jit,
         static_argnames=[
             'self',
             'evolving_names',
@@ -7521,7 +7512,7 @@ class RuntimeParamsProvider:
             neoclassical=config.neoclassical,
         )
 
-    @jit
+    @jax.jit
     def __call__(
         self,
         t: chex.Numeric,
@@ -8263,7 +8254,7 @@ class SimulationStepFn:
 
 
 @functools.partial(
-    jit,
+    jax.jit,
     static_argnames=[
         'evolving_names',
     ],
