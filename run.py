@@ -7301,48 +7301,24 @@ class Solver(abc.ABC):
             tuple[CellVariable, ...],
             SolverNumericOutputs,
     ]:
-        if runtime_params_t.numerics.evolving_names:
-            (
-                x_new,
-                solver_numeric_output,
-            ) = self._x_new(
-                dt=dt,
-                runtime_params_t=runtime_params_t,
-                runtime_params_t_plus_dt=runtime_params_t_plus_dt,
-                geo_t=geo_t,
-                geo_t_plus_dt=geo_t_plus_dt,
-                core_profiles_t=core_profiles_t,
-                core_profiles_t_plus_dt=core_profiles_t_plus_dt,
-                explicit_source_profiles=explicit_source_profiles,
-                evolving_names=runtime_params_t.numerics.evolving_names,
-            )
-        else:
-            x_new = tuple()
-            solver_numeric_output = SolverNumericOutputs()
+        (
+            x_new,
+            solver_numeric_output,
+        ) = self._x_new(
+            dt=dt,
+            runtime_params_t=runtime_params_t,
+            runtime_params_t_plus_dt=runtime_params_t_plus_dt,
+            geo_t=geo_t,
+            geo_t_plus_dt=geo_t_plus_dt,
+            core_profiles_t=core_profiles_t,
+            core_profiles_t_plus_dt=core_profiles_t_plus_dt,
+            explicit_source_profiles=explicit_source_profiles,
+            evolving_names=runtime_params_t.numerics.evolving_names,
+        )
         return (
             x_new,
             solver_numeric_output,
         )
-
-    def _x_new(
-        self,
-        dt: jax.Array,
-        runtime_params_t: RuntimeParamsSlice,
-        runtime_params_t_plus_dt: RuntimeParamsSlice,
-        geo_t: Geometry,
-        geo_t_plus_dt: Geometry,
-        core_profiles_t: CoreProfiles,
-        core_profiles_t_plus_dt: CoreProfiles,
-        explicit_source_profiles: SourceProfiles,
-        evolving_names: tuple[str, ...],
-    ) -> tuple[
-            tuple[CellVariable, ...],
-            SolverNumericOutputs,
-    ]:
-        raise NotImplementedError(
-            f'{type(self)} must implement `_x_new` or '
-            'implement a different `__call__` that does not'
-            ' need `_x_new`.')
 
 
 @functools.partial(
@@ -8119,9 +8095,6 @@ class ToraxSimState:
     core_sources: SourceProfiles
     geometry: Any
     solver_numeric_outputs: SolverNumericOutputs
-
-    def has_nan(self) -> bool:
-        return any([np.any(np.isnan(x)) for x in jax.tree.leaves(self)])
 
 
 def _get_initial_state(runtime_params, geo, step_fn):
