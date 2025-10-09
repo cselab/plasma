@@ -42,10 +42,7 @@ from torax._src.sources import generic_current_source as generic_current_source_
 from torax._src.sources import generic_ion_el_heat_source as generic_ion_el_heat_source_lib
 from torax._src.sources import generic_particle_source as generic_particle_source_lib
 from torax._src.sources import pellet_source as pellet_source_lib
-from torax._src.sources import qei_source as qei_source_lib
 from torax._src.sources import source as source_lib
-from torax._src.sources import source_models
-from torax._src.sources import source_models as source_models_lib
 from torax._src.sources import source_profiles
 from torax._src.sources import source_profiles as source_profiles_lib
 from torax._src.sources.impurity_radiation_heat_sink import impurity_radiation_heat_sink
@@ -87,9 +84,171 @@ import pydantic
 import typing_extensions
 import xarray as xr
 
+import dataclasses
+from typing import Annotated, ClassVar
+import chex
+import jax
+from jax import numpy as jnp
+from torax._src import array_typing
+from torax._src import state
+from torax._src.config import runtime_params_slice
+from torax._src.geometry import geometry
+from torax._src.neoclassical.conductivity import base as conductivity_base
+from torax._src.physics import collisions
+from torax._src.sources import base
+from torax._src.sources import runtime_params as runtime_params_lib
+from torax._src.sources import source
+from torax._src.sources import source_profiles
+from torax._src.torax_pydantic import torax_pydantic
+
+import dataclasses
+import functools
+import immutabledict
+import jax
+from torax._src.sources import source as source_lib
+
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(frozen=True)
+class RuntimeParamsQ(runtime_params_lib.RuntimeParams):
+    Qei_multiplier: float
+
+
+@dataclasses.dataclass(kw_only=True, frozen=True, eq=True)
+class QeiSource(source.Source):
+    SOURCE_NAME: ClassVar[str] = 'ei_exchange'
+
+    @property
+    def source_name(self) -> str:
+        return self.SOURCE_NAME
+
+    @property
+    def affected_core_profiles(self) -> tuple[source.AffectedCoreProfile, ...]:
+        return (
+            source.AffectedCoreProfile.TEMP_ION,
+            source.AffectedCoreProfile.TEMP_EL,
+        )
+
+    def get_qei(
+        self,
+        runtime_params: runtime_params_slice.RuntimeParams,
+        geo: geometry.Geometry,
+        core_profiles: state.CoreProfiles,
+    ) -> source_profiles.QeiInfo:
+        return jax.lax.cond(
+            runtime_params.sources[self.source_name].mode ==
+            runtime_params_lib.Mode.MODEL_BASED,
+            lambda: _model_based_qei(
+                runtime_params,
+                geo,
+                core_profiles,
+            ),
+            lambda: source_profiles.QeiInfo.zeros(geo),
+        )
+
+    def get_value(
+        self,
+        runtime_params: runtime_params_slice.RuntimeParams,
+        geo: geometry.Geometry,
+        core_profiles: state.CoreProfiles,
+        calculated_source_profiles: source_profiles.SourceProfiles | None,
+        conductivity: conductivity_base.Conductivity | None,
+    ) -> tuple[array_typing.FloatVectorCell, ...]:
+        raise NotImplementedError('Call get_qei() instead.')
+
+    def get_source_profile_for_affected_core_profile(
+        self,
+        profile: tuple[array_typing.Array, ...],
+        affected_mesh_state: int,
+        geo: geometry.Geometry,
+    ) -> jax.Array:
+        raise NotImplementedError('This method is not valid for QeiSource.')
+
+
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(frozen=True)
+class SourceModels:
+    qei_source: QeiSource
+    standard_sources: immutabledict.immutabledict[str, source_lib.Source]
+
+    @functools.cached_property
+    def psi_sources(
+            self) -> immutabledict.immutabledict[str, source_lib.Source]:
+        return immutabledict.immutabledict({
+            name: source
+            for name, source in self.standard_sources.items() if
+            source_lib.AffectedCoreProfile.PSI in source.affected_core_profiles
+        })
+
+    def __hash__(self) -> int:
+        hashes = [hash(self.standard_sources)]
+        hashes.append(hash(self.qei_source))
+        return hash(tuple(hashes))
+
+
+def _model_based_qei(
+        runtime_params,
+        geo,
+        core_profiles
+):
+    source_params = runtime_params.sources[QeiSource.SOURCE_NAME]
+    zeros = jnp.zeros_like(geo.rho_norm)
+    qei_coef = collisions.coll_exchange(
+        core_profiles=core_profiles,
+        Qei_multiplier=source_params.Qei_multiplier,
+    )
+    implicit_ii = -qei_coef
+    implicit_ee = -qei_coef
+    if ((runtime_params.numerics.evolve_ion_heat
+         and not runtime_params.numerics.evolve_electron_heat)
+            or (runtime_params.numerics.evolve_electron_heat
+                and not runtime_params.numerics.evolve_ion_heat)):
+        explicit_i = qei_coef * core_profiles.T_e.value
+        explicit_e = qei_coef * core_profiles.T_i.value
+        implicit_ie = zeros
+        implicit_ei = zeros
+    else:
+        explicit_i = zeros
+        explicit_e = zeros
+        implicit_ie = qei_coef
+        implicit_ei = qei_coef
+    return source_profiles.QeiInfo(
+        qei_coef=qei_coef,
+        implicit_ii=implicit_ii,
+        explicit_i=explicit_i,
+        implicit_ee=implicit_ee,
+        explicit_e=explicit_e,
+        implicit_ie=implicit_ie,
+        implicit_ei=implicit_ei,
+    )
+
+
+class QeiSourceConfig(base.SourceModelBase):
+    Qei_multiplier: float = 1.0
+    mode: Annotated[runtime_params_lib.Mode, torax_pydantic.JAX_STATIC] = (
+        runtime_params_lib.Mode.MODEL_BASED)
+
+    @property
+    def model_func(self) -> None:
+        return None
+
+    def build_runtime_params(
+        self,
+        t: chex.Numeric,
+    ):
+        return RuntimeParamsQ(
+            prescribed_values=tuple(
+                [v.get_value(t) for v in self.prescribed_values]),
+            mode=self.mode,
+            is_explicit=self.is_explicit,
+            Qei_multiplier=self.Qei_multiplier,
+        )
+
+    def build_source(self) -> QeiSource:
+        return QeiSource(model_func=self.model_func)
+
 
 class Sources(torax_pydantic.BaseModelFrozen):
-    ei_exchange: qei_source_lib.QeiSourceConfig = torax_pydantic.ValidatedDefault(
+    ei_exchange: QeiSourceConfig = torax_pydantic.ValidatedDefault(
         {'mode': 'ZERO'})
     cyclotron_radiation: (None) = pydantic.Field(
         discriminator='model_name',
@@ -152,7 +311,7 @@ class Sources(torax_pydantic.BaseModelFrozen):
                             'model_name'] = generic_ion_el_heat_source_lib.DEFAULT_MODEL_FUNCTION_NAME
         return constructor_data
 
-    def build_models(self) -> source_models.SourceModels:
+    def build_models(self):
         standard_sources = {}
         for k, v in dict(self).items():
             if k == 'ei_exchange':
@@ -162,7 +321,7 @@ class Sources(torax_pydantic.BaseModelFrozen):
                     source = v.build_source()
                     standard_sources[k] = source
         qei_source_model = self.ei_exchange.build_source()
-        return source_models.SourceModels(
+        return SourceModels(
             qei_source=qei_source_model,
             standard_sources=immutabledict.immutabledict(standard_sources),
         )
@@ -184,7 +343,7 @@ def build_source_profiles(
     runtime_params: runtime_params_slice.RuntimeParams,
     geo: geometry.Geometry,
     core_profiles: state.CoreProfiles,
-    source_models: source_models_lib.SourceModels,
+    source_models: SourceModels,
     neoclassical_models: neoclassical_models_lib.NeoclassicalModels,
     explicit: bool,
     explicit_source_profiles: source_profiles.SourceProfiles | None = None,
@@ -232,7 +391,7 @@ def build_standard_source_profiles(
     runtime_params: runtime_params_slice.RuntimeParams,
     geo: geometry.Geometry,
     core_profiles: state.CoreProfiles,
-    source_models: source_models_lib.SourceModels,
+    source_models: SourceModels,
     explicit: bool = True,
     conductivity: conductivity_base.Conductivity | None = None,
     calculate_anyway: bool = False,
@@ -300,13 +459,13 @@ def build_all_zero_profiles(
 
 
 def get_all_source_profiles(
-    runtime_params: runtime_params_slice.RuntimeParams,
-    geo: geometry.Geometry,
-    core_profiles: state.CoreProfiles,
-    source_models: source_models_lib.SourceModels,
-    neoclassical_models: neoclassical_models_lib.NeoclassicalModels,
-    conductivity: conductivity_base.Conductivity,
-) -> source_profiles.SourceProfiles:
+    runtime_params,
+    geo,
+    core_profiles,
+    source_models,
+    neoclassical_models,
+    conductivity
+):
     explicit_source_profiles = build_source_profiles(
         runtime_params=runtime_params,
         geo=geo,
@@ -2788,11 +2947,11 @@ def _get_initial_psi_mode(
 
 
 def _init_psi_and_psi_derived(
-    runtime_params: runtime_params_slice.RuntimeParams,
-    geo: geometry.Geometry,
-    core_profiles: state.CoreProfiles,
-    source_models: source_models_lib.SourceModels,
-    neoclassical_models: neoclassical_models_lib.NeoclassicalModels,
+    runtime_params,
+    geo,
+    core_profiles,
+    source_models,
+    neoclassical_models
 ):
     sources_are_calculated = False
     source_profiles = build_all_zero_profiles(geo)
@@ -2883,14 +3042,14 @@ def _init_psi_and_psi_derived(
 
 
 def _calculate_all_psi_dependent_profiles(
-    runtime_params: runtime_params_slice.RuntimeParams,
-    geo: geometry.Geometry,
-    psi: cell_variable.CellVariable,
-    core_profiles: state.CoreProfiles,
-    source_profiles: source_profiles_lib.SourceProfiles,
-    source_models: source_models_lib.SourceModels,
-    neoclassical_models: neoclassical_models_lib.NeoclassicalModels,
-    sources_are_calculated: bool,
+    runtime_params,
+    geo,
+    psi,
+    core_profiles,
+    source_profiles,
+    source_models,
+    neoclassical_models,
+    sources_are_calculated
 ):
     j_total, j_total_face, Ip_profile_face = psi_calculations.calc_j_total(
         geo, psi)
@@ -2949,12 +3108,12 @@ def _calculate_all_psi_dependent_profiles(
 
 
 def _get_bootstrap_and_standard_source_profiles(
-    runtime_params: runtime_params_slice.RuntimeParams,
-    geo: geometry.Geometry,
-    core_profiles: state.CoreProfiles,
-    neoclassical_models: neoclassical_models_lib.NeoclassicalModels,
-    source_models: source_models_lib.SourceModels,
-    source_profiles: source_profiles_lib.SourceProfiles,
+    runtime_params,
+    geo,
+    core_profiles,
+    neoclassical_models,
+    source_models,
+    source_profiles
 ):
     build_standard_source_profiles(
         runtime_params=runtime_params,
@@ -4291,7 +4450,7 @@ def get_consistent_runtime_params_and_geometry(*, t, runtime_params_provider,
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class PhysicsModels:
-    source_models: source_models_lib.SourceModels = dataclasses.field(
+    source_models: SourceModels = dataclasses.field(
         metadata=dict(static=True))
     transport_model: TransportModel = dataclasses.field(metadata=dict(
         static=True))
@@ -4544,7 +4703,7 @@ class StateHistory:
                 return None
         return xr.DataArray(data, dims=dims, name=name)
 
-    def _save_core_profiles(self, ) -> dict[str, xr.DataArray | None]:
+    def _save_core_profiles(self):
         xr_dict = {}
         stacked_core_profiles = self._stacked_core_profiles
         output_name_map = {
@@ -4596,7 +4755,7 @@ class StateHistory:
         xr_dict[IP] = self._pack_into_data_array(IP, Ip_data)
         return xr_dict
 
-    def _save_core_transport(self, ) -> dict[str, xr.DataArray | None]:
+    def _save_core_transport(self):
         xr_dict = {}
         core_transport = self._stacked_core_transport
         xr_dict[CHI_TURB_I] = core_transport.chi_face_ion
@@ -4617,9 +4776,9 @@ class StateHistory:
         }
         return xr_dict
 
-    def _save_core_sources(self, ) -> dict[str, xr.DataArray | None]:
+    def _save_core_sources(self):
         xr_dict = {}
-        xr_dict[qei_source_lib.QeiSource.SOURCE_NAME] = (
+        xr_dict[QeiSource.SOURCE_NAME] = (
             self._stacked_core_sources.qei.qei_coef *
             (self._stacked_core_profiles.T_e.value -
              self._stacked_core_profiles.T_i.value))
@@ -4649,7 +4808,7 @@ class StateHistory:
         }
         return xr_dict
 
-    def _save_post_processed_outputs(self, ) -> dict[str, xr.DataArray | None]:
+    def _save_post_processed_outputs(self):
         xr_dict = {}
         for field in dataclasses.fields(self._stacked_post_processed_outputs):
             attr_name = field.name
@@ -4675,7 +4834,7 @@ class StateHistory:
                 xr_dict[key] = value
         return xr_dict
 
-    def _save_geometry(self, ) -> dict[str, xr.DataArray]:
+    def _save_geometry(self):
         xr_dict = {}
         geometry_attributes = dataclasses.asdict(self._stacked_geometry)
         for field_name, data in geometry_attributes.items():
@@ -4787,10 +4946,10 @@ class Geometry:
 
 def update_geometries_with_Phibdot(
     *,
-    dt: chex.Numeric,
-    geo_t: Geometry,
-    geo_t_plus_dt: Geometry,
-) -> tuple[Geometry, Geometry]:
+    dt,
+    geo_t,
+    geo_t_plus_dt
+):
     Phibdot = (geo_t_plus_dt.Phi_b - geo_t.Phi_b) / dt
     geo_t = dataclasses.replace(geo_t, Phi_b_dot=Phibdot)
     geo_t_plus_dt = dataclasses.replace(geo_t_plus_dt, Phi_b_dot=Phibdot)
