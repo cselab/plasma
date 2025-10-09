@@ -7277,9 +7277,6 @@ class Solver(abc.ABC):
     def __hash__(self) -> int:
         return hash(self.physics_models)
 
-    def __eq__(self, other: typing_extensions.Self) -> bool:
-        return self.physics_models == other.physics_models
-
     @functools.partial(
         jit,
         static_argnames=[
