@@ -6152,3 +6152,17 @@ state_history = StateHistory(
 data_tree = state_history.simulation_output_to_xr()
 data_tree.to_netcdf("run.nc")
 print(data_tree)
+import matplotlib.pyplot as plt
+t = data_tree.time.to_numpy()
+rho = data_tree.rho_norm.to_numpy()
+nt, = np.shape(t)
+for key in 'T_i', 'T_e', 'psi':
+    var = data_tree.profiles[key].to_numpy()
+    lo = np.min(var).item()
+    hi = np.max(var).item()
+    for i, idx in enumerate([0, nt // 4, nt // 2, 3 * nt // 4, nt - 1]):
+        plt.title(f'time: {t[idx]:8.3e}')
+        plt.axis([None, None, lo, hi])
+        plt.plot(rho, var[idx], 'o-')
+        plt.savefig(f'{key}.{i:04d}.png')
+        plt.close()
