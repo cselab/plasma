@@ -16,7 +16,7 @@ class BootstrapCurrent:
     j_bootstrap_face: jax.Array
 
     @classmethod
-    def zeros(cls, geometry: geometry_lib.Geometry) -> 'BootstrapCurrent':
+    def zeros(cls, geometry):
         return cls(
             j_bootstrap=jnp.zeros_like(geometry.rho_norm),
             j_bootstrap_face=jnp.zeros_like(geometry.rho_face_norm),
@@ -28,15 +28,15 @@ class BootstrapCurrentModel(abc.ABC):
     @abc.abstractmethod
     def calculate_bootstrap_current(
         self,
-        runtime_params: runtime_params_slice.RuntimeParams,
-        geometry: geometry_lib.Geometry,
-        core_profiles: state.CoreProfiles,
-    ) -> BootstrapCurrent:
+        runtime_params,
+        geometry,
+        core_profiles
+    ):
         pass
 
 
 class BootstrapCurrentModelConfig(torax_pydantic.BaseModelFrozen, abc.ABC):
 
     @abc.abstractmethod
-    def build_model(self) -> BootstrapCurrentModel:
+    def build_model(self):
         pass
