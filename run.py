@@ -263,8 +263,8 @@ class RuntimeParamsP:
                           ...] = dataclasses.field(metadata={'static': True})
     impurity_names: tuple[str,
                           ...] = dataclasses.field(metadata={'static': True})
-    main_ion: ion_mixture.RuntimeParams
-    impurity: (ion_mixture.RuntimeParams)
+    main_ion: ion_mixture.RuntimeParamsIM
+    impurity: ion_mixture.RuntimeParamsIM
     Z_eff: array_typing.FloatVectorCell
     Z_eff_face: array_typing.FloatVectorFace
 
