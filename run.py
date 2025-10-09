@@ -60,7 +60,6 @@ import typing_extensions
 import xarray as xr
 import dataclasses
 import jax
-from torax._src.neoclassical.bootstrap_current import runtime_params as bootstrap_current_runtime_params
 
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass
