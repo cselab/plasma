@@ -15,12 +15,6 @@ from torax._src.physics import collisions
 from torax._src.torax_pydantic import torax_pydantic
 
 
-@jax.tree_util.register_dataclass
-@dataclasses.dataclass(frozen=True)
-class RuntimeParams(bootstrap_runtime_params.RuntimeParams):
-    bootstrap_multiplier: float
-
-
 class SauterModel(base.BootstrapCurrentModel):
 
     def calculate_bootstrap_current(
