@@ -62,12 +62,6 @@ import dataclasses
 import jax
 from torax._src.neoclassical.bootstrap_current import runtime_params as bootstrap_current_runtime_params
 
-
-@jax.tree_util.register_dataclass
-@dataclasses.dataclass(frozen=True)
-class RuntimeParamsNeo:
-    bootstrap_current: bootstrap_current_runtime_params.RuntimeParams
-
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass
 class NeoclassicalModels:
