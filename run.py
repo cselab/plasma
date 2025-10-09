@@ -37,7 +37,6 @@ from torax._src.physics import formulas as formulas_ph
 from torax._src.physics import psi_calculations
 from torax._src.physics import scaling_laws
 from torax._src.sources import formulas
-from torax._src.sources import runtime_params as runtime_params_lib
 from torax._src.sources import runtime_params as runtime_params_src
 from torax._src.sources import source_profiles
 from torax._src.sources import source_profiles as source_profiles_lib
@@ -138,7 +137,7 @@ class Source(abc.ABC):
         source_params = runtime_params.sources[self.source_name]
         mode = source_params.mode
         match mode:
-            case runtime_params_lib.Mode.MODEL_BASED:
+            case runtime_params_src.Mode.MODEL_BASED:
                 return self.model_func(
                     runtime_params,
                     geo,
@@ -194,7 +193,7 @@ class Source(abc.ABC):
         source_params = runtime_params.sources[self.source_name]
         mode = source_params.mode
         match mode:
-            case runtime_params_lib.Mode.MODEL_BASED:
+            case runtime_params_src.Mode.MODEL_BASED:
                 return self.model_func(
                     runtime_params,
                     geo,
@@ -250,7 +249,7 @@ class Source(abc.ABC):
         source_params = runtime_params.sources[self.source_name]
         mode = source_params.mode
         match mode:
-            case runtime_params_lib.Mode.MODEL_BASED:
+            case runtime_params_src.Mode.MODEL_BASED:
                 return self.model_func(
                     runtime_params,
                     geo,
@@ -265,7 +264,7 @@ class Source(abc.ABC):
 
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
-class RuntimeParamsGcS(runtime_params_lib.RuntimeParams):
+class RuntimeParamsGcS(runtime_params_src.RuntimeParams):
     I_generic: array_typing.FloatScalar
     fraction_of_total_current: array_typing.FloatScalar
     gaussian_width: array_typing.FloatScalar
@@ -324,8 +323,8 @@ class GenericCurrentSourceConfig(SourceModelBase):
     gaussian_location: torax_pydantic.UnitIntervalTimeVaryingScalar = (
         torax_pydantic.ValidatedDefault(0.4))
     use_absolute_current: bool = False
-    mode: Annotated[runtime_params_lib.Mode, torax_pydantic.JAX_STATIC] = (
-        runtime_params_lib.Mode.MODEL_BASED)
+    mode: Annotated[runtime_params_src.Mode, torax_pydantic.JAX_STATIC] = (
+        runtime_params_src.Mode.MODEL_BASED)
 
     @property
     def model_func(self):
@@ -354,7 +353,7 @@ class GenericCurrentSourceConfig(SourceModelBase):
 
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
-class RuntimeParamsGeIO(runtime_params_lib.RuntimeParams):
+class RuntimeParamsGeIO(runtime_params_src.RuntimeParams):
     gaussian_width: array_typing.FloatScalar
     gaussian_location: array_typing.FloatScalar
     P_total: array_typing.FloatScalar
@@ -430,8 +429,8 @@ class GenericIonElHeatSourceConfig(SourceModelBase):
         torax_pydantic.ValidatedDefault(0.66666))
     absorption_fraction: torax_pydantic.PositiveTimeVaryingScalar = (
         torax_pydantic.ValidatedDefault(1.0))
-    mode: Annotated[runtime_params_lib.Mode, torax_pydantic.JAX_STATIC] = (
-        runtime_params_lib.Mode.MODEL_BASED)
+    mode: Annotated[runtime_params_src.Mode, torax_pydantic.JAX_STATIC] = (
+        runtime_params_src.Mode.MODEL_BASED)
 
     @property
     def model_func(self):
@@ -490,7 +489,7 @@ class GenericParticleSource(Source):
 
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
-class RuntimeParamsPaSo(runtime_params_lib.RuntimeParams):
+class RuntimeParamsPaSo(runtime_params_src.RuntimeParams):
     particle_width: array_typing.FloatScalar
     deposition_location: array_typing.FloatScalar
     S_total: array_typing.FloatScalar
@@ -505,8 +504,8 @@ class GenericParticleSourceConfig(SourceModelBase):
         torax_pydantic.ValidatedDefault(0.0))
     S_total: torax_pydantic.TimeVaryingScalar = torax_pydantic.ValidatedDefault(
         1e22)
-    mode: Annotated[runtime_params_lib.Mode, torax_pydantic.JAX_STATIC] = (
-        runtime_params_lib.Mode.MODEL_BASED)
+    mode: Annotated[runtime_params_src.Mode, torax_pydantic.JAX_STATIC] = (
+        runtime_params_src.Mode.MODEL_BASED)
 
     @property
     def model_func(self):
@@ -563,7 +562,7 @@ class PelletSource(Source):
 
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
-class RuntimeParamsPE(runtime_params_lib.RuntimeParams):
+class RuntimeParamsPE(runtime_params_src.RuntimeParams):
     pellet_width: array_typing.FloatScalar
     pellet_deposition_location: array_typing.FloatScalar
     S_total: array_typing.FloatScalar
@@ -578,8 +577,8 @@ class PelletSourceConfig(SourceModelBase):
         torax_pydantic.ValidatedDefault(0.85))
     S_total: torax_pydantic.TimeVaryingScalar = torax_pydantic.ValidatedDefault(
         2e22)
-    mode: Annotated[runtime_params_lib.Mode, torax_pydantic.JAX_STATIC] = (
-        runtime_params_lib.Mode.MODEL_BASED)
+    mode: Annotated[runtime_params_src.Mode, torax_pydantic.JAX_STATIC] = (
+        runtime_params_src.Mode.MODEL_BASED)
 
     @property
     def model_func(self):
@@ -694,8 +693,8 @@ class FusionHeatSource(Source):
 class FusionHeatSourceConfig(SourceModelBase):
     model_name: Annotated[Literal['bosch_hale'],
                           torax_pydantic.JAX_STATIC] = ('bosch_hale')
-    mode: Annotated[runtime_params_lib.Mode, torax_pydantic.JAX_STATIC] = (
-        runtime_params_lib.Mode.MODEL_BASED)
+    mode: Annotated[runtime_params_src.Mode, torax_pydantic.JAX_STATIC] = (
+        runtime_params_src.Mode.MODEL_BASED)
 
     @property
     def model_func(self):
@@ -704,8 +703,8 @@ class FusionHeatSourceConfig(SourceModelBase):
     def build_runtime_params(
         self,
         t: chex.Numeric,
-    ) -> runtime_params_lib.RuntimeParams:
-        return runtime_params_lib.RuntimeParams(
+    ) -> runtime_params_src.RuntimeParams:
+        return runtime_params_src.RuntimeParams(
             prescribed_values=tuple(
                 [v.get_value(t) for v in self.prescribed_values]),
             mode=self.mode,
@@ -718,7 +717,7 @@ class FusionHeatSourceConfig(SourceModelBase):
 
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
-class RuntimeParamsPS(runtime_params_lib.RuntimeParams):
+class RuntimeParamsPS(runtime_params_src.RuntimeParams):
     puff_decay_length: array_typing.FloatScalar
     S_total: array_typing.FloatScalar
 
@@ -761,8 +760,8 @@ class GasPuffSourceConfig(SourceModelBase):
         torax_pydantic.ValidatedDefault(0.05))
     S_total: torax_pydantic.TimeVaryingScalar = torax_pydantic.ValidatedDefault(
         1e22)
-    mode: Annotated[runtime_params_lib.Mode, torax_pydantic.JAX_STATIC] = (
-        runtime_params_lib.Mode.MODEL_BASED)
+    mode: Annotated[runtime_params_src.Mode, torax_pydantic.JAX_STATIC] = (
+        runtime_params_src.Mode.MODEL_BASED)
 
     @property
     def model_func(self):
@@ -784,7 +783,7 @@ class GasPuffSourceConfig(SourceModelBase):
 
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
-class RuntimeParamsQ(runtime_params_lib.RuntimeParams):
+class RuntimeParamsQ(runtime_params_src.RuntimeParams):
     Qei_multiplier: float
 
 
@@ -811,7 +810,7 @@ class QeiSource(Source):
     ):
         return jax.lax.cond(
             runtime_params.sources[self.source_name].mode ==
-            runtime_params_lib.Mode.MODEL_BASED,
+            runtime_params_src.Mode.MODEL_BASED,
             lambda: _model_based_qei(
                 runtime_params,
                 geo,
@@ -894,8 +893,8 @@ def _model_based_qei(runtime_params, geo, core_profiles):
 
 class QeiSourceConfig(SourceModelBase):
     Qei_multiplier: float = 1.0
-    mode: Annotated[runtime_params_lib.Mode, torax_pydantic.JAX_STATIC] = (
-        runtime_params_lib.Mode.MODEL_BASED)
+    mode: Annotated[runtime_params_src.Mode, torax_pydantic.JAX_STATIC] = (
+        runtime_params_src.Mode.MODEL_BASED)
 
     @property
     def model_func(self):
