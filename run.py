@@ -96,14 +96,9 @@ class RuntimeParamsGcS(runtime_params_lib.RuntimeParams):
     use_absolute_current: bool
 
 
-def calculate_generic_current(
-    runtime_params,
-    geo,
-    source_name,
-    unused_state,
-    unused_calculated_source_profiles,
-    unused_conductivity
-):
+def calculate_generic_current(runtime_params, geo, source_name, unused_state,
+                              unused_calculated_source_profiles,
+                              unused_conductivity):
     source_params = runtime_params.sources[source_name]
     I_generic = _calculate_I_generic(
         runtime_params,
@@ -117,10 +112,7 @@ def calculate_generic_current(
     return (generic_current_profile, )
 
 
-def _calculate_I_generic(
-    runtime_params,
-    source_params
-):
+def _calculate_I_generic(runtime_params, source_params):
     return jnp.where(
         source_params.use_absolute_current,
         source_params.I_generic,
@@ -139,7 +131,8 @@ class GenericCurrentSource(source_lib.Source):
         return self.SOURCE_NAME
 
     @property
-    def affected_core_profiles(self) -> tuple[source_lib.AffectedCoreProfile, ...]:
+    def affected_core_profiles(
+            self) -> tuple[source_lib.AffectedCoreProfile, ...]:
         return (source_lib.AffectedCoreProfile.PSI, )
 
 
@@ -181,6 +174,7 @@ class GenericCurrentSourceConfig(source_base.SourceModelBase):
 
     def build_source(self) -> GenericCurrentSource:
         return GenericCurrentSource(model_func=self.model_func)
+
 
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
@@ -285,6 +279,7 @@ class GenericIonElHeatSourceConfig(base.SourceModelBase):
 
     def build_source(self) -> GenericIonElectronHeatSource:
         return GenericIonElectronHeatSource(model_func=self.model_func)
+
 
 def calc_generic_particle_source(
     runtime_params: runtime_params_slice.RuntimeParams,
@@ -675,8 +670,7 @@ class SourceModels:
     standard_sources: immutabledict.immutabledict[str, source_lib.Source]
 
     @functools.cached_property
-    def psi_sources(
-            self):
+    def psi_sources(self):
         return immutabledict.immutabledict({
             name: source
             for name, source in self.standard_sources.items() if
@@ -743,7 +737,7 @@ class QeiSourceConfig(base.SourceModelBase):
             Qei_multiplier=self.Qei_multiplier,
         )
 
-    def build_source(self) -> QeiSource:
+    def build_source(self):
         return QeiSource(model_func=self.model_func)
 
 
@@ -785,7 +779,7 @@ class Sources(torax_pydantic.BaseModelFrozen):
 
     @pydantic.model_validator(mode='before')
     @classmethod
-    def _set_default_model_functions(cls, x: dict[str, Any]) -> dict[str, Any]:
+    def _set_default_model_functions(cls, x):
         constructor_data = copy.deepcopy(x)
         for k, v in x.items():
             match k:
@@ -794,8 +788,7 @@ class Sources(torax_pydantic.BaseModelFrozen):
                         constructor_data[k]['model_name'] = 'exponential'
                 case 'generic_particle':
                     if 'model_name' not in v:
-                        constructor_data[k][
-                            'model_name'] = 'gaussian'
+                        constructor_data[k]['model_name'] = 'gaussian'
                 case 'pellet':
                     if 'model_name' not in v:
                         constructor_data[k]['model_name'] = 'gaussian'
@@ -804,8 +797,7 @@ class Sources(torax_pydantic.BaseModelFrozen):
                         constructor_data[k]['model_name'] = 'bosch_hale'
                 case 'generic_heat':
                     if 'model_name' not in v:
-                        constructor_data[k][
-                            'model_name'] = 'gaussian'
+                        constructor_data[k]['model_name'] = 'gaussian'
         return constructor_data
 
     def build_models(self):
@@ -828,8 +820,9 @@ class Sources(torax_pydantic.BaseModelFrozen):
 class ImpurityRadiationHeatSink(source_lib.Source):
     SOURCE_NAME = "impurity_radiation"
     model_func: source_lib.SourceProfileFunction
-_FINAL_SOURCES = frozenset(
-    [ImpurityRadiationHeatSink.SOURCE_NAME])
+
+
+_FINAL_SOURCES = frozenset([ImpurityRadiationHeatSink.SOURCE_NAME])
 
 
 @functools.partial(
@@ -840,16 +833,14 @@ _FINAL_SOURCES = frozenset(
         'explicit',
     ],
 )
-def build_source_profiles(
-    runtime_params: runtime_params_slice.RuntimeParams,
-    geo: geometry.Geometry,
-    core_profiles: state.CoreProfiles,
-    source_models: SourceModels,
-    neoclassical_models: neoclassical_models_lib.NeoclassicalModels,
-    explicit: bool,
-    explicit_source_profiles: source_profiles.SourceProfiles | None = None,
-    conductivity: conductivity_base.Conductivity | None = None,
-) -> source_profiles.SourceProfiles:
+def build_source_profiles(runtime_params,
+                          geo,
+                          core_profiles,
+                          source_models,
+                          neoclassical_models,
+                          explicit,
+                          explicit_source_profiles=None,
+                          conductivity=None):
     if not explicit and explicit_source_profiles is None:
         raise ValueError(
             '`explicit_source_profiles` must be provided if explicit is False.'
@@ -951,8 +942,7 @@ def _update_standard_source_profiles(
                 calculated_source_profiles.T_e[source_name] = profile
 
 
-def build_all_zero_profiles(
-    geo: geometry.Geometry, ) -> source_profiles.SourceProfiles:
+def build_all_zero_profiles(geo: geometry.Geometry, ):
     return source_profiles.SourceProfiles(
         bootstrap_current=bootstrap_current_base.BootstrapCurrent.zeros(geo),
         qei=source_profiles.QeiInfo.zeros(geo),
@@ -1025,11 +1015,11 @@ class PedestalModel(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def __hash__(self) -> int:
+    def __hash__(self):
         ...
 
     @abc.abstractmethod
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other):
         ...
 
 
@@ -1069,10 +1059,10 @@ class SetTemperatureDensityPedestalModel(PedestalModel):
                 geo.rho_norm - pedestal_params.rho_norm_ped_top).argmin(),
         )
 
-    def __hash__(self) -> int:
+    def __hash__(self):
         return hash('SetTemperatureDensityPedestalModel')
 
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other):
         return isinstance(other, SetTemperatureDensityPedestalModel)
 
 
@@ -1152,7 +1142,7 @@ class IonMixture(torax_pydantic.BaseModelFrozen):
         )
 
 
-def _impurity_before_validator(value: Any) -> Any:
+def _impurity_before_validator(value):
     return {value: 1.0}
 
 
@@ -1358,7 +1348,7 @@ class PlasmaComposition(torax_pydantic.BaseModelFrozen):
 
     @pydantic.model_validator(mode='before')
     @classmethod
-    def _conform_impurity_data(cls, data: dict[str, Any]) -> dict[str, Any]:
+    def _conform_impurity_data(cls, data):
         configurable_data = copy.deepcopy(data)
         Z_impurity_override = configurable_data.get('Z_impurity_override')
         A_impurity_override = configurable_data.get('A_impurity_override')
@@ -1780,12 +1770,8 @@ def calculate_chiGB(
             reference_length)
 
 
-def calculate_alpha(
-    core_profiles: state.CoreProfiles,
-    q: array_typing.FloatVectorFace,
-    reference_magnetic_field: chex.Numeric,
-    normalized_logarithmic_gradients: NormalizedLogarithmicGradients,
-) -> array_typing.FloatVectorFace:
+def calculate_alpha(core_profiles, q, reference_magnetic_field,
+                    normalized_logarithmic_gradients):
     constants = constants_module.CONSTANTS
     factor_0 = (2 * constants.keV_to_J / reference_magnetic_field**2 *
                 constants.mu_0 * q**2)
@@ -1814,7 +1800,7 @@ def calculate_normalized_logarithmic_gradient(
     var: cell_variable.CellVariable,
     radial_coordinate: jax.Array,
     reference_length: jax.Array,
-) -> jax.Array:
+):
     result = jnp.where(
         jnp.abs(var.face_value()) < constants_module.CONSTANTS.eps,
         constants_module.CONSTANTS.eps,
@@ -1866,7 +1852,7 @@ class QuasilinearTransportModel(TransportModel):
             ((gradient_reference_length / gyrobohm_flux_reference_length) * qe)
             / quasilinear_inputs.lref_over_lte) * quasilinear_inputs.chiGB
 
-        def DV_effective_approach() -> tuple[jax.Array, jax.Array]:
+        def DV_effective_approach():
             Deff = -pfe_SI / (core_profiles.n_e.face_grad() *
                               geo.g1_over_vpr2_face * geo.rho_b +
                               constants.eps)
@@ -2541,7 +2527,7 @@ class SafetyFactorFit:
     rho_q_3_1_second: array_typing.FloatScalar
 
 
-def _sliding_window_of_three(flat_array: jax.Array) -> jax.Array:
+def _sliding_window_of_three(flat_array):
     window_size = 3
     starts = jnp.arange(len(flat_array) - window_size + 1)
     return jax.vmap(lambda start: jax.lax.dynamic_slice(
@@ -3848,13 +3834,9 @@ def update_core_and_source_profiles_after_step(
     return core_profiles_t_plus_dt, total_source_profiles
 
 
-def compute_boundary_conditions_for_t_plus_dt(
-    dt: array_typing.FloatScalar,
-    runtime_params_t: runtime_params_slice.RuntimeParams,
-    runtime_params_t_plus_dt: runtime_params_slice.RuntimeParams,
-    geo_t_plus_dt: geometry.Geometry,
-    core_profiles_t: state.CoreProfiles,
-) -> dict[str, dict[str, jax.Array | None]]:
+def compute_boundary_conditions_for_t_plus_dt(dt, runtime_params_t,
+                                              runtime_params_t_plus_dt,
+                                              geo_t_plus_dt, core_profiles_t):
     profile_conditions_t_plus_dt = (
         runtime_params_t_plus_dt.profile_conditions)
     n_e = get_updated_electron_density(profile_conditions_t_plus_dt,
@@ -3938,13 +3920,9 @@ def compute_boundary_conditions_for_t_plus_dt(
     }
 
 
-def provide_core_profiles_t_plus_dt(
-    dt: jax.Array,
-    runtime_params_t: runtime_params_slice.RuntimeParams,
-    runtime_params_t_plus_dt: runtime_params_slice.RuntimeParams,
-    geo_t_plus_dt: geometry.Geometry,
-    core_profiles_t: state.CoreProfiles,
-) -> state.CoreProfiles:
+def provide_core_profiles_t_plus_dt(dt, runtime_params_t,
+                                    runtime_params_t_plus_dt, geo_t_plus_dt,
+                                    core_profiles_t):
     updated_boundary_conditions = compute_boundary_conditions_for_t_plus_dt(
         dt=dt,
         runtime_params_t=runtime_params_t,
@@ -4014,11 +3992,7 @@ def provide_core_profiles_t_plus_dt(
     return core_profiles_t_plus_dt
 
 
-def _update_v_loop_lcfs_from_psi(
-    psi_t: cell_variable.CellVariable,
-    psi_t_plus_dt: cell_variable.CellVariable,
-    dt: array_typing.FloatScalar,
-) -> jax.Array:
+def _update_v_loop_lcfs_from_psi(psi_t, psi_t_plus_dt, dt):
     psi_lcfs_t = psi_t.face_value()[-1]
     psi_lcfs_t_plus_dt = psi_t_plus_dt.face_value()[-1]
     v_loop_lcfs_t_plus_dt = (psi_lcfs_t_plus_dt - psi_lcfs_t) / dt
