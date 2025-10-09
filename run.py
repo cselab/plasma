@@ -3675,78 +3675,21 @@ def _init_psi_and_psi_derived(runtime_params, geo, core_profiles,
     sources_are_calculated = False
     source_profiles = build_all_zero_profiles(geo)
     initial_psi_mode = _get_initial_psi_mode(runtime_params, geo)
-    match initial_psi_mode:
-        case InitialPsiMode.PROFILE_CONDITIONS:
-            if runtime_params.profile_conditions.psi is None:
-                raise ValueError(
-                    'psi is None, but initial_psi_mode is PROFILE_CONDITIONS.')
-            dpsi_drhonorm_edge = (
-                psi_calculations.calculate_psi_grad_constraint_from_Ip(
-                    runtime_params.profile_conditions.Ip,
-                    geo,
-                ))
-            if runtime_params.profile_conditions.use_v_loop_lcfs_boundary_condition:
-                right_face_grad_constraint = None
-                right_face_constraint = (
-                    runtime_params.profile_conditions.psi[-1] +
-                    dpsi_drhonorm_edge * geo.drho_norm / 2)
-            else:
-                right_face_grad_constraint = dpsi_drhonorm_edge
-                right_face_constraint = None
-            psi = cell_variable.CellVariable(
-                value=runtime_params.profile_conditions.psi,
-                right_face_grad_constraint=right_face_grad_constraint,
-                right_face_constraint=right_face_constraint,
-                dr=geo.drho_norm,
-            )
-        case InitialPsiMode.GEOMETRY:
-            if not isinstance(geo, standard_geometry.StandardGeometry):
-                raise ValueError(
-                    'GEOMETRY initial_psi_source is only supported for standard'
-                    ' geometry.')
-            dpsi_drhonorm_edge = (
-                psi_calculations.calculate_psi_grad_constraint_from_Ip(
-                    runtime_params.profile_conditions.Ip,
-                    geo,
-                ))
-            psi = cell_variable.CellVariable(
-                value=geo.psi_from_Ip,
-                right_face_grad_constraint=None
-                if runtime_params.profile_conditions.
-                use_v_loop_lcfs_boundary_condition else dpsi_drhonorm_edge,
-                right_face_constraint=geo.psi_from_Ip_face[-1]
-                if runtime_params.profile_conditions.
-                use_v_loop_lcfs_boundary_condition else None,
-                dr=geo.drho_norm,
-            )
-        case profile_conditions_lib.InitialPsiMode.J:
-            j_total_hires = _get_j_total_hires_with_no_external_sources(
-                runtime_params, geo)
-            psi = update_psi_from_j(
-                runtime_params.profile_conditions.Ip,
-                geo,
-                j_total_hires,
-                use_v_loop_lcfs_boundary_condition=runtime_params.
-                profile_conditions.use_v_loop_lcfs_boundary_condition,
-            )
-            if not (runtime_params.profile_conditions.
-                    initial_j_is_total_current):
-                core_profiles_initial = dataclasses.replace(
-                    core_profiles,
-                    psi=psi,
-                    q_face=psi_calculations.calc_q_face(geo, psi),
-                    s_face=psi_calculations.calc_s_face(geo, psi),
-                )
-                psi, source_profiles = _iterate_psi_and_sources(
-                    runtime_params=runtime_params,
-                    geo=geo,
-                    core_profiles=core_profiles_initial,
-                    neoclassical_models=neoclassical_models,
-                    source_models=source_models,
-                    source_profiles=source_profiles,
-                    iterations=2,
-                )
-                sources_are_calculated = True
+    dpsi_drhonorm_edge = (
+        psi_calculations.calculate_psi_grad_constraint_from_Ip(
+            runtime_params.profile_conditions.Ip,
+            geo,
+        ))
+    psi = cell_variable.CellVariable(
+        value=geo.psi_from_Ip,
+        right_face_grad_constraint=None
+        if runtime_params.profile_conditions.
+        use_v_loop_lcfs_boundary_condition else dpsi_drhonorm_edge,
+        right_face_constraint=geo.psi_from_Ip_face[-1]
+        if runtime_params.profile_conditions.
+        use_v_loop_lcfs_boundary_condition else None,
+        dr=geo.drho_norm,
+    )
     core_profiles = _calculate_all_psi_dependent_profiles(
         runtime_params=runtime_params,
         geo=geo,
