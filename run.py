@@ -62,6 +62,22 @@ import typing
 import typing_extensions
 import xarray as xr
 
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass
+class NeoclassicalModels:
+    conductivity: conductivity_base.ConductivityModel
+    bootstrap_current: bootstrap_current_base.BootstrapCurrentModel
+
+    def __hash__(self) -> int:
+        return hash(
+            (self.bootstrap_current, self.conductivity))
+
+    def __eq__(self, other) -> bool:
+        return (isinstance(other, NeoclassicalModels)
+                and self.conductivity == other.conductivity
+                and self.bootstrap_current == other.bootstrap_current)
+
+
 
 def exponential_profile(
     geo: geometry.Geometry,
@@ -2668,7 +2684,7 @@ class Neoclassical0(torax_pydantic.BaseModelFrozen):
         )
 
     def build_models(self):
-        return neoclassical_models.NeoclassicalModels(
+        return NeoclassicalModels(
             conductivity=self.conductivity.build_model(),
             bootstrap_current=self.bootstrap_current.build_model(),
         )
@@ -5048,7 +5064,7 @@ class PhysicsModels:
         static=True))
     pedestal_model: PedestalModel = dataclasses.field(metadata=dict(
         static=True))
-    neoclassical_models: neoclassical_models_lib.NeoclassicalModels = (
+    neoclassical_models: NeoclassicalModels = (
         dataclasses.field(metadata=dict(static=True)))
 
 
