@@ -9,15 +9,8 @@ from torax._src.fvm import cell_variable
 from torax._src.geometry import geometry as geometry_lib
 from torax._src.neoclassical import formulas
 from torax._src.neoclassical.conductivity import base
-from torax._src.neoclassical.conductivity import runtime_params
 from torax._src.physics import collisions
 from torax._src.torax_pydantic import torax_pydantic
-
-
-@jax.tree_util.register_dataclass
-@dataclasses.dataclass(frozen=True)
-class RuntimeParams(runtime_params.RuntimeParams):
-    pass
 
 
 class SauterModel(base.ConductivityModel):
@@ -49,9 +42,6 @@ class SauterModel(base.ConductivityModel):
 class SauterModelConfig(base.ConductivityModelConfig):
     model_name: Annotated[Literal['sauter'],
                           torax_pydantic.JAX_STATIC] = 'sauter'
-
-    def build_runtime_params(self) -> RuntimeParams:
-        return RuntimeParams()
 
     def build_model(self) -> SauterModel:
         return SauterModel()
