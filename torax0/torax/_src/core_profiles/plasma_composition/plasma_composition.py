@@ -19,7 +19,7 @@ _IMPURITY_MODE_NE_RATIOS_ZEFF: Final[str] = 'n_e_ratios_Z_eff'
 
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass
-class RuntimeParams:
+class RuntimeParamsP:
     main_ion_names: tuple[str,
                           ...] = dataclasses.field(metadata={'static': True})
     impurity_names: tuple[str,
@@ -94,21 +94,21 @@ class PlasmaComposition(torax_pydantic.BaseModelFrozen):
         return obj
 
     @functools.cached_property
-    def _main_ion_mixture(self) -> ion_mixture.IonMixture:
+    def _main_ion_mixture(self):
         return ion_mixture.IonMixture.model_construct(
             species=self.main_ion,
             Z_override=self.Z_i_override,
             A_override=self.A_i_override,
         )
 
-    def get_main_ion_names(self) -> tuple[str, ...]:
+    def get_main_ion_names(self):
         return tuple(self._main_ion_mixture.species.keys())
 
-    def get_impurity_names(self) -> tuple[str, ...]:
+    def get_impurity_names(self):
         return tuple(self.impurity.species.keys())
 
-    def build_runtime_params(self, t: chex.Numeric) -> RuntimeParams:
-        return RuntimeParams(
+    def build_runtime_params(self, t):
+        return RuntimeParamsP(
             main_ion_names=self.get_main_ion_names(),
             impurity_names=self.get_impurity_names(),
             main_ion=self._main_ion_mixture.build_runtime_params(t),
