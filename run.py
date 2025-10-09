@@ -1,20 +1,3 @@
-import dataclasses
-import jax
-from jax import numpy as jnp
-from torax._src import array_typing
-from torax._src import constants as constants_module
-from torax._src import state
-from torax._src.geometry import geometry
-from torax._src.physics import collisions
-from torax._src.physics import psi_calculations
-from torax._src.transport_model import quasilinear_transport_model
-import abc
-import chex
-import pydantic
-from torax._src.torax_pydantic import interpolated_param_1d
-from torax._src.torax_pydantic import torax_pydantic
-from torax._src.transport_model import runtime_params as runtime_params0
-from torax._src.transport_model import transport_model
 from absl import logging
 from collections.abc import Callable
 from collections.abc import Mapping
@@ -23,6 +6,7 @@ from fusion_surrogates.qlknn import qlknn_model
 from jax import numpy as jnp
 from torax._src import array_typing
 from torax._src import constants
+from torax._src import constants as constants_module
 from torax._src import jax_utils
 from torax._src import math_utils
 from torax._src import state
@@ -52,6 +36,7 @@ from torax._src.neoclassical.transport import zeros as transport_zeros
 from torax._src.pedestal_model import pedestal_model as pedestal_model_lib
 from torax._src.pedestal_model import pydantic_model as pedestal_pydantic_model
 from torax._src.physics import charge_states
+from torax._src.physics import collisions
 from torax._src.physics import formulas
 from torax._src.physics import psi_calculations
 from torax._src.physics import scaling_laws
@@ -61,10 +46,14 @@ from torax._src.sources import source_models as source_models_lib
 from torax._src.sources import source_profile_builders
 from torax._src.sources import source_profiles
 from torax._src.sources import source_profiles as source_profiles_lib
+from torax._src.torax_pydantic import interpolated_param_1d
 from torax._src.torax_pydantic import interpolated_param_2d
 from torax._src.torax_pydantic import model_base
 from torax._src.torax_pydantic import torax_pydantic
+from torax._src.transport_model import quasilinear_transport_model
 from torax._src.transport_model import runtime_params as runtime_params_lib
+from torax._src.transport_model import runtime_params as runtime_params0
+from torax._src.transport_model import transport_model
 from torax._src.transport_model import transport_model as transport_model_lib
 from typing import Annotated, Any, Literal
 from typing import Annotated, Any, Literal, TypeAlias, TypeVar
