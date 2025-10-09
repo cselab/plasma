@@ -48,7 +48,7 @@ def _calculate_conductivity0(
     )
 
 
-class SauterModel(base.ConductivityModel):
+class SauterModelCond(base.ConductivityModel):
 
     def calculate_conductivity(
         self,
@@ -78,7 +78,6 @@ class SauterModelConfig(base.ConductivityModelConfig):
     model_name: Annotated[Literal['sauter'],
                           torax_pydantic.JAX_STATIC] = 'sauter'
 
-    def build_model(self) -> SauterModel:
-        return SauterModel()
-
+    def build_model(self):
+        return SauterModelCond()
 
