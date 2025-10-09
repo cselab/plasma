@@ -47,25 +47,8 @@ from torax._src.torax_pydantic import interpolated_param_1d
 from torax._src.torax_pydantic import interpolated_param_2d
 from torax._src.torax_pydantic import model_base
 from torax._src.torax_pydantic import torax_pydantic
-from typing import Annotated, Any
-from typing import Annotated, Any, Literal
-from typing import Annotated, Any, Literal, TypeAlias
-from typing import Annotated, Any, Literal, TypeAlias, TypeVar
-from typing import Annotated, ClassVar
-from typing import Annotated, ClassVar, Literal
-from typing import Annotated, Final
-from typing import Annotated, Literal
-from typing import Any
-from typing import Any, Final, Mapping, Sequence, TypeAlias
-from typing import Callable
-from typing import ClassVar, Protocol
-from typing import Final
-from typing import Final, Mapping
-from typing import Mapping
-from typing import TypeAlias
-from typing_extensions import Annotated
-from typing_extensions import Final
-from typing_extensions import override
+from typing import Annotated, Any, Literal, TypeAlias, TypeVar, ClassVar, Final, Mapping, Protocol, Callable
+from typing_extensions import Annotated, Final, override
 import abc
 import chex
 import copy
