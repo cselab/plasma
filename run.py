@@ -36,17 +36,16 @@ from torax._src.physics import collisions
 from torax._src.physics import formulas as formulas_ph
 from torax._src.physics import psi_calculations
 from torax._src.physics import scaling_laws
-from torax._src.sources import base
-from torax._src.sources import base as source_base
 from torax._src.sources import formulas
 from torax._src.sources import runtime_params as runtime_params_lib
-from torax._src.sources import source as source_lib
+from torax._src.sources import runtime_params as runtime_params_src
 from torax._src.sources import source_profiles
 from torax._src.sources import source_profiles as source_profiles_lib
 from torax._src.torax_pydantic import interpolated_param_1d
 from torax._src.torax_pydantic import interpolated_param_2d
 from torax._src.torax_pydantic import model_base
 from torax._src.torax_pydantic import torax_pydantic
+from typing import Annotated
 from typing import Annotated, Any, Literal, TypeAlias, TypeVar, ClassVar, Final, Mapping, Protocol, Callable
 from typing import ClassVar, Protocol
 from typing_extensions import Annotated, Final, override
@@ -70,6 +69,32 @@ import typing_extensions
 import xarray as xr
 
 
+class SourceModelBase(torax_pydantic.BaseModelFrozen, abc.ABC):
+    mode: Annotated[runtime_params_src.Mode,
+                    torax_pydantic.JAX_STATIC] = (runtime_params_src.Mode.ZERO)
+    is_explicit: Annotated[bool, torax_pydantic.JAX_STATIC] = False
+    prescribed_values: tuple[torax_pydantic.TimeVaryingArray,
+                             ...] = (torax_pydantic.ValidatedDefault(({
+                                 0: {
+                                     0: 0,
+                                     1: 0
+                                 }
+                             }, )))
+
+    @abc.abstractmethod
+    def build_source(self):
+        pass
+
+    @property
+    @abc.abstractmethod
+    def model_func(self):
+        pass
+
+    @abc.abstractmethod
+    def build_runtime_params(self, t):
+        pass
+
+
 @typing.runtime_checkable
 class SourceProfileFunction(Protocol):
 
@@ -180,6 +205,63 @@ class Source(abc.ABC):
                 )
             case _:
                 raise ValueError(f'Unknown mode: {mode}')
+
+
+@typing.runtime_checkable
+class SourceProfileFunction(Protocol):
+
+    def __call__(
+        self,
+        runtime_params: runtime_params_slice.RuntimeParams,
+        geo: geometry.Geometry,
+        source_name: str,
+        core_profiles: state.CoreProfiles,
+        calculated_source_profiles: source_profiles.SourceProfiles | None,
+        unused_conductivity: conductivity_base.Conductivity | None,
+    ) -> tuple[array_typing.FloatVectorCell, ...]:
+        ...
+
+
+@enum.unique
+class AffectedCoreProfile(enum.IntEnum):
+    PSI = 1
+    NE = 2
+    TEMP_ION = 3
+    TEMP_EL = 4
+
+
+@dataclasses.dataclass(kw_only=True, frozen=True, eq=True)
+class Source(abc.ABC):
+    SOURCE_NAME: ClassVar[str] = 'source'
+    model_func: SourceProfileFunction | None = None
+
+    @property
+    @abc.abstractmethod
+    def source_name(self) -> str:
+        pass
+
+    @property
+    @abc.abstractmethod
+    def affected_core_profiles(self) -> tuple[AffectedCoreProfile, ...]:
+        pass
+
+    def get_value(self, runtime_params, geo, core_profiles,
+                  calculated_source_profiles, conductivity):
+        source_params = runtime_params.sources[self.source_name]
+        mode = source_params.mode
+        match mode:
+            case runtime_params_lib.Mode.MODEL_BASED:
+                return self.model_func(
+                    runtime_params,
+                    geo,
+                    self.source_name,
+                    core_profiles,
+                    calculated_source_profiles,
+                    conductivity,
+                )
+            case _:
+                raise ValueError(f'Unknown mode: {mode}')
+
 
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
@@ -217,21 +299,20 @@ def _calculate_I_generic(runtime_params, source_params):
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True, eq=True)
-class GenericCurrentSource(source_lib.Source):
+class GenericCurrentSource(Source):
     SOURCE_NAME: ClassVar[str] = 'generic_current'
-    model_func: source_lib.SourceProfileFunction = calculate_generic_current
+    model_func: SourceProfileFunction = calculate_generic_current
 
     @property
-    def source_name(self) -> str:
+    def source_name(self):
         return self.SOURCE_NAME
 
     @property
-    def affected_core_profiles(
-            self) -> tuple[source_lib.AffectedCoreProfile, ...]:
-        return (source_lib.AffectedCoreProfile.PSI, )
+    def affected_core_profiles(self):
+        return (AffectedCoreProfile.PSI, )
 
 
-class GenericCurrentSourceConfig(source_base.SourceModelBase):
+class GenericCurrentSourceConfig(SourceModelBase):
     model_name: Annotated[Literal['gaussian'],
                           torax_pydantic.JAX_STATIC] = ('gaussian')
     I_generic: torax_pydantic.TimeVaryingScalar = torax_pydantic.ValidatedDefault(
@@ -320,23 +401,23 @@ def default_formula(
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True, eq=True)
-class GenericIonElectronHeatSource(source_lib.Source):
+class GenericIonElectronHeatSource(Source):
     SOURCE_NAME: ClassVar[str] = 'generic_heat'
-    model_func: source_lib.SourceProfileFunction = default_formula
+    model_func: SourceProfileFunction = default_formula
 
     @property
-    def source_name(self) -> str:
+    def source_name(self):
         return self.SOURCE_NAME
 
     @property
     def affected_core_profiles(self):
         return (
-            source_lib.AffectedCoreProfile.TEMP_ION,
-            source_lib.AffectedCoreProfile.TEMP_EL,
+            AffectedCoreProfile.TEMP_ION,
+            AffectedCoreProfile.TEMP_EL,
         )
 
 
-class GenericIonElHeatSourceConfig(base.SourceModelBase):
+class GenericIonElHeatSourceConfig(SourceModelBase):
     model_name: Annotated[Literal['gaussian'],
                           torax_pydantic.JAX_STATIC] = ('gaussian')
     gaussian_width: torax_pydantic.TimeVaryingScalar = (
@@ -394,17 +475,17 @@ def calc_generic_particle_source(
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True, eq=True)
-class GenericParticleSource(source_lib.Source):
+class GenericParticleSource(Source):
     SOURCE_NAME: ClassVar[str] = 'generic_particle'
-    model_func: source_lib.SourceProfileFunction = calc_generic_particle_source
+    model_func: SourceProfileFunction = calc_generic_particle_source
 
     @property
-    def source_name(self) -> str:
+    def source_name(self):
         return self.SOURCE_NAME
 
     @property
     def affected_core_profiles(self):
-        return (source_lib.AffectedCoreProfile.NE, )
+        return (AffectedCoreProfile.NE, )
 
 
 @jax.tree_util.register_dataclass
@@ -415,7 +496,7 @@ class RuntimeParamsPaSo(runtime_params_lib.RuntimeParams):
     S_total: array_typing.FloatScalar
 
 
-class GenericParticleSourceConfig(base.SourceModelBase):
+class GenericParticleSourceConfig(SourceModelBase):
     model_name: Annotated[Literal['gaussian'],
                           torax_pydantic.JAX_STATIC] = ('gaussian')
     particle_width: torax_pydantic.TimeVaryingScalar = (
@@ -467,9 +548,9 @@ def calc_pellet_source(
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True, eq=True)
-class PelletSource(source_lib.Source):
+class PelletSource(Source):
     SOURCE_NAME: ClassVar[str] = 'pellet'
-    model_func: source_lib.SourceProfileFunction = calc_pellet_source
+    model_func: SourceProfileFunction = calc_pellet_source
 
     @property
     def source_name(self):
@@ -477,7 +558,7 @@ class PelletSource(source_lib.Source):
 
     @property
     def affected_core_profiles(self):
-        return (source_lib.AffectedCoreProfile.NE, )
+        return (AffectedCoreProfile.NE, )
 
 
 @jax.tree_util.register_dataclass
@@ -488,7 +569,7 @@ class RuntimeParamsPE(runtime_params_lib.RuntimeParams):
     S_total: array_typing.FloatScalar
 
 
-class PelletSourceConfig(base.SourceModelBase):
+class PelletSourceConfig(SourceModelBase):
     model_name: Annotated[Literal['gaussian'],
                           torax_pydantic.JAX_STATIC] = ('gaussian')
     pellet_width: torax_pydantic.TimeVaryingScalar = (
@@ -594,9 +675,9 @@ def fusion_heat_model_func(
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True, eq=True)
-class FusionHeatSource(source_lib.Source):
+class FusionHeatSource(Source):
     SOURCE_NAME: ClassVar[str] = 'fusion'
-    model_func: source_lib.SourceProfileFunction = fusion_heat_model_func
+    model_func: SourceProfileFunction = fusion_heat_model_func
 
     @property
     def source_name(self) -> str:
@@ -605,12 +686,12 @@ class FusionHeatSource(source_lib.Source):
     @property
     def affected_core_profiles(self):
         return (
-            source_lib.AffectedCoreProfile.TEMP_ION,
-            source_lib.AffectedCoreProfile.TEMP_EL,
+            AffectedCoreProfile.TEMP_ION,
+            AffectedCoreProfile.TEMP_EL,
         )
 
 
-class FusionHeatSourceConfig(base.SourceModelBase):
+class FusionHeatSourceConfig(SourceModelBase):
     model_name: Annotated[Literal['bosch_hale'],
                           torax_pydantic.JAX_STATIC] = ('bosch_hale')
     mode: Annotated[runtime_params_lib.Mode, torax_pydantic.JAX_STATIC] = (
@@ -660,9 +741,9 @@ def calc_puff_source(
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True, eq=True)
-class GasPuffSource(source_lib.Source):
+class GasPuffSource(Source):
     SOURCE_NAME: ClassVar[str] = 'gas_puff'
-    model_func: source_lib.SourceProfileFunction = calc_puff_source
+    model_func: SourceProfileFunction = calc_puff_source
 
     @property
     def source_name(self):
@@ -670,10 +751,10 @@ class GasPuffSource(source_lib.Source):
 
     @property
     def affected_core_profiles(self):
-        return (source_lib.AffectedCoreProfile.NE, )
+        return (AffectedCoreProfile.NE, )
 
 
-class GasPuffSourceConfig(base.SourceModelBase):
+class GasPuffSourceConfig(SourceModelBase):
     model_name: Annotated[Literal['exponential'],
                           torax_pydantic.JAX_STATIC] = ('exponential')
     puff_decay_length: torax_pydantic.TimeVaryingScalar = (
@@ -708,7 +789,7 @@ class RuntimeParamsQ(runtime_params_lib.RuntimeParams):
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True, eq=True)
-class QeiSource(source_lib.Source):
+class QeiSource(Source):
     SOURCE_NAME: ClassVar[str] = 'ei_exchange'
 
     @property
@@ -762,14 +843,14 @@ class QeiSource(source_lib.Source):
 @dataclasses.dataclass(frozen=True)
 class SourceModels:
     qei_source: QeiSource
-    standard_sources: immutabledict.immutabledict[str, source_lib.Source]
+    standard_sources: immutabledict.immutabledict[str, Source]
 
     @functools.cached_property
     def psi_sources(self):
         return immutabledict.immutabledict({
             name: source
-            for name, source in self.standard_sources.items() if
-            source_lib.AffectedCoreProfile.PSI in source.affected_core_profiles
+            for name, source in self.standard_sources.items()
+            if AffectedCoreProfile.PSI in source.affected_core_profiles
         })
 
     def __hash__(self):
@@ -811,7 +892,7 @@ def _model_based_qei(runtime_params, geo, core_profiles):
     )
 
 
-class QeiSourceConfig(base.SourceModelBase):
+class QeiSourceConfig(SourceModelBase):
     Qei_multiplier: float = 1.0
     mode: Annotated[runtime_params_lib.Mode, torax_pydantic.JAX_STATIC] = (
         runtime_params_lib.Mode.MODEL_BASED)
@@ -912,9 +993,9 @@ class Sources(torax_pydantic.BaseModelFrozen):
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True, eq=True)
-class ImpurityRadiationHeatSink(source_lib.Source):
+class ImpurityRadiationHeatSink(Source):
     SOURCE_NAME = "impurity_radiation"
-    model_func: source_lib.SourceProfileFunction
+    model_func: SourceProfileFunction
 
 
 _FINAL_SOURCES = frozenset([ImpurityRadiationHeatSink.SOURCE_NAME])
@@ -985,7 +1066,7 @@ def build_standard_source_profiles(
     psi_only: bool = False,
 ):
 
-    def calculate_source(source_name: str, source: source_lib.Source):
+    def calculate_source(source_name, source):
         source_params = runtime_params.sources[source_name]
         if (explicit == source_params.is_explicit) | calculate_anyway:
             value = source.get_value(
@@ -1020,20 +1101,20 @@ def build_standard_source_profiles(
 def _update_standard_source_profiles(
     calculated_source_profiles: source_profiles.SourceProfiles,
     source_name: str,
-    affected_core_profiles: tuple[source_lib.AffectedCoreProfile, ...],
+    affected_core_profiles: tuple[AffectedCoreProfile, ...],
     profile: tuple[array_typing.FloatVectorCell, ...],
 ):
     for profile, affected_core_profile in zip(profile,
                                               affected_core_profiles,
                                               strict=True):
         match affected_core_profile:
-            case source_lib.AffectedCoreProfile.PSI:
+            case AffectedCoreProfile.PSI:
                 calculated_source_profiles.psi[source_name] = profile
-            case source_lib.AffectedCoreProfile.NE:
+            case AffectedCoreProfile.NE:
                 calculated_source_profiles.n_e[source_name] = profile
-            case source_lib.AffectedCoreProfile.TEMP_ION:
+            case AffectedCoreProfile.TEMP_ION:
                 calculated_source_profiles.T_i[source_name] = profile
-            case source_lib.AffectedCoreProfile.TEMP_EL:
+            case AffectedCoreProfile.TEMP_EL:
                 calculated_source_profiles.T_e[source_name] = profile
 
 
