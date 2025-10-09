@@ -39,7 +39,6 @@ from torax._src.physics import scaling_laws
 from torax._src.sources import base
 from torax._src.sources import formulas
 from torax._src.sources import runtime_params as runtime_params_lib
-from torax._src.sources import source
 from torax._src.sources import source as source_lib
 from torax._src.sources import source_profiles
 from torax._src.sources import source_profiles as source_profiles_lib
