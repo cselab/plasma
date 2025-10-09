@@ -152,17 +152,17 @@ class _PiecewiseLinearInterpolatedParam:
         self._ys = ys
 
     @property
-    def xs(self) -> Array:
+    def xs(self):
         return self._xs
 
     @property
-    def ys(self) -> Array:
+    def ys(self):
         return self._ys
 
     def get_value(
         self,
         x: chex.Numeric,
-    ) -> Array:
+    ):
         x_shape = getattr(x, 'shape', ())
         is_jax = isinstance(x, jax.Array)
         interp = _interp_fn if is_jax else np.interp
@@ -269,7 +269,7 @@ class InterpolatedVarSingleAxis:
     def get_value(
         self,
         x: chex.Numeric,
-    ) -> Array:
+    ):
         value = self._param.get_value(x)
         if self._is_bool_param:
             return jnp.bool_(value > 0.5)
@@ -318,7 +318,7 @@ class InterpolatedVarTimeRho:
         obj._time_interpolation_mode = aux_data[1]
         return obj
 
-    def get_value(self, x: chex.Numeric) -> Array:
+    def get_value(self, x: chex.Numeric):
         return self._time_interpolated_var.get_value(x)
 
 
@@ -610,7 +610,7 @@ class TimeVaryingScalar(BaseModelFrozen):
     interpolation_mode: typing_extensions.Annotated[
         InterpolationMode, JAX_STATIC] = InterpolationMode.PIECEWISE_LINEAR
 
-    def get_value(self, t: chex.Numeric) -> Array:
+    def get_value(self, t: chex.Numeric):
         return self._get_cached_interpolated_param.get_value(t)
 
     @pydantic.model_validator(mode='after')
@@ -1341,7 +1341,7 @@ class SolverNumericOutputs:
     sawtooth_crash: BoolScalar = False
 
 
-def face_to_cell(face: FloatVectorFace, ) -> FloatVectorCell:
+def face_to_cell(face: FloatVectorFace, ):
     return 0.5 * (face[:-1] + face[1:])
 
 
@@ -1419,44 +1419,44 @@ class Geometry:
         )
 
     @property
-    def rho_norm(self) -> Array:
+    def rho_norm(self):
         return self.torax_mesh.cell_centers
 
     @property
-    def rho_face_norm(self) -> Array:
+    def rho_face_norm(self):
         return self.torax_mesh.face_centers
 
     @property
-    def drho_norm(self) -> Array:
+    def drho_norm(self):
         return jnp.array(self.torax_mesh.dx)
 
     @property
-    def rho_face(self) -> Array:
+    def rho_face(self):
         return self.rho_face_norm * jnp.expand_dims(self.rho_b, axis=-1)
 
     @property
-    def rho(self) -> Array:
+    def rho(self):
         return self.rho_norm * jnp.expand_dims(self.rho_b, axis=-1)
 
     @property
-    def r_mid(self) -> Array:
+    def r_mid(self):
         return (self.R_out - self.R_in) / 2
 
     @property
-    def r_mid_face(self) -> Array:
+    def r_mid_face(self):
         return (self.R_out_face - self.R_in_face) / 2
 
     @property
-    def epsilon(self) -> Array:
+    def epsilon(self):
         return (self.R_out - self.R_in) / (self.R_out + self.R_in)
 
     @property
-    def epsilon_face(self) -> Array:
+    def epsilon_face(self):
         return (self.R_out_face - self.R_in_face) / (self.R_out_face +
                                                      self.R_in_face)
 
     @property
-    def drho(self) -> Array:
+    def drho(self):
         return self.drho_norm * self.rho_b
 
     @property
@@ -1468,11 +1468,11 @@ class Geometry:
         return self.Phi_face[..., -1]
 
     @property
-    def g1_over_vpr(self) -> Array:
+    def g1_over_vpr(self):
         return self.g1 / self.vpr
 
     @property
-    def g1_over_vpr2(self) -> Array:
+    def g1_over_vpr2(self):
         return self.g1 / self.vpr**2
 
     @property
@@ -7664,11 +7664,11 @@ class StateHistory:
         self._rho_norm = np.concatenate([[0.0], self.rho_cell_norm, [1.0]])
 
     @property
-    def times(self) -> Array:
+    def times(self):
         return self._times
 
     @property
-    def rho_cell_norm(self) -> FloatVectorCell:
+    def rho_cell_norm(self):
         return self._rho_cell_norm
 
     @property
