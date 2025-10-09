@@ -1110,18 +1110,8 @@ def build_source_profiles0(runtime_params,
                           explicit,
                           explicit_source_profiles=None,
                           conductivity=None):
-    if explicit:
-        qei = QeiInfo.zeros(geo)
-        bootstrap_current = bootstrap_current_base.BootstrapCurrent.zeros(geo)
-    else:
-        qei = source_models.qei_source.get_qei(
-            runtime_params=runtime_params,
-            geo=geo,
-            core_profiles=core_profiles,
-        )
-        bootstrap_current = (
-            neoclassical_models.bootstrap_current.calculate_bootstrap_current(
-                runtime_params, geo, core_profiles))
+    qei = QeiInfo.zeros(geo)
+    bootstrap_current = bootstrap_current_base.BootstrapCurrent.zeros(geo)
     profiles = SourceProfiles(
         bootstrap_current=bootstrap_current,
         qei=qei,
@@ -1158,18 +1148,14 @@ def build_source_profiles1(runtime_params,
                           explicit,
                           explicit_source_profiles=None,
                           conductivity=None):
-    if explicit:
-        qei = QeiInfo.zeros(geo)
-        bootstrap_current = bootstrap_current_base.BootstrapCurrent.zeros(geo)
-    else:
-        qei = source_models.qei_source.get_qei(
-            runtime_params=runtime_params,
-            geo=geo,
-            core_profiles=core_profiles,
-        )
-        bootstrap_current = (
-            neoclassical_models.bootstrap_current.calculate_bootstrap_current(
-                runtime_params, geo, core_profiles))
+    qei = source_models.qei_source.get_qei(
+        runtime_params=runtime_params,
+        geo=geo,
+        core_profiles=core_profiles,
+    )
+    bootstrap_current = (
+        neoclassical_models.bootstrap_current.calculate_bootstrap_current(
+            runtime_params, geo, core_profiles))
     profiles = SourceProfiles(
         bootstrap_current=bootstrap_current,
         qei=qei,
