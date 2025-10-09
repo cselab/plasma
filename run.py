@@ -1,10 +1,3 @@
-import dataclasses
-import enum
-from typing import Annotated, Final
-import jax
-import pydantic
-from torax._src import array_typing
-from torax._src.torax_pydantic import torax_pydantic
 from absl import logging
 from collections.abc import Callable
 from collections.abc import Mapping
@@ -21,7 +14,6 @@ from torax._src import xnp
 from torax._src.config import numerics as numerics_lib
 from torax._src.config import runtime_params_slice
 from torax._src.config import runtime_validation_utils
-from torax._src.core_profiles.plasma_composition import impurity_fractions
 from torax._src.core_profiles.plasma_composition import ion_mixture
 from torax._src.fvm import cell_variable
 from torax._src.fvm import convection_terms
@@ -58,7 +50,9 @@ from torax._src.torax_pydantic import model_base
 from torax._src.torax_pydantic import torax_pydantic
 from typing import Annotated, Any
 from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, TypeAlias
 from typing import Annotated, Any, Literal, TypeAlias, TypeVar
+from typing import Annotated, Final
 from typing import Any
 from typing import Any, Final, Mapping, Sequence, TypeAlias
 from typing import Callable
@@ -79,11 +73,81 @@ import inspect
 import itertools
 import jax
 import jax.numpy as jnp
+import jaxtyping as jt
 import logging
 import numpy as np
 import pydantic
 import typing_extensions
 import xarray as xr
+
+_IMPURITY_MODE_FRACTIONS: Final[str] = 'fractions'
+
+
+def _impurity_before_validator(value: Any) -> Any:
+    return {value: 1.0}
+
+
+def _impurity_after_validator(value):
+    first_key = next(iter(value))
+    first_tva = value[first_key]
+    reference_times = first_tva.value.keys()
+    for t in reference_times:
+        reference_rho_norm, _ = first_tva.value[t]
+        values_at_t = [tva.value[t][1] for tva in value.values()]
+        reference_shape = values_at_t[0].shape
+        sum_of_values = np.sum(np.stack(values_at_t, axis=0), axis=0)
+    return value
+
+
+ImpurityMapping: TypeAlias = Annotated[
+    Mapping[str, torax_pydantic.NonNegativeTimeVaryingArray],
+    pydantic.BeforeValidator(_impurity_before_validator),
+    pydantic.AfterValidator(_impurity_after_validator),
+]
+
+
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(frozen=True)
+class RuntimeParamsIF:
+    fractions: jt.Float[array_typing.Array, 'ion_symbol rhon']
+    fractions_face: jt.Float[array_typing.Array, 'ion_symbol rhon+1']
+    A_avg: array_typing.FloatVectorCell
+    A_avg_face: array_typing.FloatVectorFace
+    Z_override: array_typing.FloatScalar | None = None
+
+
+class ImpurityFractions(torax_pydantic.BaseModelFrozen):
+    impurity_mode: Annotated[Literal['fractions'],
+                             torax_pydantic.JAX_STATIC] = ('fractions')
+    species: ImpurityMapping = torax_pydantic.ValidatedDefault({'Ne': 1.0})
+    Z_override: torax_pydantic.TimeVaryingScalar | None = None
+    A_override: torax_pydantic.TimeVaryingScalar | None = None
+
+    def build_runtime_params(self, t):
+        ions = self.species.keys()
+        fractions = jnp.array([self.species[ion].get_value(t) for ion in ions])
+        fractions_face = jnp.array(
+            [self.species[ion].get_value(t, grid_type='face') for ion in ions])
+        Z_override = None if not self.Z_override else self.Z_override.get_value(
+            t)
+        As = jnp.array([constants.ION_PROPERTIES_DICT[ion].A for ion in ions])
+        A_avg = jnp.sum(As[..., jnp.newaxis] * fractions, axis=0)
+        A_avg_face = jnp.sum(As[..., jnp.newaxis] * fractions_face, axis=0)
+        return RuntimeParamsIF(
+            fractions=fractions,
+            fractions_face=fractions_face,
+            A_avg=A_avg,
+            A_avg_face=A_avg_face,
+            Z_override=Z_override,
+        )
+
+    @pydantic.model_validator(mode='before')
+    @classmethod
+    def _conform_impurity_data(cls, data):
+        if 'legacy' in data:
+            del data['legacy']
+        return data
+
 
 _MIN_IP_AMPS: Final[float] = 1e3
 _MIN_DENSITY_M3: Final[float] = 1e10
@@ -186,6 +250,7 @@ class ProfileConditions(torax_pydantic.BaseModelFrozen):
         runtime_params = {k: _get_value(v) for k, v in runtime_params.items()}
         return RuntimeParamsPC(**runtime_params)
 
+
 _IMPURITY_MODE_FRACTIONS: Final[str] = 'fractions'
 _IMPURITY_MODE_NE_RATIOS: Final[str] = 'n_e_ratios'
 _IMPURITY_MODE_NE_RATIOS_ZEFF: Final[str] = 'n_e_ratios_Z_eff'
@@ -207,7 +272,7 @@ class RuntimeParamsP:
 @jax.tree_util.register_pytree_node_class
 class PlasmaComposition(torax_pydantic.BaseModelFrozen):
     impurity: Annotated[
-        impurity_fractions.ImpurityFractions,
+        ImpurityFractions,
         pydantic.Field(discriminator='impurity_mode'),
     ]
     main_ion: runtime_validation_utils.IonMapping = (
@@ -290,6 +355,7 @@ class PlasmaComposition(torax_pydantic.BaseModelFrozen):
             Z_eff=self.Z_eff.get_value(t),
             Z_eff_face=self.Z_eff.get_value(t, grid_type='face'),
         )
+
 
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
@@ -2030,9 +2096,7 @@ class Ions:
     Z_eff_face: array_typing.FloatVectorFace
 
 
-def get_updated_ion_temperature(
-    profile_conditions_params,
-    geo):
+def get_updated_ion_temperature(profile_conditions_params, geo):
     T_i = cell_variable.CellVariable(
         value=profile_conditions_params.T_i,
         left_face_grad_constraint=jnp.zeros(()),
@@ -2043,10 +2107,7 @@ def get_updated_ion_temperature(
     return T_i
 
 
-def get_updated_electron_temperature(
-        profile_conditions_params,
-    geo
-):
+def get_updated_electron_temperature(profile_conditions_params, geo):
     T_e = cell_variable.CellVariable(
         value=profile_conditions_params.T_e,
         left_face_grad_constraint=jnp.zeros(()),
@@ -2057,10 +2118,7 @@ def get_updated_electron_temperature(
     return T_e
 
 
-def get_updated_electron_density(
-        profile_conditions_params,
-    geo
-):
+def get_updated_electron_density(profile_conditions_params, geo):
     nGW = (profile_conditions_params.Ip / 1e6 / (jnp.pi * geo.a_minor**2) *
            1e20)
     n_e_value = jnp.where(
@@ -2111,14 +2169,9 @@ class _IonProperties:
     impurity_fractions: array_typing.FloatVector
 
 
-def _get_ion_properties_from_fractions(
-        impurity_symbols,
-        impurity_params,
-        T_e,
-        Z_i,
-        Z_i_face,
-        Z_eff_from_config,
-        Z_eff_face_from_config):
+def _get_ion_properties_from_fractions(impurity_symbols, impurity_params, T_e,
+                                       Z_i, Z_i_face, Z_eff_from_config,
+                                       Z_eff_face_from_config):
     Z_impurity = charge_states.get_average_charge_state(
         ion_symbols=impurity_symbols,
         T_e=T_e.value,
@@ -2178,7 +2231,7 @@ def get_updated_ions(
     ).Z_mixture
     impurity_params = runtime_params.plasma_composition.impurity
     match impurity_params:
-        case impurity_fractions.RuntimeParamsIF():
+        case RuntimeParamsIF():
             ion_properties = _get_ion_properties_from_fractions(
                 runtime_params.plasma_composition.impurity_names,
                 impurity_params,
