@@ -31,14 +31,14 @@ jax.config.update('jax_enable_x64', True)
 T = TypeVar('T')
 Array: TypeAlias = jax.Array | np.ndarray
 FloatScalar: TypeAlias = jt.Float[Array | float, ""]
-BoolScalar: TypeAlias = jt.Bool[Array | bool, ""]
-IntScalar: TypeAlias = jt.Int[Array | int, ""]
-FloatVector: TypeAlias = jt.Float[Array, "_"]
-BoolVector: TypeAlias = jt.Bool[Array, "_"]
-FloatVectorCell: TypeAlias = jt.Float[Array, "rhon"]
-FloatVectorCellPlusBoundaries: TypeAlias = jt.Float[Array, "rhon+2"]
-FloatMatrixCell: TypeAlias = jt.Float[Array, "rhon rhon"]
-FloatVectorFace: TypeAlias = jt.Float[Array, "rhon+1"]
+BoolScalar: TypeAlias = Any
+IntScalar: TypeAlias = Any
+FloatVector: TypeAlias = Any
+BoolVector: TypeAlias = Any
+FloatVectorCell: TypeAlias = Any
+FloatVectorCellPlusBoundaries: TypeAlias = Any
+FloatMatrixCell: TypeAlias = Any
+FloatVectorFace: TypeAlias = Any
 
 
 def jaxtyped(fn):
