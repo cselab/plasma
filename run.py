@@ -22,8 +22,6 @@ from torax._src.geometry import geometry
 from torax._src.geometry import geometry as geometry_lib
 from torax._src.geometry import geometry_provider
 from torax._src.geometry import standard_geometry
-from torax._src.neoclassical.bootstrap_current import base as bootstrap_current_base
-from torax._src.neoclassical.bootstrap_current import sauter as sauter_current
 from torax._src.neoclassical.conductivity import base as conductivity_base
 from torax._src.neoclassical.conductivity import sauter as sauter_conductivity
 from torax._src.physics import charge_states
@@ -61,11 +59,190 @@ import xarray as xr
 import dataclasses
 import jax
 
+import abc
+import dataclasses
+import jax
+import jax.numpy as jnp
+from torax._src import state
+from torax._src.config import runtime_params_slice
+from torax._src.geometry import geometry as geometry_lib
+from torax._src.torax_pydantic import torax_pydantic
+import dataclasses
+from typing import Annotated, Literal
+import jax
+import jax.numpy as jnp
+from torax._src import array_typing
+from torax._src import jax_utils
+from torax._src import state
+from torax._src.config import runtime_params_slice
+from torax._src.fvm import cell_variable
+from torax._src.geometry import geometry as geometry_lib
+from torax._src.neoclassical import formulas
+from torax._src.physics import collisions
+from torax._src.torax_pydantic import torax_pydantic
+
+
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(kw_only=True, frozen=True)
+class BootstrapCurrent:
+    j_bootstrap: jax.Array
+    j_bootstrap_face: jax.Array
+
+    @classmethod
+    def zeros(cls, geometry):
+        return cls(
+            j_bootstrap=jnp.zeros_like(geometry.rho_norm),
+            j_bootstrap_face=jnp.zeros_like(geometry.rho_face_norm),
+        )
+
+
+class BootstrapCurrentModel(abc.ABC):
+
+    @abc.abstractmethod
+    def calculate_bootstrap_current(
+        self,
+        geometry,
+        core_profiles
+    ):
+        pass
+
+
+class BootstrapCurrentModelConfig(torax_pydantic.BaseModelFrozen, abc.ABC):
+
+    @abc.abstractmethod
+    def build_model(self):
+        pass
+
+class SauterModel(BootstrapCurrentModel):
+
+    def calculate_bootstrap_current(
+        self,
+        geometry,
+        core_profiles
+    ):
+        result = _calculate_bootstrap_current(
+            Z_eff_face=core_profiles.Z_eff_face,
+            Z_i_face=core_profiles.Z_i_face,
+            n_e=core_profiles.n_e,
+            n_i=core_profiles.n_i,
+            T_e=core_profiles.T_e,
+            T_i=core_profiles.T_i,
+            psi=core_profiles.psi,
+            q_face=core_profiles.q_face,
+            geo=geometry,
+        )
+        return BootstrapCurrent(
+            j_bootstrap=result.j_bootstrap,
+            j_bootstrap_face=result.j_bootstrap_face,
+        )
+
+    def __eq__(self, other) -> bool:
+        return isinstance(other, self.__class__)
+
+    def __hash__(self) -> int:
+        return hash(self.__class__)
+
+
+class SauterModelConfig(BootstrapCurrentModelConfig):
+    model_name: Annotated[Literal['sauter'],
+                          torax_pydantic.JAX_STATIC] = 'sauter'
+    bootstrap_multiplier: float = 1.0
+
+    def build_model(self) -> SauterModel:
+        return SauterModel()
+
+
+@jax_utils.jit
+def _calculate_bootstrap_current(
+    *,
+    Z_eff_face: array_typing.FloatVectorFace,
+    Z_i_face: array_typing.FloatVectorFace,
+    n_e: cell_variable.CellVariable,
+    n_i: cell_variable.CellVariable,
+    T_e: cell_variable.CellVariable,
+    T_i: cell_variable.CellVariable,
+    psi: cell_variable.CellVariable,
+    q_face: array_typing.FloatVectorFace,
+    geo: geometry_lib.Geometry,
+):
+    f_trap = formulas.calculate_f_trap(geo)
+    log_lambda_ei = collisions.calculate_log_lambda_ei(T_e.face_value(),
+                                                       n_e.face_value())
+    log_lambda_ii = collisions.calculate_log_lambda_ii(T_i.face_value(),
+                                                       n_i.face_value(),
+                                                       Z_i_face)
+    nu_e_star = formulas.calculate_nu_e_star(
+        q=q_face,
+        geo=geo,
+        n_e=n_e.face_value(),
+        T_e=T_e.face_value(),
+        Z_eff=Z_eff_face,
+        log_lambda_ei=log_lambda_ei,
+    )
+    nu_i_star = formulas.calculate_nu_i_star(
+        q=q_face,
+        geo=geo,
+        n_i=n_i.face_value(),
+        T_i=T_i.face_value(),
+        Z_eff=Z_eff_face,
+        log_lambda_ii=log_lambda_ii,
+    )
+    bootstrap_multiplier = 1.0
+    L31 = formulas.calculate_L31(f_trap, nu_e_star, Z_eff_face)
+    L32 = formulas.calculate_L32(f_trap, nu_e_star, Z_eff_face)
+    L34 = _calculate_L34(f_trap, nu_e_star, Z_eff_face)
+    alpha = _calculate_alpha(f_trap, nu_i_star)
+    prefactor = -geo.F_face * bootstrap_multiplier * 2 * jnp.pi / geo.B_0
+    pe = n_e.face_value() * T_e.face_value() * 1e3 * 1.6e-19
+    pi = n_i.face_value() * T_i.face_value() * 1e3 * 1.6e-19
+    dpsi_drnorm = psi.face_grad()
+    dlnne_drnorm = n_e.face_grad() / n_e.face_value()
+    dlnni_drnorm = n_i.face_grad() / n_i.face_value()
+    dlnte_drnorm = T_e.face_grad() / T_e.face_value()
+    dlnti_drnorm = T_i.face_grad() / T_i.face_value()
+    global_coeff = prefactor[1:] / dpsi_drnorm[1:]
+    global_coeff = jnp.concatenate([jnp.zeros(1), global_coeff])
+    necoeff = L31 * pe
+    nicoeff = L31 * pi
+    tecoeff = (L31 + L32) * pe
+    ticoeff = (L31 + alpha * L34) * pi
+    j_bootstrap_face = global_coeff * (
+        necoeff * dlnne_drnorm + nicoeff * dlnni_drnorm +
+        tecoeff * dlnte_drnorm + ticoeff * dlnti_drnorm)
+    j_bootstrap = geometry_lib.face_to_cell(j_bootstrap_face)
+    return BootstrapCurrent(
+        j_bootstrap=j_bootstrap,
+        j_bootstrap_face=j_bootstrap_face,
+    )
+
+
+def _calculate_L34(
+    f_trap: array_typing.FloatVectorFace,
+    nu_e_star: array_typing.FloatVectorFace,
+    Z_eff: array_typing.FloatVectorFace,
+) -> array_typing.FloatVectorFace:
+    ft34 = f_trap / (1.0 + (1 - 0.1 * f_trap) * jnp.sqrt(nu_e_star) + 0.5 *
+                     (1.0 - 0.5 * f_trap) * nu_e_star / Z_eff)
+    return ((1 + 1.4 / (Z_eff + 1)) * ft34 - 1.9 / (Z_eff + 1) * ft34**2 +
+            0.3 / (Z_eff + 1) * ft34**3 + 0.2 / (Z_eff + 1) * ft34**4)
+
+
+def _calculate_alpha(
+    f_trap: array_typing.FloatVectorFace,
+    nu_i_star: array_typing.FloatVectorFace,
+) -> array_typing.FloatVectorFace:
+    alpha0 = -1.17 * (1 - f_trap) / (1 - 0.22 * f_trap - 0.19 * f_trap**2)
+    alpha = ((alpha0 + 0.25 * (1 - f_trap**2) * jnp.sqrt(nu_i_star)) /
+             (1 + 0.5 * jnp.sqrt(nu_i_star)) + 0.315 * nu_i_star**2 *
+             f_trap**6) / (1 + 0.15 * nu_i_star**2 * f_trap**6)
+    return alpha
+
+
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass
 class NeoclassicalModels:
     conductivity: conductivity_base.ConductivityModel
-    bootstrap_current: bootstrap_current_base.BootstrapCurrentModel
+    bootstrap_current: BootstrapCurrentModel
 
     def __hash__(self) -> int:
         return hash(
@@ -131,7 +308,7 @@ class QeiInfo:
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class SourceProfiles:
-    bootstrap_current: bootstrap_current_base.BootstrapCurrent
+    bootstrap_current: BootstrapCurrent
     qei: QeiInfo
     T_e: dict[str, jax.Array] = dataclasses.field(default_factory=dict)
     T_i: dict[str, jax.Array] = dataclasses.field(default_factory=dict)
@@ -1112,7 +1289,7 @@ def build_source_profiles0(runtime_params,
                           explicit_source_profiles=None,
                           conductivity=None):
     qei = QeiInfo.zeros(geo)
-    bootstrap_current = bootstrap_current_base.BootstrapCurrent.zeros(geo)
+    bootstrap_current = BootstrapCurrent.zeros(geo)
     profiles = SourceProfiles(
         bootstrap_current=bootstrap_current,
         qei=qei,
@@ -1242,9 +1419,9 @@ def _update_standard_source_profiles(
                 calculated_source_profiles.T_e[source_name] = profile
 
 
-def build_all_zero_profiles(geo: geometry.Geometry, ):
+def build_all_zero_profiles(geo):
     return SourceProfiles(
-        bootstrap_current=bootstrap_current_base.BootstrapCurrent.zeros(geo),
+        bootstrap_current=BootstrapCurrent.zeros(geo),
         qei=QeiInfo.zeros(geo),
     )
 
@@ -2693,7 +2870,7 @@ def calculate_total_transport_coeffs(pedestal_model, transport_model,
 
 
 class Neoclassical0(torax_pydantic.BaseModelFrozen):
-    bootstrap_current: sauter_current.SauterModelConfig = pydantic.Field(
+    bootstrap_current: SauterModelConfig = pydantic.Field(
         discriminator="model_name")
     conductivity: sauter_conductivity.SauterModelConfig = (
         torax_pydantic.ValidatedDefault(
