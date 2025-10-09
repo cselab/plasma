@@ -22,6 +22,7 @@ from torax._src.geometry import geometry
 from torax._src.geometry import geometry as geometry_lib
 from torax._src.geometry import geometry_provider
 from torax._src.geometry import standard_geometry
+from torax._src.neoclassical import formulas
 from torax._src.neoclassical.conductivity import base as conductivity_base
 from torax._src.neoclassical.conductivity import sauter as sauter_conductivity
 from torax._src.physics import charge_states
@@ -35,6 +36,7 @@ from torax._src.torax_pydantic import model_base
 from torax._src.torax_pydantic import torax_pydantic
 from typing import Annotated
 from typing import Annotated, Any, Literal, TypeAlias, TypeVar, ClassVar, Final, Mapping, Protocol, Callable
+from typing import Annotated, Literal
 from typing import ClassVar, Protocol
 from typing import Literal
 from typing_extensions import Annotated, Final, override
@@ -56,30 +58,6 @@ import pydantic
 import typing
 import typing_extensions
 import xarray as xr
-import dataclasses
-import jax
-
-import abc
-import dataclasses
-import jax
-import jax.numpy as jnp
-from torax._src import state
-from torax._src.config import runtime_params_slice
-from torax._src.geometry import geometry as geometry_lib
-from torax._src.torax_pydantic import torax_pydantic
-import dataclasses
-from typing import Annotated, Literal
-import jax
-import jax.numpy as jnp
-from torax._src import array_typing
-from torax._src import jax_utils
-from torax._src import state
-from torax._src.config import runtime_params_slice
-from torax._src.fvm import cell_variable
-from torax._src.geometry import geometry as geometry_lib
-from torax._src.neoclassical import formulas
-from torax._src.physics import collisions
-from torax._src.torax_pydantic import torax_pydantic
 
 
 @jax.tree_util.register_dataclass
