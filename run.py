@@ -36,9 +36,6 @@ from torax._src.physics import collisions
 from torax._src.physics import formulas as formulas_ph
 from torax._src.physics import psi_calculations
 from torax._src.physics import scaling_laws
-from torax._src.sources import formulas
-from torax._src.sources import source_profiles
-from torax._src.sources import source_profiles as source_profiles_lib
 from torax._src.torax_pydantic import interpolated_param_1d
 from torax._src.torax_pydantic import interpolated_param_2d
 from torax._src.torax_pydantic import model_base
@@ -66,6 +63,103 @@ import typing
 import typing_extensions
 import xarray as xr
 
+import dataclasses
+from typing import Literal
+import jax
+import jax.numpy as jnp
+from torax._src import constants
+from torax._src.geometry import geometry
+from torax._src.neoclassical.bootstrap_current import base as bootstrap_current_base
+import typing_extensions
+
+
+def exponential_profile(
+    geo: geometry.Geometry,
+    *,
+    decay_start: float,
+    width: float,
+    total: float,
+) -> jax.Array:
+    r = geo.rho_norm
+    S = jnp.exp(-(decay_start - r) / width)
+    C = total / math_utils.volume_integration(S, geo)
+    return C * S
+
+
+def gaussian_profile(
+    geo: geometry.Geometry,
+    *,
+    center: float,
+    width: float,
+    total: float,
+) -> jax.Array:
+    r = geo.rho_norm
+    S = jnp.exp(-((r - center)**2) / (2 * width**2))
+    C = total / math_utils.volume_integration(S, geo)
+    return C * S
+
+
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(frozen=True)
+class QeiInfo:
+    qei_coef: jax.Array
+    implicit_ii: jax.Array
+    explicit_i: jax.Array
+    implicit_ee: jax.Array
+    explicit_e: jax.Array
+    implicit_ie: jax.Array
+    implicit_ei: jax.Array
+
+    @classmethod
+    def zeros(cls, geo: geometry.Geometry) -> typing_extensions.Self:
+        return QeiInfo(
+            qei_coef=jnp.zeros_like(geo.rho),
+            implicit_ii=jnp.zeros_like(geo.rho),
+            explicit_i=jnp.zeros_like(geo.rho),
+            implicit_ee=jnp.zeros_like(geo.rho),
+            explicit_e=jnp.zeros_like(geo.rho),
+            implicit_ie=jnp.zeros_like(geo.rho),
+            implicit_ei=jnp.zeros_like(geo.rho),
+        )
+
+
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(frozen=True)
+class SourceProfiles:
+    bootstrap_current: bootstrap_current_base.BootstrapCurrent
+    qei: QeiInfo
+    T_e: dict[str, jax.Array] = dataclasses.field(default_factory=dict)
+    T_i: dict[str, jax.Array] = dataclasses.field(default_factory=dict)
+    n_e: dict[str, jax.Array] = dataclasses.field(default_factory=dict)
+    psi: dict[str, jax.Array] = dataclasses.field(default_factory=dict)
+
+    @classmethod
+    def merge(
+        cls,
+        explicit_source_profiles: typing_extensions.Self,
+        implicit_source_profiles: typing_extensions.Self,
+    ) -> typing_extensions.Self:
+        sum_profiles = lambda a, b: a + b
+        return jax.tree_util.tree_map(sum_profiles, explicit_source_profiles,
+                                      implicit_source_profiles)
+
+    def total_psi_sources(self, geo: geometry.Geometry) -> jax.Array:
+        total = self.bootstrap_current.j_bootstrap
+        total += sum(self.psi.values())
+        mu0 = constants.CONSTANTS.mu_0
+        prefactor = 8 * geo.vpr * jnp.pi**2 * geo.B_0 * mu0 * geo.Phi_b / geo.F**2
+        return -total * prefactor
+
+    def total_sources(
+        self,
+        source_type: Literal['n_e', 'T_i', 'T_e'],
+        geo: geometry.Geometry,
+    ) -> jax.Array:
+        source: dict[str, jax.Array] = getattr(self, source_type)
+        total = sum(source.values())
+        return total * geo.vpr
+
+
 @enum.unique
 class Mode(enum.Enum):
     ZERO = "ZERO"
@@ -82,8 +176,7 @@ class RuntimeParamsSrc:
 
 
 class SourceModelBase(torax_pydantic.BaseModelFrozen, abc.ABC):
-    mode: Annotated[Mode,
-                    torax_pydantic.JAX_STATIC] = (Mode.ZERO)
+    mode: Annotated[Mode, torax_pydantic.JAX_STATIC] = (Mode.ZERO)
     is_explicit: Annotated[bool, torax_pydantic.JAX_STATIC] = False
     prescribed_values: tuple[torax_pydantic.TimeVaryingArray,
                              ...] = (torax_pydantic.ValidatedDefault(({
@@ -116,7 +209,7 @@ class SourceProfileFunction(Protocol):
         geo: geometry.Geometry,
         source_name: str,
         core_profiles: state.CoreProfiles,
-        calculated_source_profiles: source_profiles.SourceProfiles | None,
+        calculated_source_profiles: SourceProfiles | None,
         unused_conductivity: conductivity_base.Conductivity | None,
     ) -> tuple[array_typing.FloatVectorCell, ...]:
         ...
@@ -172,7 +265,7 @@ class SourceProfileFunction(Protocol):
         geo: geometry.Geometry,
         source_name: str,
         core_profiles: state.CoreProfiles,
-        calculated_source_profiles: source_profiles.SourceProfiles | None,
+        calculated_source_profiles: SourceProfiles | None,
         unused_conductivity: conductivity_base.Conductivity | None,
     ) -> tuple[array_typing.FloatVectorCell, ...]:
         ...
@@ -228,7 +321,7 @@ class SourceProfileFunction(Protocol):
         geo: geometry.Geometry,
         source_name: str,
         core_profiles: state.CoreProfiles,
-        calculated_source_profiles: source_profiles.SourceProfiles | None,
+        calculated_source_profiles: SourceProfiles | None,
         unused_conductivity: conductivity_base.Conductivity | None,
     ) -> tuple[array_typing.FloatVectorCell, ...]:
         ...
@@ -336,8 +429,7 @@ class GenericCurrentSourceConfig(SourceModelBase):
     gaussian_location: torax_pydantic.UnitIntervalTimeVaryingScalar = (
         torax_pydantic.ValidatedDefault(0.4))
     use_absolute_current: bool = False
-    mode: Annotated[Mode, torax_pydantic.JAX_STATIC] = (
-        Mode.MODEL_BASED)
+    mode: Annotated[Mode, torax_pydantic.JAX_STATIC] = (Mode.MODEL_BASED)
 
     @property
     def model_func(self):
@@ -383,10 +475,10 @@ def calc_generic_heat_source(
     absorption_fraction: float,
 ) -> tuple[array_typing.FloatVectorCell, array_typing.FloatVectorCell]:
     absorbed_power = P_total * absorption_fraction
-    profile = formulas.gaussian_profile(geo,
-                                        center=gaussian_location,
-                                        width=gaussian_width,
-                                        total=absorbed_power)
+    profile = gaussian_profile(geo,
+                               center=gaussian_location,
+                               width=gaussian_width,
+                               total=absorbed_power)
     source_ion = profile * (1 - electron_heat_fraction)
     source_el = profile * electron_heat_fraction
     return source_ion, source_el
@@ -397,7 +489,7 @@ def default_formula(
     geo: geometry.Geometry,
     source_name: str,
     unused_core_profiles: state.CoreProfiles,
-    unused_calculated_source_profiles: source_profiles.SourceProfiles | None,
+    unused_calculated_source_profiles: SourceProfiles | None,
     unused_conductivity: conductivity_base.Conductivity | None,
 ):
     source_params = runtime_params.sources[source_name]
@@ -442,8 +534,7 @@ class GenericIonElHeatSourceConfig(SourceModelBase):
         torax_pydantic.ValidatedDefault(0.66666))
     absorption_fraction: torax_pydantic.PositiveTimeVaryingScalar = (
         torax_pydantic.ValidatedDefault(1.0))
-    mode: Annotated[Mode, torax_pydantic.JAX_STATIC] = (
-        Mode.MODEL_BASED)
+    mode: Annotated[Mode, torax_pydantic.JAX_STATIC] = (Mode.MODEL_BASED)
 
     @property
     def model_func(self):
@@ -474,11 +565,11 @@ def calc_generic_particle_source(
     geo: geometry.Geometry,
     source_name: str,
     unused_state: state.CoreProfiles,
-    unused_calculated_source_profiles: source_profiles.SourceProfiles | None,
+    unused_calculated_source_profiles: SourceProfiles | None,
     unused_conductivity: conductivity_base.Conductivity | None,
 ) -> tuple[array_typing.FloatVectorCell, ...]:
     source_params = runtime_params.sources[source_name]
-    return (formulas.gaussian_profile(
+    return (gaussian_profile(
         center=source_params.deposition_location,
         width=source_params.particle_width,
         total=source_params.S_total,
@@ -517,8 +608,7 @@ class GenericParticleSourceConfig(SourceModelBase):
         torax_pydantic.ValidatedDefault(0.0))
     S_total: torax_pydantic.TimeVaryingScalar = torax_pydantic.ValidatedDefault(
         1e22)
-    mode: Annotated[Mode, torax_pydantic.JAX_STATIC] = (
-        Mode.MODEL_BASED)
+    mode: Annotated[Mode, torax_pydantic.JAX_STATIC] = (Mode.MODEL_BASED)
 
     @property
     def model_func(self):
@@ -547,11 +637,11 @@ def calc_pellet_source(
     geo: geometry.Geometry,
     source_name: str,
     unused_state: state.CoreProfiles,
-    unused_calculated_source_profiles: source_profiles.SourceProfiles | None,
+    unused_calculated_source_profiles: SourceProfiles | None,
     unused_conductivity: conductivity_base.Conductivity | None,
 ) -> tuple[array_typing.FloatVectorCell, ...]:
     source_params = runtime_params.sources[source_name]
-    return (formulas.gaussian_profile(
+    return (gaussian_profile(
         center=source_params.pellet_deposition_location,
         width=source_params.pellet_width,
         total=source_params.S_total,
@@ -590,8 +680,7 @@ class PelletSourceConfig(SourceModelBase):
         torax_pydantic.ValidatedDefault(0.85))
     S_total: torax_pydantic.TimeVaryingScalar = torax_pydantic.ValidatedDefault(
         2e22)
-    mode: Annotated[Mode, torax_pydantic.JAX_STATIC] = (
-        Mode.MODEL_BASED)
+    mode: Annotated[Mode, torax_pydantic.JAX_STATIC] = (Mode.MODEL_BASED)
 
     @property
     def model_func(self):
@@ -675,7 +764,7 @@ def fusion_heat_model_func(
     geo: geometry.Geometry,
     unused_source_name: str,
     core_profiles: state.CoreProfiles,
-    unused_calculated_source_profiles: source_profiles.SourceProfiles | None,
+    unused_calculated_source_profiles: SourceProfiles | None,
     unused_conductivity: conductivity_base.Conductivity | None,
 ) -> tuple[array_typing.FloatVectorCell, array_typing.FloatVectorCell]:
     _, Pfus_i, Pfus_e = calc_fusion(
@@ -706,8 +795,7 @@ class FusionHeatSource(Source):
 class FusionHeatSourceConfig(SourceModelBase):
     model_name: Annotated[Literal['bosch_hale'],
                           torax_pydantic.JAX_STATIC] = ('bosch_hale')
-    mode: Annotated[Mode, torax_pydantic.JAX_STATIC] = (
-        Mode.MODEL_BASED)
+    mode: Annotated[Mode, torax_pydantic.JAX_STATIC] = (Mode.MODEL_BASED)
 
     @property
     def model_func(self):
@@ -744,7 +832,7 @@ def calc_puff_source(
     unused_conductivity,
 ):
     source_params = runtime_params.sources[source_name]
-    return (formulas.exponential_profile(
+    return (exponential_profile(
         decay_start=1.0,
         width=source_params.puff_decay_length,
         total=source_params.S_total,
@@ -773,8 +861,7 @@ class GasPuffSourceConfig(SourceModelBase):
         torax_pydantic.ValidatedDefault(0.05))
     S_total: torax_pydantic.TimeVaryingScalar = torax_pydantic.ValidatedDefault(
         1e22)
-    mode: Annotated[Mode, torax_pydantic.JAX_STATIC] = (
-        Mode.MODEL_BASED)
+    mode: Annotated[Mode, torax_pydantic.JAX_STATIC] = (Mode.MODEL_BASED)
 
     @property
     def model_func(self):
@@ -822,14 +909,13 @@ class QeiSource(Source):
         core_profiles: state.CoreProfiles,
     ):
         return jax.lax.cond(
-            runtime_params.sources[self.source_name].mode ==
-            Mode.MODEL_BASED,
+            runtime_params.sources[self.source_name].mode == Mode.MODEL_BASED,
             lambda: _model_based_qei(
                 runtime_params,
                 geo,
                 core_profiles,
             ),
-            lambda: source_profiles.QeiInfo.zeros(geo),
+            lambda: QeiInfo.zeros(geo),
         )
 
     def get_value(
@@ -837,7 +923,7 @@ class QeiSource(Source):
         runtime_params: runtime_params_slice.RuntimeParams,
         geo: geometry.Geometry,
         core_profiles: state.CoreProfiles,
-        calculated_source_profiles: source_profiles.SourceProfiles | None,
+        calculated_source_profiles: SourceProfiles | None,
         conductivity: conductivity_base.Conductivity | None,
     ):
         raise NotImplementedError('Call get_qei() instead.')
@@ -893,7 +979,7 @@ def _model_based_qei(runtime_params, geo, core_profiles):
         explicit_e = zeros
         implicit_ie = qei_coef
         implicit_ei = qei_coef
-    return source_profiles.QeiInfo(
+    return QeiInfo(
         qei_coef=qei_coef,
         implicit_ii=implicit_ii,
         explicit_i=explicit_i,
@@ -906,8 +992,7 @@ def _model_based_qei(runtime_params, geo, core_profiles):
 
 class QeiSourceConfig(SourceModelBase):
     Qei_multiplier: float = 1.0
-    mode: Annotated[Mode, torax_pydantic.JAX_STATIC] = (
-        Mode.MODEL_BASED)
+    mode: Annotated[Mode, torax_pydantic.JAX_STATIC] = (Mode.MODEL_BASED)
 
     @property
     def model_func(self):
@@ -1034,7 +1119,7 @@ def build_source_profiles(runtime_params,
             '`explicit_source_profiles` must be provided if explicit is False.'
         )
     if explicit:
-        qei = source_profiles.QeiInfo.zeros(geo)
+        qei = QeiInfo.zeros(geo)
         bootstrap_current = bootstrap_current_base.BootstrapCurrent.zeros(geo)
     else:
         qei = source_models.qei_source.get_qei(
@@ -1045,7 +1130,7 @@ def build_source_profiles(runtime_params,
         bootstrap_current = (
             neoclassical_models.bootstrap_current.calculate_bootstrap_current(
                 runtime_params, geo, core_profiles))
-    profiles = source_profiles.SourceProfiles(
+    profiles = SourceProfiles(
         bootstrap_current=bootstrap_current,
         qei=qei,
         T_e=explicit_source_profiles.T_e if explicit_source_profiles else {},
@@ -1067,7 +1152,7 @@ def build_source_profiles(runtime_params,
 
 def build_standard_source_profiles(
     *,
-    calculated_source_profiles: source_profiles.SourceProfiles,
+    calculated_source_profiles: SourceProfiles,
     runtime_params: runtime_params_slice.RuntimeParams,
     geo: geometry.Geometry,
     core_profiles: state.CoreProfiles,
@@ -1111,7 +1196,7 @@ def build_standard_source_profiles(
 
 
 def _update_standard_source_profiles(
-    calculated_source_profiles: source_profiles.SourceProfiles,
+    calculated_source_profiles: SourceProfiles,
     source_name: str,
     affected_core_profiles: tuple[AffectedCoreProfile, ...],
     profile: tuple[array_typing.FloatVectorCell, ...],
@@ -1131,9 +1216,9 @@ def _update_standard_source_profiles(
 
 
 def build_all_zero_profiles(geo: geometry.Geometry, ):
-    return source_profiles.SourceProfiles(
+    return SourceProfiles(
         bootstrap_current=bootstrap_current_base.BootstrapCurrent.zeros(geo),
-        qei=source_profiles.QeiInfo.zeros(geo),
+        qei=QeiInfo.zeros(geo),
     )
 
 
@@ -3016,7 +3101,7 @@ def _get_integrated_source_value(
 def _calculate_integrated_sources(
     geo: geometry.Geometry,
     core_profiles: state.CoreProfiles,
-    core_sources: source_profiles.SourceProfiles,
+    core_sources: SourceProfiles,
     runtime_params: runtime_params_slice.RuntimeParams,
 ):
     integrated = {}
@@ -4231,7 +4316,7 @@ class CoeffsCallback:
         geo: geometry.Geometry,
         core_profiles: state.CoreProfiles,
         x: tuple[cell_variable.CellVariable, ...],
-        explicit_source_profiles: source_profiles_lib.SourceProfiles,
+        explicit_source_profiles: SourceProfiles,
         allow_pereverzev: bool = False,
         explicit_call: bool = False,
     ):
@@ -4770,7 +4855,7 @@ class Solver(abc.ABC):
         geo_t_plus_dt: geometry.Geometry,
         core_profiles_t: state.CoreProfiles,
         core_profiles_t_plus_dt: state.CoreProfiles,
-        explicit_source_profiles: source_profiles.SourceProfiles,
+        explicit_source_profiles: SourceProfiles,
     ) -> tuple[
             tuple[cell_variable.CellVariable, ...],
             state.SolverNumericOutputs,
@@ -4807,7 +4892,7 @@ class Solver(abc.ABC):
         geo_t_plus_dt: geometry.Geometry,
         core_profiles_t: state.CoreProfiles,
         core_profiles_t_plus_dt: state.CoreProfiles,
-        explicit_source_profiles: source_profiles.SourceProfiles,
+        explicit_source_profiles: SourceProfiles,
         evolving_names: tuple[str, ...],
     ) -> tuple[
             tuple[cell_variable.CellVariable, ...],
@@ -4833,7 +4918,7 @@ def predictor_corrector_method(
     x_new_guess: tuple[cell_variable.CellVariable, ...],
     core_profiles_t_plus_dt: state.CoreProfiles,
     coeffs_exp,
-    explicit_source_profiles: source_profiles.SourceProfiles,
+    explicit_source_profiles: SourceProfiles,
     coeffs_callback: CoeffsCallback,
 ) -> tuple[cell_variable.CellVariable, ...]:
     solver_params = runtime_params_t_plus_dt.solver
@@ -4889,7 +4974,7 @@ class LinearThetaMethod0(Solver):
         geo_t_plus_dt: geometry.Geometry,
         core_profiles_t: state.CoreProfiles,
         core_profiles_t_plus_dt: state.CoreProfiles,
-        explicit_source_profiles: source_profiles.SourceProfiles,
+        explicit_source_profiles: SourceProfiles,
         evolving_names: tuple[str, ...],
     ) -> tuple[
             tuple[cell_variable.CellVariable, ...],
@@ -5192,8 +5277,8 @@ class StateHistory:
         stack = lambda *ys: np.stack(ys)
         self._stacked_core_profiles: state.CoreProfiles = jax.tree_util.tree_map(
             stack, *self._core_profiles)
-        self._stacked_core_sources: source_profiles_lib.SourceProfiles = (
-            jax.tree_util.tree_map(stack, *self._core_sources))
+        self._stacked_core_sources: SourceProfiles = (jax.tree_util.tree_map(
+            stack, *self._core_sources))
         self._stacked_core_transport: state.CoreTransport = jax.tree_util.tree_map(
             stack, *self._transport)
         self._stacked_post_processed_outputs: (
@@ -5600,7 +5685,7 @@ class ToraxSimState:
     dt: array_typing.FloatScalar
     core_profiles: state.CoreProfiles
     core_transport: state.CoreTransport
-    core_sources: source_profiles.SourceProfiles
+    core_sources: SourceProfiles
     geometry: Any
     solver_numeric_outputs: state.SolverNumericOutputs
 
