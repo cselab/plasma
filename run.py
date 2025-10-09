@@ -149,14 +149,7 @@ TimeRhoInterpolatedInput: TypeAlias = (
     ])
 
 
-class InterpolatedParamBase(abc.ABC):
-
-    @abc.abstractmethod
-    def get_value(self, x: chex.Numeric) -> Array:
-        pass
-
-
-class _PiecewiseLinearInterpolatedParam(InterpolatedParamBase):
+class _PiecewiseLinearInterpolatedParam:
 
     def __init__(self, xs: Array, ys: Array):
         self._xs = xs
@@ -239,7 +232,7 @@ def convert_input_to_xs_ys(interp_input):
 
 
 @jax.tree_util.register_pytree_node_class
-class InterpolatedVarSingleAxis(InterpolatedParamBase):
+class InterpolatedVarSingleAxis:
 
     def __init__(
         self,
@@ -288,7 +281,7 @@ class InterpolatedVarSingleAxis(InterpolatedParamBase):
 
 
 @jax.tree_util.register_pytree_node_class
-class InterpolatedVarTimeRho(InterpolatedParamBase):
+class InterpolatedVarTimeRho:
 
     def __init__(
         self,
