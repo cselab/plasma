@@ -1,12 +1,3 @@
-import functools
-import os
-from typing import Any, ParamSpec, TypeAlias, TypeVar
-import jax
-from jax import numpy as jnp
-import numpy as np
-from typing import Annotated, TypeAlias
-import numpy as np
-import pydantic
 from absl import logging
 from collections.abc import Callable
 from collections.abc import Mapping
@@ -18,13 +9,16 @@ from typing import Annotated
 from typing import Annotated, Any, Final, TypeAlias
 from typing import Annotated, Any, Literal, TypeAlias, TypeVar, ClassVar, Final, Mapping, Protocol, Callable
 from typing import Annotated, Literal
+from typing import Annotated, TypeAlias
 from typing import Any, Callable, TYPE_CHECKING, TypeVar
 from typing import Any, Final, Mapping, Sequence, TypeAlias
 from typing import Any, Literal, TypeAlias
+from typing import Any, ParamSpec, TypeAlias, TypeVar
 from typing import ClassVar, Protocol
 from typing import Final, Mapping
 from typing import Literal
 from typing import TypeAlias
+from typing import TypeAlias, TypeVar
 from typing_extensions import Annotated
 from typing_extensions import Annotated, Final, override
 from typing_extensions import Self
@@ -50,12 +44,7 @@ import torax
 import typing
 import typing_extensions
 import xarray as xr
-from typing import TypeAlias, TypeVar
-import jax
-import jaxtyping as jt
-import numpy as np
 
-T = TypeVar("T")
 T = TypeVar('T')
 @functools.cache
 def get_dtype():
