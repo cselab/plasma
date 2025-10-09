@@ -43,7 +43,6 @@ from torax._src.sources import source
 from torax._src.sources import source as source_lib
 from torax._src.sources import source_profiles
 from torax._src.sources import source_profiles as source_profiles_lib
-from torax._src.sources.impurity_radiation_heat_sink import impurity_radiation_heat_sink
 from torax._src.torax_pydantic import interpolated_param_1d
 from torax._src.torax_pydantic import interpolated_param_2d
 from torax._src.torax_pydantic import model_base
@@ -841,8 +840,12 @@ class Sources(torax_pydantic.BaseModelFrozen):
         )
 
 
+@dataclasses.dataclass(kw_only=True, frozen=True, eq=True)
+class ImpurityRadiationHeatSink(source_lib.Source):
+    SOURCE_NAME = "impurity_radiation"
+    model_func: source_lib.SourceProfileFunction
 _FINAL_SOURCES = frozenset(
-    [impurity_radiation_heat_sink.ImpurityRadiationHeatSink.SOURCE_NAME])
+    [ImpurityRadiationHeatSink.SOURCE_NAME])
 
 
 @functools.partial(
