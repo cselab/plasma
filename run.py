@@ -4,8 +4,6 @@ from collections.abc import Sequence
 from collections.abc import Set
 from fusion_surrogates.qlknn import qlknn_model
 from jax import numpy as jnp
-from typing import Annotated
-from typing import Annotated, Any, Final, TypeAlias
 from typing import Annotated, Any, Literal, TypeAlias, TypeVar, ClassVar, Final, Mapping, Protocol, Callable
 from typing import Annotated, Literal
 from typing import Annotated, TypeAlias
