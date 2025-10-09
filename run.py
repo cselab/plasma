@@ -45,21 +45,6 @@ import torax
 import typing
 import typing_extensions
 import xarray as xr
-import chex
-from jax import numpy as jnp
-from torax._src import array_typing
-from torax._src import math_utils
-from jax import numpy as jnp
-from torax._src import jax_utils
-from torax._src import math_utils
-import enum
-import dataclasses
-import chex
-import jax
-from jax import numpy as jnp
-import jaxtyping as jt
-from torax._src import array_typing
-import typing_extensions
 
 
 @enum.unique
