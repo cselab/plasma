@@ -126,7 +126,7 @@ class SauterModelConfig(BootstrapCurrentModelConfig):
                           torax_pydantic.JAX_STATIC] = 'sauter'
     bootstrap_multiplier: float = 1.0
 
-    def build_model(self) -> SauterModel:
+    def build_model(self):
         return SauterModel()
 
 
