@@ -2673,21 +2673,6 @@ class Source(abc.ABC):
                 raise ValueError(f'Unknown mode: {mode}')
 
 
-@typing.runtime_checkable
-class SourceProfileFunction(typing.Protocol):
-
-    def __call__(
-        self,
-        runtime_params: RuntimeParamsSlice,
-        geo: Geometry,
-        source_name: str,
-        core_profiles: CoreProfiles,
-        calculated_source_profiles: SourceProfiles | None,
-        unused_conductivity: Conductivity | None,
-    ) -> tuple[FloatVectorCell, ...]:
-        ...
-
-
 @enum.unique
 class AffectedCoreProfile(enum.IntEnum):
     PSI = 1
@@ -2727,22 +2712,6 @@ class Source(abc.ABC):
                 )
             case _:
                 raise ValueError(f'Unknown mode: {mode}')
-
-
-@typing.runtime_checkable
-class SourceProfileFunction(typing.Protocol):
-
-    def __call__(
-        self,
-        runtime_params: RuntimeParamsSlice,
-        geo: Geometry,
-        source_name: str,
-        core_profiles: CoreProfiles,
-        calculated_source_profiles: SourceProfiles | None,
-        unused_conductivity: Conductivity | None,
-    ) -> tuple[FloatVectorCell, ...]:
-        ...
-
 
 @enum.unique
 class AffectedCoreProfile(enum.IntEnum):
