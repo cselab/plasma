@@ -40,7 +40,6 @@ from torax._src.sources import base
 from torax._src.sources import generic_current_source as generic_current_source_lib
 from torax._src.sources import generic_ion_el_heat_source as generic_ion_el_heat_source_lib
 from torax._src.sources import generic_particle_source as generic_particle_source_lib
-from torax._src.sources import pellet_source as pellet_source_lib
 from torax._src.sources import runtime_params as runtime_params_lib
 from torax._src.sources import source
 from torax._src.sources import source as source_lib
@@ -119,6 +118,94 @@ from torax._src.sources import runtime_params as runtime_params_lib
 from torax._src.sources import source
 from torax._src.sources import source_profiles
 from torax._src.torax_pydantic import torax_pydantic
+
+import dataclasses
+from typing import Annotated, ClassVar, Literal
+import chex
+import jax
+from torax._src import array_typing
+from torax._src import state
+from torax._src.config import runtime_params_slice
+from torax._src.geometry import geometry
+from torax._src.neoclassical.conductivity import base as conductivity_base
+from torax._src.sources import base
+from torax._src.sources import formulas
+from torax._src.sources import runtime_params as runtime_params_lib
+from torax._src.sources import source
+from torax._src.sources import source_profiles
+from torax._src.torax_pydantic import torax_pydantic
+
+
+def calc_pellet_source(
+    runtime_params: runtime_params_slice.RuntimeParams,
+    geo: geometry.Geometry,
+    source_name: str,
+    unused_state: state.CoreProfiles,
+    unused_calculated_source_profiles: source_profiles.SourceProfiles | None,
+    unused_conductivity: conductivity_base.Conductivity | None,
+) -> tuple[array_typing.FloatVectorCell, ...]:
+    source_params = runtime_params.sources[source_name]
+    return (formulas.gaussian_profile(
+        center=source_params.pellet_deposition_location,
+        width=source_params.pellet_width,
+        total=source_params.S_total,
+        geo=geo,
+    ), )
+
+
+@dataclasses.dataclass(kw_only=True, frozen=True, eq=True)
+class PelletSource(source.Source):
+    SOURCE_NAME: ClassVar[str] = 'pellet'
+    model_func: source.SourceProfileFunction = calc_pellet_source
+
+    @property
+    def source_name(self) -> str:
+        return self.SOURCE_NAME
+
+    @property
+    def affected_core_profiles(self) -> tuple[source.AffectedCoreProfile, ...]:
+        return (source.AffectedCoreProfile.NE, )
+
+
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(frozen=True)
+class RuntimeParamsPE(runtime_params_lib.RuntimeParams):
+    pellet_width: array_typing.FloatScalar
+    pellet_deposition_location: array_typing.FloatScalar
+    S_total: array_typing.FloatScalar
+
+
+class PelletSourceConfig(base.SourceModelBase):
+    model_name: Annotated[Literal['gaussian'],
+                          torax_pydantic.JAX_STATIC] = ('gaussian')
+    pellet_width: torax_pydantic.TimeVaryingScalar = (
+        torax_pydantic.ValidatedDefault(0.1))
+    pellet_deposition_location: torax_pydantic.TimeVaryingScalar = (
+        torax_pydantic.ValidatedDefault(0.85))
+    S_total: torax_pydantic.TimeVaryingScalar = torax_pydantic.ValidatedDefault(
+        2e22)
+    mode: Annotated[runtime_params_lib.Mode, torax_pydantic.JAX_STATIC] = (
+        runtime_params_lib.Mode.MODEL_BASED)
+
+    @property
+    def model_func(self) -> source.SourceProfileFunction:
+        return calc_pellet_source
+
+    def build_runtime_params(self, t):
+        return RuntimeParamsPE(
+            prescribed_values=tuple(
+                [v.get_value(t) for v in self.prescribed_values]),
+            mode=self.mode,
+            is_explicit=self.is_explicit,
+            pellet_width=self.pellet_width.get_value(t),
+            pellet_deposition_location=self.pellet_deposition_location.
+            get_value(t),
+            S_total=self.S_total.get_value(t),
+        )
+
+    def build_source(self) -> PelletSource:
+        return PelletSource(model_func=self.model_func)
+
 
 def calc_fusion(
     geo: geometry.Geometry,
@@ -234,6 +321,7 @@ class FusionHeatSourceConfig(base.SourceModelBase):
     def build_source(self) -> FusionHeatSource:
         return FusionHeatSource(model_func=self.model_func)
 
+
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class RuntimeParamsPS(runtime_params_lib.RuntimeParams):
@@ -286,10 +374,7 @@ class GasPuffSourceConfig(base.SourceModelBase):
     def model_func(self) -> source.SourceProfileFunction:
         return calc_puff_source
 
-    def build_runtime_params(
-        self,
-        t
-    ):
+    def build_runtime_params(self, t):
         return RuntimeParamsPS(
             prescribed_values=tuple(
                 [v.get_value(t) for v in self.prescribed_values]),
@@ -381,11 +466,7 @@ class SourceModels:
         return hash(tuple(hashes))
 
 
-def _model_based_qei(
-        runtime_params,
-        geo,
-        core_profiles
-):
+def _model_based_qei(runtime_params, geo, core_profiles):
     source_params = runtime_params.sources[QeiSource.SOURCE_NAME]
     zeros = jnp.zeros_like(geo.rho_norm)
     qei_coef = collisions.coll_exchange(
@@ -474,7 +555,7 @@ class Sources(torax_pydantic.BaseModelFrozen):
         discriminator='model_name',
         default=None,
     )
-    pellet: pellet_source_lib.PelletSourceConfig | None = pydantic.Field(
+    pellet: PelletSourceConfig | None = pydantic.Field(
         discriminator='model_name',
         default=None,
     )
@@ -487,20 +568,17 @@ class Sources(torax_pydantic.BaseModelFrozen):
             match k:
                 case 'gas_puff':
                     if 'model_name' not in v:
-                        constructor_data[k][
-                            'model_name'] = 'exponential'
+                        constructor_data[k]['model_name'] = 'exponential'
                 case 'generic_particle':
                     if 'model_name' not in v:
                         constructor_data[k][
                             'model_name'] = generic_particle_source_lib.DEFAULT_MODEL_FUNCTION_NAME
                 case 'pellet':
                     if 'model_name' not in v:
-                        constructor_data[k][
-                            'model_name'] = pellet_source_lib.DEFAULT_MODEL_FUNCTION_NAME
+                        constructor_data[k]['model_name'] = 'gaussian'
                 case 'fusion':
                     if 'model_name' not in v:
-                        constructor_data[k][
-                            'model_name'] = 'bosch_hale'
+                        constructor_data[k]['model_name'] = 'bosch_hale'
                 case 'generic_heat':
                     if 'model_name' not in v:
                         constructor_data[k][
@@ -654,14 +732,8 @@ def build_all_zero_profiles(
     )
 
 
-def get_all_source_profiles(
-    runtime_params,
-    geo,
-    core_profiles,
-    source_models,
-    neoclassical_models,
-    conductivity
-):
+def get_all_source_profiles(runtime_params, geo, core_profiles, source_models,
+                            neoclassical_models, conductivity):
     explicit_source_profiles = build_source_profiles(
         runtime_params=runtime_params,
         geo=geo,
@@ -2626,7 +2698,7 @@ def make_post_processed_outputs(
             sim_state.geometry,
         ))
     FFprime_face = formulas_ph.calc_FFprime(sim_state.core_profiles,
-                                         sim_state.geometry)
+                                            sim_state.geometry)
     psi_face = sim_state.core_profiles.psi.face_value()
     psi_norm_face = (psi_face - psi_face[0]) / (psi_face[-1] - psi_face[0])
     integrated_sources = _calculate_integrated_sources(
@@ -2964,8 +3036,8 @@ def _get_ion_properties_from_fractions(impurity_symbols, impurity_params, T_e,
         Z_eff_edge == 1.0,
         1.0,
         formulas_ph.calculate_main_ion_dilution_factor(Z_i_face[-1],
-                                                    Z_impurity_face[-1],
-                                                    Z_eff_edge),
+                                                       Z_impurity_face[-1],
+                                                       Z_eff_edge),
     )
     return _IonProperties(
         A_impurity=impurity_params.A_avg,
@@ -3142,13 +3214,8 @@ def _get_initial_psi_mode(
     return psi_mode
 
 
-def _init_psi_and_psi_derived(
-    runtime_params,
-    geo,
-    core_profiles,
-    source_models,
-    neoclassical_models
-):
+def _init_psi_and_psi_derived(runtime_params, geo, core_profiles,
+                              source_models, neoclassical_models):
     sources_are_calculated = False
     source_profiles = build_all_zero_profiles(geo)
     initial_psi_mode = _get_initial_psi_mode(runtime_params, geo)
@@ -3237,16 +3304,10 @@ def _init_psi_and_psi_derived(
     return core_profiles
 
 
-def _calculate_all_psi_dependent_profiles(
-    runtime_params,
-    geo,
-    psi,
-    core_profiles,
-    source_profiles,
-    source_models,
-    neoclassical_models,
-    sources_are_calculated
-):
+def _calculate_all_psi_dependent_profiles(runtime_params, geo, psi,
+                                          core_profiles, source_profiles,
+                                          source_models, neoclassical_models,
+                                          sources_are_calculated):
     j_total, j_total_face, Ip_profile_face = psi_calculations.calc_j_total(
         geo, psi)
     core_profiles = dataclasses.replace(
@@ -3303,14 +3364,11 @@ def _calculate_all_psi_dependent_profiles(
     return core_profiles
 
 
-def _get_bootstrap_and_standard_source_profiles(
-    runtime_params,
-    geo,
-    core_profiles,
-    neoclassical_models,
-    source_models,
-    source_profiles
-):
+def _get_bootstrap_and_standard_source_profiles(runtime_params, geo,
+                                                core_profiles,
+                                                neoclassical_models,
+                                                source_models,
+                                                source_profiles):
     build_standard_source_profiles(
         runtime_params=runtime_params,
         geo=geo,
@@ -4646,8 +4704,7 @@ def get_consistent_runtime_params_and_geometry(*, t, runtime_params_provider,
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class PhysicsModels:
-    source_models: SourceModels = dataclasses.field(
-        metadata=dict(static=True))
+    source_models: SourceModels = dataclasses.field(metadata=dict(static=True))
     transport_model: TransportModel = dataclasses.field(metadata=dict(
         static=True))
     pedestal_model: PedestalModel = dataclasses.field(metadata=dict(
@@ -5140,12 +5197,7 @@ class Geometry:
     _z_magnetic_axis: array_typing.FloatScalar | None
 
 
-def update_geometries_with_Phibdot(
-    *,
-    dt,
-    geo_t,
-    geo_t_plus_dt
-):
+def update_geometries_with_Phibdot(*, dt, geo_t, geo_t_plus_dt):
     Phibdot = (geo_t_plus_dt.Phi_b - geo_t.Phi_b) / dt
     geo_t = dataclasses.replace(geo_t, Phi_b_dot=Phibdot)
     geo_t_plus_dt = dataclasses.replace(geo_t_plus_dt, Phi_b_dot=Phibdot)
