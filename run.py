@@ -40,7 +40,6 @@ from torax._src.sources import base
 from torax._src.sources import formulas
 from torax._src.sources import generic_current_source as generic_current_source_lib
 from torax._src.sources import generic_ion_el_heat_source as generic_ion_el_heat_source_lib
-from torax._src.sources import generic_particle_source as generic_particle_source_lib
 from torax._src.sources import runtime_params as runtime_params_lib
 from torax._src.sources import source
 from torax._src.sources import source as source_lib
@@ -86,6 +85,94 @@ import numpy as np
 import pydantic
 import typing_extensions
 import xarray as xr
+
+import dataclasses
+from typing import Annotated, ClassVar, Literal
+import chex
+import jax
+from torax._src import array_typing
+from torax._src import state
+from torax._src.config import runtime_params_slice
+from torax._src.geometry import geometry
+from torax._src.neoclassical.conductivity import base as conductivity_base
+from torax._src.sources import base
+from torax._src.sources import formulas
+from torax._src.sources import runtime_params as runtime_params_lib
+from torax._src.sources import source
+from torax._src.sources import source_profiles
+from torax._src.torax_pydantic import torax_pydantic
+
+def calc_generic_particle_source(
+    runtime_params: runtime_params_slice.RuntimeParams,
+    geo: geometry.Geometry,
+    source_name: str,
+    unused_state: state.CoreProfiles,
+    unused_calculated_source_profiles: source_profiles.SourceProfiles | None,
+    unused_conductivity: conductivity_base.Conductivity | None,
+) -> tuple[array_typing.FloatVectorCell, ...]:
+    source_params = runtime_params.sources[source_name]
+    return (formulas.gaussian_profile(
+        center=source_params.deposition_location,
+        width=source_params.particle_width,
+        total=source_params.S_total,
+        geo=geo,
+    ), )
+
+
+@dataclasses.dataclass(kw_only=True, frozen=True, eq=True)
+class GenericParticleSource(source.Source):
+    SOURCE_NAME: ClassVar[str] = 'generic_particle'
+    model_func: source.SourceProfileFunction = calc_generic_particle_source
+
+    @property
+    def source_name(self) -> str:
+        return self.SOURCE_NAME
+
+    @property
+    def affected_core_profiles(self) -> tuple[source.AffectedCoreProfile, ...]:
+        return (source.AffectedCoreProfile.NE, )
+
+
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(frozen=True)
+class RuntimeParamsPaSo(runtime_params_lib.RuntimeParams):
+    particle_width: array_typing.FloatScalar
+    deposition_location: array_typing.FloatScalar
+    S_total: array_typing.FloatScalar
+
+
+class GenericParticleSourceConfig(base.SourceModelBase):
+    model_name: Annotated[Literal['gaussian'],
+                          torax_pydantic.JAX_STATIC] = ('gaussian')
+    particle_width: torax_pydantic.TimeVaryingScalar = (
+        torax_pydantic.ValidatedDefault(0.25))
+    deposition_location: torax_pydantic.TimeVaryingScalar = (
+        torax_pydantic.ValidatedDefault(0.0))
+    S_total: torax_pydantic.TimeVaryingScalar = torax_pydantic.ValidatedDefault(
+        1e22)
+    mode: Annotated[runtime_params_lib.Mode, torax_pydantic.JAX_STATIC] = (
+        runtime_params_lib.Mode.MODEL_BASED)
+
+    @property
+    def model_func(self) -> source.SourceProfileFunction:
+        return calc_generic_particle_source
+
+    def build_runtime_params(
+        self,
+        t: chex.Numeric,
+    ):
+        return RuntimeParamsPaSo(
+            prescribed_values=tuple(
+                [v.get_value(t) for v in self.prescribed_values]),
+            mode=self.mode,
+            is_explicit=self.is_explicit,
+            particle_width=self.particle_width.get_value(t),
+            deposition_location=self.deposition_location.get_value(t),
+            S_total=self.S_total.get_value(t),
+        )
+
+    def build_source(self) -> GenericParticleSource:
+        return GenericParticleSource(model_func=self.model_func)
 
 
 def calc_pellet_source(
@@ -498,7 +585,7 @@ class Sources(torax_pydantic.BaseModelFrozen):
                        discriminator='model_name',
                        default=None,
                    )
-    generic_particle: (generic_particle_source_lib.GenericParticleSourceConfig
+    generic_particle: (GenericParticleSourceConfig
                        | None) = pydantic.Field(
                            discriminator='model_name',
                            default=None,
@@ -524,7 +611,7 @@ class Sources(torax_pydantic.BaseModelFrozen):
                 case 'generic_particle':
                     if 'model_name' not in v:
                         constructor_data[k][
-                            'model_name'] = generic_particle_source_lib.DEFAULT_MODEL_FUNCTION_NAME
+                            'model_name'] = 'gaussian'
                 case 'pellet':
                     if 'model_name' not in v:
                         constructor_data[k]['model_name'] = 'gaussian'
