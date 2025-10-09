@@ -23,8 +23,6 @@ from torax._src.geometry import geometry as geometry_lib
 from torax._src.geometry import geometry_provider
 from torax._src.geometry import standard_geometry
 from torax._src.neoclassical import formulas
-from torax._src.neoclassical.conductivity import base as conductivity_base
-from torax._src.neoclassical.conductivity import sauter as sauter_conductivity
 from torax._src.physics import charge_states
 from torax._src.physics import collisions
 from torax._src.physics import formulas as formulas_ph
@@ -59,7 +57,118 @@ import typing
 import typing_extensions
 import xarray as xr
 
+import abc
+import dataclasses
+import jax
+from torax._src import array_typing
+from torax._src import state
+from torax._src.geometry import geometry as geometry_lib
+from torax._src.torax_pydantic import torax_pydantic
+from typing import Annotated, Literal
+import jax.numpy as jnp
+from torax._src import array_typing
+from torax._src import jax_utils
+from torax._src.fvm import cell_variable
+from torax._src.geometry import geometry as geometry_lib
+from torax._src.neoclassical import formulas
+from torax._src.physics import collisions
+from torax._src.torax_pydantic import torax_pydantic
 
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(kw_only=True, frozen=True)
+class Conductivity:
+    sigma: array_typing.FloatVectorCell
+    sigma_face: array_typing.FloatVectorFace
+
+
+class ConductivityModel(abc.ABC):
+
+    @abc.abstractmethod
+    def calculate_conductivity(
+        self,
+        geometry: geometry_lib.Geometry,
+        core_profiles: state.CoreProfiles,
+    ) -> Conductivity:
+        pass
+
+
+class ConductivityModelConfig(torax_pydantic.BaseModelFrozen, abc.ABC):
+
+    @abc.abstractmethod
+    def build_model(self) -> ConductivityModel:
+        pass
+
+
+@jax_utils.jit
+def _calculate_conductivity0(
+    *,
+    Z_eff_face: array_typing.FloatVectorFace,
+    n_e: cell_variable.CellVariable,
+    T_e: cell_variable.CellVariable,
+    q_face: array_typing.FloatVectorFace,
+    geo: geometry_lib.Geometry,
+):
+    f_trap = formulas.calculate_f_trap(geo)
+    NZ = 0.58 + 0.74 / (0.76 + Z_eff_face)
+    log_lambda_ei = collisions.calculate_log_lambda_ei(T_e.face_value(),
+                                                       n_e.face_value())
+    sigsptz = (1.9012e04 * (T_e.face_value() * 1e3)**1.5 / Z_eff_face / NZ /
+               log_lambda_ei)
+    nu_e_star_face = formulas.calculate_nu_e_star(
+        q=q_face,
+        geo=geo,
+        n_e=n_e.face_value(),
+        T_e=T_e.face_value(),
+        Z_eff=Z_eff_face,
+        log_lambda_ei=log_lambda_ei,
+    )
+    ft33 = f_trap / (1.0 +
+                     (0.55 - 0.1 * f_trap) * jnp.sqrt(nu_e_star_face) + 0.45 *
+                     (1.0 - f_trap) * nu_e_star_face / (Z_eff_face**1.5))
+    signeo_face = 1.0 - ft33 * (1.0 + 0.36 / Z_eff_face - ft33 *
+                                (0.59 / Z_eff_face - 0.23 / Z_eff_face * ft33))
+    sigma_face = sigsptz * signeo_face
+    sigmaneo_cell = geometry_lib.face_to_cell(sigma_face)
+    return Conductivity(
+        sigma=sigmaneo_cell,
+        sigma_face=sigma_face,
+    )
+
+
+class SauterModelCond(ConductivityModel):
+
+    def calculate_conductivity(
+        self,
+        geometry,
+        core_profiles,
+    ):
+        result = _calculate_conductivity0(
+            Z_eff_face=core_profiles.Z_eff_face,
+            n_e=core_profiles.n_e,
+            T_e=core_profiles.T_e,
+            q_face=core_profiles.q_face,
+            geo=geometry,
+        )
+        return Conductivity(
+            sigma=result.sigma,
+            sigma_face=result.sigma_face,
+        )
+
+    def __eq__(self, other) -> bool:
+        return isinstance(other, self.__class__)
+
+    def __hash__(self) -> int:
+        return hash(self.__class__)
+
+
+class SauterModelConfigCond(ConductivityModelConfig):
+    model_name: Annotated[Literal['sauter'],
+                          torax_pydantic.JAX_STATIC] = 'sauter'
+
+    def build_model(self):
+        return SauterModelCond()
+
+    
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(kw_only=True, frozen=True)
 class BootstrapCurrent:
@@ -199,7 +308,7 @@ def _calculate_alpha(f_trap, nu_i_star):
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass
 class NeoclassicalModels:
-    conductivity: conductivity_base.ConductivityModel
+    conductivity: ConductivityModel
     bootstrap_current: BootstrapCurrentModel
 
     def __hash__(self):
@@ -342,7 +451,7 @@ class SourceProfileFunction(Protocol):
         source_name: str,
         core_profiles: state.CoreProfiles,
         calculated_source_profiles: SourceProfiles | None,
-        unused_conductivity: conductivity_base.Conductivity | None,
+        unused_conductivity: Conductivity | None,
     ) -> tuple[array_typing.FloatVectorCell, ...]:
         ...
 
@@ -398,7 +507,7 @@ class SourceProfileFunction(Protocol):
         source_name: str,
         core_profiles: state.CoreProfiles,
         calculated_source_profiles: SourceProfiles | None,
-        unused_conductivity: conductivity_base.Conductivity | None,
+        unused_conductivity: Conductivity | None,
     ) -> tuple[array_typing.FloatVectorCell, ...]:
         ...
 
@@ -454,7 +563,7 @@ class SourceProfileFunction(Protocol):
         source_name: str,
         core_profiles: state.CoreProfiles,
         calculated_source_profiles: SourceProfiles | None,
-        unused_conductivity: conductivity_base.Conductivity | None,
+        unused_conductivity: Conductivity | None,
     ) -> tuple[array_typing.FloatVectorCell, ...]:
         ...
 
@@ -622,7 +731,7 @@ def default_formula(
     source_name: str,
     unused_core_profiles: state.CoreProfiles,
     unused_calculated_source_profiles: SourceProfiles | None,
-    unused_conductivity: conductivity_base.Conductivity | None,
+    unused_conductivity: Conductivity | None,
 ):
     source_params = runtime_params.sources[source_name]
     ion, el = calc_generic_heat_source(
@@ -698,7 +807,7 @@ def calc_generic_particle_source(
     source_name: str,
     unused_state: state.CoreProfiles,
     unused_calculated_source_profiles: SourceProfiles | None,
-    unused_conductivity: conductivity_base.Conductivity | None,
+    unused_conductivity: Conductivity | None,
 ) -> tuple[array_typing.FloatVectorCell, ...]:
     source_params = runtime_params.sources[source_name]
     return (gaussian_profile(
@@ -770,7 +879,7 @@ def calc_pellet_source(
     source_name: str,
     unused_state: state.CoreProfiles,
     unused_calculated_source_profiles: SourceProfiles | None,
-    unused_conductivity: conductivity_base.Conductivity | None,
+    unused_conductivity: Conductivity | None,
 ) -> tuple[array_typing.FloatVectorCell, ...]:
     source_params = runtime_params.sources[source_name]
     return (gaussian_profile(
@@ -888,8 +997,8 @@ def fusion_heat_model_func(
     unused_source_name: str,
     core_profiles: state.CoreProfiles,
     unused_calculated_source_profiles: SourceProfiles | None,
-    unused_conductivity: conductivity_base.Conductivity | None,
-) -> tuple[array_typing.FloatVectorCell, array_typing.FloatVectorCell]:
+    unused_conductivity: Conductivity | None,
+):
     _, Pfus_i, Pfus_e = calc_fusion(
         geo,
         core_profiles,
@@ -1046,8 +1155,8 @@ class QeiSource(Source):
         runtime_params: runtime_params_slice.RuntimeParams,
         geo: geometry.Geometry,
         core_profiles: state.CoreProfiles,
-        calculated_source_profiles: SourceProfiles | None,
-        conductivity: conductivity_base.Conductivity | None,
+        calculated_source_profiles,
+        conductivity
     ):
         raise NotImplementedError('Call get_qei() instead.')
 
@@ -1311,9 +1420,9 @@ def build_standard_source_profiles(
     core_profiles: state.CoreProfiles,
     source_models: SourceModels,
     explicit: bool = True,
-    conductivity: conductivity_base.Conductivity | None = None,
-    calculate_anyway: bool = False,
-    psi_only: bool = False,
+    conductivity = None,
+    calculate_anyway = False,
+    psi_only = False,
 ):
 
     def calculate_source(source_name, source):
@@ -2821,9 +2930,9 @@ def calculate_total_transport_coeffs(pedestal_model, transport_model,
 class Neoclassical0(torax_pydantic.BaseModelFrozen):
     bootstrap_current: SauterModelConfig = pydantic.Field(
         discriminator="model_name")
-    conductivity: sauter_conductivity.SauterModelConfig = (
+    conductivity: SauterModelConfigCond = (
         torax_pydantic.ValidatedDefault(
-            sauter_conductivity.SauterModelConfig()))
+            SauterModelConfigCond()))
 
     @pydantic.model_validator(mode="before")
     @classmethod
@@ -5732,7 +5841,7 @@ def _get_initial_state(runtime_params, geo, step_fn):
         core_profiles=initial_core_profiles,
         source_models=physics_models.source_models,
         neoclassical_models=physics_models.neoclassical_models,
-        conductivity=conductivity_base.Conductivity(
+        conductivity=Conductivity(
             sigma=initial_core_profiles.sigma,
             sigma_face=initial_core_profiles.sigma_face,
         ),
