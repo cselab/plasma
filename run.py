@@ -14,7 +14,6 @@ from torax._src import xnp
 from torax._src.config import numerics as numerics_lib
 from torax._src.config import runtime_params_slice
 from torax._src.config import runtime_validation_utils
-from torax._src.core_profiles.plasma_composition import ion_mixture
 from torax._src.fvm import cell_variable
 from torax._src.fvm import convection_terms
 from torax._src.fvm import diffusion_terms
@@ -79,8 +78,48 @@ import numpy as np
 import pydantic
 import typing_extensions
 import xarray as xr
+import dataclasses
+import chex
+import jax
+from jax import numpy as jnp
+from torax._src import array_typing
+from torax._src import constants
+from torax._src.config import runtime_validation_utils
+from torax._src.torax_pydantic import torax_pydantic
+from typing_extensions import Final
 
 _IMPURITY_MODE_FRACTIONS: Final[str] = 'fractions'
+
+
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(frozen=True)
+class RuntimeParamsIM:
+    fractions: array_typing.FloatVector
+    A_avg: array_typing.FloatScalar | array_typing.FloatVectorCell
+    Z_override: array_typing.FloatScalar | None = None
+
+
+class IonMixture(torax_pydantic.BaseModelFrozen):
+    species: runtime_validation_utils.IonMapping
+    Z_override: torax_pydantic.TimeVaryingScalar | None = None
+    A_override: torax_pydantic.TimeVaryingScalar | None = None
+
+    def build_runtime_params(self, t):
+        ions = self.species.keys()
+        fractions = jnp.array([self.species[ion].get_value(t) for ion in ions])
+        Z_override = None if not self.Z_override else self.Z_override.get_value(
+            t)
+        if not self.A_override:
+            As = jnp.array(
+                [constants.ION_PROPERTIES_DICT[ion].A for ion in ions])
+            A_avg = jnp.sum(As * fractions)
+        else:
+            A_avg = self.A_override.get_value(t)
+        return RuntimeParamsIM(
+            fractions=fractions,
+            A_avg=A_avg,
+            Z_override=Z_override,
+        )
 
 
 def _impurity_before_validator(value: Any) -> Any:
@@ -251,7 +290,6 @@ class ProfileConditions(torax_pydantic.BaseModelFrozen):
         return RuntimeParamsPC(**runtime_params)
 
 
-_IMPURITY_MODE_FRACTIONS: Final[str] = 'fractions'
 _IMPURITY_MODE_NE_RATIOS: Final[str] = 'n_e_ratios'
 _IMPURITY_MODE_NE_RATIOS_ZEFF: Final[str] = 'n_e_ratios_Z_eff'
 
@@ -263,8 +301,8 @@ class RuntimeParamsP:
                           ...] = dataclasses.field(metadata={'static': True})
     impurity_names: tuple[str,
                           ...] = dataclasses.field(metadata={'static': True})
-    main_ion: ion_mixture.RuntimeParamsIM
-    impurity: ion_mixture.RuntimeParamsIM
+    main_ion: RuntimeParamsIM
+    impurity: RuntimeParamsIM
     Z_eff: array_typing.FloatVectorCell
     Z_eff_face: array_typing.FloatVectorFace
 
@@ -334,7 +372,7 @@ class PlasmaComposition(torax_pydantic.BaseModelFrozen):
 
     @functools.cached_property
     def _main_ion_mixture(self):
-        return ion_mixture.IonMixture.model_construct(
+        return IonMixture.model_construct(
             species=self.main_ion,
             Z_override=self.Z_i_override,
             A_override=self.A_i_override,
