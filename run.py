@@ -8,8 +8,6 @@ from collections.abc import Sequence
 from collections.abc import Set
 from fusion_surrogates.qlknn import qlknn_model
 from jax import numpy as jnp
-from torax._src import array_typing
-from torax._src import interpolated_param
 from torax._src import jax_utils
 from typing import Annotated
 from typing import Annotated, Any, Final, TypeAlias
@@ -47,6 +45,27 @@ import torax
 import typing
 import typing_extensions
 import xarray as xr
+from typing import TypeAlias, TypeVar
+import jax
+import jaxtyping as jt
+import numpy as np
+
+T = TypeVar("T")
+Array: TypeAlias = jax.Array | np.ndarray
+FloatScalar: TypeAlias = jt.Float[Array | float, ""]
+BoolScalar: TypeAlias = jt.Bool[Array | bool, ""]
+IntScalar: TypeAlias = jt.Int[Array | int, ""]
+FloatVector: TypeAlias = jt.Float[Array, "_"]
+BoolVector: TypeAlias = jt.Bool[Array, "_"]
+FloatVectorCell: TypeAlias = jt.Float[Array, "rhon"]
+FloatVectorCellPlusBoundaries: TypeAlias = jt.Float[Array, "rhon+2"]
+FloatMatrixCell: TypeAlias = jt.Float[Array, "rhon rhon"]
+FloatVectorFace: TypeAlias = jt.Float[Array, "rhon+1"]
+
+
+def jaxtyped(fn):
+    return fn
+
 
 DataTypes: TypeAlias = float | int | bool
 DtypeName: TypeAlias = str
@@ -101,6 +120,254 @@ TIME_INVARIANT: Final[str] = '_pydantic_time_invariant_field'
 JAX_STATIC: Final[str] = '_pydantic_jax_static_field'
 StaticKwargs: TypeAlias = dict[str, Any]
 DynamicArgs: TypeAlias = list[Any]
+
+RHO_NORM: Final[str] = 'rho_norm'
+_interp_fn = jax_utils.jit(jnp.interp)
+_interp_fn_vmap = jax_utils.jit(jax.vmap(jnp.interp, in_axes=(None, None, 1)))
+
+
+@enum.unique
+class InterpolationMode(enum.Enum):
+    PIECEWISE_LINEAR = 'piecewise_linear'
+    STEP = 'step'
+
+
+InterpolationModeLiteral: TypeAlias = Literal['step', 'STEP',
+                                              'piecewise_linear',
+                                              'PIECEWISE_LINEAR']
+_ArrayOrListOfFloats: TypeAlias = Array | list[float]
+InterpolatedVarSingleAxisInput: TypeAlias = (float
+                                             | dict[float, float]
+                                             | bool
+                                             | dict[float, bool]
+                                             | tuple[_ArrayOrListOfFloats,
+                                                     _ArrayOrListOfFloats]
+                                             | xr.DataArray)
+InterpolatedVarTimeRhoInput: TypeAlias = (
+    Mapping[float, InterpolatedVarSingleAxisInput]
+    | float
+    | xr.DataArray
+    | tuple[_ArrayOrListOfFloats, _ArrayOrListOfFloats, _ArrayOrListOfFloats]
+    | tuple[_ArrayOrListOfFloats, _ArrayOrListOfFloats])
+TimeInterpolatedInput: TypeAlias = (InterpolatedVarSingleAxisInput
+                                    | tuple[InterpolatedVarSingleAxisInput,
+                                            InterpolationModeLiteral])
+TimeRhoInterpolatedInput: TypeAlias = (
+    InterpolatedVarTimeRhoInput
+    | tuple[
+        InterpolatedVarTimeRhoInput,
+        Mapping[
+            Literal['time_interpolation_mode', 'rho_interpolation_mode'],
+            InterpolationModeLiteral,
+        ],
+    ])
+
+
+class InterpolatedParamBase(abc.ABC):
+
+    @abc.abstractmethod
+    def get_value(self, x: chex.Numeric) -> Array:
+        pass
+
+
+class _PiecewiseLinearInterpolatedParam(InterpolatedParamBase):
+
+    def __init__(self, xs: Array, ys: Array):
+        self._xs = xs
+        self._ys = ys
+
+    @property
+    def xs(self) -> Array:
+        return self._xs
+
+    @property
+    def ys(self) -> Array:
+        return self._ys
+
+    def get_value(
+        self,
+        x: chex.Numeric,
+    ) -> Array:
+        x_shape = getattr(x, 'shape', ())
+        is_jax = isinstance(x, jax.Array)
+        interp = _interp_fn if is_jax else np.interp
+        full = jnp.full if is_jax else np.full
+        match self.ys.ndim:
+            case 1:
+                if self.ys.size == 1:
+                    if x_shape == ():
+                        return self.ys[0]
+                    else:
+                        return full(x_shape, self.ys[0], dtype=self.ys.dtype)
+                else:
+                    return interp(x, self.xs, self.ys)
+            case 2:
+                if len(self.ys) == 1 and x_shape == ():
+                    return self.ys[0]
+                else:
+                    return _interp_fn_vmap(x, self.xs, self.ys)
+            case _:
+                raise ValueError(
+                    f'ys must be either 1D or 2D. Given: {self.ys.shape}.')
+
+
+def _is_bool(interp_input: InterpolatedVarSingleAxisInput, ) -> bool:
+    if isinstance(interp_input, dict):
+        if not interp_input:
+            raise ValueError(
+                'InterpolatedVarSingleAxisInput must include values.')
+        value = list(interp_input.values())[0]
+        return isinstance(value, bool)
+    return isinstance(interp_input, bool)
+
+
+def _convert_value_to_floats(
+    interp_input: InterpolatedVarSingleAxisInput,
+) -> InterpolatedVarSingleAxisInput:
+    if isinstance(interp_input, dict):
+        return {key: float(value) for key, value in interp_input.items()}
+    return float(interp_input)
+
+
+def convert_input_to_xs_ys(
+    interp_input
+):
+    interpolation_mode = InterpolationMode.PIECEWISE_LINEAR
+    if _is_bool(interp_input):
+        interp_input = _convert_value_to_floats(interp_input)
+        is_bool_param = True
+    else:
+        is_bool_param = False
+    if isinstance(interp_input, dict):
+        return (
+            np.array(list(interp_input.keys()),
+                     dtype=jax_utils.get_np_dtype()),
+            np.array(list(interp_input.values()),
+                     dtype=jax_utils.get_np_dtype()),
+            interpolation_mode,
+            is_bool_param,
+        )
+    else:
+        return (
+            np.array([0.0], dtype=jax_utils.get_np_dtype()),
+            np.array([interp_input], dtype=jax_utils.get_np_dtype()),
+            interpolation_mode,
+            is_bool_param,
+        )
+
+
+@jax.tree_util.register_pytree_node_class
+class InterpolatedVarSingleAxis(InterpolatedParamBase):
+
+    def __init__(
+        self,
+        value: tuple[Array, Array],
+        interpolation_mode: InterpolationMode = (
+            InterpolationMode.PIECEWISE_LINEAR),
+        is_bool_param: bool = False,
+    ):
+        self._value = value
+        xs, ys = value
+        self._is_bool_param = is_bool_param
+        self._interpolation_mode = interpolation_mode
+        match interpolation_mode:
+            case InterpolationMode.PIECEWISE_LINEAR:
+                self._param = _PiecewiseLinearInterpolatedParam(xs=xs, ys=ys)
+            case _:
+                raise ValueError('Unknown interpolation mode.')
+
+    def tree_flatten(self):
+        static_params = {
+            'interpolation_mode': self.interpolation_mode,
+            'is_bool_param': self.is_bool_param,
+        }
+        return (self._value, static_params)
+
+    @classmethod
+    def tree_unflatten(cls, aux_data, children):
+        return cls(children, **aux_data)
+
+    @property
+    def is_bool_param(self) -> bool:
+        return self._is_bool_param
+
+    @property
+    def interpolation_mode(self) -> InterpolationMode:
+        return self._interpolation_mode
+
+    def get_value(
+        self,
+        x: chex.Numeric,
+    ) -> Array:
+        value = self._param.get_value(x)
+        if self._is_bool_param:
+            return jnp.bool_(value > 0.5)
+        return value
+
+    @property
+    def param(self) -> InterpolatedParamBase:
+        return self._param
+
+    def __eq__(self, other: 'InterpolatedVarSingleAxis') -> bool:
+        try:
+            chex.assert_trees_all_equal(self, other)
+        except AssertionError:
+            return False
+        return True
+
+
+@jax.tree_util.register_pytree_node_class
+class InterpolatedVarTimeRho(InterpolatedParamBase):
+
+    def __init__(
+        self,
+        values: Mapping[float, tuple[Array, Array]],
+        rho_norm: Array,
+        time_interpolation_mode: InterpolationMode = (
+            InterpolationMode.PIECEWISE_LINEAR),
+        rho_interpolation_mode: InterpolationMode = (
+            InterpolationMode.PIECEWISE_LINEAR),
+    ):
+        self._rho_interpolation_mode = rho_interpolation_mode
+        self._time_interpolation_mode = time_interpolation_mode
+        sorted_indices = np.array(sorted(values.keys()))
+        rho_norm_interpolated_values = np.stack(
+            [
+                InterpolatedVarSingleAxis(
+                    values[t], rho_interpolation_mode).get_value(rho_norm)
+                for t in sorted_indices
+            ],
+            axis=0,
+        )
+        self._time_interpolated_var = InterpolatedVarSingleAxis(
+            value=(sorted_indices, rho_norm_interpolated_values),
+            interpolation_mode=time_interpolation_mode,
+        )
+
+    def tree_flatten(self):
+        children = (self._time_interpolated_var, )
+        aux_data = (self._rho_interpolation_mode,
+                    self._time_interpolation_mode)
+        return children, aux_data
+
+    @classmethod
+    def tree_unflatten(cls, aux_data, children):
+        obj = object.__new__(InterpolatedVarTimeRho)
+        obj._time_interpolated_var = children[0]
+        obj._rho_interpolation_mode = aux_data[0]
+        obj._time_interpolation_mode = aux_data[1]
+        return obj
+
+    @property
+    def time_interpolation_mode(self) -> InterpolationMode:
+        return self._time_interpolation_mode
+
+    @property
+    def rho_interpolation_mode(self) -> InterpolationMode:
+        return self._rho_interpolation_mode
+
+    def get_value(self, x: chex.Numeric) -> Array:
+        return self._time_interpolated_var.get_value(x)
 
 
 class BaseModelFrozen(pydantic.BaseModel):
@@ -208,11 +475,11 @@ class Grid1D(BaseModelFrozen):
 class TimeVaryingArray(BaseModelFrozen):
     value: ValueType
     rho_interpolation_mode: typing_extensions.Annotated[
-        interpolated_param.InterpolationMode, 
-        JAX_STATIC] = interpolated_param.InterpolationMode.PIECEWISE_LINEAR
+        InterpolationMode, 
+        JAX_STATIC] = InterpolationMode.PIECEWISE_LINEAR
     time_interpolation_mode: typing_extensions.Annotated[
-        interpolated_param.InterpolationMode, 
-        JAX_STATIC] = interpolated_param.InterpolationMode.PIECEWISE_LINEAR
+        InterpolationMode, 
+        JAX_STATIC] = InterpolationMode.PIECEWISE_LINEAR
     grid: Grid1D | None = None
 
     def tree_flatten(self):
@@ -253,7 +520,7 @@ class TimeVaryingArray(BaseModelFrozen):
         self,
         t: chex.Numeric,
         grid_type: Literal['cell', 'face', 'face_right'] = 'cell',
-    ) -> array_typing.Array:
+    ) -> Array:
         match grid_type:
             case 'cell':
                 return self._get_cached_interpolated_param_cell.get_value(t)
@@ -275,7 +542,7 @@ class TimeVaryingArray(BaseModelFrozen):
     @pydantic.model_validator(mode='before')
     @classmethod
     def _conform_data(
-        cls, data: interpolated_param.TimeRhoInterpolatedInput | dict[str, Any]
+        cls, data: TimeRhoInterpolatedInput | dict[str, Any]
     ) -> dict[str, Any]:
         if isinstance(data, dict):
             data.pop('_get_cached_interpolated_param_cell_centers', None)
@@ -284,9 +551,9 @@ class TimeVaryingArray(BaseModelFrozen):
             if set(data.keys()).issubset(cls.model_fields.keys()):
                 return data
         time_interpolation_mode = (
-            interpolated_param.InterpolationMode.PIECEWISE_LINEAR)
+            InterpolationMode.PIECEWISE_LINEAR)
         rho_interpolation_mode = (
-            interpolated_param.InterpolationMode.PIECEWISE_LINEAR)
+            InterpolationMode.PIECEWISE_LINEAR)
         value = _load_from_primitives(data)
         return dict(
             value=value,
@@ -296,8 +563,8 @@ class TimeVaryingArray(BaseModelFrozen):
 
     @functools.cached_property
     def _get_cached_interpolated_param_cell(
-        self, ) -> interpolated_param.InterpolatedVarTimeRho:
-        return interpolated_param.InterpolatedVarTimeRho(
+        self, ) -> InterpolatedVarTimeRho:
+        return InterpolatedVarTimeRho(
             self.value,
             rho_norm=self.grid.cell_centers,
             time_interpolation_mode=self.time_interpolation_mode,
@@ -306,8 +573,8 @@ class TimeVaryingArray(BaseModelFrozen):
 
     @functools.cached_property
     def _get_cached_interpolated_param_face(
-        self, ) -> interpolated_param.InterpolatedVarTimeRho:
-        return interpolated_param.InterpolatedVarTimeRho(
+        self, ) -> InterpolatedVarTimeRho:
+        return InterpolatedVarTimeRho(
             self.value,
             rho_norm=self.grid.face_centers,
             time_interpolation_mode=self.time_interpolation_mode,
@@ -316,8 +583,8 @@ class TimeVaryingArray(BaseModelFrozen):
 
     @functools.cached_property
     def _get_cached_interpolated_param_face_right(
-        self, ) -> interpolated_param.InterpolatedVarTimeRho:
-        return interpolated_param.InterpolatedVarTimeRho(
+        self, ) -> InterpolatedVarTimeRho:
+        return InterpolatedVarTimeRho(
             self.value,
             rho_norm=self.grid.face_centers[-1],
             time_interpolation_mode=self.time_interpolation_mode,
@@ -335,9 +602,9 @@ PositiveTimeVaryingArray = typing_extensions.Annotated[
 
 def _load_from_primitives(
     primitive_values: (
-        Mapping[float, interpolated_param.InterpolatedVarSingleAxisInput]
+        Mapping[float, InterpolatedVarSingleAxisInput]
         | float),
-) -> Mapping[float, tuple[array_typing.Array, array_typing.Array]]:
+) -> Mapping[float, tuple[Array, Array]]:
     if isinstance(primitive_values, (float, int)):
         primitive_values = {0.0: {0.0: primitive_values}}
     if isinstance(primitive_values, Mapping) and all(
@@ -349,7 +616,7 @@ def _load_from_primitives(
         raise ValueError('Values mapping must not be empty.')
     loaded_values = {}
     for t, v in primitive_values.items():
-        x, y, _, _ = interpolated_param.convert_input_to_xs_ys(v)
+        x, y, _, _ = convert_input_to_xs_ys(v)
         loaded_values[t] = (x, y)
     return loaded_values
 
@@ -405,10 +672,10 @@ class TimeVaryingScalar(BaseModelFrozen):
     is_bool_param: typing_extensions.Annotated[bool,
                                                JAX_STATIC] = (False)
     interpolation_mode: typing_extensions.Annotated[
-        interpolated_param.InterpolationMode, 
-        JAX_STATIC] = interpolated_param.InterpolationMode.PIECEWISE_LINEAR
+        InterpolationMode, 
+        JAX_STATIC] = InterpolationMode.PIECEWISE_LINEAR
 
-    def get_value(self, t: chex.Numeric) -> array_typing.Array:
+    def get_value(self, t: chex.Numeric) -> Array:
         return self._get_cached_interpolated_param.get_value(t)
 
     @pydantic.model_validator(mode='after')
@@ -419,7 +686,7 @@ class TimeVaryingScalar(BaseModelFrozen):
     @classmethod
     def _conform_data(cls, data):
         time, value, interpolation_mode, is_bool_param = (
-            interpolated_param.convert_input_to_xs_ys(data))
+            convert_input_to_xs_ys(data))
         sort_order = np.argsort(time)
         time = time[sort_order]
         value = value[sort_order]
@@ -432,8 +699,8 @@ class TimeVaryingScalar(BaseModelFrozen):
 
     @functools.cached_property
     def _get_cached_interpolated_param(
-        self, ) -> interpolated_param.InterpolatedVarSingleAxis:
-        return interpolated_param.InterpolatedVarSingleAxis(
+        self, ) -> InterpolatedVarSingleAxis:
+        return InterpolatedVarSingleAxis(
             value=(self.time, self.value),
             interpolation_mode=self.interpolation_mode,
             is_bool_param=self.is_bool_param,
@@ -731,17 +998,17 @@ class IntegralPreservationQuantity(enum.Enum):
     VALUE = 'value'
 
 
-@array_typing.jaxtyped
+@jaxtyped
 def tridiag(
-    diag: jt.Shaped[array_typing.Array, 'size'],
-    above: jt.Shaped[array_typing.Array, 'size-1'],
-    below: jt.Shaped[array_typing.Array, 'size-1'],
-) -> jt.Shaped[array_typing.Array, 'size size']:
+    diag: jt.Shaped[Array, 'size'],
+    above: jt.Shaped[Array, 'size-1'],
+    below: jt.Shaped[Array, 'size-1'],
+) -> jt.Shaped[Array, 'size size']:
     return jnp.diag(diag) + jnp.diag(above, 1) + jnp.diag(below, -1)
 
 
 @jax_utils.jit
-@array_typing.jaxtyped
+@jaxtyped
 def cell_integration(x, geo):
     if x.shape != geo.rho_norm.shape:
         raise ValueError(
@@ -750,7 +1017,7 @@ def cell_integration(x, geo):
     return jnp.sum(x * geo.drho_norm)
 
 
-@array_typing.jaxtyped
+@jaxtyped
 def area_integration(
     value,
     geo,
@@ -758,7 +1025,7 @@ def area_integration(
     return cell_integration(value * geo.spr, geo)
 
 
-@array_typing.jaxtyped
+@jaxtyped
 def volume_integration(
     value,
     geo,
@@ -766,7 +1033,7 @@ def volume_integration(
     return cell_integration(value * geo.vpr, geo)
 
 
-@array_typing.jaxtyped
+@jaxtyped
 def line_average(
     value,
     geo,
@@ -774,7 +1041,7 @@ def line_average(
     return cell_integration(value, geo)
 
 
-@array_typing.jaxtyped
+@jaxtyped
 def volume_average(
     value,
     geo,
@@ -792,7 +1059,7 @@ class RuntimeParamsNumeric:
     chi_timestep_prefactor: float
     fixed_dt: float
     dt_reduction_factor: float
-    resistivity_multiplier: array_typing.FloatScalar
+    resistivity_multiplier: FloatScalar
     adaptive_T_source_prefactor: float
     adaptive_n_source_prefactor: float
     evolve_ion_heat: bool = dataclasses.field(metadata={'static': True})
@@ -872,7 +1139,7 @@ class InitialGuessMode(enum.StrEnum):
 _trapz = jax.scipy.integrate.trapezoid
 
 
-def _zero() -> array_typing.FloatScalar:
+def _zero() -> FloatScalar:
     return jnp.zeros(())
 
 
@@ -1050,8 +1317,8 @@ def make_convection_terms(v_face,
 
 
 def make_diffusion_terms(
-    d_face: array_typing.FloatVectorFace, var: CellVariable
-) -> tuple[array_typing.FloatMatrixCell, array_typing.FloatVectorCell]:
+    d_face: FloatVectorFace, var: CellVariable
+) -> tuple[FloatMatrixCell, FloatVectorCell]:
     denom = var.dr**2
     diag = jnp.asarray(-d_face[1:] - d_face[:-1])
     off = d_face[1:-1]
@@ -1093,24 +1360,24 @@ class CoreProfiles:
     n_e: CellVariable
     n_i: CellVariable
     n_impurity: CellVariable
-    impurity_fractions: Mapping[str, array_typing.FloatVector]
-    q_face: array_typing.FloatVectorFace
-    s_face: array_typing.FloatVectorFace
-    v_loop_lcfs: array_typing.FloatScalar
-    Z_i: array_typing.FloatVectorCell
-    Z_i_face: array_typing.FloatVectorFace
-    A_i: array_typing.FloatScalar
-    Z_impurity: array_typing.FloatVectorCell
-    Z_impurity_face: array_typing.FloatVectorFace
-    A_impurity: array_typing.FloatVectorCell
-    A_impurity_face: array_typing.FloatVectorFace
-    Z_eff: array_typing.FloatVectorCell
-    Z_eff_face: array_typing.FloatVectorFace
-    sigma: array_typing.FloatVectorCell
-    sigma_face: array_typing.FloatVectorFace
-    j_total: array_typing.FloatVectorCell
-    j_total_face: array_typing.FloatVectorFace
-    Ip_profile_face: array_typing.FloatVectorFace
+    impurity_fractions: Mapping[str, FloatVector]
+    q_face: FloatVectorFace
+    s_face: FloatVectorFace
+    v_loop_lcfs: FloatScalar
+    Z_i: FloatVectorCell
+    Z_i_face: FloatVectorFace
+    A_i: FloatScalar
+    Z_impurity: FloatVectorCell
+    Z_impurity_face: FloatVectorFace
+    A_impurity: FloatVectorCell
+    A_impurity_face: FloatVectorFace
+    Z_eff: FloatVectorCell
+    Z_eff_face: FloatVectorFace
+    sigma: FloatVectorCell
+    sigma_face: FloatVectorFace
+    j_total: FloatVectorCell
+    j_total_face: FloatVectorFace
+    Ip_profile_face: FloatVectorFace
 
 
 @jax.tree_util.register_dataclass
@@ -1146,14 +1413,14 @@ class CoreTransport:
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass
 class SolverNumericOutputs:
-    outer_solver_iterations: array_typing.IntScalar = 0
-    solver_error_state: array_typing.IntScalar = 0
-    inner_solver_iterations: array_typing.IntScalar = 0
-    sawtooth_crash: array_typing.BoolScalar = False
+    outer_solver_iterations: IntScalar = 0
+    solver_error_state: IntScalar = 0
+    inner_solver_iterations: IntScalar = 0
+    sawtooth_crash: BoolScalar = False
 
 
 def face_to_cell(
-    face: array_typing.FloatVectorFace, ) -> array_typing.FloatVectorCell:
+    face: FloatVectorFace, ) -> FloatVectorCell:
     return 0.5 * (face[:-1] + face[1:])
 
 
@@ -1171,49 +1438,49 @@ class GeometryType(enum.IntEnum):
 class Geometry:
     geometry_type: GeometryType
     torax_mesh: None
-    Phi: array_typing.Array
-    Phi_face: array_typing.Array
-    R_major: array_typing.FloatScalar
-    a_minor: array_typing.FloatScalar
-    B_0: array_typing.FloatScalar
-    volume: array_typing.Array
-    volume_face: array_typing.Array
-    area: array_typing.Array
-    area_face: array_typing.Array
-    vpr: array_typing.Array
-    vpr_face: array_typing.Array
-    spr: array_typing.Array
-    spr_face: array_typing.Array
-    delta_face: array_typing.Array
-    elongation: array_typing.Array
-    elongation_face: array_typing.Array
-    g0: array_typing.Array
-    g0_face: array_typing.Array
-    g1: array_typing.Array
-    g1_face: array_typing.Array
-    g2: array_typing.Array
-    g2_face: array_typing.Array
-    g3: array_typing.Array
-    g3_face: array_typing.Array
-    gm4: array_typing.Array
-    gm4_face: array_typing.Array
-    gm5: array_typing.Array
-    gm5_face: array_typing.Array
-    g2g3_over_rhon: array_typing.Array
-    g2g3_over_rhon_face: array_typing.Array
-    g2g3_over_rhon_hires: array_typing.Array
-    F: array_typing.Array
-    F_face: array_typing.Array
-    F_hires: array_typing.Array
-    R_in: array_typing.Array
-    R_in_face: array_typing.Array
-    R_out: array_typing.Array
-    R_out_face: array_typing.Array
-    spr_hires: array_typing.Array
-    rho_hires_norm: array_typing.Array
-    rho_hires: array_typing.Array
-    Phi_b_dot: array_typing.FloatScalar
-    _z_magnetic_axis: array_typing.FloatScalar | None
+    Phi: Array
+    Phi_face: Array
+    R_major: FloatScalar
+    a_minor: FloatScalar
+    B_0: FloatScalar
+    volume: Array
+    volume_face: Array
+    area: Array
+    area_face: Array
+    vpr: Array
+    vpr_face: Array
+    spr: Array
+    spr_face: Array
+    delta_face: Array
+    elongation: Array
+    elongation_face: Array
+    g0: Array
+    g0_face: Array
+    g1: Array
+    g1_face: Array
+    g2: Array
+    g2_face: Array
+    g3: Array
+    g3_face: Array
+    gm4: Array
+    gm4_face: Array
+    gm5: Array
+    gm5_face: Array
+    g2g3_over_rhon: Array
+    g2g3_over_rhon_face: Array
+    g2g3_over_rhon_hires: Array
+    F: Array
+    F_face: Array
+    F_hires: Array
+    R_in: Array
+    R_in_face: Array
+    R_out: Array
+    R_out_face: Array
+    spr_hires: Array
+    rho_hires_norm: Array
+    rho_hires: Array
+    Phi_b_dot: FloatScalar
+    _z_magnetic_axis: FloatScalar | None
 
     def __eq__(self, other: 'Geometry') -> bool:
         try:
@@ -1231,60 +1498,60 @@ class Geometry:
         )
 
     @property
-    def rho_norm(self) -> array_typing.Array:
+    def rho_norm(self) -> Array:
         return self.torax_mesh.cell_centers
 
     @property
-    def rho_face_norm(self) -> array_typing.Array:
+    def rho_face_norm(self) -> Array:
         return self.torax_mesh.face_centers
 
     @property
-    def drho_norm(self) -> array_typing.Array:
+    def drho_norm(self) -> Array:
         return jnp.array(self.torax_mesh.dx)
 
     @property
-    def rho_face(self) -> array_typing.Array:
+    def rho_face(self) -> Array:
         return self.rho_face_norm * jnp.expand_dims(self.rho_b, axis=-1)
 
     @property
-    def rho(self) -> array_typing.Array:
+    def rho(self) -> Array:
         return self.rho_norm * jnp.expand_dims(self.rho_b, axis=-1)
 
     @property
-    def r_mid(self) -> array_typing.Array:
+    def r_mid(self) -> Array:
         return (self.R_out - self.R_in) / 2
 
     @property
-    def r_mid_face(self) -> array_typing.Array:
+    def r_mid_face(self) -> Array:
         return (self.R_out_face - self.R_in_face) / 2
 
     @property
-    def epsilon(self) -> array_typing.Array:
+    def epsilon(self) -> Array:
         return (self.R_out - self.R_in) / (self.R_out + self.R_in)
 
     @property
-    def epsilon_face(self) -> array_typing.Array:
+    def epsilon_face(self) -> Array:
         return (self.R_out_face - self.R_in_face) / (self.R_out_face +
                                                      self.R_in_face)
 
     @property
-    def drho(self) -> array_typing.Array:
+    def drho(self) -> Array:
         return self.drho_norm * self.rho_b
 
     @property
-    def rho_b(self) -> array_typing.FloatScalar:
+    def rho_b(self) -> FloatScalar:
         return jnp.sqrt(self.Phi_b / np.pi / self.B_0)
 
     @property
-    def Phi_b(self) -> array_typing.FloatScalar:
+    def Phi_b(self) -> FloatScalar:
         return self.Phi_face[..., -1]
 
     @property
-    def g1_over_vpr(self) -> array_typing.Array:
+    def g1_over_vpr(self) -> Array:
         return self.g1 / self.vpr
 
     @property
-    def g1_over_vpr2(self) -> array_typing.Array:
+    def g1_over_vpr2(self) -> Array:
         return self.g1 / self.vpr**2
 
     @property
@@ -1329,7 +1596,7 @@ def stack_geometries(geometries: Sequence[Geometry]) -> Geometry:
         field_name = field.name
         field_value = getattr(first_geo, field_name)
         if isinstance(field_value,
-                      (array_typing.Array, array_typing.FloatScalar)):
+                      (Array, FloatScalar)):
             field_values = [getattr(geo, field_name) for geo in geometries]
             stacked_data[field_name] = np.stack(field_values)
         else:
@@ -1501,7 +1768,7 @@ def calculate_scaling_law_confinement_time(
 def calc_q_face(
     geo: Geometry,
     psi: CellVariable,
-) -> array_typing.FloatVectorFace:
+) -> FloatVectorFace:
     inv_iota = jnp.abs(
         (2 * geo.Phi_b * geo.rho_face_norm[1:]) / psi.face_grad()[1:])
     inv_iota0 = jnp.expand_dims(
@@ -1514,9 +1781,9 @@ def calc_j_total(
     geo: Geometry,
     psi: CellVariable,
 ) -> tuple[
-        array_typing.FloatVectorCell,
-        array_typing.FloatVectorFace,
-        array_typing.FloatVectorFace,
+        FloatVectorCell,
+        FloatVectorFace,
+        FloatVectorFace,
 ]:
     Ip_profile_face = (psi.face_grad() * geo.g2g3_over_rhon_face * geo.F_face /
                        geo.Phi_b / (16 * jnp.pi**3 * CONSTANTS.mu_0))
@@ -1577,15 +1844,15 @@ def calc_li3(
 
 
 def calc_q95(
-    psi_norm_face: array_typing.FloatVector,
-    q_face: array_typing.FloatVector,
-) -> array_typing.FloatScalar:
+    psi_norm_face: FloatVector,
+    q_face: FloatVector,
+) -> FloatScalar:
     q95 = jnp.interp(0.95, psi_norm_face, q_face)
     return q95
 
 
 def calculate_psi_grad_constraint_from_Ip(
-    Ip: array_typing.FloatScalar,
+    Ip: FloatScalar,
     geo: Geometry,
 ) -> jax.Array:
     return (Ip * (16 * jnp.pi**3 * CONSTANTS.mu_0 * geo.Phi_b) /
@@ -1594,8 +1861,8 @@ def calculate_psi_grad_constraint_from_Ip(
 
 def calculate_psidot_from_psi_sources(
     *,
-    psi_sources: array_typing.FloatVector,
-    sigma: array_typing.FloatVector,
+    psi_sources: FloatVector,
+    sigma: FloatVector,
     resistivity_multiplier: float,
     psi: CellVariable,
     geo: Geometry,
@@ -1617,10 +1884,10 @@ def calculate_psidot_from_psi_sources(
 
 
 def calculate_main_ion_dilution_factor(
-    Z_i: array_typing.FloatScalar,
-    Z_impurity: array_typing.FloatVector,
-    Z_eff: array_typing.FloatVector,
-) -> array_typing.FloatVector:
+    Z_i: FloatScalar,
+    Z_impurity: FloatVector,
+    Z_eff: FloatVector,
+) -> FloatVector:
     return (Z_impurity - Z_eff) / (Z_i * (Z_impurity - Z_i))
 
 
@@ -1657,7 +1924,7 @@ def calculate_pressure(
     )
 
 
-def calc_pprime(core_profiles: CoreProfiles, ) -> array_typing.FloatVector:
+def calc_pprime(core_profiles: CoreProfiles, ) -> FloatVector:
     _, _, p_total = calculate_pressure(core_profiles)
     psi = core_profiles.psi.face_value()
     n_e = core_profiles.n_e.face_value()
@@ -1688,7 +1955,7 @@ def calc_pprime(core_profiles: CoreProfiles, ) -> array_typing.FloatVector:
 def calc_FFprime(
     core_profiles: CoreProfiles,
     geo: Geometry,
-) -> array_typing.FloatVector:
+) -> FloatVector:
     mu0 = CONSTANTS.mu_0
     pprime = calc_pprime(core_profiles)
     g3 = geo.g3_face
@@ -1702,7 +1969,7 @@ def calculate_stored_thermal_energy(
     p_ion: CellVariable,
     p_tot: CellVariable,
     geo: Geometry,
-) -> tuple[array_typing.FloatScalar, ...]:
+) -> tuple[FloatScalar, ...]:
     wth_el = volume_integration(1.5 * p_el.value, geo)
     wth_ion = volume_integration(1.5 * p_ion.value, geo)
     wth_tot = volume_integration(1.5 * p_tot.value, geo)
@@ -1710,10 +1977,10 @@ def calculate_stored_thermal_energy(
 
 
 def calculate_greenwald_fraction(
-    n_e_avg: array_typing.FloatScalar,
+    n_e_avg: FloatScalar,
     core_profiles: CoreProfiles,
     geo: Geometry,
-) -> array_typing.FloatScalar:
+) -> FloatScalar:
     gw_limit = (core_profiles.Ip_profile_face[-1] * 1e-6 /
                 (jnp.pi * geo.a_minor**2))
     fgw = n_e_avg / (gw_limit * 1e20)
@@ -1723,7 +1990,7 @@ def calculate_greenwald_fraction(
 def calculate_betas(
     core_profiles: CoreProfiles,
     geo: Geometry,
-) -> array_typing.FloatScalar:
+) -> FloatScalar:
     _, _, p_total = calculate_pressure(core_profiles)
     p_total_volume_avg = volume_average(p_total.value, geo)
     magnetic_pressure_on_axis = geo.B_0**2 / (2 * CONSTANTS.mu_0)
@@ -1786,10 +2053,10 @@ def calc_nu_star(
 
 
 def fast_ion_fractional_heating_formula(
-    birth_energy: float | array_typing.FloatVector,
-    T_e: array_typing.FloatVector,
+    birth_energy: float | FloatVector,
+    T_e: FloatVector,
     fast_ion_mass: float,
-) -> array_typing.FloatVector:
+) -> FloatVector:
     critical_energy = 10 * fast_ion_mass * T_e
     energy_ratio = birth_energy / critical_energy
     x_squared = energy_ratio
@@ -1836,7 +2103,7 @@ def _calculate_log_tau_e_Z1(
             1.5 * jnp.log(T_e * CONSTANTS.keV_to_J))
 
 
-_MAVRIN_Z_COEFFS: Final[Mapping[str, array_typing.FloatVector]] = (
+_MAVRIN_Z_COEFFS: Final[Mapping[str, FloatVector]] = (
     immutabledict.immutabledict({
         'C':
         np.array([
@@ -1886,7 +2153,7 @@ _MAVRIN_Z_COEFFS: Final[Mapping[str, array_typing.FloatVector]] = (
             [1.5119e01, -8.4207e01, 1.5985e02, -1.0011e02, 6.3795e01],
         ]),
     }))
-_TEMPERATURE_INTERVALS: Final[Mapping[str, array_typing.FloatVector]] = (
+_TEMPERATURE_INTERVALS: Final[Mapping[str, FloatVector]] = (
     immutabledict.immutabledict({
         'C': np.array([0.7]),
         'N': np.array([0.7]),
@@ -1902,17 +2169,17 @@ _TEMPERATURE_INTERVALS: Final[Mapping[str, array_typing.FloatVector]] = (
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class ChargeStateInfo:
-    Z_avg: array_typing.FloatVector
-    Z2_avg: array_typing.FloatVector
-    Z_per_species: array_typing.FloatVector
+    Z_avg: FloatVector
+    Z2_avg: FloatVector
+    Z_per_species: FloatVector
 
     @property
-    def Z_mixture(self) -> array_typing.FloatVector:
+    def Z_mixture(self) -> FloatVector:
         return self.Z2_avg / self.Z_avg
 
 
 def calculate_average_charge_state_single_species(
-    T_e: array_typing.FloatVector,
+    T_e: FloatVector,
     ion_symbol: str,
 ):
     if ion_symbol not in _MAVRIN_Z_COEFFS:
@@ -1944,7 +2211,7 @@ def get_average_charge_state(ion_symbols, T_e, fractions, Z_override):
     )
 
 
-def calculate_f_trap(geo: Geometry, ) -> array_typing.FloatVectorFace:
+def calculate_f_trap(geo: Geometry, ) -> FloatVectorFace:
     epsilon_effective = (
         0.67 * (1.0 - 1.4 * jnp.abs(geo.delta_face) * geo.delta_face) *
         geo.epsilon_face)
@@ -1954,10 +2221,10 @@ def calculate_f_trap(geo: Geometry, ) -> array_typing.FloatVectorFace:
 
 
 def calculate_L31(
-    f_trap: array_typing.FloatVectorFace,
-    nu_e_star: array_typing.FloatVectorFace,
-    Z_eff: array_typing.FloatVectorFace,
-) -> array_typing.FloatVectorFace:
+    f_trap: FloatVectorFace,
+    nu_e_star: FloatVectorFace,
+    Z_eff: FloatVectorFace,
+) -> FloatVectorFace:
     denom = (1.0 + (1 - 0.1 * f_trap) * jnp.sqrt(nu_e_star) + 0.5 *
              (1.0 - f_trap) * nu_e_star / Z_eff)
     ft31 = f_trap / denom
@@ -1969,10 +2236,10 @@ def calculate_L31(
 
 
 def calculate_L32(
-    f_trap: array_typing.FloatVectorFace,
-    nu_e_star: array_typing.FloatVectorFace,
-    Z_eff: array_typing.FloatVectorFace,
-) -> array_typing.FloatVectorFace:
+    f_trap: FloatVectorFace,
+    nu_e_star: FloatVectorFace,
+    Z_eff: FloatVectorFace,
+) -> FloatVectorFace:
     ft32ee = f_trap / (1 + 0.26 * (1 - f_trap) * jnp.sqrt(nu_e_star) + 0.18 *
                        (1 - 0.37 * f_trap) * nu_e_star / jnp.sqrt(Z_eff))
     ft32ei = f_trap / (1 + (1 + 0.6 * f_trap) * jnp.sqrt(nu_e_star) + 0.85 *
@@ -1989,25 +2256,25 @@ def calculate_L32(
 
 
 def calculate_nu_e_star(
-    q: array_typing.FloatVectorFace,
+    q: FloatVectorFace,
     geo: Geometry,
-    n_e: array_typing.FloatVectorFace,
-    T_e: array_typing.FloatVectorFace,
-    Z_eff: array_typing.FloatVectorFace,
-    log_lambda_ei: array_typing.FloatVectorFace,
-) -> array_typing.FloatVectorFace:
+    n_e: FloatVectorFace,
+    T_e: FloatVectorFace,
+    Z_eff: FloatVectorFace,
+    log_lambda_ei: FloatVectorFace,
+) -> FloatVectorFace:
     return (6.921e-18 * q * geo.R_major * n_e * Z_eff * log_lambda_ei /
             (((T_e * 1e3)**2) * (geo.epsilon_face + CONSTANTS.eps)**1.5))
 
 
 def calculate_nu_i_star(
-    q: array_typing.FloatVectorFace,
+    q: FloatVectorFace,
     geo: Geometry,
-    n_i: array_typing.FloatVectorFace,
-    T_i: array_typing.FloatVectorFace,
-    Z_eff: array_typing.FloatVectorFace,
-    log_lambda_ii: array_typing.FloatVectorFace,
-) -> array_typing.FloatVectorFace:
+    n_i: FloatVectorFace,
+    T_i: FloatVectorFace,
+    Z_eff: FloatVectorFace,
+    log_lambda_ii: FloatVectorFace,
+) -> FloatVectorFace:
     return (4.9e-18 * q * geo.R_major * n_i * Z_eff**4 * log_lambda_ii /
             (((T_i * 1e3)**2) * (geo.epsilon_face + CONSTANTS.eps)**1.5))
 
@@ -2015,8 +2282,8 @@ def calculate_nu_i_star(
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(kw_only=True, frozen=True)
 class Conductivity:
-    sigma: array_typing.FloatVectorCell
-    sigma_face: array_typing.FloatVectorFace
+    sigma: FloatVectorCell
+    sigma_face: FloatVectorFace
 
 
 class ConductivityModel(abc.ABC):
@@ -2040,10 +2307,10 @@ class ConductivityModelConfig(BaseModelFrozen, abc.ABC):
 @jax_utils.jit
 def _calculate_conductivity0(
     *,
-    Z_eff_face: array_typing.FloatVectorFace,
+    Z_eff_face: FloatVectorFace,
     n_e: CellVariable,
     T_e: CellVariable,
-    q_face: array_typing.FloatVectorFace,
+    q_face: FloatVectorFace,
     geo: Geometry,
 ):
     f_trap = calculate_f_trap(geo)
@@ -2346,7 +2613,7 @@ class Mode(enum.Enum):
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class RuntimeParamsSrc:
-    prescribed_values: tuple[array_typing.FloatVector, ...]
+    prescribed_values: tuple[FloatVector, ...]
     mode: Mode = dataclasses.field(metadata={"static": True})
     is_explicit: bool = dataclasses.field(metadata={"static": True})
 
@@ -2387,7 +2654,7 @@ class SourceProfileFunction(Protocol):
         core_profiles: CoreProfiles,
         calculated_source_profiles: SourceProfiles | None,
         unused_conductivity: Conductivity | None,
-    ) -> tuple[array_typing.FloatVectorCell, ...]:
+    ) -> tuple[FloatVectorCell, ...]:
         ...
 
 
@@ -2443,7 +2710,7 @@ class SourceProfileFunction(Protocol):
         core_profiles: CoreProfiles,
         calculated_source_profiles: SourceProfiles | None,
         unused_conductivity: Conductivity | None,
-    ) -> tuple[array_typing.FloatVectorCell, ...]:
+    ) -> tuple[FloatVectorCell, ...]:
         ...
 
 
@@ -2499,7 +2766,7 @@ class SourceProfileFunction(Protocol):
         core_profiles: CoreProfiles,
         calculated_source_profiles: SourceProfiles | None,
         unused_conductivity: Conductivity | None,
-    ) -> tuple[array_typing.FloatVectorCell, ...]:
+    ) -> tuple[FloatVectorCell, ...]:
         ...
 
 
@@ -2547,10 +2814,10 @@ class Source(abc.ABC):
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class RuntimeParamsGcS(RuntimeParamsSrc):
-    I_generic: array_typing.FloatScalar
-    fraction_of_total_current: array_typing.FloatScalar
-    gaussian_width: array_typing.FloatScalar
-    gaussian_location: array_typing.FloatScalar
+    I_generic: FloatScalar
+    fraction_of_total_current: FloatScalar
+    gaussian_width: FloatScalar
+    gaussian_location: FloatScalar
     use_absolute_current: bool
 
 
@@ -2635,11 +2902,11 @@ class GenericCurrentSourceConfig(SourceModelBase):
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class RuntimeParamsGeIO(RuntimeParamsSrc):
-    gaussian_width: array_typing.FloatScalar
-    gaussian_location: array_typing.FloatScalar
-    P_total: array_typing.FloatScalar
-    electron_heat_fraction: array_typing.FloatScalar
-    absorption_fraction: array_typing.FloatScalar
+    gaussian_width: FloatScalar
+    gaussian_location: FloatScalar
+    P_total: FloatScalar
+    electron_heat_fraction: FloatScalar
+    absorption_fraction: FloatScalar
 
 
 def calc_generic_heat_source(
@@ -2649,7 +2916,7 @@ def calc_generic_heat_source(
     P_total: float,
     electron_heat_fraction: float,
     absorption_fraction: float,
-) -> tuple[array_typing.FloatVectorCell, array_typing.FloatVectorCell]:
+) -> tuple[FloatVectorCell, FloatVectorCell]:
     absorbed_power = P_total * absorption_fraction
     profile = gaussian_profile(geo,
                                center=gaussian_location,
@@ -2743,7 +3010,7 @@ def calc_generic_particle_source(
     unused_state: CoreProfiles,
     unused_calculated_source_profiles: SourceProfiles | None,
     unused_conductivity: Conductivity | None,
-) -> tuple[array_typing.FloatVectorCell, ...]:
+) -> tuple[FloatVectorCell, ...]:
     source_params = runtime_params.sources[source_name]
     return (gaussian_profile(
         center=source_params.deposition_location,
@@ -2770,9 +3037,9 @@ class GenericParticleSource(Source):
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class RuntimeParamsPaSo(RuntimeParamsSrc):
-    particle_width: array_typing.FloatScalar
-    deposition_location: array_typing.FloatScalar
-    S_total: array_typing.FloatScalar
+    particle_width: FloatScalar
+    deposition_location: FloatScalar
+    S_total: FloatScalar
 
 
 class GenericParticleSourceConfig(SourceModelBase):
@@ -2815,7 +3082,7 @@ def calc_pellet_source(
     unused_state: CoreProfiles,
     unused_calculated_source_profiles: SourceProfiles | None,
     unused_conductivity: Conductivity | None,
-) -> tuple[array_typing.FloatVectorCell, ...]:
+) -> tuple[FloatVectorCell, ...]:
     source_params = runtime_params.sources[source_name]
     return (gaussian_profile(
         center=source_params.pellet_deposition_location,
@@ -2842,9 +3109,9 @@ class PelletSource(Source):
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class RuntimeParamsPE(RuntimeParamsSrc):
-    pellet_width: array_typing.FloatScalar
-    pellet_deposition_location: array_typing.FloatScalar
-    S_total: array_typing.FloatScalar
+    pellet_width: FloatScalar
+    pellet_deposition_location: FloatScalar
+    S_total: FloatScalar
 
 
 class PelletSourceConfig(SourceModelBase):
@@ -2986,8 +3253,8 @@ class FusionHeatSourceConfig(SourceModelBase):
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class RuntimeParamsPS(RuntimeParamsSrc):
-    puff_decay_length: array_typing.FloatScalar
-    S_total: array_typing.FloatScalar
+    puff_decay_length: FloatScalar
+    S_total: FloatScalar
 
 
 def calc_puff_source(
@@ -3092,7 +3359,7 @@ class QeiSource(Source):
 
     def get_source_profile_for_affected_core_profile(
         self,
-        profile: tuple[array_typing.Array, ...],
+        profile: tuple[Array, ...],
         affected_mesh_state: int,
         geo: Geometry,
     ):
@@ -3391,7 +3658,7 @@ def _update_standard_source_profiles(
     calculated_source_profiles: SourceProfiles,
     source_name: str,
     affected_core_profiles: tuple[AffectedCoreProfile, ...],
-    profile: tuple[array_typing.FloatVectorCell, ...],
+    profile: tuple[FloatVectorCell, ...],
 ):
     for profile, affected_core_profile in zip(profile,
                                               affected_core_profiles,
@@ -3439,11 +3706,11 @@ def get_all_source_profiles(runtime_params, geo, core_profiles, source_models,
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class PedestalModelOutput:
-    rho_norm_ped_top: array_typing.FloatScalar
-    rho_norm_ped_top_idx: array_typing.IntScalar
-    T_i_ped: array_typing.FloatScalar
-    T_e_ped: array_typing.FloatScalar
-    n_e_ped: array_typing.FloatScalar
+    rho_norm_ped_top: FloatScalar
+    rho_norm_ped_top_idx: IntScalar
+    T_i_ped: FloatScalar
+    T_e_ped: FloatScalar
+    n_e_ped: FloatScalar
 
 
 class PedestalModel(abc.ABC):
@@ -3491,12 +3758,12 @@ class PedestalModel(abc.ABC):
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class RuntimeParamsPED:
-    set_pedestal: array_typing.BoolScalar
-    n_e_ped: array_typing.FloatScalar
-    T_i_ped: array_typing.FloatScalar
-    T_e_ped: array_typing.FloatScalar
-    rho_norm_ped_top: array_typing.FloatScalar
-    n_e_ped_is_fGW: array_typing.BoolScalar
+    set_pedestal: BoolScalar
+    n_e_ped: FloatScalar
+    T_i_ped: FloatScalar
+    T_e_ped: FloatScalar
+    rho_norm_ped_top: FloatScalar
+    n_e_ped_is_fGW: BoolScalar
 
 
 class SetTemperatureDensityPedestalModel(PedestalModel):
@@ -3579,9 +3846,9 @@ _IMPURITY_MODE_FRACTIONS: Final[str] = 'fractions'
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class RuntimeParamsIM:
-    fractions: array_typing.FloatVector
-    A_avg: array_typing.FloatScalar | array_typing.FloatVectorCell
-    Z_override: array_typing.FloatScalar | None = None
+    fractions: FloatVector
+    A_avg: FloatScalar | FloatVectorCell
+    Z_override: FloatScalar | None = None
 
 
 class IonMixture(BaseModelFrozen):
@@ -3632,11 +3899,11 @@ ImpurityMapping: TypeAlias = Annotated[
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class RuntimeParamsIF:
-    fractions: jt.Float[array_typing.Array, 'ion_symbol rhon']
-    fractions_face: jt.Float[array_typing.Array, 'ion_symbol rhon+1']
-    A_avg: array_typing.FloatVectorCell
-    A_avg_face: array_typing.FloatVectorFace
-    Z_override: array_typing.FloatScalar | None = None
+    fractions: jt.Float[Array, 'ion_symbol rhon']
+    fractions_face: jt.Float[Array, 'ion_symbol rhon+1']
+    A_avg: FloatVectorCell
+    A_avg_face: FloatVectorFace
+    Z_override: FloatScalar | None = None
 
 
 class ImpurityFractions(BaseModelFrozen):
@@ -3688,18 +3955,18 @@ class InitialPsiMode(enum.StrEnum):
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass
 class RuntimeParamsPC:
-    Ip: array_typing.FloatScalar
-    v_loop_lcfs: array_typing.FloatScalar
-    T_i_right_bc: array_typing.FloatScalar
-    T_e_right_bc: array_typing.FloatScalar
-    T_e: array_typing.FloatVector
-    T_i: array_typing.FloatVector
-    psi: array_typing.FloatVector | None
-    psidot: array_typing.FloatVector | None
-    n_e: array_typing.FloatVector
-    nbar: array_typing.FloatScalar
+    Ip: FloatScalar
+    v_loop_lcfs: FloatScalar
+    T_i_right_bc: FloatScalar
+    T_e_right_bc: FloatScalar
+    T_e: FloatVector
+    T_i: FloatVector
+    psi: FloatVector | None
+    psidot: FloatVector | None
+    n_e: FloatVector
+    nbar: FloatScalar
     n_e_nbar_is_fGW: bool
-    n_e_right_bc: array_typing.FloatScalar
+    n_e_right_bc: FloatScalar
     n_e_right_bc_is_fGW: bool
     current_profile_nu: float
     initial_j_is_total_current: bool
@@ -3787,8 +4054,8 @@ class RuntimeParamsP:
                           ...] = dataclasses.field(metadata={'static': True})
     main_ion: RuntimeParamsIM
     impurity: RuntimeParamsIM
-    Z_eff: array_typing.FloatVectorCell
-    Z_eff_face: array_typing.FloatVectorFace
+    Z_eff: FloatVectorCell
+    Z_eff_face: FloatVectorFace
 
 
 @jax.tree_util.register_pytree_node_class
@@ -3886,20 +4153,20 @@ class RuntimeParamsX:
     D_e_max: float
     V_e_min: float
     V_e_max: float
-    rho_min: array_typing.FloatScalar
-    rho_max: array_typing.FloatScalar
-    apply_inner_patch: array_typing.BoolScalar
-    D_e_inner: array_typing.FloatScalar
-    V_e_inner: array_typing.FloatScalar
-    chi_i_inner: array_typing.FloatScalar
-    chi_e_inner: array_typing.FloatScalar
-    rho_inner: array_typing.FloatScalar
-    apply_outer_patch: array_typing.BoolScalar
-    D_e_outer: array_typing.FloatScalar
-    V_e_outer: array_typing.FloatScalar
-    chi_i_outer: array_typing.FloatScalar
-    chi_e_outer: array_typing.FloatScalar
-    rho_outer: array_typing.FloatScalar
+    rho_min: FloatScalar
+    rho_max: FloatScalar
+    apply_inner_patch: BoolScalar
+    D_e_inner: FloatScalar
+    V_e_inner: FloatScalar
+    chi_i_inner: FloatScalar
+    chi_e_inner: FloatScalar
+    rho_inner: FloatScalar
+    apply_outer_patch: BoolScalar
+    D_e_outer: FloatScalar
+    V_e_outer: FloatScalar
+    chi_i_outer: FloatScalar
+    chi_e_outer: FloatScalar
+    rho_outer: FloatScalar
     smoothing_width: float
     smooth_everywhere: bool
 
@@ -4190,11 +4457,11 @@ def _build_smoothing_matrix(transport_runtime_params, runtime_params, geo,
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class NormalizedLogarithmicGradients:
-    lref_over_lti: array_typing.FloatVectorFace
-    lref_over_lte: array_typing.FloatVectorFace
-    lref_over_lne: array_typing.FloatVectorFace
-    lref_over_lni0: array_typing.FloatVectorFace
-    lref_over_lni1: array_typing.FloatVectorFace
+    lref_over_lti: FloatVectorFace
+    lref_over_lte: FloatVectorFace
+    lref_over_lne: FloatVectorFace
+    lref_over_lni0: FloatVectorFace
+    lref_over_lni1: FloatVectorFace
 
     @classmethod
     def from_profiles(
@@ -4220,7 +4487,7 @@ class NormalizedLogarithmicGradients:
 
 
 def calculate_chiGB(
-    reference_temperature: array_typing.Array,
+    reference_temperature: Array,
     reference_magnetic_field: chex.Numeric,
     reference_mass: chex.Numeric,
     reference_length: chex.Numeric,
@@ -4280,14 +4547,14 @@ def calculate_normalized_logarithmic_gradient(
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class QuasilinearInputs:
-    chiGB: (array_typing.FloatVectorFace)
-    Rmin: array_typing.FloatScalar
-    Rmaj: array_typing.FloatScalar
-    lref_over_lti: array_typing.FloatVectorFace
-    lref_over_lte: array_typing.FloatVectorFace
-    lref_over_lne: array_typing.FloatVectorFace
-    lref_over_lni0: array_typing.FloatVectorFace
-    lref_over_lni1: array_typing.FloatVectorFace
+    chiGB: (FloatVectorFace)
+    Rmin: FloatScalar
+    Rmaj: FloatScalar
+    lref_over_lti: FloatVectorFace
+    lref_over_lte: FloatVectorFace
+    lref_over_lne: FloatVectorFace
+    lref_over_lni0: FloatVectorFace
+    lref_over_lni1: FloatVectorFace
 
 
 class QuasilinearTransportModel(TransportModel):
@@ -4362,15 +4629,15 @@ class RuntimeParams(RuntimeParams00):
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class QualikizInputs(QuasilinearInputs):
-    Z_eff_face: array_typing.FloatVectorFace
-    q: array_typing.FloatVectorFace
-    smag: array_typing.FloatVectorFace
-    x: array_typing.FloatVectorFace
-    Ti_Te: array_typing.FloatVectorFace
-    log_nu_star_face: array_typing.FloatVectorFace
-    normni: array_typing.FloatVectorFace
-    alpha: array_typing.FloatVectorFace
-    epsilon_lcfs: array_typing.FloatScalar
+    Z_eff_face: FloatVectorFace
+    q: FloatVectorFace
+    smag: FloatVectorFace
+    x: FloatVectorFace
+    Ti_Te: FloatVectorFace
+    log_nu_star_face: FloatVectorFace
+    normni: FloatVectorFace
+    alpha: FloatVectorFace
+    epsilon_lcfs: FloatScalar
 
     @property
     def Ati(self):
@@ -4881,44 +5148,44 @@ _RHO_SMOOTHING_LIMIT = 0.1
 @dataclasses.dataclass(frozen=True)
 class StandardGeometry(Geometry):
     Ip_from_parameters: bool = dataclasses.field(metadata=dict(static=True))
-    Ip_profile_face: array_typing.FloatVectorFace
-    psi: array_typing.FloatVectorCell
-    psi_from_Ip: array_typing.FloatVectorCell
-    psi_from_Ip_face: array_typing.FloatVectorFace
-    j_total: array_typing.Array
-    j_total_face: array_typing.FloatVectorFace
-    delta_upper_face: array_typing.FloatVectorFace
-    delta_lower_face: array_typing.FloatVectorFace
+    Ip_profile_face: FloatVectorFace
+    psi: FloatVectorCell
+    psi_from_Ip: FloatVectorCell
+    psi_from_Ip_face: FloatVectorFace
+    j_total: Array
+    j_total_face: FloatVectorFace
+    delta_upper_face: FloatVectorFace
+    delta_lower_face: FloatVectorFace
 
 
 @dataclasses.dataclass(frozen=True)
 class StandardGeometryIntermediates:
     geometry_type: GeometryType
     Ip_from_parameters: bool
-    R_major: array_typing.FloatScalar
-    a_minor: array_typing.FloatScalar
-    B_0: array_typing.FloatScalar
-    psi: array_typing.Array
-    Ip_profile: array_typing.Array
-    Phi: array_typing.Array
-    R_in: array_typing.Array
-    R_out: array_typing.Array
-    F: array_typing.Array
-    int_dl_over_Bp: array_typing.Array
-    flux_surf_avg_1_over_R: array_typing.Array
-    flux_surf_avg_1_over_R2: array_typing.Array
-    flux_surf_avg_Bp2: array_typing.Array
-    flux_surf_avg_RBp: array_typing.Array
-    flux_surf_avg_R2Bp2: array_typing.Array
-    flux_surf_avg_B2: array_typing.Array
-    flux_surf_avg_1_over_B2: array_typing.Array
-    delta_upper_face: array_typing.Array
-    delta_lower_face: array_typing.Array
-    elongation: array_typing.Array
-    vpr: array_typing.Array
+    R_major: FloatScalar
+    a_minor: FloatScalar
+    B_0: FloatScalar
+    psi: Array
+    Ip_profile: Array
+    Phi: Array
+    R_in: Array
+    R_out: Array
+    F: Array
+    int_dl_over_Bp: Array
+    flux_surf_avg_1_over_R: Array
+    flux_surf_avg_1_over_R2: Array
+    flux_surf_avg_Bp2: Array
+    flux_surf_avg_RBp: Array
+    flux_surf_avg_R2Bp2: Array
+    flux_surf_avg_B2: Array
+    flux_surf_avg_1_over_B2: Array
+    delta_upper_face: Array
+    delta_lower_face: Array
+    elongation: Array
+    vpr: Array
     n_rho: int
     hires_factor: int
-    z_magnetic_axis: array_typing.FloatScalar | None
+    z_magnetic_axis: FloatScalar | None
 
     def __post_init__(self):
         if self.flux_surf_avg_Bp2[-1] < 1e-10:
@@ -5283,14 +5550,14 @@ def _apply_relevant_kwargs(f, kwargs):
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class SafetyFactorFit:
-    rho_q_min: array_typing.FloatScalar
-    q_min: array_typing.FloatScalar
-    rho_q_3_2_first: array_typing.FloatScalar
-    rho_q_2_1_first: array_typing.FloatScalar
-    rho_q_3_1_first: array_typing.FloatScalar
-    rho_q_3_2_second: array_typing.FloatScalar
-    rho_q_2_1_second: array_typing.FloatScalar
-    rho_q_3_1_second: array_typing.FloatScalar
+    rho_q_min: FloatScalar
+    q_min: FloatScalar
+    rho_q_3_2_first: FloatScalar
+    rho_q_2_1_first: FloatScalar
+    rho_q_3_1_first: FloatScalar
+    rho_q_3_2_second: FloatScalar
+    rho_q_2_1_second: FloatScalar
+    rho_q_3_1_second: FloatScalar
 
 
 def _sliding_window_of_three(flat_array):
@@ -5433,9 +5700,9 @@ IMPURITY_DIM = "impurity_symbol"
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class ImpuritySpeciesOutput:
-    radiation: array_typing.FloatVectorCell
-    n_impurity: array_typing.FloatVectorCell
-    Z_impurity: array_typing.FloatVectorCell
+    radiation: FloatVectorCell
+    n_impurity: FloatVectorCell
+    Z_impurity: FloatVectorCell
 
 
 def calculate_impurity_species_output(sim_state, runtime_params):
@@ -5469,84 +5736,84 @@ class PostProcessedOutputs:
     pressure_thermal_i: CellVariable
     pressure_thermal_e: CellVariable
     pressure_thermal_total: CellVariable
-    pprime: array_typing.FloatVector
-    W_thermal_i: array_typing.FloatScalar
-    W_thermal_e: array_typing.FloatScalar
-    W_thermal_total: array_typing.FloatScalar
-    tau_E: array_typing.FloatScalar
-    H89P: array_typing.FloatScalar
-    H98: array_typing.FloatScalar
-    H97L: array_typing.FloatScalar
-    H20: array_typing.FloatScalar
-    FFprime: array_typing.FloatVector
-    psi_norm: array_typing.FloatVector
-    P_SOL_i: array_typing.FloatScalar
-    P_SOL_e: array_typing.FloatScalar
-    P_SOL_total: array_typing.FloatScalar
-    P_aux_i: array_typing.FloatScalar
-    P_aux_e: array_typing.FloatScalar
-    P_aux_total: array_typing.FloatScalar
-    P_external_injected: array_typing.FloatScalar
-    P_external_total: array_typing.FloatScalar
-    P_ei_exchange_i: array_typing.FloatScalar
-    P_ei_exchange_e: array_typing.FloatScalar
-    P_aux_generic_i: array_typing.FloatScalar
-    P_aux_generic_e: array_typing.FloatScalar
-    P_aux_generic_total: array_typing.FloatScalar
-    P_alpha_i: array_typing.FloatScalar
-    P_alpha_e: array_typing.FloatScalar
-    P_alpha_total: array_typing.FloatScalar
-    P_ohmic_e: array_typing.FloatScalar
-    P_bremsstrahlung_e: array_typing.FloatScalar
-    P_cyclotron_e: array_typing.FloatScalar
-    P_ecrh_e: array_typing.FloatScalar
-    P_radiation_e: array_typing.FloatScalar
-    I_ecrh: array_typing.FloatScalar
-    I_aux_generic: array_typing.FloatScalar
-    P_fusion: array_typing.FloatScalar
-    Q_fusion: array_typing.FloatScalar
-    P_icrh_e: array_typing.FloatScalar
-    P_icrh_i: array_typing.FloatScalar
-    P_icrh_total: array_typing.FloatScalar
-    P_LH_high_density: array_typing.FloatScalar
-    P_LH_min: array_typing.FloatScalar
-    P_LH: array_typing.FloatScalar
-    n_e_min_P_LH: array_typing.FloatScalar
-    E_fusion: array_typing.FloatScalar
-    E_aux_total: array_typing.FloatScalar
-    E_ohmic_e: array_typing.FloatScalar
-    E_external_injected: array_typing.FloatScalar
-    E_external_total: array_typing.FloatScalar
-    T_e_volume_avg: array_typing.FloatScalar
-    T_i_volume_avg: array_typing.FloatScalar
-    n_e_volume_avg: array_typing.FloatScalar
-    n_i_volume_avg: array_typing.FloatScalar
-    n_e_line_avg: array_typing.FloatScalar
-    n_i_line_avg: array_typing.FloatScalar
-    fgw_n_e_volume_avg: array_typing.FloatScalar
-    fgw_n_e_line_avg: array_typing.FloatScalar
-    q95: array_typing.FloatScalar
-    W_pol: array_typing.FloatScalar
-    li3: array_typing.FloatScalar
-    dW_thermal_dt: array_typing.FloatScalar
-    rho_q_min: array_typing.FloatScalar
-    q_min: array_typing.FloatScalar
-    rho_q_3_2_first: array_typing.FloatScalar
-    rho_q_3_2_second: array_typing.FloatScalar
-    rho_q_2_1_first: array_typing.FloatScalar
-    rho_q_2_1_second: array_typing.FloatScalar
-    rho_q_3_1_first: array_typing.FloatScalar
-    rho_q_3_1_second: array_typing.FloatScalar
-    I_bootstrap: array_typing.FloatScalar
-    j_external: array_typing.FloatVector
-    j_ohmic: array_typing.FloatVector
-    S_gas_puff: array_typing.FloatScalar
-    S_pellet: array_typing.FloatScalar
-    S_generic_particle: array_typing.FloatScalar
-    beta_tor: array_typing.FloatScalar
-    beta_pol: array_typing.FloatScalar
-    beta_N: array_typing.FloatScalar
-    S_total: array_typing.FloatScalar
+    pprime: FloatVector
+    W_thermal_i: FloatScalar
+    W_thermal_e: FloatScalar
+    W_thermal_total: FloatScalar
+    tau_E: FloatScalar
+    H89P: FloatScalar
+    H98: FloatScalar
+    H97L: FloatScalar
+    H20: FloatScalar
+    FFprime: FloatVector
+    psi_norm: FloatVector
+    P_SOL_i: FloatScalar
+    P_SOL_e: FloatScalar
+    P_SOL_total: FloatScalar
+    P_aux_i: FloatScalar
+    P_aux_e: FloatScalar
+    P_aux_total: FloatScalar
+    P_external_injected: FloatScalar
+    P_external_total: FloatScalar
+    P_ei_exchange_i: FloatScalar
+    P_ei_exchange_e: FloatScalar
+    P_aux_generic_i: FloatScalar
+    P_aux_generic_e: FloatScalar
+    P_aux_generic_total: FloatScalar
+    P_alpha_i: FloatScalar
+    P_alpha_e: FloatScalar
+    P_alpha_total: FloatScalar
+    P_ohmic_e: FloatScalar
+    P_bremsstrahlung_e: FloatScalar
+    P_cyclotron_e: FloatScalar
+    P_ecrh_e: FloatScalar
+    P_radiation_e: FloatScalar
+    I_ecrh: FloatScalar
+    I_aux_generic: FloatScalar
+    P_fusion: FloatScalar
+    Q_fusion: FloatScalar
+    P_icrh_e: FloatScalar
+    P_icrh_i: FloatScalar
+    P_icrh_total: FloatScalar
+    P_LH_high_density: FloatScalar
+    P_LH_min: FloatScalar
+    P_LH: FloatScalar
+    n_e_min_P_LH: FloatScalar
+    E_fusion: FloatScalar
+    E_aux_total: FloatScalar
+    E_ohmic_e: FloatScalar
+    E_external_injected: FloatScalar
+    E_external_total: FloatScalar
+    T_e_volume_avg: FloatScalar
+    T_i_volume_avg: FloatScalar
+    n_e_volume_avg: FloatScalar
+    n_i_volume_avg: FloatScalar
+    n_e_line_avg: FloatScalar
+    n_i_line_avg: FloatScalar
+    fgw_n_e_volume_avg: FloatScalar
+    fgw_n_e_line_avg: FloatScalar
+    q95: FloatScalar
+    W_pol: FloatScalar
+    li3: FloatScalar
+    dW_thermal_dt: FloatScalar
+    rho_q_min: FloatScalar
+    q_min: FloatScalar
+    rho_q_3_2_first: FloatScalar
+    rho_q_3_2_second: FloatScalar
+    rho_q_2_1_first: FloatScalar
+    rho_q_2_1_second: FloatScalar
+    rho_q_3_1_first: FloatScalar
+    rho_q_3_1_second: FloatScalar
+    I_bootstrap: FloatScalar
+    j_external: FloatVector
+    j_ohmic: FloatVector
+    S_gas_puff: FloatScalar
+    S_pellet: FloatScalar
+    S_generic_particle: FloatScalar
+    beta_tor: FloatScalar
+    beta_pol: FloatScalar
+    beta_N: FloatScalar
+    S_total: FloatScalar
     impurity_species: dict[str, ImpuritySpeciesOutput]
 
 
@@ -5579,10 +5846,10 @@ PARTICLE_SOURCE_TRANSFORMATIONS = {
 
 
 def _get_integrated_source_value(
-    source_profiles_dict: dict[str, array_typing.FloatVector],
+    source_profiles_dict: dict[str, FloatVector],
     internal_source_name: str,
     geo: Geometry,
-    integration_fn: Callable[[array_typing.FloatVector, Geometry], jax.Array],
+    integration_fn: Callable[[FloatVector, Geometry], jax.Array],
 ):
     if internal_source_name in source_profiles_dict:
         return integration_fn(source_profiles_dict[internal_source_name], geo)
@@ -5904,16 +6171,16 @@ _trapz = jax.scipy.integrate.trapezoid
 class Ions:
     n_i: CellVariable
     n_impurity: CellVariable
-    impurity_fractions: Mapping[str, array_typing.FloatVectorCell]
-    Z_i: array_typing.FloatVectorCell
-    Z_i_face: array_typing.FloatVectorFace
-    Z_impurity: array_typing.FloatVectorCell
-    Z_impurity_face: array_typing.FloatVectorFace
-    A_i: array_typing.FloatScalar
-    A_impurity: array_typing.FloatVectorCell
-    A_impurity_face: array_typing.FloatVectorFace
-    Z_eff: array_typing.FloatVectorCell
-    Z_eff_face: array_typing.FloatVectorFace
+    impurity_fractions: Mapping[str, FloatVectorCell]
+    Z_i: FloatVectorCell
+    Z_i_face: FloatVectorFace
+    Z_impurity: FloatVectorCell
+    Z_impurity_face: FloatVectorFace
+    A_i: FloatScalar
+    A_impurity: FloatVectorCell
+    A_impurity_face: FloatVectorFace
+    Z_eff: FloatVectorCell
+    Z_eff_face: FloatVectorFace
 
 
 def get_updated_ion_temperature(profile_conditions_params, geo):
@@ -5979,14 +6246,14 @@ def get_updated_electron_density(profile_conditions_params, geo):
 
 @dataclasses.dataclass(frozen=True)
 class _IonProperties:
-    A_impurity: array_typing.FloatVectorCell
-    A_impurity_face: array_typing.FloatVectorFace
-    Z_impurity: array_typing.FloatVectorCell
-    Z_impurity_face: array_typing.FloatVectorFace
-    Z_eff: array_typing.FloatVectorCell
-    dilution_factor: array_typing.FloatVectorCell
-    dilution_factor_edge: array_typing.FloatScalar
-    impurity_fractions: array_typing.FloatVector
+    A_impurity: FloatVectorCell
+    A_impurity_face: FloatVectorFace
+    Z_impurity: FloatVectorCell
+    Z_impurity_face: FloatVectorFace
+    Z_eff: FloatVectorCell
+    dilution_factor: FloatVectorCell
+    dilution_factor_edge: FloatScalar
+    impurity_fractions: FloatVector
 
 
 def _get_ion_properties_from_fractions(impurity_symbols, impurity_params, T_e,
@@ -7641,9 +7908,9 @@ EXCLUDED_GEOMETRY_NAMES = frozenset({
 
 
 def _extend_cell_grid_to_boundaries(
-    cell_var: array_typing.FloatVectorCell,
-    face_var: array_typing.FloatVectorFace,
-) -> array_typing.FloatVectorCellPlusBoundaries:
+    cell_var: FloatVectorCell,
+    face_var: FloatVectorFace,
+) -> FloatVectorCellPlusBoundaries:
     left_value = np.expand_dims(face_var[:, 0], axis=-1)
     right_value = np.expand_dims(face_var[:, -1], axis=-1)
     return np.concatenate([left_value, cell_var, right_value], axis=-1)
@@ -7685,19 +7952,19 @@ class StateHistory:
         self._rho_norm = np.concatenate([[0.0], self.rho_cell_norm, [1.0]])
 
     @property
-    def times(self) -> array_typing.Array:
+    def times(self) -> Array:
         return self._times
 
     @property
-    def rho_cell_norm(self) -> array_typing.FloatVectorCell:
+    def rho_cell_norm(self) -> FloatVectorCell:
         return self._rho_cell_norm
 
     @property
-    def rho_face_norm(self) -> array_typing.FloatVectorFace:
+    def rho_face_norm(self) -> FloatVectorFace:
         return self._rho_face_norm
 
     @property
-    def rho_norm(self) -> array_typing.FloatVectorCellPlusBoundaries:
+    def rho_norm(self) -> FloatVectorCellPlusBoundaries:
         return self._rho_norm
 
     @property
@@ -7960,7 +8227,7 @@ class StateHistory:
                     or field_name == "geometry_type"
                     or field_name == "Ip_from_parameters"
                     or field_name == "j_total"
-                    or not isinstance(data, array_typing.Array)):
+                    or not isinstance(data, Array)):
                 continue
             if f"{field_name}_face" in geometry_attributes:
                 data = _extend_cell_grid_to_boundaries(
@@ -8015,49 +8282,49 @@ class GeometryType(enum.IntEnum):
 class Geometry:
     geometry_type: GeometryType
     torax_mesh: Any
-    Phi: array_typing.Array
-    Phi_face: array_typing.Array
-    R_major: array_typing.FloatScalar
-    a_minor: array_typing.FloatScalar
-    B_0: array_typing.FloatScalar
-    volume: array_typing.Array
-    volume_face: array_typing.Array
-    area: array_typing.Array
-    area_face: array_typing.Array
-    vpr: array_typing.Array
-    vpr_face: array_typing.Array
-    spr: array_typing.Array
-    spr_face: array_typing.Array
-    delta_face: array_typing.Array
-    elongation: array_typing.Array
-    elongation_face: array_typing.Array
-    g0: array_typing.Array
-    g0_face: array_typing.Array
-    g1: array_typing.Array
-    g1_face: array_typing.Array
-    g2: array_typing.Array
-    g2_face: array_typing.Array
-    g3: array_typing.Array
-    g3_face: array_typing.Array
-    gm4: array_typing.Array
-    gm4_face: array_typing.Array
-    gm5: array_typing.Array
-    gm5_face: array_typing.Array
-    g2g3_over_rhon: array_typing.Array
-    g2g3_over_rhon_face: array_typing.Array
-    g2g3_over_rhon_hires: array_typing.Array
-    F: array_typing.Array
-    F_face: array_typing.Array
-    F_hires: array_typing.Array
-    R_in: array_typing.Array
-    R_in_face: array_typing.Array
-    R_out: array_typing.Array
-    R_out_face: array_typing.Array
-    spr_hires: array_typing.Array
-    rho_hires_norm: array_typing.Array
-    rho_hires: array_typing.Array
-    Phi_b_dot: array_typing.FloatScalar
-    _z_magnetic_axis: array_typing.FloatScalar | None
+    Phi: Array
+    Phi_face: Array
+    R_major: FloatScalar
+    a_minor: FloatScalar
+    B_0: FloatScalar
+    volume: Array
+    volume_face: Array
+    area: Array
+    area_face: Array
+    vpr: Array
+    vpr_face: Array
+    spr: Array
+    spr_face: Array
+    delta_face: Array
+    elongation: Array
+    elongation_face: Array
+    g0: Array
+    g0_face: Array
+    g1: Array
+    g1_face: Array
+    g2: Array
+    g2_face: Array
+    g3: Array
+    g3_face: Array
+    gm4: Array
+    gm4_face: Array
+    gm5: Array
+    gm5_face: Array
+    g2g3_over_rhon: Array
+    g2g3_over_rhon_face: Array
+    g2g3_over_rhon_hires: Array
+    F: Array
+    F_face: Array
+    F_hires: Array
+    R_in: Array
+    R_in_face: Array
+    R_out: Array
+    R_out_face: Array
+    spr_hires: Array
+    rho_hires_norm: Array
+    rho_hires: Array
+    Phi_b_dot: FloatScalar
+    _z_magnetic_axis: FloatScalar | None
 
 
 def update_geometries_with_Phibdot(*, dt, geo_t, geo_t_plus_dt):
@@ -8070,8 +8337,8 @@ def update_geometries_with_Phibdot(*, dt, geo_t, geo_t_plus_dt):
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass
 class ToraxSimState:
-    t: array_typing.FloatScalar
-    dt: array_typing.FloatScalar
+    t: FloatScalar
+    dt: FloatScalar
     core_profiles: CoreProfiles
     core_transport: CoreTransport
     core_sources: SourceProfiles
