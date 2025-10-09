@@ -1665,7 +1665,7 @@ def _load_CHEASE_data(file_path):
 
 def get_geometry_dir(geometry_dir):
     if geometry_dir is None:
-        geometry_dir = os.path.join(torax.__path__[0], 'data/third_party/geo')
+        geometry_dir = "geo"
     return geometry_dir
 
 
