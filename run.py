@@ -358,7 +358,7 @@ class Grid1D(BaseModelFrozen):
 
     @property
     def face_centers(self):
-        return _get_face_centers(nx=self.nx, dx=self.dx)
+        return np.linspace(0, self.nx * self.dx, self.nx + 1)
 
     @property
     def cell_centers(self):
@@ -532,11 +532,6 @@ def _is_non_negative(
         if not np.all(value >= 0.0):
             raise ValueError('All values must be non-negative.')
     return time_varying_array
-
-
-@functools.cache
-def _get_face_centers(nx: int, dx: float):
-    return np.linspace(0, nx * dx, nx + 1)
 
 
 @functools.cache
