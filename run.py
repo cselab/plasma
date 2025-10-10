@@ -7776,8 +7776,6 @@ CONFIG = {
         'An_min': 0.05,
         'ITG_flux_ratio_correction': 1,
     },
-    'solver': {
-    },
 }
 g.tolerance = 1e-7
 g.n_corrector_steps = 1
