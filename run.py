@@ -6577,7 +6577,6 @@ def calc_c(x, coeffs):
 MIN_DELTA: Final[float] = 1e-7
 
 
-@jax.jit
 def implicit_solve_block(dt, x_old, x_new_guess, coeffs_exp, coeffs_new):
     x_old_vec = cell_variable_tuple_to_vec(x_old)
     x_new_guess_vec = cell_variable_tuple_to_vec(x_new_guess)
