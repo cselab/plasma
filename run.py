@@ -6403,10 +6403,10 @@ def _calculate_pereverzev_flux(runtime_params, geo, core_profiles,
     geo_factor = jnp.concatenate(
         [jnp.ones(1), geo.g1_over_vpr_face[1:] / geo.g0_face[1:]])
     chi_face_per_ion = (geo.g1_over_vpr_face * core_profiles.n_i.face_value() *
-                        g.keV_to_J * runtime_params.solver.chi_pereverzev)
+                        g.keV_to_J * g.chi_pereverzev)
     chi_face_per_el = (geo.g1_over_vpr_face * core_profiles.n_e.face_value() *
-                       g.keV_to_J * runtime_params.solver.chi_pereverzev)
-    d_face_per_el = runtime_params.solver.D_pereverzev
+                       g.keV_to_J * g.chi_pereverzev)
+    d_face_per_el = g.D_pereverzev
     v_face_per_el = (core_profiles.n_e.face_grad() /
                      core_profiles.n_e.face_value() * d_face_per_el *
                      geo_factor)
@@ -6848,8 +6848,6 @@ class RuntimeParams:
     convection_dirichlet_mode: str = dataclasses.field(
         metadata={'static': True})
     convection_neumann_mode: str = dataclasses.field(metadata={'static': True})
-    chi_pereverzev: float
-    D_pereverzev: float
 
 
 @functools.partial(
@@ -6948,8 +6946,6 @@ class BaseSolver(BaseModelFrozen, abc.ABC):
                                          JAX_STATIC] = 'ghost'
     convection_neumann_mode: Annotated[Literal['ghost', 'semi-implicit'],
                                        JAX_STATIC] = 'ghost'
-    chi_pereverzev: pydantic.PositiveFloat = 30.0
-    D_pereverzev: pydantic.NonNegativeFloat = 15.0
 
     @property
     @abc.abstractmethod
@@ -6975,8 +6971,6 @@ class LinearThetaMethod(BaseSolver):
             theta_implicit=self.theta_implicit,
             convection_dirichlet_mode=self.convection_dirichlet_mode,
             convection_neumann_mode=self.convection_neumann_mode,
-            chi_pereverzev=self.chi_pereverzev,
-            D_pereverzev=self.D_pereverzev,
         )
 
     def build_solver(self):
@@ -7783,14 +7777,14 @@ CONFIG = {
         'ITG_flux_ratio_correction': 1,
     },
     'solver': {
-        'chi_pereverzev': 30,
-        'D_pereverzev': 15,
     },
 }
 g.tolerance = 1e-7
 g.n_corrector_steps = 1
 g.torax_config = ToraxConfig.from_dict(CONFIG)
 g.use_pereverzev = True
+g.chi_pereverzev = 30
+g.D_pereverzev = 15
 
 mesh = g.torax_config.geometry.build_provider.torax_mesh
 for submodel in g.torax_config.submodels:
