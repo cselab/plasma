@@ -7630,7 +7630,7 @@ import matplotlib.pyplot as plt
 t = data_tree.time.to_numpy()
 rho = data_tree.rho_norm.to_numpy()
 nt, = np.shape(t)
-for key in 'T_i', 'T_e', 'psi':
+for key in g.evolving_names:
     var = data_tree.profiles[key].to_numpy()
     lo = np.min(var).item()
     hi = np.max(var).item()
