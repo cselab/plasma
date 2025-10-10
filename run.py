@@ -27,8 +27,9 @@ import xarray as xr
 
 class g:
     pass
-g.evolving_names = 'T_i', 'T_e', 'psi', 'n_e'
 
+
+g.evolving_names = 'T_i', 'T_e', 'psi', 'n_e'
 
 os.environ['XLA_FLAGS'] = (
     os.environ.get('XLA_FLAGS', '') +
@@ -5997,32 +5998,10 @@ def initial_core_profiles0(runtime_params, geo, source_models,
     )
 
 
-def _get_initial_psi_mode(
-    runtime_params: RuntimeParamsSlice,
-    geo: Geometry,
-):
-    psi_mode = runtime_params.profile_conditions.initial_psi_mode
-    if psi_mode == InitialPsiMode.PROFILE_CONDITIONS:
-        if runtime_params.profile_conditions.psi is None:
-            logging.warning(
-                'Falling back to legacy behavior as `profile_conditions.psi` is '
-                'None. Future versions of TORAX will require `psi` to be provided '
-                'if `initial_psi_mode` is PROFILE_CONDITIONS. Use '
-                '`initial_psi_mode` to initialize psi from `j` or `geometry` and '
-                'avoid this warning.')
-            if (isinstance(geo, StandardGeometry) and
-                    not runtime_params.profile_conditions.initial_psi_from_j):
-                psi_mode = InitialPsiMode.GEOMETRY
-            else:
-                psi_mode = profile_conditions_lib.InitialPsiMode.J
-    return psi_mode
-
-
 def _init_psi_and_psi_derived(runtime_params, geo, core_profiles,
                               source_models, neoclassical_models):
     sources_are_calculated = False
     source_profiles = build_all_zero_profiles(geo)
-    initial_psi_mode = _get_initial_psi_mode(runtime_params, geo)
     dpsi_drhonorm_edge = (calculate_psi_grad_constraint_from_Ip(
         runtime_params.profile_conditions.Ip,
         geo,
@@ -6527,19 +6506,6 @@ def cell_variable_tuple_to_vec(
 
 
 class CoeffsCallback:
-
-    def __init__(self, evolving_names):
-        self.evolving_names = evolving_names
-
-    def __hash__(self) -> int:
-        return hash((
-            self.evolving_names,
-        ))
-
-    def __eq__(self, other: typing_extensions.Self) -> bool:
-        return (self.physics_models == other.physics_models
-                and self.evolving_names == other.evolving_names)
-
     def __call__(
         self,
         runtime_params: RuntimeParamsSlice,
@@ -6555,7 +6521,7 @@ class CoeffsCallback:
             runtime_params,
             geo,
             core_profiles,
-            self.evolving_names,
+            None,
         )
         if allow_pereverzev:
             use_pereverzev = runtime_params.solver.use_pereverzev
@@ -6567,7 +6533,7 @@ class CoeffsCallback:
             core_profiles=core_profiles,
             explicit_source_profiles=explicit_source_profiles,
             physics_models=None,
-            evolving_names=self.evolving_names,
+            evolving_names=None,
             use_pereverzev=use_pereverzev,
             explicit_call=explicit_call,
         )
@@ -7097,14 +7063,14 @@ def predictor_corrector_method(
     return x_new
 
 
-
 @jax.jit
 def solver_x_new(dt, runtime_params_t, runtime_params_t_plus_dt, geo_t,
-           geo_t_plus_dt, core_profiles_t, core_profiles_t_plus_dt,
-           explicit_source_profiles):
+                 geo_t_plus_dt, core_profiles_t, core_profiles_t_plus_dt,
+                 explicit_source_profiles):
     x_old = core_profiles_to_solver_x_tuple(core_profiles_t, None)
-    x_new_guess = core_profiles_to_solver_x_tuple(core_profiles_t_plus_dt, None)
-    coeffs_callback = CoeffsCallback(evolving_names=None)
+    x_new_guess = core_profiles_to_solver_x_tuple(core_profiles_t_plus_dt,
+                                                  None)
+    coeffs_callback = CoeffsCallback()
     coeffs_exp = coeffs_callback(
         runtime_params_t,
         geo_t,
