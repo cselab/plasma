@@ -27,6 +27,7 @@ import xarray as xr
 
 class g:
     pass
+g.evolving_names = 'T_i', 'T_e', 'psi', 'n_e'
 
 
 os.environ['XLA_FLAGS'] = (
