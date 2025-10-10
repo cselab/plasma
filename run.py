@@ -2910,18 +2910,16 @@ def build_source_profiles1(runtime_params,
     return profiles
 
 
-def build_standard_source_profiles(
-    *,
-    calculated_source_profiles: SourceProfiles,
-    runtime_params: RuntimeParamsSlice,
-    geo: Geometry,
-    core_profiles: CoreProfiles,
-    source_models: SourceModels,
-    explicit: bool = True,
-    conductivity=None,
-    calculate_anyway=False,
-    psi_only=False,
-):
+def build_standard_source_profiles(*,
+                                   calculated_source_profiles,
+                                   runtime_params,
+                                   geo: Geometry,
+                                   core_profiles,
+                                   source_models,
+                                   explicit: bool = True,
+                                   conductivity=None,
+                                   calculate_anyway=False,
+                                   psi_only=False):
 
     def calculate_source(source_name, source):
         source_params = runtime_params.sources[source_name]
@@ -2931,13 +2929,13 @@ def build_standard_source_profiles(
                 geo,
                 core_profiles,
                 calculated_source_profiles,
-                conductivity,
+                conductivity
             )
             _update_standard_source_profiles(
                 calculated_source_profiles,
                 source_name,
                 source.affected_core_profiles,
-                value,
+                value
             )
 
     for source_name, source in source_models.psi_sources.items():
