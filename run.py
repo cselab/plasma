@@ -6860,14 +6860,7 @@ def solver_x_new(dt, runtime_params_t, runtime_params_t_plus_dt, geo_t,
     )
 
 
-class BaseSolver(BaseModelFrozen, abc.ABC):
-
-    @abc.abstractmethod
-    def build_solver(self):
-        pass
-
-
-class LinearThetaMethod(BaseSolver):
+class LinearThetaMethod(BaseModelFrozen):
 
     @pydantic.model_validator(mode='before')
     @classmethod
