@@ -1044,7 +1044,6 @@ class SolverNumericOutputs:
     outer_solver_iterations: IntScalar = 0
     solver_error_state: IntScalar = 0
     inner_solver_iterations: IntScalar = 0
-    sawtooth_crash: BoolScalar = False
 
 
 def face_to_cell(face: FloatVectorFace, ):
@@ -6798,7 +6797,6 @@ Q_FUSION = "Q_fusion"
 SIM_ERROR = "sim_error"
 OUTER_SOLVER_ITERATIONS = "outer_solver_iterations"
 INNER_SOLVER_ITERATIONS = "inner_solver_iterations"
-SAWTOOTH_CRASH = "sawtooth_crash"
 EXCLUDED_GEOMETRY_NAMES = frozenset({
     RHO_FACE,
     RHO_CELL,
@@ -6902,12 +6900,6 @@ class StateHistory:
         for key, value in itertools.chain(*(d.items() for d in all_dicts)):
             flat_dict[key] = value
         numerics_dict = {
-            SAWTOOTH_CRASH:
-            xr.DataArray(
-                self._stacked_solver_numeric_outputs.sawtooth_crash,
-                dims=[TIME],
-                name=SAWTOOTH_CRASH,
-            ),
             OUTER_SOLVER_ITERATIONS:
             xr.DataArray(
                 self._stacked_solver_numeric_outputs.outer_solver_iterations,
@@ -7582,7 +7574,6 @@ while not_done(current_state.t, g.t_final):
             + 1,
             inner_solver_iterations=old_solver_outputs.inner_solver_iterations
             + solver_numeric_outputs.inner_solver_iterations,
-            sawtooth_crash=solver_numeric_outputs.sawtooth_crash,
         )
         next_dt = dt / g.dt_reduction_factor
         return next_dt, (
@@ -7606,7 +7597,6 @@ while not_done(current_state.t, g.t_final):
                     solver_error_state=1,
                     outer_solver_iterations=0,
                     inner_solver_iterations=0,
-                    sawtooth_crash=False,
                 ),
                 runtime_params_t,
                 geo_t,
