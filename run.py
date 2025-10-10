@@ -43,7 +43,6 @@ IntScalar: TypeAlias = Any
 FloatVector: TypeAlias = Any
 BoolVector: TypeAlias = Any
 FloatVectorCell: TypeAlias = Any
-FloatVectorCellPlusBoundaries: TypeAlias = Any
 FloatMatrixCell: TypeAlias = Any
 FloatVectorFace: TypeAlias = Any
 
@@ -63,7 +62,6 @@ NumpyArray1DUnitInterval = Any
 TIME_INVARIANT: Final[str] = '_pydantic_time_invariant_field'
 JAX_STATIC: Final[str] = '_pydantic_jax_static_field'
 StaticKwargs: TypeAlias = Any
-DynamicArgs: TypeAlias = Any
 
 RHO_NORM: Final[str] = 'rho_norm'
 _interp_fn = jax.jit(jnp.interp)
@@ -273,7 +271,7 @@ class BaseModelFrozen(pydantic.BaseModel):
         return (dynamic_children, static_children)
 
     @classmethod
-    def tree_unflatten(cls, aux_data: StaticKwargs, children: DynamicArgs):
+    def tree_unflatten(cls, aux_data: StaticKwargs, children):
         dynamic_kwargs = {
             name: value
             for name, value in zip(
