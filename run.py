@@ -158,13 +158,7 @@ def convert_input_to_xs_ys(interp_input):
 @jax.tree_util.register_pytree_node_class
 class InterpolatedVarSingleAxis:
 
-    def __init__(
-        self,
-        value: tuple[Array, Array],
-        interpolation_mode: InterpolationMode = (
-            InterpolationMode.PIECEWISE_LINEAR),
-        is_bool_param: bool = False,
-    ):
+    def __init__(self, value, interpolation_mode, is_bool_param=False):
         self._value = value
         xs, ys = value
         self._is_bool_param = is_bool_param
@@ -322,6 +316,8 @@ class BaseModelFrozen(pydantic.BaseModel):
 
 
 ValueType: TypeAlias = Any
+
+
 class Grid1D(BaseModelFrozen):
     nx: typing_extensions.Annotated[pydantic.conint(ge=4), JAX_STATIC]
 
@@ -399,9 +395,7 @@ class TimeVaryingArray(BaseModelFrozen):
 
     @pydantic.model_validator(mode='before')
     @classmethod
-    def _conform_data(
-            cls,
-            data: TimeRhoInterpolatedInput | dict[str, Any]):
+    def _conform_data(cls, data: TimeRhoInterpolatedInput | dict[str, Any]):
         if isinstance(data, dict):
             data.pop('_get_cached_interpolated_param_cell_centers', None)
             data.pop('_get_cached_interpolated_param_face_centers', None)
@@ -436,8 +430,7 @@ class TimeVaryingArray(BaseModelFrozen):
         )
 
     @functools.cached_property
-    def _get_cached_interpolated_param_face_right(
-        self):
+    def _get_cached_interpolated_param_face_right(self):
         return InterpolatedVarTimeRho(
             self.value,
             rho_norm=self.grid.face_centers[-1],
@@ -651,8 +644,7 @@ def make_ip_consistent(runtime_params, geo):
     return runtime_params, geo
 
 
-def time_varying_array_defined_at_1(
-    time_varying_array: TimeVaryingArray):
+def time_varying_array_defined_at_1(time_varying_array: TimeVaryingArray):
     if not time_varying_array.right_boundary_conditions_defined:
         logging.debug("""Not defined at rho=1.0.""")
     return time_varying_array
@@ -830,10 +822,7 @@ class CellVariable:
     def _assert_unbatched(self):
         pass
 
-    def face_grad(
-        self,
-        x: jt.Float[chex.Array, 'cell'] | None = None
-    ):
+    def face_grad(self, x: jt.Float[chex.Array, 'cell'] | None = None):
         self._assert_unbatched()
         if x is None:
             forward_difference = jnp.diff(self.value) / self.dr
@@ -969,9 +958,7 @@ def make_convection_terms(v_face,
     return mat, vec
 
 
-def make_diffusion_terms(
-        d_face: FloatVectorFace,
-        var: CellVariable):
+def make_diffusion_terms(d_face: FloatVectorFace, var: CellVariable):
     denom = var.dr**2
     diag = jnp.asarray(-d_face[1:] - d_face[:-1])
     off = d_face[1:-1]
@@ -1493,7 +1480,7 @@ def calc_q95(
 def calculate_psi_grad_constraint_from_Ip(
     Ip: FloatScalar,
     geo: Geometry,
-) :
+):
     return (Ip * (16 * jnp.pi**3 * g.mu_0 * geo.Phi_b) /
             (geo.g2g3_over_rhon_face[-1] * geo.F_face[-1]))
 
@@ -2875,10 +2862,8 @@ def _model_based_qei(runtime_params, geo, core_profiles):
     )
     implicit_ii = -qei_coef
     implicit_ee = -qei_coef
-    if ((g.evolve_ion_heat
-         and not g.evolve_electron_heat)
-            or (g.evolve_electron_heat
-                and not g.evolve_ion_heat)):
+    if ((g.evolve_ion_heat and not g.evolve_electron_heat)
+            or (g.evolve_electron_heat and not g.evolve_ion_heat)):
         explicit_i = qei_coef * core_profiles.T_e.value
         explicit_e = qei_coef * core_profiles.T_i.value
         implicit_ie = zeros
@@ -6429,9 +6414,9 @@ def _calc_coeffs_full(runtime_params, geo, core_profiles,
     tic_T_i = core_profiles.n_i.value * geo.vpr**(5.0 / 3.0)
     toc_T_e = 1.5 * geo.vpr**(-2.0 / 3.0) * g.keV_to_J
     tic_T_e = core_profiles.n_e.value * geo.vpr**(5.0 / 3.0)
-    toc_psi = (1.0 / g.resistivity_multiplier *
-               geo.rho_norm * conductivity.sigma * g.mu_0 * 16 * jnp.pi**2 *
-               geo.Phi_b**2 / geo.F**2)
+    toc_psi = (1.0 / g.resistivity_multiplier * geo.rho_norm *
+               conductivity.sigma * g.mu_0 * 16 * jnp.pi**2 * geo.Phi_b**2 /
+               geo.F**2)
     tic_psi = jnp.ones_like(toc_psi)
     toc_dens_el = jnp.ones_like(geo.vpr)
     tic_dens_el = geo.vpr
@@ -6812,8 +6797,7 @@ def next_dt(t, runtime_params, geo, core_profiles, core_transport):
         g.chi_timestep_prefactor * basic_dt,
         g.max_dt,
     )
-    crosses_t_final = (t < g.t_final) * (
-        t + dt > g.t_final)
+    crosses_t_final = (t < g.t_final) * (t + dt > g.t_final)
     dt = jax.lax.select(
         jnp.logical_and(
             runtime_params.numerics.exact_t_final,
@@ -7510,8 +7494,7 @@ CONFIG = {
             }
         },
     },
-    'numerics': {
-    },
+    'numerics': {},
     'geometry': {
         'geometry_type': 'chease',
         'geometry_file': 'ITER_hybrid_citrin_equil_cheasedata.mat2cols',
