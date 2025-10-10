@@ -6032,8 +6032,8 @@ def initial_core_profiles0(runtime_params, geo, source_models,
         bootstrap_current = (
             neoclassical_models.bootstrap_current.calculate_bootstrap_current(
                 geo, core_profiles))
-        source_profiles = dataclasses.replace(source_profiles,
-                                              bootstrap_current=bootstrap_current)
+        source_profiles = dataclasses.replace(
+            source_profiles, bootstrap_current=bootstrap_current)
     if (not runtime_params.numerics.evolve_current
             and runtime_params.profile_conditions.psidot is not None):
         psidot_value = runtime_params.profile_conditions.psidot
@@ -6064,6 +6064,7 @@ def initial_core_profiles0(runtime_params, geo, source_models,
         sigma_face=conductivity.sigma_face,
     )
     return core_profiles
+
 
 def core_profiles_to_solver_x_tuple(
     core_profiles,
