@@ -6764,9 +6764,7 @@ MIN_DELTA: Final[float] = 1e-7
 
 
 @jax.jit
-def implicit_solve_block(dt: jax.Array, x_old: tuple[CellVariable, ...],
-                         x_new_guess: tuple[CellVariable,
-                                            ...], coeffs_old, coeffs_new):
+def implicit_solve_block(dt, x_old, x_new_guess, coeffs_old, coeffs_new):
     x_old_vec = cell_variable_tuple_to_vec(x_old)
     lhs_mat, lhs_vec, rhs_mat, rhs_vec = (theta_method_matrix_equation(
         dt=dt,
