@@ -1916,6 +1916,7 @@ class BootstrapCurrent:
 class BootstrapCurrentModel:
     pass
 
+
 class BootstrapCurrentModelConfig(BaseModelFrozen):
     pass
 
@@ -2030,8 +2031,10 @@ def _calculate_alpha(f_trap, nu_i_star):
 class NeoclassicalModels:
     conductivity: ConductivityModel
     bootstrap_current: BootstrapCurrentModel
+
     def __hash__(self):
         return hash((self.bootstrap_current, self.conductivity))
+
 
 def exponential_profile(
     geo,
@@ -2094,11 +2097,7 @@ class SourceProfiles:
         prefactor = 8 * geo.vpr * jnp.pi**2 * geo.B_0 * mu0 * geo.Phi_b / geo.F**2
         return -total * prefactor
 
-    def total_sources(
-            self,
-        source_type,
-        geo
-    ):
+    def total_sources(self, source_type, geo):
         source = getattr(self, source_type)
         total = sum(source.values())
         return total * geo.vpr
@@ -2160,18 +2159,9 @@ class Source:
                   calculated_source_profiles, conductivity):
         source_params = runtime_params.sources[self.source_name]
         mode = source_params.mode
-        match mode:
-            case Mode.MODEL_BASED:
-                return self.model_func(
-                    runtime_params,
-                    geo,
-                    self.source_name,
-                    core_profiles,
-                    calculated_source_profiles,
-                    conductivity,
-                )
-            case _:
-                raise ValueError(f'Unknown mode: {mode}')
+        return self.model_func(runtime_params, geo, self.source_name,
+                               core_profiles, calculated_source_profiles,
+                               conductivity)
 
 
 @jax.tree_util.register_dataclass
