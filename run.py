@@ -6068,7 +6068,6 @@ def initial_core_profiles0(runtime_params, geo, source_models,
 
 def core_profiles_to_solver_x_tuple(
     core_profiles,
-    evolving_names,
 ):
     x_tuple_for_solver_list = []
     for name in g.evolving_names:
@@ -6187,7 +6186,7 @@ def update_core_profiles_during_step(x_new, runtime_params, geo,
 def update_core_and_source_profiles_after_step(
         dt, x_new, runtime_params_t_plus_dt, geo, core_profiles_t,
         core_profiles_t_plus_dt, explicit_source_profiles, source_models,
-        neoclassical_models, evolving_names):
+        neoclassical_models):
     updated_core_profiles_t_plus_dt = solver_x_tuple_to_core_profiles(
         x_new, core_profiles_t_plus_dt)
     ions = get_updated_ions(
@@ -7019,9 +7018,8 @@ def predictor_corrector_method(
 def solver_x_new(dt, runtime_params_t, runtime_params_t_plus_dt, geo_t,
                  geo_t_plus_dt, core_profiles_t, core_profiles_t_plus_dt,
                  explicit_source_profiles):
-    x_old = core_profiles_to_solver_x_tuple(core_profiles_t, None)
-    x_new_guess = core_profiles_to_solver_x_tuple(core_profiles_t_plus_dt,
-                                                  None)
+    x_old = core_profiles_to_solver_x_tuple(core_profiles_t)
+    x_new_guess = core_profiles_to_solver_x_tuple(core_profiles_t_plus_dt)
     coeffs_callback = CoeffsCallback()
     coeffs_exp = coeffs_callback(
         runtime_params_t,
@@ -7742,7 +7740,6 @@ def _finalize_outputs(t, dt, x_new, solver_numeric_outputs, geometry_t_plus_dt,
             explicit_source_profiles=explicit_source_profiles,
             source_models=g.source_models,
             neoclassical_models=g.neoclassical_models,
-            evolving_names=evolving_names,
         ))
     final_total_transport = (calculate_total_transport_coeffs(
         g.pedestal_model,
@@ -8042,8 +8039,7 @@ while not_done(current_state.t, g.runtime_params_provider.numerics.t_final):
         (
             initial_dt,
             (
-                core_profiles_to_solver_x_tuple(current_state.core_profiles,
-                                                None),
+                core_profiles_to_solver_x_tuple(current_state.core_profiles),
                 initial_dt,
                 SolverNumericOutputs(
                     solver_error_state=1,
