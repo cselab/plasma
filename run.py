@@ -689,31 +689,19 @@ def cell_integration(x, geo):
     return jnp.sum(x * geo.drho_norm)
 
 
-def area_integration(
-    value,
-    geo,
-):
+def area_integration(value, geo):
     return cell_integration(value * geo.spr, geo)
 
 
-def volume_integration(
-    value,
-    geo,
-):
+def volume_integration(value, geo):
     return cell_integration(value * geo.vpr, geo)
 
 
-def line_average(
-    value,
-    geo,
-):
+def line_average(value, geo):
     return cell_integration(value, geo)
 
 
-def volume_average(
-    value,
-    geo,
-):
+def volume_average(value, geo):
     return cell_integration(value * geo.vpr, geo) / geo.volume_face[-1]
 
 
