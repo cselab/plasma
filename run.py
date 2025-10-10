@@ -667,9 +667,7 @@ TimeVaryingArrayDefinedAtRightBoundaryAndBounded: TypeAlias = Annotated[
 ]
 
 
-def _ion_mixture_before_validator(value: Any):
-    if isinstance(value, str):
-        return {value: 1.0}
+def _ion_mixture_before_validator(value):
     return value
 
 
