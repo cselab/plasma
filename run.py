@@ -6262,7 +6262,7 @@ def compute_boundary_conditions_for_t_plus_dt(dt, runtime_params_t,
                 v_loop_lcfs_t=runtime_params_t.profile_conditions.v_loop_lcfs,
                 v_loop_lcfs_t_plus_dt=profile_conditions_t_plus_dt.v_loop_lcfs,
                 psi_lcfs_t=core_profiles_t.psi.right_face_constraint,
-                theta=runtime_params_t.solver.theta_implicit,
+
             ) if runtime_params_t.profile_conditions.
                                    use_v_loop_lcfs_boundary_condition else
                                    None),
@@ -6451,7 +6451,7 @@ def calc_coeffs(runtime_params,
                 core_profiles,
                 explicit_source_profiles,
                 explicit_call=False):
-    if explicit_call and runtime_params.solver.theta_implicit == 1.0:
+    if explicit_call and g.theta_implicit == 1.0:
         return _calc_coeffs_reduced(
             geo,
             core_profiles,
@@ -6729,22 +6729,15 @@ def calc_c(
     return c_mat, c
 
 
-@functools.partial(
-    jax.jit,
-    static_argnames=[
-        'theta_implicit',
-    ],
-)
 def theta_method_matrix_equation(
     dt: jax.Array,
     x_old: tuple[CellVariable, ...],
     x_new_guess: tuple[CellVariable, ...],
     coeffs_old: Block1DCoeffs,
     coeffs_new: Block1DCoeffs,
-    theta_implicit: float = 1.0,
 ):
     x_new_guess_vec = cell_variable_tuple_to_vec(x_new_guess)
-    theta_exp = 1.0 - theta_implicit
+    theta_exp = 1.0 - g.theta_implicit
     tc_in_old = jnp.concatenate(coeffs_old.transient_in_cell)
     tc_out_new = jnp.concatenate(coeffs_new.transient_out_cell)
     tc_in_new = jnp.concatenate(coeffs_new.transient_in_cell)
@@ -6756,8 +6749,8 @@ def theta_method_matrix_equation(
         coeffs_new,
     )
     broadcasted = jnp.expand_dims(1 / (tc_out_new * tc_in_new), 1)
-    lhs_mat = left_transient - dt * theta_implicit * broadcasted * c_mat_new
-    lhs_vec = -theta_implicit * dt * (1 / (tc_out_new * tc_in_new)) * c_new
+    lhs_mat = left_transient - dt * g.theta_implicit * broadcasted * c_mat_new
+    lhs_vec = -g.theta_implicit * dt * (1 / (tc_out_new * tc_in_new)) * c_new
     if theta_exp > 0.0:
         tc_out_old = jnp.concatenate(coeffs_old.transient_out_cell)
         tc_in_new = error_if(
@@ -6781,20 +6774,14 @@ def theta_method_matrix_equation(
 MIN_DELTA: Final[float] = 1e-7
 
 
-@functools.partial(
-    jax.jit,
-    static_argnames=[
-        'theta_implicit',
-    ],
-)
+@jax.jit
 def implicit_solve_block(
     dt: jax.Array,
     x_old: tuple[CellVariable, ...],
     x_new_guess: tuple[CellVariable, ...],
     coeffs_old,
-    coeffs_new,
-    theta_implicit: float = 1.0,
-) -> tuple[CellVariable, ...]:
+    coeffs_new
+):
     x_old_vec = cell_variable_tuple_to_vec(x_old)
     lhs_mat, lhs_vec, rhs_mat, rhs_vec = (theta_method_matrix_equation(
         dt=dt,
@@ -6802,7 +6789,6 @@ def implicit_solve_block(
         x_new_guess=x_new_guess,
         coeffs_old=coeffs_old,
         coeffs_new=coeffs_new,
-        theta_implicit=theta_implicit,
     ))
     rhs = jnp.dot(rhs_mat, x_old_vec) + rhs_vec - lhs_vec
     x_new = jnp.linalg.solve(lhs_mat, rhs)
@@ -6818,7 +6804,7 @@ def implicit_solve_block(
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class RuntimeParams:
-    theta_implicit: float = dataclasses.field(metadata={'static': True})
+    pass
 
 @functools.partial(
     jax.jit,
@@ -6854,7 +6840,6 @@ def predictor_corrector_method(
             x_new_guess=x_new_guess,
             coeffs_old=coeffs_exp,
             coeffs_new=coeffs_new,
-            theta_implicit=solver_params.theta_implicit,
         )
 
     x_new = fori_loop(
@@ -6907,8 +6892,6 @@ def solver_x_new(dt, runtime_params_t, runtime_params_t_plus_dt, geo_t,
 
 
 class BaseSolver(BaseModelFrozen, abc.ABC):
-    theta_implicit: Annotated[UnitInterval, JAX_STATIC] = 1.0
-
     @property
     @abc.abstractmethod
     def build_runtime_params(self):
@@ -6929,9 +6912,7 @@ class LinearThetaMethod(BaseSolver):
 
     @functools.cached_property
     def build_runtime_params(self):
-        return RuntimeParams(
-            theta_implicit=self.theta_implicit,
-        )
+        return RuntimeParams()
 
     def build_solver(self):
         return None
@@ -7743,6 +7724,7 @@ g.torax_config = ToraxConfig.from_dict(CONFIG)
 g.use_pereverzev = True
 g.chi_pereverzev = 30
 g.D_pereverzev = 15
+g.theta_implicit = 1.0
 
 mesh = g.torax_config.geometry.build_provider.torax_mesh
 for submodel in g.torax_config.submodels:
