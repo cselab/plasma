@@ -6389,16 +6389,11 @@ class CoeffsCallback:
     ):
         core_profiles = update_core_profiles_during_step(
             x, runtime_params, geo, core_profiles)
-        if allow_pereverzev:
-            use_pereverzev = runtime_params.solver.use_pereverzev
-        else:
-            use_pereverzev = False
         return calc_coeffs(
             runtime_params=runtime_params,
             geo=geo,
             core_profiles=core_profiles,
             explicit_source_profiles=explicit_source_profiles,
-            use_pereverzev=use_pereverzev,
             explicit_call=explicit_call,
         )
 
@@ -6455,7 +6450,6 @@ def calc_coeffs(runtime_params,
                 geo,
                 core_profiles,
                 explicit_source_profiles,
-                use_pereverzev=False,
                 explicit_call=False):
     if explicit_call and runtime_params.solver.theta_implicit == 1.0:
         return _calc_coeffs_reduced(
@@ -6469,7 +6463,6 @@ def calc_coeffs(runtime_params,
             geo=geo,
             core_profiles=core_profiles,
             explicit_source_profiles=explicit_source_profiles,
-            use_pereverzev=use_pereverzev,
         )
 
 
@@ -6477,8 +6470,7 @@ def calc_coeffs(runtime_params,
 def _calc_coeffs_full(runtime_params,
                       geo,
                       core_profiles,
-                      explicit_source_profiles,
-                      use_pereverzev=False):
+                      explicit_source_profiles):
     pedestal_model_output = g.pedestal_model(runtime_params, geo,
                                              core_profiles)
     mask = (jnp.zeros_like(
@@ -6537,7 +6529,7 @@ def _calc_coeffs_full(runtime_params,
         d_face_per_el,
         v_face_per_el,
     ) = jax.lax.cond(
-        use_pereverzev,
+        g.use_pereverzev,
         lambda: _calculate_pereverzev_flux(
             runtime_params,
             geo,
@@ -6856,7 +6848,6 @@ class RuntimeParams:
     convection_dirichlet_mode: str = dataclasses.field(
         metadata={'static': True})
     convection_neumann_mode: str = dataclasses.field(metadata={'static': True})
-    use_pereverzev: bool = dataclasses.field(metadata={'static': True})
     chi_pereverzev: float
     D_pereverzev: float
 
@@ -6957,7 +6948,6 @@ class BaseSolver(BaseModelFrozen, abc.ABC):
                                          JAX_STATIC] = 'ghost'
     convection_neumann_mode: Annotated[Literal['ghost', 'semi-implicit'],
                                        JAX_STATIC] = 'ghost'
-    use_pereverzev: Annotated[bool, JAX_STATIC] = False
     chi_pereverzev: pydantic.PositiveFloat = 30.0
     D_pereverzev: pydantic.NonNegativeFloat = 15.0
 
@@ -6985,7 +6975,6 @@ class LinearThetaMethod(BaseSolver):
             theta_implicit=self.theta_implicit,
             convection_dirichlet_mode=self.convection_dirichlet_mode,
             convection_neumann_mode=self.convection_neumann_mode,
-            use_pereverzev=self.use_pereverzev,
             chi_pereverzev=self.chi_pereverzev,
             D_pereverzev=self.D_pereverzev,
         )
@@ -7796,12 +7785,13 @@ CONFIG = {
     'solver': {
         'chi_pereverzev': 30,
         'D_pereverzev': 15,
-        'use_pereverzev': True,
     },
 }
 g.tolerance = 1e-7
 g.n_corrector_steps = 1
 g.torax_config = ToraxConfig.from_dict(CONFIG)
+g.use_pereverzev = True
+
 mesh = g.torax_config.geometry.build_provider.torax_mesh
 for submodel in g.torax_config.submodels:
     if isinstance(submodel, TimeVaryingArray):
