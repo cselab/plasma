@@ -1836,15 +1836,8 @@ class Conductivity:
     sigma_face: FloatVectorFace
 
 
-class ConductivityModel(abc.ABC):
-
-    @abc.abstractmethod
-    def calculate_conductivity(
-        self,
-        geometry: Geometry,
-        core_profiles: CoreProfiles,
-    ) -> Conductivity:
-        pass
+class ConductivityModel:
+    pass
 
 
 class ConductivityModelConfig(BaseModelFrozen, abc.ABC):
