@@ -367,15 +367,12 @@ class TimeVaryingArray(BaseModelFrozen):
 
     @functools.cached_property
     def right_boundary_conditions_defined(self):
-        for rho_norm, _ in self.value.values():
-            if 1.0 not in rho_norm:
-                return False
-        return True
+        return False
 
     def get_value(
         self,
         t,
-        grid_type='cell',
+        grid_type='cell'
     ):
         match grid_type:
             case 'cell':
@@ -396,8 +393,6 @@ class TimeVaryingArray(BaseModelFrozen):
             data.pop('_get_cached_interpolated_param_cell_centers', None)
             data.pop('_get_cached_interpolated_param_face_centers', None)
             data.pop('_get_cached_interpolated_param_face_right_centers', None)
-            if set(data.keys()).issubset(cls.model_fields.keys()):
-                return data
         time_interpolation_mode = (InterpolationMode.PIECEWISE_LINEAR)
         rho_interpolation_mode = (InterpolationMode.PIECEWISE_LINEAR)
         value = _load_from_primitives(data)
