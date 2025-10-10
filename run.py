@@ -333,12 +333,7 @@ class BaseModelFrozen(pydantic.BaseModel):
         return tuple(all_submodels)
 
 
-ValueType: TypeAlias = dict[
-    float,
-    tuple[NumpyArray1DUnitInterval, NumpyArray1D],
-]
-
-
+ValueType: TypeAlias = Any
 class Grid1D(BaseModelFrozen):
     nx: typing_extensions.Annotated[pydantic.conint(ge=4), JAX_STATIC]
 
