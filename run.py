@@ -3415,7 +3415,7 @@ class TurbulentTransport:
     chi_face_ion_gyrobohm: jax.Array | None = None
 
 
-class TransportModel(abc.ABC):
+class TransportModel:
 
     def __setattr__(self, attr, value):
         if getattr(self, "_frozen", False):
@@ -3459,19 +3459,6 @@ class TransportModel(abc.ABC):
             transport_coeffs,
             pedestal_model_output,
         )
-
-    @abc.abstractmethod
-    def _call_implementation(self, transport_runtime_params, runtime_params,
-                             geo, core_profiles, pedestal_model_output):
-        pass
-
-    @abc.abstractmethod
-    def __hash__(self):
-        pass
-
-    @abc.abstractmethod
-    def __eq__(self, other):
-        pass
 
     def _apply_domain_restriction(self, transport_runtime_params, geo,
                                   transport_coeffs, pedestal_model_output):
@@ -3870,10 +3857,6 @@ class QualikizInputs(QuasilinearInputs):
     def Ani0(self):
         return self.lref_over_lni0
 
-    @property
-    def Ani1(self):
-        return self.lref_over_lni1
-
 
 class QualikizBasedTransportModel(QuasilinearTransportModel):
 
@@ -3964,7 +3947,7 @@ class QualikizBasedTransportModel(QuasilinearTransportModel):
         )
 
 
-class TransportBase(BaseModelFrozen, abc.ABC):
+class TransportBase(BaseModelFrozen):
     chi_min: MeterSquaredPerSecond = 0.05
     chi_max: MeterSquaredPerSecond = 100.0
     D_e_min: MeterSquaredPerSecond = 0.05
@@ -4013,10 +3996,6 @@ class TransportBase(BaseModelFrozen, abc.ABC):
             smoothing_width=self.smoothing_width,
             smooth_everywhere=self.smooth_everywhere,
         )
-
-    @abc.abstractmethod
-    def build_transport_model(self):
-        pass
 
 
 _FLUX_NAME_MAP: Final[Mapping[str, str]] = immutabledict.immutabledict({
