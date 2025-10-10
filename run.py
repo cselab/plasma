@@ -5989,17 +5989,6 @@ def initial_core_profiles0(runtime_params, geo, source_models,
         j_total_face=np.zeros_like(geo.rho_face),
         Ip_profile_face=np.zeros_like(geo.rho_face),
     )
-    return _init_psi_and_psi_derived(
-        runtime_params,
-        geo,
-        core_profiles,
-        source_models,
-        neoclassical_models,
-    )
-
-
-def _init_psi_and_psi_derived(runtime_params, geo, core_profiles,
-                              source_models, neoclassical_models):
     sources_are_calculated = False
     source_profiles = build_all_zero_profiles(geo)
     dpsi_drhonorm_edge = (calculate_psi_grad_constraint_from_Ip(
@@ -6506,6 +6495,7 @@ def cell_variable_tuple_to_vec(
 
 
 class CoeffsCallback:
+
     def __call__(
         self,
         runtime_params: RuntimeParamsSlice,
