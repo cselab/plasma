@@ -777,7 +777,6 @@ def volume_average(
 @dataclasses.dataclass
 class RuntimeParamsNumeric:
     t_initial: float
-    t_final: float
     max_dt: float
     min_dt: float
     chi_timestep_prefactor: float
@@ -797,7 +796,6 @@ class RuntimeParamsNumeric:
 
 class Numerics(BaseModelFrozen):
     t_initial: Second = 0.0
-    t_final: Second = 5.0
     exact_t_final: Annotated[bool, JAX_STATIC] = True
     max_dt: Second = 2.0
     min_dt: Second = 1e-8
@@ -821,7 +819,6 @@ class Numerics(BaseModelFrozen):
     def build_runtime_params(self, t):
         return RuntimeParamsNumeric(
             t_initial=self.t_initial,
-            t_final=self.t_final,
             max_dt=self.max_dt,
             min_dt=self.min_dt,
             chi_timestep_prefactor=self.chi_timestep_prefactor,
@@ -6854,7 +6851,6 @@ def solver_x_new(dt, runtime_params_t, runtime_params_t_plus_dt, geo_t,
     )
 
 
-
 def not_done(t, t_final):
     return t < (t_final - g.tolerance)
 
@@ -6866,14 +6862,14 @@ def next_dt(t, runtime_params, geo, core_profiles, core_transport):
         runtime_params.numerics.chi_timestep_prefactor * basic_dt,
         runtime_params.numerics.max_dt,
     )
-    crosses_t_final = (t < runtime_params.numerics.t_final) * (
-        t + dt > runtime_params.numerics.t_final)
+    crosses_t_final = (t < g.t_final) * (
+        t + dt > g.t_final)
     dt = jax.lax.select(
         jnp.logical_and(
             runtime_params.numerics.exact_t_final,
             crosses_t_final,
         ),
-        runtime_params.numerics.t_final - t,
+        g.t_final - t,
         dt,
     )
     return dt
@@ -7565,7 +7561,6 @@ CONFIG = {
         },
     },
     'numerics': {
-        't_final': 5,
         'resistivity_multiplier': 200,
         'evolve_ion_heat': True,
         'evolve_electron_heat': True,
@@ -7656,6 +7651,16 @@ g.chi_pereverzev = 30
 g.D_pereverzev = 15
 g.theta_implicit = 1.0
 
+g.t_final = 5
+g.resistivity_multiplier = 200
+g.evolve_ion_heat = True
+g.evolve_electron_heat = True
+g.evolve_current = True
+g.evolve_density = True
+g.max_dt = 0.5
+g.chi_timestep_prefactor = 50
+g.dt_reduction_factor = 3
+
 mesh = g.torax_config.geometry.build_provider.torax_mesh
 for submodel in g.torax_config.submodels:
     if isinstance(submodel, TimeVaryingArray):
@@ -7686,7 +7691,7 @@ initial_post_processed_outputs = post_processed_outputs
 state_history = [current_state]
 post_processing_history = [initial_post_processed_outputs]
 initial_runtime_params = g.runtime_params_provider(current_state.t)
-while not_done(current_state.t, g.runtime_params_provider.numerics.t_final):
+while not_done(current_state.t, g.t_final):
     previous_post_processed_outputs = post_processing_history[-1]
     runtime_params_t, geo_t = (get_consistent_runtime_params_and_geometry(
         t=current_state.t))
@@ -7714,7 +7719,7 @@ while not_done(current_state.t, g.runtime_params_provider.numerics.t_final):
         if runtime_params_t.numerics.exact_t_final:
             at_exact_t_final = jnp.allclose(
                 current_state.t + next_dt,
-                runtime_params_t.numerics.t_final,
+                g.t_final,
             )
         else:
             at_exact_t_final = array(False)
