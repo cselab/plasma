@@ -6577,38 +6577,6 @@ def calc_c(x, coeffs):
 MIN_DELTA: Final[float] = 1e-7
 
 
-def implicit_solve_block(dt, x_old, x_new_guess, coeffs_exp, coeffs_new):
-    x_old_vec = cell_variable_tuple_to_vec(x_old)
-    x_new_guess_vec = cell_variable_tuple_to_vec(x_new_guess)
-    theta_exp = 1.0 - g.theta_implicit
-    tc_in_old = jnp.concatenate(coeffs_exp.transient_in_cell)
-    tc_out_new = jnp.concatenate(coeffs_new.transient_out_cell)
-    tc_in_new = jnp.concatenate(coeffs_new.transient_in_cell)
-    eps = 1e-7
-    left_transient = jnp.identity(len(x_new_guess_vec))
-    right_transient = jnp.diag(jnp.squeeze(tc_in_old / tc_in_new))
-    c_mat_new, c_new = calc_c(
-        x_new_guess,
-        coeffs_new,
-    )
-    broadcasted = jnp.expand_dims(1 / (tc_out_new * tc_in_new), 1)
-    lhs_mat = left_transient - dt * g.theta_implicit * broadcasted * c_mat_new
-    lhs_vec = -g.theta_implicit * dt * (1 / (tc_out_new * tc_in_new)) * c_new
-    if theta_exp > 0.0:
-        assert False
-    rhs_mat = right_transient
-    rhs_vec = jnp.zeros_like(x_new_guess_vec)
-    rhs = jnp.dot(rhs_mat, x_old_vec) + rhs_vec - lhs_vec
-    x_new = jnp.linalg.solve(lhs_mat, rhs)
-    x_new = jnp.split(x_new, len(x_old))
-    out = [
-        dataclasses.replace(var, value=value)
-        for var, value in zip(x_new_guess, x_new)
-    ]
-    out = tuple(out)
-    return out
-
-
 @jax.jit
 def solver_x_new(dt, runtime_params_t, runtime_params_t_plus_dt, geo_t,
                  geo_t_plus_dt, core_profiles_t, core_profiles_t_plus_dt,
@@ -6634,13 +6602,36 @@ def solver_x_new(dt, runtime_params_t, runtime_params_t_plus_dt, geo_t,
             explicit_source_profiles=explicit_source_profiles,
             allow_pereverzev=True,
         )
-        return implicit_solve_block(
-            dt=dt,
-            x_old=x_old,
-            x_new_guess=x_new_guess,
-            coeffs_exp=coeffs_exp,
-            coeffs_new=coeffs_new,
+        x_old_vec = cell_variable_tuple_to_vec(x_old)
+        x_new_guess_vec = cell_variable_tuple_to_vec(x_new_guess)
+        theta_exp = 1.0 - g.theta_implicit
+        tc_in_old = jnp.concatenate(coeffs_exp.transient_in_cell)
+        tc_out_new = jnp.concatenate(coeffs_new.transient_out_cell)
+        tc_in_new = jnp.concatenate(coeffs_new.transient_in_cell)
+        eps = 1e-7
+        left_transient = jnp.identity(len(x_new_guess_vec))
+        right_transient = jnp.diag(jnp.squeeze(tc_in_old / tc_in_new))
+        c_mat_new, c_new = calc_c(
+            x_new_guess,
+            coeffs_new,
         )
+        broadcasted = jnp.expand_dims(1 / (tc_out_new * tc_in_new), 1)
+        lhs_mat = left_transient - dt * g.theta_implicit * broadcasted * c_mat_new
+        lhs_vec = -g.theta_implicit * dt * (1 /
+                                            (tc_out_new * tc_in_new)) * c_new
+        if theta_exp > 0.0:
+            assert False
+        rhs_mat = right_transient
+        rhs_vec = jnp.zeros_like(x_new_guess_vec)
+        rhs = jnp.dot(rhs_mat, x_old_vec) + rhs_vec - lhs_vec
+        x_new = jnp.linalg.solve(lhs_mat, rhs)
+        x_new = jnp.split(x_new, len(x_old))
+        out = [
+            dataclasses.replace(var, value=value)
+            for var, value in zip(x_new_guess, x_new)
+        ]
+        out = tuple(out)
+        return out
 
     x_new = fori_loop(
         0,
