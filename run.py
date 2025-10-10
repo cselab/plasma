@@ -7908,24 +7908,24 @@ def _get_initial_state(runtime_params, geo, step_fn):
 
 
 @jit0
-def step0(input_state, previous_post_processed_outputs):
+def step0(current_state, previous_post_processed_outputs):
     runtime_params_t, geo_t = (get_consistent_runtime_params_and_geometry(
-        t=input_state.t))
+        t=current_state.t))
     explicit_source_profiles = build_source_profiles0(
         runtime_params=runtime_params_t,
         geo=geo_t,
-        core_profiles=input_state.core_profiles,
+        core_profiles=current_state.core_profiles,
         source_models=g.source_models,
         neoclassical_models=g.neoclassical_models,
         explicit=True,
     )
     evolving_names = runtime_params_t.numerics.evolving_names
     initial_dt = next_dt(
-        input_state.t,
+        current_state.t,
         runtime_params_t,
         geo_t,
-        input_state.core_profiles,
-        input_state.core_transport,
+        current_state.core_profiles,
+        current_state.core_transport,
     )
 
     def cond_fun(inputs):
@@ -7935,7 +7935,7 @@ def step0(input_state, previous_post_processed_outputs):
         solver_did_not_converge = solver_outputs.solver_error_state == 1
         if runtime_params_t.numerics.exact_t_final:
             at_exact_t_final = jnp.allclose(
-                input_state.t + next_dt,
+                current_state.t + next_dt,
                 runtime_params_t.numerics.t_final,
             )
         else:
@@ -7954,7 +7954,7 @@ def step0(input_state, previous_post_processed_outputs):
         old_solver_outputs = output[2]
         runtime_params_t_plus_dt, geo_t_with_phibdot, geo_t_plus_dt = (
             _get_geo_and_runtime_params_at_t_plus_dt_and_phibdot(
-                input_state.t,
+                current_state.t,
                 dt,
                 geo_t,
             ))
@@ -7963,16 +7963,16 @@ def step0(input_state, previous_post_processed_outputs):
             runtime_params_t=runtime_params_t,
             runtime_params_t_plus_dt=runtime_params_t_plus_dt,
             geo_t_plus_dt=geo_t_plus_dt,
-            core_profiles_t=input_state.core_profiles,
+            core_profiles_t=current_state.core_profiles,
         )
         x_new, solver_numeric_outputs = g.solver(
-            t=input_state.t,
+            t=current_state.t,
             dt=dt,
             runtime_params_t=runtime_params_t,
             runtime_params_t_plus_dt=runtime_params_t_plus_dt,
             geo_t=geo_t_with_phibdot,
             geo_t_plus_dt=geo_t_plus_dt,
-            core_profiles_t=input_state.core_profiles,
+            core_profiles_t=current_state.core_profiles,
             core_profiles_t_plus_dt=core_profiles_t_plus_dt,
             explicit_source_profiles=explicit_source_profiles,
         )
@@ -8000,7 +8000,7 @@ def step0(input_state, previous_post_processed_outputs):
         (
             initial_dt,
             (
-                core_profiles_to_solver_x_tuple(input_state.core_profiles,
+                core_profiles_to_solver_x_tuple(current_state.core_profiles,
                                                 evolving_names),
                 initial_dt,
                 SolverNumericOutputs(
@@ -8011,18 +8011,18 @@ def step0(input_state, previous_post_processed_outputs):
                 ),
                 runtime_params_t,
                 geo_t,
-                input_state.core_profiles,
+                current_state.core_profiles,
             ),
         ),
     )
     output_state, post_processed_outputs = _finalize_outputs(
-        t=input_state.t,
+        t=current_state.t,
         dt=result[1],
         x_new=result[0],
         solver_numeric_outputs=result[2],
         runtime_params_t_plus_dt=result[3],
         geometry_t_plus_dt=result[4],
-        core_profiles_t=input_state.core_profiles,
+        core_profiles_t=current_state.core_profiles,
         core_profiles_t_plus_dt=result[5],
         explicit_source_profiles=explicit_source_profiles,
         physics_models=g.solver.physics_models,
