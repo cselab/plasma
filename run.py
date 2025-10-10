@@ -7109,7 +7109,6 @@ def predictor_corrector_method(
     return x_new
 
 
-@jax.jit
 def solver_call(t, dt, runtime_params_t, runtime_params_t_plus_dt,
              geo_t, geo_t_plus_dt, core_profiles_t,
              core_profiles_t_plus_dt, explicit_source_profiles):
