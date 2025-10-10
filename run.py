@@ -7907,157 +7907,145 @@ def _get_initial_state(runtime_params, geo, step_fn):
     )
 
 
-class SimulationStepFn:
+@jit0
+def step0(input_state, previous_post_processed_outputs):
+    runtime_params_t, geo_t = (get_consistent_runtime_params_and_geometry(
+        t=input_state.t))
+    explicit_source_profiles = build_source_profiles0(
+        runtime_params=runtime_params_t,
+        geo=geo_t,
+        core_profiles=input_state.core_profiles,
+        source_models=g.source_models,
+        neoclassical_models=g.neoclassical_models,
+        explicit=True,
+    )
 
-    @jit0
-    def __call__(
-        self,
-        input_state,
-        previous_post_processed_outputs,
-    ):
-        runtime_params_t, geo_t = (get_consistent_runtime_params_and_geometry(
-            t=input_state.t))
-        explicit_source_profiles = build_source_profiles0(
-            runtime_params=runtime_params_t,
-            geo=geo_t,
-            core_profiles=input_state.core_profiles,
-            source_models=g.source_models,
-            neoclassical_models=g.neoclassical_models,
-            explicit=True,
-        )
-
-        def _step():
-            return self._adaptive_step(
-                runtime_params_t,
-                geo_t,
-                explicit_source_profiles,
-                input_state,
-                previous_post_processed_outputs,
-            )
-
-        output_state, post_processed_outputs = _step()
-        return output_state, post_processed_outputs
-
-    def _adaptive_step(
-        self,
-        runtime_params_t,
-        geo_t,
-        explicit_source_profiles,
-        input_state,
-        previous_post_processed_outputs,
-    ):
-        evolving_names = runtime_params_t.numerics.evolving_names
-        initial_dt = next_dt(
-            input_state.t,
+    def _step():
+        return _adaptive_step(
             runtime_params_t,
             geo_t,
-            input_state.core_profiles,
-            input_state.core_transport,
+            explicit_source_profiles,
+            input_state,
+            previous_post_processed_outputs,
         )
 
-        def cond_fun(inputs):
-            next_dt, output = inputs
-            solver_outputs = output[2]
-            is_nan_next_dt = jnp.isnan(next_dt)
-            solver_did_not_converge = solver_outputs.solver_error_state == 1
-            if runtime_params_t.numerics.exact_t_final:
-                at_exact_t_final = jnp.allclose(
-                    input_state.t + next_dt,
-                    runtime_params_t.numerics.t_final,
-                )
-            else:
-                at_exact_t_final = array(False)
-            next_dt_too_small = next_dt < runtime_params_t.numerics.min_dt
-            take_another_step = cond(
-                solver_did_not_converge,
-                lambda: cond(at_exact_t_final, lambda: True, lambda:
-                             ~next_dt_too_small),
-                lambda: False,
-            )
-            return take_another_step & ~is_nan_next_dt
+    output_state, post_processed_outputs = _step()
+    return output_state, post_processed_outputs
 
-        def body_fun(inputs):
-            dt, output = inputs
-            old_solver_outputs = output[2]
-            runtime_params_t_plus_dt, geo_t_with_phibdot, geo_t_plus_dt = (
-                _get_geo_and_runtime_params_at_t_plus_dt_and_phibdot(
-                    input_state.t,
-                    dt,
-                    geo_t,
-                ))
-            core_profiles_t_plus_dt = provide_core_profiles_t_plus_dt(
-                dt=dt,
-                runtime_params_t=runtime_params_t,
-                runtime_params_t_plus_dt=runtime_params_t_plus_dt,
-                geo_t_plus_dt=geo_t_plus_dt,
-                core_profiles_t=input_state.core_profiles,
+
+def _adaptive_step(runtime_params_t, geo_t, explicit_source_profiles,
+                   input_state, previous_post_processed_outputs):
+    evolving_names = runtime_params_t.numerics.evolving_names
+    initial_dt = next_dt(
+        input_state.t,
+        runtime_params_t,
+        geo_t,
+        input_state.core_profiles,
+        input_state.core_transport,
+    )
+
+    def cond_fun(inputs):
+        next_dt, output = inputs
+        solver_outputs = output[2]
+        is_nan_next_dt = jnp.isnan(next_dt)
+        solver_did_not_converge = solver_outputs.solver_error_state == 1
+        if runtime_params_t.numerics.exact_t_final:
+            at_exact_t_final = jnp.allclose(
+                input_state.t + next_dt,
+                runtime_params_t.numerics.t_final,
             )
-            x_new, solver_numeric_outputs = g.solver(
-                t=input_state.t,
-                dt=dt,
-                runtime_params_t=runtime_params_t,
-                runtime_params_t_plus_dt=runtime_params_t_plus_dt,
-                geo_t=geo_t_with_phibdot,
-                geo_t_plus_dt=geo_t_plus_dt,
-                core_profiles_t=input_state.core_profiles,
-                core_profiles_t_plus_dt=core_profiles_t_plus_dt,
-                explicit_source_profiles=explicit_source_profiles,
-            )
-            solver_numeric_outputs = SolverNumericOutputs(
-                solver_error_state=solver_numeric_outputs.solver_error_state,
-                outer_solver_iterations=old_solver_outputs.
-                outer_solver_iterations + 1,
-                inner_solver_iterations=old_solver_outputs.
-                inner_solver_iterations +
-                solver_numeric_outputs.inner_solver_iterations,
-                sawtooth_crash=solver_numeric_outputs.sawtooth_crash,
-            )
-            next_dt = dt / runtime_params_t_plus_dt.numerics.dt_reduction_factor
-            return next_dt, (
-                x_new,
+        else:
+            at_exact_t_final = array(False)
+        next_dt_too_small = next_dt < runtime_params_t.numerics.min_dt
+        take_another_step = cond(
+            solver_did_not_converge,
+            lambda: cond(at_exact_t_final, lambda: True, lambda:
+                         ~next_dt_too_small),
+            lambda: False,
+        )
+        return take_another_step & ~is_nan_next_dt
+
+    def body_fun(inputs):
+        dt, output = inputs
+        old_solver_outputs = output[2]
+        runtime_params_t_plus_dt, geo_t_with_phibdot, geo_t_plus_dt = (
+            _get_geo_and_runtime_params_at_t_plus_dt_and_phibdot(
+                input_state.t,
                 dt,
-                solver_numeric_outputs,
-                runtime_params_t_plus_dt,
-                geo_t_plus_dt,
-                core_profiles_t_plus_dt,
-            )
-
-        _, result = while_loop(
-            cond_fun,
-            body_fun,
-            (
-                initial_dt,
-                (
-                    core_profiles_to_solver_x_tuple(input_state.core_profiles,
-                                                    evolving_names),
-                    initial_dt,
-                    SolverNumericOutputs(
-                        solver_error_state=1,
-                        outer_solver_iterations=0,
-                        inner_solver_iterations=0,
-                        sawtooth_crash=False,
-                    ),
-                    runtime_params_t,
-                    geo_t,
-                    input_state.core_profiles,
-                ),
-            ),
-        )
-        output_state, post_processed_outputs = _finalize_outputs(
-            t=input_state.t,
-            dt=result[1],
-            x_new=result[0],
-            solver_numeric_outputs=result[2],
-            runtime_params_t_plus_dt=result[3],
-            geometry_t_plus_dt=result[4],
+                geo_t,
+            ))
+        core_profiles_t_plus_dt = provide_core_profiles_t_plus_dt(
+            dt=dt,
+            runtime_params_t=runtime_params_t,
+            runtime_params_t_plus_dt=runtime_params_t_plus_dt,
+            geo_t_plus_dt=geo_t_plus_dt,
             core_profiles_t=input_state.core_profiles,
-            core_profiles_t_plus_dt=result[5],
-            explicit_source_profiles=explicit_source_profiles,
-            physics_models=g.solver.physics_models,
-            evolving_names=evolving_names,
-            input_post_processed_outputs=previous_post_processed_outputs,
         )
-        return output_state, post_processed_outputs
+        x_new, solver_numeric_outputs = g.solver(
+            t=input_state.t,
+            dt=dt,
+            runtime_params_t=runtime_params_t,
+            runtime_params_t_plus_dt=runtime_params_t_plus_dt,
+            geo_t=geo_t_with_phibdot,
+            geo_t_plus_dt=geo_t_plus_dt,
+            core_profiles_t=input_state.core_profiles,
+            core_profiles_t_plus_dt=core_profiles_t_plus_dt,
+            explicit_source_profiles=explicit_source_profiles,
+        )
+        solver_numeric_outputs = SolverNumericOutputs(
+            solver_error_state=solver_numeric_outputs.solver_error_state,
+            outer_solver_iterations=old_solver_outputs.outer_solver_iterations
+            + 1,
+            inner_solver_iterations=old_solver_outputs.inner_solver_iterations
+            + solver_numeric_outputs.inner_solver_iterations,
+            sawtooth_crash=solver_numeric_outputs.sawtooth_crash,
+        )
+        next_dt = dt / runtime_params_t_plus_dt.numerics.dt_reduction_factor
+        return next_dt, (
+            x_new,
+            dt,
+            solver_numeric_outputs,
+            runtime_params_t_plus_dt,
+            geo_t_plus_dt,
+            core_profiles_t_plus_dt,
+        )
+
+    _, result = while_loop(
+        cond_fun,
+        body_fun,
+        (
+            initial_dt,
+            (
+                core_profiles_to_solver_x_tuple(input_state.core_profiles,
+                                                evolving_names),
+                initial_dt,
+                SolverNumericOutputs(
+                    solver_error_state=1,
+                    outer_solver_iterations=0,
+                    inner_solver_iterations=0,
+                    sawtooth_crash=False,
+                ),
+                runtime_params_t,
+                geo_t,
+                input_state.core_profiles,
+            ),
+        ),
+    )
+    output_state, post_processed_outputs = _finalize_outputs(
+        t=input_state.t,
+        dt=result[1],
+        x_new=result[0],
+        solver_numeric_outputs=result[2],
+        runtime_params_t_plus_dt=result[3],
+        geometry_t_plus_dt=result[4],
+        core_profiles_t=input_state.core_profiles,
+        core_profiles_t_plus_dt=result[5],
+        explicit_source_profiles=explicit_source_profiles,
+        physics_models=g.solver.physics_models,
+        evolving_names=evolving_names,
+        input_post_processed_outputs=previous_post_processed_outputs,
+    )
+    return output_state, post_processed_outputs
 
 
 @functools.partial(
@@ -8284,14 +8272,13 @@ g.transport_model = g.torax_config.transport.build_transport_model()
 g.neoclassical_models = g.torax_config.neoclassical.build_models()
 g.solver = g.torax_config.solver.build_solver(None)
 g.runtime_params_provider = RuntimeParamsProvider.from_config()
-step_fn = SimulationStepFn()
 runtime_params_for_init, geo_for_init = (
     get_consistent_runtime_params_and_geometry(
         t=g.torax_config.numerics.t_initial, ))
 current_state = _get_initial_state(
     runtime_params=runtime_params_for_init,
     geo=geo_for_init,
-    step_fn=step_fn,
+    step_fn=None,
 )
 post_processed_outputs = make_post_processed_outputs(current_state,
                                                      runtime_params_for_init)
@@ -8300,7 +8287,7 @@ state_history = [current_state]
 post_processing_history = [initial_post_processed_outputs]
 initial_runtime_params = g.runtime_params_provider(current_state.t)
 while not_done(current_state.t, g.runtime_params_provider.numerics.t_final):
-    current_state, post_processed_outputs = step_fn(
+    current_state, post_processed_outputs = step0(
         current_state,
         post_processing_history[-1],
     )
