@@ -587,8 +587,7 @@ def cond(cond_val, true_fun, false_fun, *operands):
     return py_cond(cond_val, true_fun, false_fun, *operands)
 
 
-def py_fori_loop(lower: int, upper: int, body_fun: Callable[[int, T], T],
-                 init_val: T) -> T:
+def py_fori_loop(lower, upper, body_fun, init_val):
     val = init_val
     for i in range(lower, upper):
         val = body_fun(i, val)
@@ -958,13 +957,6 @@ class CellVariable:
             axis=-1,
         )
 
-    def __eq__(self, other: typing_extensions.Self) -> bool:
-        try:
-            chex.assert_trees_all_equal(self, other)
-            return True
-        except AssertionError:
-            return False
-
 
 def make_convection_terms(v_face,
                           d_face,
@@ -1192,13 +1184,6 @@ class Geometry:
     rho_hires: Array
     Phi_b_dot: FloatScalar
     _z_magnetic_axis: FloatScalar | None
-
-    def __eq__(self, other: 'Geometry') -> bool:
-        try:
-            chex.assert_trees_all_equal(self, other)
-        except AssertionError:
-            return False
-        return True
 
     @property
     def q_correction_factor(self) -> chex.Numeric:
@@ -2343,21 +2328,6 @@ class SourceModelBase(BaseModelFrozen, abc.ABC):
         pass
 
 
-@typing.runtime_checkable
-class SourceProfileFunction(typing.Protocol):
-
-    def __call__(
-        self,
-        runtime_params: RuntimeParamsSlice,
-        geo: Geometry,
-        source_name: str,
-        core_profiles: CoreProfiles,
-        calculated_source_profiles: SourceProfiles | None,
-        unused_conductivity: Conductivity | None,
-    ) -> tuple[FloatVectorCell, ...]:
-        ...
-
-
 @enum.unique
 class AffectedCoreProfile(enum.IntEnum):
     PSI = 1
@@ -2369,7 +2339,7 @@ class AffectedCoreProfile(enum.IntEnum):
 @dataclasses.dataclass(kw_only=True, frozen=True, eq=True)
 class Source(abc.ABC):
     SOURCE_NAME: typing.ClassVar[str] = 'source'
-    model_func: SourceProfileFunction | None = None
+    model_func: Any = None
 
     @property
     @abc.abstractmethod
@@ -2437,7 +2407,7 @@ def _calculate_I_generic(runtime_params, source_params):
 @dataclasses.dataclass(kw_only=True, frozen=True, eq=True)
 class GenericCurrentSource(Source):
     SOURCE_NAME: typing.ClassVar[str] = 'generic_current'
-    model_func: SourceProfileFunction = calculate_generic_current
+    model_func: Any = calculate_generic_current
 
     @property
     def source_name(self):
@@ -2534,7 +2504,7 @@ def default_formula(
 @dataclasses.dataclass(kw_only=True, frozen=True, eq=True)
 class GenericIonElectronHeatSource(Source):
     SOURCE_NAME: typing.ClassVar[str] = 'generic_heat'
-    model_func: SourceProfileFunction = default_formula
+    model_func: Any = default_formula
 
     @property
     def source_name(self):
@@ -2601,7 +2571,7 @@ def calc_generic_particle_source(
 @dataclasses.dataclass(kw_only=True, frozen=True, eq=True)
 class GenericParticleSource(Source):
     SOURCE_NAME: typing.ClassVar[str] = 'generic_particle'
-    model_func: SourceProfileFunction = calc_generic_particle_source
+    model_func: Any = calc_generic_particle_source
 
     @property
     def source_name(self):
@@ -2669,7 +2639,7 @@ def calc_pellet_source(
 @dataclasses.dataclass(kw_only=True, frozen=True, eq=True)
 class PelletSource(Source):
     SOURCE_NAME: typing.ClassVar[str] = 'pellet'
-    model_func: SourceProfileFunction = calc_pellet_source
+    model_func: Any = calc_pellet_source
 
     @property
     def source_name(self):
@@ -2782,7 +2752,7 @@ def fusion_heat_model_func(
 @dataclasses.dataclass(kw_only=True, frozen=True, eq=True)
 class FusionHeatSource(Source):
     SOURCE_NAME: typing.ClassVar[str] = 'fusion'
-    model_func: SourceProfileFunction = fusion_heat_model_func
+    model_func: Any = fusion_heat_model_func
 
     @property
     def source_name(self) -> str:
@@ -2846,7 +2816,7 @@ def calc_puff_source(
 @dataclasses.dataclass(kw_only=True, frozen=True, eq=True)
 class GasPuffSource(Source):
     SOURCE_NAME: typing.ClassVar[str] = 'gas_puff'
-    model_func: SourceProfileFunction = calc_puff_source
+    model_func: Any = calc_puff_source
 
     @property
     def source_name(self):
@@ -3086,7 +3056,7 @@ class Sources(BaseModelFrozen):
 @dataclasses.dataclass(kw_only=True, frozen=True, eq=True)
 class ImpurityRadiationHeatSink(Source):
     SOURCE_NAME = "impurity_radiation"
-    model_func: SourceProfileFunction
+    model_func: Any
 
 
 _FINAL_SOURCES = frozenset([ImpurityRadiationHeatSink.SOURCE_NAME])
@@ -6883,8 +6853,6 @@ def implicit_solve_block(
 @dataclasses.dataclass(frozen=True)
 class RuntimeParams:
     theta_implicit: float = dataclasses.field(metadata={'static': True})
-    use_predictor_corrector: bool = dataclasses.field(
-        metadata={'static': True})
     n_corrector_steps: int = dataclasses.field(metadata={'static': True})
     convection_dirichlet_mode: str = dataclasses.field(
         metadata={'static': True})
@@ -6934,15 +6902,12 @@ def predictor_corrector_method(
             convection_neumann_mode=(solver_params.convection_neumann_mode),
         )
 
-    if solver_params.use_predictor_corrector:
-        x_new = fori_loop(
-            0,
-            runtime_params_t_plus_dt.solver.n_corrector_steps + 1,
-            loop_body,
-            x_new_guess,
-        )
-    else:
-        x_new = loop_body(0, x_new_guess)
+    x_new = fori_loop(
+        0,
+        runtime_params_t_plus_dt.solver.n_corrector_steps + 1,
+        loop_body,
+        x_new_guess,
+    )
     return x_new
 
 
@@ -6973,11 +6938,8 @@ def solver_x_new(dt, runtime_params_t, runtime_params_t_plus_dt, geo_t,
         coeffs_callback=coeffs_callback,
         explicit_source_profiles=explicit_source_profiles,
     )
-    if runtime_params_t_plus_dt.solver.use_predictor_corrector:
-        inner_solver_iterations = (
-            1 + runtime_params_t_plus_dt.solver.n_corrector_steps)
-    else:
-        inner_solver_iterations = 1
+    inner_solver_iterations = (
+        1 + runtime_params_t_plus_dt.solver.n_corrector_steps)
     solver_numeric_outputs = SolverNumericOutputs(
         inner_solver_iterations=inner_solver_iterations,
         outer_solver_iterations=1,
@@ -6991,7 +6953,6 @@ def solver_x_new(dt, runtime_params_t, runtime_params_t_plus_dt, geo_t,
 
 class BaseSolver(BaseModelFrozen, abc.ABC):
     theta_implicit: Annotated[UnitInterval, JAX_STATIC] = 1.0
-    use_predictor_corrector: Annotated[bool, JAX_STATIC] = False
     n_corrector_steps: Annotated[pydantic.PositiveInt, JAX_STATIC] = 10
     convection_dirichlet_mode: Annotated[Literal['ghost', 'direct',
                                                  'semi-implicit'],
@@ -7029,7 +6990,6 @@ class LinearThetaMethod(BaseSolver):
             convection_dirichlet_mode=self.convection_dirichlet_mode,
             convection_neumann_mode=self.convection_neumann_mode,
             use_pereverzev=self.use_pereverzev,
-            use_predictor_corrector=self.use_predictor_corrector,
             chi_pereverzev=self.chi_pereverzev,
             D_pereverzev=self.D_pereverzev,
             n_corrector_steps=self.n_corrector_steps,
@@ -7840,7 +7800,6 @@ CONFIG = {
     },
     'solver': {
         'solver_type': 'linear',
-        'use_predictor_corrector': True,
         'n_corrector_steps': 1,
         'chi_pereverzev': 30,
         'D_pereverzev': 15,
