@@ -6242,25 +6242,23 @@ def cell_variable_tuple_to_vec(x_tuple):
     return jnp.concatenate([x.value for x in x_tuple])
 
 
-class CoeffsCallback:
-
-    def __call__(self,
-                 runtime_params,
-                 geo,
-                 core_profiles,
-                 x,
-                 explicit_source_profiles,
-                 allow_pereverzev=False,
-                 explicit_call=False):
-        core_profiles = update_core_profiles_during_step(
-            x, runtime_params, geo, core_profiles)
-        return calc_coeffs(
-            runtime_params=runtime_params,
-            geo=geo,
-            core_profiles=core_profiles,
-            explicit_source_profiles=explicit_source_profiles,
-            explicit_call=explicit_call,
-        )
+def coeffs_callback(
+             runtime_params,
+             geo,
+             core_profiles,
+             x,
+             explicit_source_profiles,
+             allow_pereverzev=False,
+             explicit_call=False):
+    core_profiles = update_core_profiles_during_step(
+        x, runtime_params, geo, core_profiles)
+    return calc_coeffs(
+        runtime_params=runtime_params,
+        geo=geo,
+        core_profiles=core_profiles,
+        explicit_source_profiles=explicit_source_profiles,
+        explicit_call=explicit_call,
+    )
 
 
 def _calculate_pereverzev_flux(geo, core_profiles, pedestal_model_output):
@@ -6659,7 +6657,6 @@ def solver_x_new(dt, runtime_params_t, runtime_params_t_plus_dt, geo_t,
                  explicit_source_profiles):
     x_old = core_profiles_to_solver_x_tuple(core_profiles_t)
     x_new_guess = core_profiles_to_solver_x_tuple(core_profiles_t_plus_dt)
-    coeffs_callback = CoeffsCallback()
     coeffs_exp = coeffs_callback(
         runtime_params_t,
         geo_t,
