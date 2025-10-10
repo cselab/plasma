@@ -7060,6 +7060,7 @@ class RuntimeParams:
 
 
 class Solver(abc.ABC):
+
     @functools.partial(
         jax.jit,
         static_argnames=[
@@ -7162,21 +7163,9 @@ class LinearThetaMethod0(Solver):
             'evolving_names',
         ],
     )
-    def _x_new(
-        self,
-        dt: jax.Array,
-        runtime_params_t: RuntimeParamsSlice,
-        runtime_params_t_plus_dt: RuntimeParamsSlice,
-        geo_t: Geometry,
-        geo_t_plus_dt: Geometry,
-        core_profiles_t: CoreProfiles,
-        core_profiles_t_plus_dt: CoreProfiles,
-        explicit_source_profiles: SourceProfiles,
-        evolving_names: tuple[str, ...],
-    ) -> tuple[
-            tuple[CellVariable, ...],
-            SolverNumericOutputs,
-    ]:
+    def _x_new(self, dt, runtime_params_t, runtime_params_t_plus_dt, geo_t,
+               geo_t_plus_dt, core_profiles_t, core_profiles_t_plus_dt,
+               explicit_source_profiles, evolving_names):
         x_old = core_profiles_to_solver_x_tuple(core_profiles_t,
                                                 evolving_names)
         x_new_guess = core_profiles_to_solver_x_tuple(core_profiles_t_plus_dt,
@@ -7892,8 +7881,7 @@ def _get_initial_state(runtime_params, geo, step_fn):
 def _finalize_outputs(t, dt, x_new, solver_numeric_outputs, geometry_t_plus_dt,
                       runtime_params_t_plus_dt, core_profiles_t,
                       core_profiles_t_plus_dt, explicit_source_profiles,
-                      evolving_names,
-                      input_post_processed_outputs):
+                      evolving_names, input_post_processed_outputs):
     final_core_profiles, final_source_profiles = (
         update_core_and_source_profiles_after_step(
             dt=dt,
