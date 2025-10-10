@@ -6020,14 +6020,20 @@ def initial_core_profiles0(runtime_params, geo, source_models,
         core_profiles,
     )
     if not sources_are_calculated:
-        source_profiles = _get_bootstrap_and_standard_source_profiles(
-            runtime_params,
-            geo,
-            core_profiles,
-            neoclassical_models,
-            source_models,
-            source_profiles,
+        build_standard_source_profiles(
+            runtime_params=runtime_params,
+            geo=geo,
+            core_profiles=core_profiles,
+            source_models=source_models,
+            psi_only=True,
+            calculate_anyway=True,
+            calculated_source_profiles=source_profiles,
         )
+        bootstrap_current = (
+            neoclassical_models.bootstrap_current.calculate_bootstrap_current(
+                geo, core_profiles))
+        source_profiles = dataclasses.replace(source_profiles,
+                                              bootstrap_current=bootstrap_current)
     if (not runtime_params.numerics.evolve_current
             and runtime_params.profile_conditions.psidot is not None):
         psidot_value = runtime_params.profile_conditions.psidot
@@ -6058,29 +6064,6 @@ def initial_core_profiles0(runtime_params, geo, source_models,
         sigma_face=conductivity.sigma_face,
     )
     return core_profiles
-
-
-def _get_bootstrap_and_standard_source_profiles(runtime_params, geo,
-                                                core_profiles,
-                                                neoclassical_models,
-                                                source_models,
-                                                source_profiles):
-    build_standard_source_profiles(
-        runtime_params=runtime_params,
-        geo=geo,
-        core_profiles=core_profiles,
-        source_models=source_models,
-        psi_only=True,
-        calculate_anyway=True,
-        calculated_source_profiles=source_profiles,
-    )
-    bootstrap_current = (
-        neoclassical_models.bootstrap_current.calculate_bootstrap_current(
-            geo, core_profiles))
-    source_profiles = dataclasses.replace(source_profiles,
-                                          bootstrap_current=bootstrap_current)
-    return source_profiles
-
 
 def core_profiles_to_solver_x_tuple(
     core_profiles,
