@@ -1317,7 +1317,7 @@ class ConstantGeometryProvider(GeometryProvider):
 def calculate_plh_scaling_factor(
     geo: Geometry,
     core_profiles: CoreProfiles,
-) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array]:
+):
     line_avg_n_e = line_average(core_profiles.n_e.value, geo)
     P_LH_hi_dens_D = (2.15 * (line_avg_n_e / 1e20)**0.782 * geo.B_0**0.772 *
                       geo.a_minor**0.975 * geo.R_major**0.999 * 1e6)
@@ -1338,7 +1338,7 @@ def calculate_scaling_law_confinement_time(
     core_profiles: CoreProfiles,
     Ploss: jax.Array,
     scaling_law: str,
-) -> jax.Array:
+):
     scaling_params = {
         'H89P': {
             'prefactor': 0.038128,
@@ -1428,11 +1428,7 @@ def calc_q_face(
 def calc_j_total(
     geo: Geometry,
     psi: CellVariable,
-) -> tuple[
-        FloatVectorCell,
-        FloatVectorFace,
-        FloatVectorFace,
-]:
+):
     Ip_profile_face = (psi.face_grad() * geo.g2g3_over_rhon_face * geo.F_face /
                        geo.Phi_b / (16 * jnp.pi**3 * g.mu_0))
     Ip_profile = (psi.grad() * geo.g2g3_over_rhon * geo.F / geo.Phi_b /
@@ -1448,7 +1444,7 @@ def calc_j_total(
     return j_total, j_total_face, Ip_profile_face
 
 
-def calc_s_face(geo: Geometry, psi: CellVariable) -> jax.Array:
+def calc_s_face(geo: Geometry, psi: CellVariable):
     iota_scaled = jnp.abs((psi.face_grad()[1:] / geo.rho_face_norm[1:]))
     iota_scaled0 = jnp.expand_dims(jnp.abs(psi.face_grad()[1] / geo.drho_norm),
                                    axis=0)
@@ -1458,7 +1454,7 @@ def calc_s_face(geo: Geometry, psi: CellVariable) -> jax.Array:
     return s_face
 
 
-def calc_s_rmid(geo: Geometry, psi: CellVariable) -> jax.Array:
+def calc_s_rmid(geo: Geometry, psi: CellVariable):
     iota_scaled = jnp.abs((psi.face_grad()[1:] / geo.rho_face_norm[1:]))
     iota_scaled0 = jnp.expand_dims(jnp.abs(psi.face_grad()[1] / geo.drho_norm),
                                    axis=0)
@@ -1468,7 +1464,7 @@ def calc_s_rmid(geo: Geometry, psi: CellVariable) -> jax.Array:
     return s_face
 
 
-def _calc_bpol2(geo: Geometry, psi: CellVariable) -> jax.Array:
+def _calc_bpol2(geo: Geometry, psi: CellVariable):
     bpol2_bulk = ((psi.face_grad()[1:] / (2 * jnp.pi))**2 * geo.g2_face[1:] /
                   geo.vpr_face[1:]**2)
     bpol2_axis = jnp.array([0.0], dtype=jnp.float64)
@@ -1476,7 +1472,7 @@ def _calc_bpol2(geo: Geometry, psi: CellVariable) -> jax.Array:
     return bpol2_face
 
 
-def calc_Wpol(geo: Geometry, psi: CellVariable) -> jax.Array:
+def calc_Wpol(geo: Geometry, psi: CellVariable):
     bpol2 = _calc_bpol2(geo, psi)
     Wpol = _trapz(bpol2 * geo.vpr_face, geo.rho_face_norm) / (2 * g.mu_0)
     return Wpol
@@ -1486,14 +1482,14 @@ def calc_li3(
     R_major: jax.Array,
     Wpol: jax.Array,
     Ip_total: jax.Array,
-) -> jax.Array:
+):
     return 4 * Wpol / (g.mu_0 * Ip_total**2 * R_major)
 
 
 def calc_q95(
     psi_norm_face: FloatVector,
     q_face: FloatVector,
-) -> FloatScalar:
+):
     q95 = jnp.interp(0.95, psi_norm_face, q_face)
     return q95
 
@@ -1501,7 +1497,7 @@ def calc_q95(
 def calculate_psi_grad_constraint_from_Ip(
     Ip: FloatScalar,
     geo: Geometry,
-) -> jax.Array:
+) :
     return (Ip * (16 * jnp.pi**3 * g.mu_0 * geo.Phi_b) /
             (geo.g2g3_over_rhon_face[-1] * geo.F_face[-1]))
 
