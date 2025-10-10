@@ -6614,16 +6614,10 @@ def implicit_solve_block(dt, x_old, x_new_guess, coeffs_old, coeffs_new):
     return out
 
 
-@functools.partial(
-    jax.jit,
-    static_argnames=[
-        'coeffs_callback',
-    ],
-)
+@jax.jit
 def predictor_corrector_method(dt, runtime_params_t_plus_dt, geo_t_plus_dt,
                                x_old, x_new_guess, core_profiles_t_plus_dt,
-                               coeffs_exp, explicit_source_profiles,
-                               coeffs_callback):
+                               coeffs_exp, explicit_source_profiles):
 
     def loop_body(i, x_new_guess):
         coeffs_new = coeffs_callback(
@@ -6674,7 +6668,6 @@ def solver_x_new(dt, runtime_params_t, runtime_params_t_plus_dt, geo_t,
         x_new_guess=x_new_guess,
         core_profiles_t_plus_dt=core_profiles_t_plus_dt,
         coeffs_exp=coeffs_exp,
-        coeffs_callback=coeffs_callback,
         explicit_source_profiles=explicit_source_profiles,
     )
     inner_solver_iterations = (1 + g.n_corrector_steps)
