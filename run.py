@@ -848,10 +848,6 @@ class RuntimeParamsNumeric:
     adaptive_dt: bool = dataclasses.field(metadata={'static': True})
     calcphibdot: bool = dataclasses.field(metadata={'static': True})
 
-    @functools.cached_property
-    def evolving_names(self) -> tuple[str, ...]:
-        return g.evolving_names
-
 
 class Numerics(BaseModelFrozen):
     t_initial: Second = 0.0
@@ -6140,7 +6136,7 @@ def core_profiles_to_solver_x_tuple(
     evolving_names,
 ):
     x_tuple_for_solver_list = []
-    for name in evolving_names:
+    for name in g.evolving_names:
         original_units_cv = getattr(core_profiles, name)
         solver_x_tuple_cv = scale_cell_variable(
             cv=original_units_cv,
@@ -6152,7 +6148,7 @@ def core_profiles_to_solver_x_tuple(
 
 def solver_x_tuple_to_core_profiles(x_new, evolving_names, core_profiles):
     updated_vars = {}
-    for i, var_name in enumerate(evolving_names):
+    for i, var_name in enumerate(g.evolving_names):
         solver_x_tuple_cv = x_new[i]
         original_units_cv = scale_cell_variable(
             cv=solver_x_tuple_cv,
@@ -6790,22 +6786,22 @@ def _calc_coeffs_full(runtime_params,
         'psi': tic_psi,
         'n_e': tic_dens_el,
     }
-    transient_out_cell = tuple(var_to_toc[var] for var in evolving_names)
-    transient_in_cell = tuple(var_to_tic[var] for var in evolving_names)
+    transient_out_cell = tuple(var_to_toc[var] for var in g.evolving_names)
+    transient_in_cell = tuple(var_to_tic[var] for var in g.evolving_names)
     var_to_d_face = {
         'T_i': full_chi_face_ion,
         'T_e': full_chi_face_el,
         'psi': d_face_psi,
         'n_e': full_d_face_el,
     }
-    d_face = tuple(var_to_d_face[var] for var in evolving_names)
+    d_face = tuple(var_to_d_face[var] for var in g.evolving_names)
     var_to_v_face = {
         'T_i': v_heat_face_ion,
         'T_e': v_heat_face_el,
         'psi': v_face_psi,
         'n_e': full_v_face_el,
     }
-    v_face = tuple(var_to_v_face.get(var) for var in evolving_names)
+    v_face = tuple(var_to_v_face.get(var) for var in g.evolving_names)
     d = {
         ('T_i', 'T_i'): source_mat_ii,
         ('T_i', 'T_e'): source_mat_ie,
@@ -6815,15 +6811,15 @@ def _calc_coeffs_full(runtime_params,
         ('psi', 'psi'): source_mat_psi,
     }
     source_mat_cell = tuple(
-        tuple(d.get((row_block, col_block)) for col_block in evolving_names)
-        for row_block in evolving_names)
+        tuple(d.get((row_block, col_block)) for col_block in g.evolving_names)
+        for row_block in g.evolving_names)
     var_to_source = {
         'T_i': source_i / SCALING_FACTORS['T_i'],
         'T_e': source_e / SCALING_FACTORS['T_e'],
         'psi': source_psi / SCALING_FACTORS['psi'],
         'n_e': source_n_e / SCALING_FACTORS['n_e'],
     }
-    source_cell = tuple(var_to_source.get(var) for var in evolving_names)
+    source_cell = tuple(var_to_source.get(var) for var in g.evolving_names)
     coeffs = Block1DCoeffs(
         transient_out_cell=transient_out_cell,
         transient_in_cell=transient_in_cell,
@@ -6859,7 +6855,7 @@ def _calc_coeffs_reduced(
         'psi': tic_psi,
         'n_e': tic_dens_el,
     }
-    transient_in_cell = tuple(var_to_tic[var] for var in evolving_names)
+    transient_in_cell = tuple(var_to_tic[var] for var in g.evolving_names)
     coeffs = Block1DCoeffs(transient_in_cell=transient_in_cell, )
     return coeffs
 
@@ -7116,29 +7112,19 @@ def solver_call(t, dt, runtime_params_t, runtime_params_t_plus_dt,
         core_profiles_t=core_profiles_t,
         core_profiles_t_plus_dt=core_profiles_t_plus_dt,
         explicit_source_profiles=explicit_source_profiles,
-        evolving_names=runtime_params_t.numerics.evolving_names,
     )
     return (
         x_new,
         solver_numeric_output,
     )
 
-@functools.partial(
-    jax.jit,
-    static_argnames=[
-        'evolving_names',
-    ],
-)
+@jax.jit
 def solver_x_new(dt, runtime_params_t, runtime_params_t_plus_dt, geo_t,
            geo_t_plus_dt, core_profiles_t, core_profiles_t_plus_dt,
-           explicit_source_profiles, evolving_names):
-    x_old = core_profiles_to_solver_x_tuple(core_profiles_t,
-                                            evolving_names)
-    x_new_guess = core_profiles_to_solver_x_tuple(core_profiles_t_plus_dt,
-                                                  evolving_names)
-    coeffs_callback = CoeffsCallback(
-        evolving_names=evolving_names
-    )
+           explicit_source_profiles):
+    x_old = core_profiles_to_solver_x_tuple(core_profiles_t, None)
+    x_new_guess = core_profiles_to_solver_x_tuple(core_profiles_t_plus_dt, None)
+    coeffs_callback = CoeffsCallback(evolving_names=None)
     coeffs_exp = coeffs_callback(
         runtime_params_t,
         geo_t,
@@ -8079,7 +8065,6 @@ while not_done(current_state.t, g.runtime_params_provider.numerics.t_final):
         neoclassical_models=g.neoclassical_models,
         explicit=True,
     )
-    evolving_names = runtime_params_t.numerics.evolving_names
     initial_dt = next_dt(
         current_state.t,
         runtime_params_t,
@@ -8161,7 +8146,7 @@ while not_done(current_state.t, g.runtime_params_provider.numerics.t_final):
             initial_dt,
             (
                 core_profiles_to_solver_x_tuple(current_state.core_profiles,
-                                                evolving_names),
+                                                None),
                 initial_dt,
                 SolverNumericOutputs(
                     solver_error_state=1,
@@ -8185,7 +8170,7 @@ while not_done(current_state.t, g.runtime_params_provider.numerics.t_final):
         core_profiles_t=current_state.core_profiles,
         core_profiles_t_plus_dt=result[5],
         explicit_source_profiles=explicit_source_profiles,
-        evolving_names=evolving_names,
+        evolving_names=None,
         input_post_processed_outputs=previous_post_processed_outputs,
     )
     current_state = output_state
