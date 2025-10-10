@@ -7059,37 +7059,6 @@ class RuntimeParams:
     D_pereverzev: float
 
 
-class Solver(abc.ABC):
-
-    @functools.partial(
-        jax.jit,
-        static_argnames=[
-            'self',
-        ],
-    )
-    def __call__(self, t, dt, runtime_params_t, runtime_params_t_plus_dt,
-                 geo_t, geo_t_plus_dt, core_profiles_t,
-                 core_profiles_t_plus_dt, explicit_source_profiles):
-        (
-            x_new,
-            solver_numeric_output,
-        ) = self._x_new(
-            dt=dt,
-            runtime_params_t=runtime_params_t,
-            runtime_params_t_plus_dt=runtime_params_t_plus_dt,
-            geo_t=geo_t,
-            geo_t_plus_dt=geo_t_plus_dt,
-            core_profiles_t=core_profiles_t,
-            core_profiles_t_plus_dt=core_profiles_t_plus_dt,
-            explicit_source_profiles=explicit_source_profiles,
-            evolving_names=runtime_params_t.numerics.evolving_names,
-        )
-        return (
-            x_new,
-            solver_numeric_output,
-        )
-
-
 @functools.partial(
     jax.jit,
     static_argnames=[
@@ -7142,7 +7111,34 @@ def predictor_corrector_method(
     return x_new
 
 
-class LinearThetaMethod0(Solver):
+class LinearThetaMethod0:
+    @functools.partial(
+        jax.jit,
+        static_argnames=[
+            'self',
+        ],
+    )
+    def __call__(self, t, dt, runtime_params_t, runtime_params_t_plus_dt,
+                 geo_t, geo_t_plus_dt, core_profiles_t,
+                 core_profiles_t_plus_dt, explicit_source_profiles):
+        (
+            x_new,
+            solver_numeric_output,
+        ) = self._x_new(
+            dt=dt,
+            runtime_params_t=runtime_params_t,
+            runtime_params_t_plus_dt=runtime_params_t_plus_dt,
+            geo_t=geo_t,
+            geo_t_plus_dt=geo_t_plus_dt,
+            core_profiles_t=core_profiles_t,
+            core_profiles_t_plus_dt=core_profiles_t_plus_dt,
+            explicit_source_profiles=explicit_source_profiles,
+            evolving_names=runtime_params_t.numerics.evolving_names,
+        )
+        return (
+            x_new,
+            solver_numeric_output,
+        )
 
     @functools.partial(
         jax.jit,
