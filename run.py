@@ -369,11 +369,7 @@ class TimeVaryingArray(BaseModelFrozen):
     def right_boundary_conditions_defined(self):
         return False
 
-    def get_value(
-        self,
-        t,
-        grid_type='cell'
-    ):
+    def get_value(self, t, grid_type='cell'):
         match grid_type:
             case 'cell':
                 return self._get_cached_interpolated_param_cell.get_value(t)
@@ -2119,6 +2115,7 @@ class SourceModelBase(BaseModelFrozen):
             1: 0
         }
     }, )))
+
 
 @enum.unique
 class AffectedCoreProfile(enum.IntEnum):
@@ -4592,8 +4589,6 @@ def _smooth_savgol(
     window_length: int = 5,
     preserve_first: bool = True,
 ):
-    if idx_limit == 0:
-        return data
     smoothed_data = scipy.signal.savgol_filter(data,
                                                window_length,
                                                polyorder,
@@ -6167,10 +6162,8 @@ def calc_c(x, coeffs):
                 if source is not None:
                     c_mat[i][j] += jnp.diag(source)
 
-    def add(left: jax.Array, right: jax.Array | None):
-        if right is not None:
-            return left + right
-        return left
+    def add(left, right):
+        return left + right
 
     if source_cell is not None:
         c = [add(c_i, source_i) for c_i, source_i in zip(c, source_cell)]
@@ -6195,8 +6188,7 @@ def solver_x_new(dt, runtime_params_t, runtime_params_t_plus_dt, geo_t,
         x_old,
         explicit_source_profiles=explicit_source_profiles,
         allow_pereverzev=True,
-        explicit_call=True,
-    )
+        explicit_call=True)
 
     def loop_body(i, x_new_guess):
         coeffs_new = coeffs_callback(
@@ -6205,8 +6197,7 @@ def solver_x_new(dt, runtime_params_t, runtime_params_t_plus_dt, geo_t,
             core_profiles_t_plus_dt,
             x_new_guess,
             explicit_source_profiles=explicit_source_profiles,
-            allow_pereverzev=True,
-        )
+            allow_pereverzev=True)
         x_old_vec = cell_variable_tuple_to_vec(x_old)
         x_new_guess_vec = cell_variable_tuple_to_vec(x_new_guess)
         theta_exp = 1.0 - g.theta_implicit
