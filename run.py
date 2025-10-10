@@ -6398,7 +6398,7 @@ class CoeffsCallback:
         )
 
 
-def _calculate_pereverzev_flux(runtime_params, geo, core_profiles,
+def _calculate_pereverzev_flux(geo, core_profiles,
                                pedestal_model_output):
     geo_factor = jnp.concatenate(
         [jnp.ones(1), geo.g1_over_vpr_face[1:] / geo.g0_face[1:]])
@@ -6531,7 +6531,6 @@ def _calc_coeffs_full(runtime_params,
     ) = jax.lax.cond(
         g.use_pereverzev,
         lambda: _calculate_pereverzev_flux(
-            runtime_params,
             geo,
             core_profiles,
             pedestal_model_output,
