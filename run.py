@@ -4976,12 +4976,33 @@ def _get_integrated_source_value(
         return jnp.array(0.0, dtype=jnp.float64)
 
 
-def _calculate_integrated_sources(
-    geo: Geometry,
-    core_profiles: CoreProfiles,
-    core_sources: SourceProfiles,
+@jax.jit
+def make_post_processed_outputs(
+    sim_state,
     runtime_params: RuntimeParamsSlice,
+    previous_post_processed_outputs: PostProcessedOutputs | None = None,
 ):
+    impurity_radiation_outputs = (calculate_impurity_species_output(
+        sim_state, runtime_params))
+    (
+        pressure_thermal_el,
+        pressure_thermal_ion,
+        pressure_thermal_tot,
+    ) = calculate_pressure(sim_state.core_profiles)
+    pprime_face = calc_pprime(sim_state.core_profiles)
+    W_thermal_el, W_thermal_ion, W_thermal_tot = (
+        calculate_stored_thermal_energy(
+            pressure_thermal_el,
+            pressure_thermal_ion,
+            pressure_thermal_tot,
+            sim_state.geometry,
+        ))
+    FFprime_face = calc_FFprime(sim_state.core_profiles, sim_state.geometry)
+    psi_face = sim_state.core_profiles.psi.face_value()
+    psi_norm_face = (psi_face - psi_face[0]) / (psi_face[-1] - psi_face[0])
+    geo = sim_state.geometry
+    core_profiles = sim_state.core_profiles
+    core_sources = sim_state.core_sources
     integrated = {}
     integrated['P_alpha_total'] = jnp.array(0.0, dtype=jnp.float64)
     integrated['S_total'] = jnp.array(0.0, dtype=jnp.float64)
@@ -5036,39 +5057,7 @@ def _calculate_integrated_sources(
     integrated['P_fusion'] = 5 * integrated['P_alpha_total']
     integrated['P_external_total'] = (integrated['P_external_injected'] +
                                       integrated['P_ohmic_e'])
-    return integrated
-
-
-@jax.jit
-def make_post_processed_outputs(
-    sim_state,
-    runtime_params: RuntimeParamsSlice,
-    previous_post_processed_outputs: PostProcessedOutputs | None = None,
-):
-    impurity_radiation_outputs = (calculate_impurity_species_output(
-        sim_state, runtime_params))
-    (
-        pressure_thermal_el,
-        pressure_thermal_ion,
-        pressure_thermal_tot,
-    ) = calculate_pressure(sim_state.core_profiles)
-    pprime_face = calc_pprime(sim_state.core_profiles)
-    W_thermal_el, W_thermal_ion, W_thermal_tot = (
-        calculate_stored_thermal_energy(
-            pressure_thermal_el,
-            pressure_thermal_ion,
-            pressure_thermal_tot,
-            sim_state.geometry,
-        ))
-    FFprime_face = calc_FFprime(sim_state.core_profiles, sim_state.geometry)
-    psi_face = sim_state.core_profiles.psi.face_value()
-    psi_norm_face = (psi_face - psi_face[0]) / (psi_face[-1] - psi_face[0])
-    integrated_sources = _calculate_integrated_sources(
-        sim_state.geometry,
-        sim_state.core_profiles,
-        sim_state.core_sources,
-        runtime_params,
-    )
+    integrated_sources = integrated
     Q_fusion = (integrated_sources['P_fusion'] /
                 (integrated_sources['P_external_total'] + g.eps))
     P_LH_hi_dens, P_LH_min, P_LH, n_e_min_P_LH = (calculate_plh_scaling_factor(
