@@ -126,9 +126,7 @@ def _is_bool(interp_input: InterpolatedVarSingleAxisInput):
     return isinstance(interp_input, bool)
 
 
-def _convert_value_to_floats(interp_input: InterpolatedVarSingleAxisInput):
-    if isinstance(interp_input, dict):
-        return {key: float(value) for key, value in interp_input.items()}
+def _convert_value_to_floats(interp_input):
     return float(interp_input)
 
 
