@@ -3068,21 +3068,9 @@ class SetTemperatureDensityPedestalModel(PedestalModel):
     def __hash__(self):
         return hash('SetTemperatureDensityPedestalModel')
 
-    def __eq__(self, other):
-        return isinstance(other, SetTemperatureDensityPedestalModel)
 
-
-class BasePedestal(BaseModelFrozen, abc.ABC):
+class BasePedestal(BaseModelFrozen):
     set_pedestal: TimeVaryingScalar = (ValidatedDefault(False))
-
-    @abc.abstractmethod
-    def build_pedestal_model(self):
-        pass
-
-    @abc.abstractmethod
-    def build_runtime_params(self, t):
-        pass
-
 
 class SetTpedNped(BasePedestal):
     model_name: Annotated[Literal['set_T_ped_n_ped'],
