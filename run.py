@@ -6727,8 +6727,6 @@ class StateHistory:
                 field_name = "Ip_profile_from_geo"
             if field_name == "psi":
                 field_name = "psi_from_geo"
-            if field_name == "_z_magnetic_axis":
-                field_name = "z_magnetic_axis"
             data_array = self._pack_into_data_array(
                 field_name,
                 data,
