@@ -694,14 +694,10 @@ def volume_average(value, geo):
 @dataclasses.dataclass
 class RuntimeParamsNumeric:
     t_initial: float
-    adaptive_dt: bool = dataclasses.field(metadata={'static': True})
-    calcphibdot: bool = dataclasses.field(metadata={'static': True})
 
 
 class Numerics(BaseModelFrozen):
     t_initial: Second = 0.0
-    adaptive_dt: Annotated[bool, JAX_STATIC] = True
-    calcphibdot: Annotated[bool, JAX_STATIC] = True
 
     @pydantic.model_validator(mode='after')
     def model_validation(self):
@@ -710,8 +706,6 @@ class Numerics(BaseModelFrozen):
     def build_runtime_params(self, t):
         return RuntimeParamsNumeric(
             t_initial=self.t_initial,
-            adaptive_dt=self.adaptive_dt,
-            calcphibdot=self.calcphibdot,
         )
 
 
@@ -6808,9 +6802,8 @@ def _finalize_outputs(t, dt, x_new, solver_numeric_outputs, geometry_t_plus_dt,
 def _get_geo_and_runtime_params_at_t_plus_dt_and_phibdot(t, dt, geo_t):
     runtime_params_t_plus_dt, geo_t_plus_dt = (
         get_consistent_runtime_params_and_geometry(t=t + dt))
-    if runtime_params_t_plus_dt.numerics.calcphibdot:
-        geo_t, geo_t_plus_dt = update_geometries_with_Phibdot(
-            dt=dt, geo_t=geo_t, geo_t_plus_dt=geo_t_plus_dt)
+    geo_t, geo_t_plus_dt = update_geometries_with_Phibdot(
+        dt=dt, geo_t=geo_t, geo_t_plus_dt=geo_t_plus_dt)
     return (runtime_params_t_plus_dt, geo_t, geo_t_plus_dt)
 
 
