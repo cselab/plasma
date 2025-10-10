@@ -694,14 +694,12 @@ def volume_average(value, geo):
 @dataclasses.dataclass
 class RuntimeParamsNumeric:
     t_initial: float
-    exact_t_final: bool = dataclasses.field(metadata={'static': True})
     adaptive_dt: bool = dataclasses.field(metadata={'static': True})
     calcphibdot: bool = dataclasses.field(metadata={'static': True})
 
 
 class Numerics(BaseModelFrozen):
     t_initial: Second = 0.0
-    exact_t_final: Annotated[bool, JAX_STATIC] = True
     adaptive_dt: Annotated[bool, JAX_STATIC] = True
     calcphibdot: Annotated[bool, JAX_STATIC] = True
 
@@ -712,7 +710,6 @@ class Numerics(BaseModelFrozen):
     def build_runtime_params(self, t):
         return RuntimeParamsNumeric(
             t_initial=self.t_initial,
-            exact_t_final=self.exact_t_final,
             adaptive_dt=self.adaptive_dt,
             calcphibdot=self.calcphibdot,
         )
@@ -6196,7 +6193,7 @@ def next_dt(t, runtime_params, geo, core_profiles, core_transport):
     crosses_t_final = (t < g.t_final) * (t + dt > g.t_final)
     dt = jax.lax.select(
         jnp.logical_and(
-            runtime_params.numerics.exact_t_final,
+            True,
             crosses_t_final,
         ),
         g.t_final - t,
@@ -7010,13 +7007,10 @@ def cond_fun(inputs):
     solver_outputs = output[2]
     is_nan_next_dt = jnp.isnan(next_dt)
     solver_did_not_converge = solver_outputs.solver_error_state == 1
-    if runtime_params_t.numerics.exact_t_final:
-        at_exact_t_final = jnp.allclose(
-            current_state.t + next_dt,
-            g.t_final,
-        )
-    else:
-        at_exact_t_final = array(False)
+    at_exact_t_final = jnp.allclose(
+        current_state.t + next_dt,
+        g.t_final,
+    )
     next_dt_too_small = next_dt < g.min_dt
     take_another_step = cond(
         solver_did_not_converge,
