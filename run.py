@@ -116,13 +116,7 @@ class _PiecewiseLinearInterpolatedParam:
                 else:
                     return interp(x, self.xs, self.ys)
             case 2:
-                if len(self.ys) == 1 and x_shape == ():
-                    return self.ys[0]
-                else:
-                    return _interp_fn_vmap(x, self.xs, self.ys)
-            case _:
-                raise ValueError(
-                    f'ys must be either 1D or 2D. Given: {self.ys.shape}.')
+                return self.ys[0]
 
 
 def _is_bool(interp_input: InterpolatedVarSingleAxisInput, ) -> bool:
