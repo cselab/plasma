@@ -24,8 +24,10 @@ import typing
 import typing_extensions
 import xarray as xr
 
+
 class g:
     pass
+
 
 os.environ['XLA_FLAGS'] = (
     os.environ.get('XLA_FLAGS', '') +
@@ -649,6 +651,8 @@ def __getattr__(name):
 
 
 _TOLERANCE: Final[float] = 1e-6
+
+
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class IonProperties:
@@ -658,16 +662,15 @@ class IonProperties:
     Z: float
 
 
-g.    keV_to_J=1e3 * 1.602176634e-19
-g.    eV_to_J=1.602176634e-19
-g.    m_amu=1.6605390666e-27
-g.    q_e=1.602176634e-19
-g.    m_e=9.1093837e-31
-g.    epsilon_0=8.85418782e-12
-g.    mu_0=4 * jnp.pi * 1e-7
-g.    k_B=1.380649e-23
-g.    eps=1e-7
-
+g.keV_to_J = 1e3 * 1.602176634e-19
+g.eV_to_J = 1.602176634e-19
+g.m_amu = 1.6605390666e-27
+g.q_e = 1.602176634e-19
+g.m_e = 9.1093837e-31
+g.epsilon_0 = 8.85418782e-12
+g.mu_0 = 4 * jnp.pi * 1e-7
+g.k_B = 1.380649e-23
+g.eps = 1e-7
 
 ION_PROPERTIES: Final[tuple[IonProperties, ...]] = (
     IonProperties(symbol='H', name='Hydrogen', A=1.008, Z=1.0),
@@ -1601,8 +1604,7 @@ def _calc_bpol2(geo: Geometry, psi: CellVariable) -> jax.Array:
 
 def calc_Wpol(geo: Geometry, psi: CellVariable) -> jax.Array:
     bpol2 = _calc_bpol2(geo, psi)
-    Wpol = _trapz(bpol2 * geo.vpr_face,
-                  geo.rho_face_norm) / (2 * g.mu_0)
+    Wpol = _trapz(bpol2 * geo.vpr_face, geo.rho_face_norm) / (2 * g.mu_0)
     return Wpol
 
 
@@ -1638,8 +1640,8 @@ def calculate_psidot_from_psi_sources(
     psi: CellVariable,
     geo: Geometry,
 ) -> jax.Array:
-    toc_psi = (1.0 / resistivity_multiplier * geo.rho_norm * sigma *
-               g.mu_0 * 16 * jnp.pi**2 * geo.Phi_b**2 / geo.F**2)
+    toc_psi = (1.0 / resistivity_multiplier * geo.rho_norm * sigma * g.mu_0 *
+               16 * jnp.pi**2 * geo.Phi_b**2 / geo.F**2)
     d_face_psi = geo.g2g3_over_rhon_face
     v_face_psi = jnp.zeros_like(d_face_psi)
     psi_sources += (8.0 * jnp.pi**2 * g.mu_0 * geo.Phi_b_dot * geo.Phi_b *
@@ -1664,8 +1666,7 @@ def calculate_main_ion_dilution_factor(
 def calculate_pressure(
     core_profiles: CoreProfiles, ) -> tuple[CellVariable, ...]:
     pressure_thermal_el = CellVariable(
-        value=core_profiles.n_e.value * core_profiles.T_e.value *
-        g.keV_to_J,
+        value=core_profiles.n_e.value * core_profiles.T_e.value * g.keV_to_J,
         dr=core_profiles.n_e.dr,
         right_face_constraint=core_profiles.n_e.right_face_constraint *
         core_profiles.T_e.right_face_constraint * g.keV_to_J,
@@ -1677,7 +1678,7 @@ def calculate_pressure(
         dr=core_profiles.n_i.dr,
         right_face_constraint=core_profiles.T_i.right_face_constraint *
         g.keV_to_J * (core_profiles.n_i.right_face_constraint +
-                              core_profiles.n_impurity.right_face_constraint),
+                      core_profiles.n_impurity.right_face_constraint),
         right_face_grad_constraint=None,
     )
     pressure_thermal_tot = CellVariable(
@@ -1708,9 +1709,9 @@ def calc_pprime(core_profiles: CoreProfiles, ) -> FloatVector:
     dti_drhon = core_profiles.T_i.face_grad()
     dte_drhon = core_profiles.T_e.face_grad()
     dpsi_drhon = core_profiles.psi.face_grad()
-    dptot_drhon = g.keV_to_J * (
-        n_e * dte_drhon + n_i * dti_drhon + n_impurity * dti_drhon +
-        dne_drhon * T_e + dni_drhon * T_i + dnimp_drhon * T_i)
+    dptot_drhon = g.keV_to_J * (n_e * dte_drhon + n_i * dti_drhon +
+                                n_impurity * dti_drhon + dne_drhon * T_e +
+                                dni_drhon * T_i + dnimp_drhon * T_i)
     p_total_face = p_total.face_value()
     pprime_face_axis = jnp.expand_dims(
         (2 * p_total_face[0] - 5 * p_total_face[1] + 4 * p_total_face[2] -
@@ -1767,11 +1768,9 @@ def calculate_betas(
     beta_tor = p_total_volume_avg / (magnetic_pressure_on_axis + g.eps)
     beta_pol = (
         4.0 * geo.volume[-1] * p_total_volume_avg /
-        (g.mu_0 * core_profiles.Ip_profile_face[-1]**2 * geo.R_major +
-         g.eps))
-    beta_N = (1e8 * beta_tor *
-              (geo.a_minor * geo.B_0 /
-               (core_profiles.Ip_profile_face[-1] + g.eps)))
+        (g.mu_0 * core_profiles.Ip_profile_face[-1]**2 * geo.R_major + g.eps))
+    beta_N = (1e8 * beta_tor * (geo.a_minor * geo.B_0 /
+                                (core_profiles.Ip_profile_face[-1] + g.eps)))
     return beta_tor, beta_pol, beta_N
 
 
@@ -1788,9 +1787,8 @@ def coll_exchange(
     )
     weighted_Z_eff = _calculate_weighted_Z_eff(core_profiles)
     log_Qei_coef = (jnp.log(Qei_multiplier * 1.5 * core_profiles.n_e.value) +
-                    jnp.log(g.keV_to_J / g.m_amu) +
-                    jnp.log(2 * g.m_e) + jnp.log(weighted_Z_eff) -
-                    log_tau_e_Z1)
+                    jnp.log(g.keV_to_J / g.m_amu) + jnp.log(2 * g.m_e) +
+                    jnp.log(weighted_Z_eff) - log_tau_e_Z1)
     Qei_coef = jnp.exp(log_Qei_coef)
     return Qei_coef
 
@@ -1815,8 +1813,8 @@ def calc_nu_star(
     epsilon = jnp.clip(epsilon, g.eps)
     tau_bounce = (
         core_profiles.q_face * geo.R_major /
-        (epsilon**1.5 * jnp.sqrt(core_profiles.T_e.face_value() *
-                                 g.keV_to_J / g.m_e)))
+        (epsilon**1.5 *
+         jnp.sqrt(core_profiles.T_e.face_value() * g.keV_to_J / g.m_e)))
     tau_bounce = tau_bounce.at[0].set(tau_bounce[1])
     nustar = nu_e * tau_bounce
     return nustar
@@ -1869,8 +1867,7 @@ def _calculate_log_tau_e_Z1(
 ) -> jax.Array:
     return (jnp.log(12 * jnp.pi**1.5 / (n_e * log_lambda_ei)) -
             4 * jnp.log(g.q_e) + 0.5 * jnp.log(g.m_e / 2.0) +
-            2 * jnp.log(g.epsilon_0) +
-            1.5 * jnp.log(T_e * g.keV_to_J))
+            2 * jnp.log(g.epsilon_0) + 1.5 * jnp.log(T_e * g.keV_to_J))
 
 
 _MAVRIN_Z_COEFFS: Final[Mapping[str, FloatVector]] = (
@@ -3907,8 +3904,7 @@ class TransportModel(abc.ABC):
         chi_face_ion = jnp.where(
             jnp.logical_and(
                 transport_runtime_params.apply_inner_patch,
-                geo.rho_face_norm
-                < transport_runtime_params.rho_inner + g.eps,
+                geo.rho_face_norm < transport_runtime_params.rho_inner + g.eps,
             ),
             transport_runtime_params.chi_i_inner,
             transport_coeffs.chi_face_ion,
@@ -3916,8 +3912,7 @@ class TransportModel(abc.ABC):
         chi_face_el = jnp.where(
             jnp.logical_and(
                 transport_runtime_params.apply_inner_patch,
-                geo.rho_face_norm
-                < transport_runtime_params.rho_inner + g.eps,
+                geo.rho_face_norm < transport_runtime_params.rho_inner + g.eps,
             ),
             transport_runtime_params.chi_e_inner,
             transport_coeffs.chi_face_el,
@@ -3925,8 +3920,7 @@ class TransportModel(abc.ABC):
         d_face_el = jnp.where(
             jnp.logical_and(
                 transport_runtime_params.apply_inner_patch,
-                geo.rho_face_norm
-                < transport_runtime_params.rho_inner + g.eps,
+                geo.rho_face_norm < transport_runtime_params.rho_inner + g.eps,
             ),
             transport_runtime_params.D_e_inner,
             transport_coeffs.d_face_el,
@@ -3934,8 +3928,7 @@ class TransportModel(abc.ABC):
         v_face_el = jnp.where(
             jnp.logical_and(
                 transport_runtime_params.apply_inner_patch,
-                geo.rho_face_norm
-                < transport_runtime_params.rho_inner + g.eps,
+                geo.rho_face_norm < transport_runtime_params.rho_inner + g.eps,
             ),
             transport_runtime_params.V_e_inner,
             transport_coeffs.v_face_el,
@@ -3946,8 +3939,7 @@ class TransportModel(abc.ABC):
                     transport_runtime_params.apply_outer_patch,
                     jnp.logical_not(runtime_params.pedestal.set_pedestal),
                 ),
-                geo.rho_face_norm
-                > transport_runtime_params.rho_outer - g.eps,
+                geo.rho_face_norm > transport_runtime_params.rho_outer - g.eps,
             ),
             transport_runtime_params.chi_i_outer,
             chi_face_ion,
@@ -3958,8 +3950,7 @@ class TransportModel(abc.ABC):
                     transport_runtime_params.apply_outer_patch,
                     jnp.logical_not(runtime_params.pedestal.set_pedestal),
                 ),
-                geo.rho_face_norm
-                > transport_runtime_params.rho_outer - g.eps,
+                geo.rho_face_norm > transport_runtime_params.rho_outer - g.eps,
             ),
             transport_runtime_params.chi_e_outer,
             chi_face_el,
@@ -3970,8 +3961,7 @@ class TransportModel(abc.ABC):
                     transport_runtime_params.apply_outer_patch,
                     jnp.logical_not(runtime_params.pedestal.set_pedestal),
                 ),
-                geo.rho_face_norm
-                > transport_runtime_params.rho_outer - g.eps,
+                geo.rho_face_norm > transport_runtime_params.rho_outer - g.eps,
             ),
             transport_runtime_params.D_e_outer,
             d_face_el,
@@ -3982,8 +3972,7 @@ class TransportModel(abc.ABC):
                     transport_runtime_params.apply_outer_patch,
                     jnp.logical_not(runtime_params.pedestal.set_pedestal),
                 ),
-                geo.rho_face_norm
-                > transport_runtime_params.rho_outer - g.eps,
+                geo.rho_face_norm > transport_runtime_params.rho_outer - g.eps,
             ),
             transport_runtime_params.V_e_outer,
             v_face_el,
@@ -4102,14 +4091,12 @@ def calculate_chiGB(
 ):
     return ((reference_mass * g.m_amu)**0.5 /
             (reference_magnetic_field * g.q_e)**2 *
-            (reference_temperature * g.keV_to_J)**1.5 /
-            reference_length)
+            (reference_temperature * g.keV_to_J)**1.5 / reference_length)
 
 
 def calculate_alpha(core_profiles, q, reference_magnetic_field,
                     normalized_logarithmic_gradients):
-    factor_0 = (2 * g.keV_to_J / reference_magnetic_field**2 *
-                g.mu_0 * q**2)
+    factor_0 = (2 * g.keV_to_J / reference_magnetic_field**2 * g.mu_0 * q**2)
     alpha = factor_0 * (
         core_profiles.T_e.face_value() * core_profiles.n_e.face_value() *
         (normalized_logarithmic_gradients.lref_over_lte +
@@ -4188,8 +4175,7 @@ class QuasilinearTransportModel(TransportModel):
 
         def DV_effective_approach():
             Deff = -pfe_SI / (core_profiles.n_e.face_grad() *
-                              geo.g1_over_vpr2_face * geo.rho_b +
-                              g.eps)
+                              geo.g1_over_vpr2_face * geo.rho_b + g.eps)
             Veff = pfe_SI / (core_profiles.n_e.face_value() *
                              geo.g0_over_vpr_face * geo.rho_b)
             Deff_mask = (
@@ -6712,8 +6698,8 @@ def _calc_coeffs_full(runtime_params,
     toc_T_e = 1.5 * geo.vpr**(-2.0 / 3.0) * g.keV_to_J
     tic_T_e = core_profiles.n_e.value * geo.vpr**(5.0 / 3.0)
     toc_psi = (1.0 / runtime_params.numerics.resistivity_multiplier *
-               geo.rho_norm * conductivity.sigma * g.mu_0 * 16 *
-               jnp.pi**2 * geo.Phi_b**2 / geo.F**2)
+               geo.rho_norm * conductivity.sigma * g.mu_0 * 16 * jnp.pi**2 *
+               geo.Phi_b**2 / geo.F**2)
     tic_psi = jnp.ones_like(toc_psi)
     toc_dens_el = jnp.ones_like(geo.vpr)
     tic_dens_el = geo.vpr
@@ -7306,7 +7292,6 @@ class NewtonRaphsonThetaMethod(BaseSolver):
 
 
 SolverConfig = (LinearThetaMethod | NewtonRaphsonThetaMethod)
-
 
 
 def not_done(t, t_final):
