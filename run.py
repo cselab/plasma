@@ -6558,24 +6558,15 @@ def calc_coeffs(runtime_params,
             geo=geo,
             core_profiles=core_profiles,
             explicit_source_profiles=explicit_source_profiles,
-            physics_models=physics_models,
-            evolving_names=evolving_names,
             use_pereverzev=use_pereverzev,
         )
 
 
-@functools.partial(
-    jax.jit,
-    static_argnames=[
-        'evolving_names',
-    ],
-)
+@jax.jit
 def _calc_coeffs_full(runtime_params,
                       geo,
                       core_profiles,
                       explicit_source_profiles,
-                      physics_models,
-                      evolving_names,
                       use_pereverzev=False):
     pedestal_model_output = g.pedestal_model(runtime_params, geo,
                                              core_profiles)
