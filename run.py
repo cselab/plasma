@@ -6237,21 +6237,21 @@ class Block1DCoeffs:
     source_cell: tuple[jax.Array | None, ...] | None = None
     auxiliary_outputs: AuxiliaryOutput | None = None
 
+
 def cell_variable_tuple_to_vec(x_tuple):
     return jnp.concatenate([x.value for x in x_tuple])
 
+
 class CoeffsCallback:
 
-    def __call__(
-        self,
-        runtime_params: RuntimeParamsSlice,
-        geo: Geometry,
-        core_profiles: CoreProfiles,
-        x: tuple[CellVariable, ...],
-        explicit_source_profiles: SourceProfiles,
-        allow_pereverzev: bool = False,
-        explicit_call: bool = False,
-    ):
+    def __call__(self,
+                 runtime_params,
+                 geo,
+                 core_profiles,
+                 x,
+                 explicit_source_profiles,
+                 allow_pereverzev=False,
+                 explicit_call=False):
         core_profiles = update_core_profiles_during_step(
             x, runtime_params, geo, core_profiles)
         return calc_coeffs(
