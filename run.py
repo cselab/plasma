@@ -4366,40 +4366,7 @@ class StandardGeometryIntermediates:
     z_magnetic_axis: FloatScalar | None
 
     def __post_init__(self):
-        if self.flux_surf_avg_Bp2[-1] < 1e-10:
-            rhon = np.sqrt(self.Phi / self.Phi[-1])
-            spline = lambda rho, data, x, bc_type: scipy.interpolate.CubicSpline(
-                rho[:-1],
-                data[:-1],
-                bc_type=bc_type,
-            )(x)
-            flux_surf_avg_Bp2_edge = spline(
-                rhon,
-                self.flux_surf_avg_Bp2,
-                1.0,
-                bc_type='not-a-knot',
-            )
-            int_dl_over_Bp_edge = spline(
-                rhon,
-                self.int_dl_over_Bp,
-                1.0,
-                bc_type='not-a-knot',
-            )
-            g2_edge_ratio = (flux_surf_avg_Bp2_edge * int_dl_over_Bp_edge**
-                             2) / (self.flux_surf_avg_Bp2[-2] *
-                                   self.int_dl_over_Bp[-2]**2)
-            if g2_edge_ratio > 1.0:
-                bc_type = 'not-a-knot'
-            else:
-                bc_type = 'natural'
-            set_edge = lambda array: spline(rhon, array, 1.0, bc_type)
-            self.int_dl_over_Bp[-1] = set_edge(self.int_dl_over_Bp)
-            self.flux_surf_avg_Bp2[-1] = set_edge(self.flux_surf_avg_Bp2)
-            self.flux_surf_avg_1_over_R2[-1] = set_edge(
-                self.flux_surf_avg_1_over_R2)
-            self.flux_surf_avg_RBp[-1] = set_edge(self.flux_surf_avg_RBp)
-            self.flux_surf_avg_R2Bp2[-1] = set_edge(self.flux_surf_avg_R2Bp2)
-            self.vpr[-1] = set_edge(self.vpr)
+        assert (not self.flux_surf_avg_Bp2[-1] < 1e-10)
         rhon = np.sqrt(self.Phi / self.Phi[-1])
         idx_limit = np.argmin(np.abs(rhon - _RHO_SMOOTHING_LIMIT))
         self.flux_surf_avg_Bp2[:] = _smooth_savgol(self.flux_surf_avg_Bp2,
@@ -6613,13 +6580,6 @@ class StateHistory:
                 dims = []
             case data if is_cell_plus_boundaries_var(data):
                 dims = [TIME, RHO_NORM]
-            case _:
-                logging.warning(
-                    "Unsupported data shape for %s: %s. Skipping persisting.",
-                    name,
-                    data.shape,
-                )
-                return None
         return xr.DataArray(data, dims=dims, name=name)
 
     def _save_core_profiles(self):
