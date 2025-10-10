@@ -2942,16 +2942,9 @@ def build_standard_source_profiles(*,
         calculate_source(source_name, source)
     if psi_only:
         return
-    to_calculate = {}
     for source_name, source in source_models.standard_sources.items():
-        if source_name in _FINAL_SOURCES:
-            to_calculate[source_name] = source
-            continue
         if source_name not in source_models.psi_sources:
             calculate_source(source_name, source)
-    for source_name, source in to_calculate.items():
-        calculate_source(source_name, source)
-
 
 def _update_standard_source_profiles(
     calculated_source_profiles: SourceProfiles,
