@@ -2203,19 +2203,9 @@ class AffectedCoreProfile(enum.IntEnum):
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True, eq=True)
-class Source(abc.ABC):
+class Source:
     SOURCE_NAME: typing.ClassVar[str] = 'source'
     model_func: Any = None
-
-    @property
-    @abc.abstractmethod
-    def source_name(self) -> str:
-        pass
-
-    @property
-    @abc.abstractmethod
-    def affected_core_profiles(self) -> tuple[AffectedCoreProfile, ...]:
-        pass
 
     def get_value(self, runtime_params, geo, core_profiles,
                   calculated_source_profiles, conductivity):
@@ -2731,13 +2721,6 @@ class QeiSource(Source):
     def source_name(self):
         return self.SOURCE_NAME
 
-    @property
-    def affected_core_profiles(self):
-        return (
-            source.AffectedCoreProfile.TEMP_ION,
-            source.AffectedCoreProfile.TEMP_EL,
-        )
-
     def get_qei(
         self,
         runtime_params: RuntimeParamsSlice,
@@ -2753,20 +2736,6 @@ class QeiSource(Source):
             ),
             lambda: QeiInfo.zeros(geo),
         )
-
-    def get_value(self, runtime_params: RuntimeParamsSlice, geo: Geometry,
-                  core_profiles: CoreProfiles, calculated_source_profiles,
-                  conductivity):
-        raise NotImplementedError('Call get_qei() instead.')
-
-    def get_source_profile_for_affected_core_profile(
-        self,
-        profile: tuple[Array, ...],
-        affected_mesh_state: int,
-        geo: Geometry,
-    ):
-        raise NotImplementedError('This method is not valid for QeiSource.')
-
 
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
@@ -7165,7 +7134,6 @@ def body_fun(inputs):
             dt,
             geo_t,
         ))
-    ####
     core_profiles_t = current_state.core_profiles
     profile_conditions_t_plus_dt = (
         runtime_params_t_plus_dt.profile_conditions)
