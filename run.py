@@ -694,7 +694,6 @@ def volume_average(value, geo):
 @dataclasses.dataclass
 class RuntimeParamsNumeric:
     t_initial: float
-    fixed_dt: float
     exact_t_final: bool = dataclasses.field(metadata={'static': True})
     adaptive_dt: bool = dataclasses.field(metadata={'static': True})
     calcphibdot: bool = dataclasses.field(metadata={'static': True})
@@ -703,7 +702,6 @@ class RuntimeParamsNumeric:
 class Numerics(BaseModelFrozen):
     t_initial: Second = 0.0
     exact_t_final: Annotated[bool, JAX_STATIC] = True
-    fixed_dt: Second = 1e-1
     adaptive_dt: Annotated[bool, JAX_STATIC] = True
     calcphibdot: Annotated[bool, JAX_STATIC] = True
 
@@ -714,7 +712,6 @@ class Numerics(BaseModelFrozen):
     def build_runtime_params(self, t):
         return RuntimeParamsNumeric(
             t_initial=self.t_initial,
-            fixed_dt=self.fixed_dt,
             exact_t_final=self.exact_t_final,
             adaptive_dt=self.adaptive_dt,
             calcphibdot=self.calcphibdot,
