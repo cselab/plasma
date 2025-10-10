@@ -461,19 +461,9 @@ PositiveTimeVaryingArray = typing_extensions.Annotated[
     TimeVaryingArray, pydantic.AfterValidator(_is_positive)]
 
 
-def _load_from_primitives(
-    primitive_values: (Mapping[float, InterpolatedVarSingleAxisInput]
-                       | float),
-) -> Mapping[float, tuple[Array, Array]]:
+def _load_from_primitives(primitive_values):
     if isinstance(primitive_values, (float, int)):
         primitive_values = {0.0: {0.0: primitive_values}}
-    if isinstance(primitive_values, Mapping) and all(
-            isinstance(v, float) for v in primitive_values.values()):
-        primitive_values = {0.0: primitive_values}
-    if len(set(primitive_values.keys())) != len(primitive_values):
-        raise ValueError('Indicies in values mapping must be unique.')
-    if not primitive_values:
-        raise ValueError('Values mapping must not be empty.')
     loaded_values = {}
     for t, v in primitive_values.items():
         x, y, _, _ = convert_input_to_xs_ys(v)
@@ -481,11 +471,7 @@ def _load_from_primitives(
     return loaded_values
 
 
-def _is_non_negative(
-    time_varying_array: TimeVaryingArray, ) -> TimeVaryingArray:
-    for _, value in time_varying_array.value.values():
-        if not np.all(value >= 0.0):
-            raise ValueError('All values must be non-negative.')
+def _is_non_negative(time_varying_array):
     return time_varying_array
 
 
@@ -537,9 +523,7 @@ class TimeVaryingScalar(BaseModelFrozen):
         )
 
 
-def _is_positive(time_varying_scalar: TimeVaryingScalar) -> TimeVaryingScalar:
-    if not np.all(time_varying_scalar.value > 0):
-        raise ValueError('All values must be positive.')
+def _is_positive(time_varying_scalar):
     return time_varying_scalar
 
 
@@ -547,7 +531,7 @@ def _interval(
     time_varying_scalar: TimeVaryingScalar,
     lower_bound: float,
     upper_bound: float,
-) -> TimeVaryingScalar:
+):
     if not np.all((time_varying_scalar.value >= lower_bound)
                   & (time_varying_scalar.value <= upper_bound)):
         raise ValueError(
@@ -574,10 +558,6 @@ Second: TypeAlias = pydantic.NonNegativeFloat
 Tesla: TypeAlias = pydantic.PositiveFloat
 UnitInterval: TypeAlias = Annotated[float, pydantic.Field(ge=0.0, le=1.0)]
 OpenUnitInterval: TypeAlias = Annotated[float, pydantic.Field(gt=0.0, lt=1.0)]
-NonNegativeTimeVaryingArray = NonNegativeTimeVaryingArray
-PositiveTimeVaryingScalar = PositiveTimeVaryingScalar
-UnitIntervalTimeVaryingScalar = (UnitIntervalTimeVaryingScalar)
-PositiveTimeVaryingArray = PositiveTimeVaryingArray
 ValidatedDefault = functools.partial(pydantic.Field, validate_default=True)
 
 BooleanNumeric = Any
