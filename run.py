@@ -6579,11 +6579,11 @@ MIN_DELTA: Final[float] = 1e-7
 
 
 @jax.jit
-def implicit_solve_block(dt, x_old, x_new_guess, coeffs_old, coeffs_new):
+def implicit_solve_block(dt, x_old, x_new_guess, coeffs_exp, coeffs_new):
     x_old_vec = cell_variable_tuple_to_vec(x_old)
     x_new_guess_vec = cell_variable_tuple_to_vec(x_new_guess)
     theta_exp = 1.0 - g.theta_implicit
-    tc_in_old = jnp.concatenate(coeffs_old.transient_in_cell)
+    tc_in_old = jnp.concatenate(coeffs_exp.transient_in_cell)
     tc_out_new = jnp.concatenate(coeffs_new.transient_out_cell)
     tc_in_new = jnp.concatenate(coeffs_new.transient_in_cell)
     eps = 1e-7
@@ -6629,7 +6629,7 @@ def predictor_corrector_method(dt, runtime_params_t_plus_dt, geo_t_plus_dt,
             dt=dt,
             x_old=x_old,
             x_new_guess=x_new_guess,
-            coeffs_old=coeffs_exp,
+            coeffs_exp=coeffs_exp,
             coeffs_new=coeffs_new,
         )
 
