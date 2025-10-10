@@ -6540,13 +6540,11 @@ def cell_variable_tuple_to_vec(
 
 class CoeffsCallback:
 
-    def __init__(self, physics_models, evolving_names):
-        self.physics_models = physics_models
+    def __init__(self, evolving_names):
         self.evolving_names = evolving_names
 
     def __hash__(self) -> int:
         return hash((
-            self.physics_models,
             self.evolving_names,
         ))
 
@@ -6580,7 +6578,7 @@ class CoeffsCallback:
             geo=geo,
             core_profiles=core_profiles,
             explicit_source_profiles=explicit_source_profiles,
-            physics_models=self.physics_models,
+            physics_models=None,
             evolving_names=self.evolving_names,
             use_pereverzev=use_pereverzev,
             explicit_call=explicit_call,
@@ -7155,8 +7153,7 @@ class LinearThetaMethod0:
         x_new_guess = core_profiles_to_solver_x_tuple(core_profiles_t_plus_dt,
                                                       evolving_names)
         coeffs_callback = CoeffsCallback(
-            physics_models=None,
-            evolving_names=evolving_names,
+            evolving_names=evolving_names
         )
         coeffs_exp = coeffs_callback(
             runtime_params_t,
