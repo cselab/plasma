@@ -2924,19 +2924,12 @@ def build_standard_source_profiles(*,
     def calculate_source(source_name, source):
         source_params = runtime_params.sources[source_name]
         if (explicit == source_params.is_explicit) | calculate_anyway:
-            value = source.get_value(
-                runtime_params,
-                geo,
-                core_profiles,
-                calculated_source_profiles,
-                conductivity
-            )
-            _update_standard_source_profiles(
-                calculated_source_profiles,
-                source_name,
-                source.affected_core_profiles,
-                value
-            )
+            value = source.get_value(runtime_params, geo, core_profiles,
+                                     calculated_source_profiles, conductivity)
+            _update_standard_source_profiles(calculated_source_profiles,
+                                             source_name,
+                                             source.affected_core_profiles,
+                                             value)
 
     for source_name, source in source_models.psi_sources.items():
         calculate_source(source_name, source)
@@ -2945,6 +2938,7 @@ def build_standard_source_profiles(*,
     for source_name, source in source_models.standard_sources.items():
         if source_name not in source_models.psi_sources:
             calculate_source(source_name, source)
+
 
 def _update_standard_source_profiles(
     calculated_source_profiles: SourceProfiles,
@@ -3029,6 +3023,7 @@ class PedestalModel:
             ),
         )
 
+
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class RuntimeParamsPED:
@@ -3072,6 +3067,7 @@ class SetTemperatureDensityPedestalModel(PedestalModel):
 class BasePedestal(BaseModelFrozen):
     set_pedestal: TimeVaryingScalar = (ValidatedDefault(False))
 
+
 class SetTpedNped(BasePedestal):
     model_name: Annotated[Literal['set_T_ped_n_ped'],
                           JAX_STATIC] = 'set_T_ped_n_ped'
@@ -3103,9 +3099,9 @@ _IMPURITY_MODE_FRACTIONS: Final[str] = 'fractions'
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class RuntimeParamsIM:
-    fractions: FloatVector
-    A_avg: FloatScalar | FloatVectorCell
-    Z_override: FloatScalar | None = None
+    fractions: Any
+    A_avg: Any
+    Z_override: Any
 
 
 class IonMixture(BaseModelFrozen):
@@ -3118,16 +3114,11 @@ class IonMixture(BaseModelFrozen):
         fractions = jnp.array([self.species[ion].get_value(t) for ion in ions])
         Z_override = None if not self.Z_override else self.Z_override.get_value(
             t)
-        if not self.A_override:
-            As = jnp.array([ION_PROPERTIES_DICT[ion].A for ion in ions])
-            A_avg = jnp.sum(As * fractions)
-        else:
-            A_avg = self.A_override.get_value(t)
-        return RuntimeParamsIM(
-            fractions=fractions,
-            A_avg=A_avg,
-            Z_override=Z_override,
-        )
+        As = jnp.array([ION_PROPERTIES_DICT[ion].A for ion in ions])
+        A_avg = jnp.sum(As * fractions)
+        return RuntimeParamsIM(fractions=fractions,
+                               A_avg=A_avg,
+                               Z_override=Z_override)
 
 
 def _impurity_before_validator(value):
