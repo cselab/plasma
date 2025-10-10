@@ -958,8 +958,7 @@ def make_diffusion_terms(d_face: FloatVectorFace, var: CellVariable):
     chex.assert_exactly_one_is_none(var.right_face_grad_constraint,
                                     var.right_face_constraint)
     diag = diag.at[0].set(-d_face[1])
-    vec = vec.at[0].set(-d_face[0] * var.left_face_grad_constraint /
-                        var.dr)
+    vec = vec.at[0].set(-d_face[0] * var.left_face_grad_constraint / var.dr)
     if var.right_face_constraint is not None:
         diag = diag.at[-1].set(-2 * d_face[-1] - d_face[-2])
         vec = vec.at[-1].set(2 * d_face[-1] * var.right_face_constraint /
@@ -1843,6 +1842,7 @@ class ConductivityModel:
 class ConductivityModelConfig(BaseModelFrozen):
     pass
 
+
 @jax.jit
 def _calculate_conductivity0(
     *,
@@ -1880,25 +1880,13 @@ def _calculate_conductivity0(
 
 class SauterModelCond(ConductivityModel):
 
-    def calculate_conductivity(
-        self,
-        geometry,
-        core_profiles,
-    ):
-        result = _calculate_conductivity0(
-            Z_eff_face=core_profiles.Z_eff_face,
-            n_e=core_profiles.n_e,
-            T_e=core_profiles.T_e,
-            q_face=core_profiles.q_face,
-            geo=geometry,
-        )
-        return Conductivity(
-            sigma=result.sigma,
-            sigma_face=result.sigma_face,
-        )
-
-    def __eq__(self, other) -> bool:
-        return isinstance(other, self.__class__)
+    def calculate_conductivity(self, geometry, core_profiles):
+        result = _calculate_conductivity0(Z_eff_face=core_profiles.Z_eff_face,
+                                          n_e=core_profiles.n_e,
+                                          T_e=core_profiles.T_e,
+                                          q_face=core_profiles.q_face,
+                                          geo=geometry)
+        return Conductivity(sigma=result.sigma, sigma_face=result.sigma_face)
 
     def __hash__(self) -> int:
         return hash(self.__class__)
@@ -2721,6 +2709,7 @@ class QeiSource(Source):
             ),
             lambda: QeiInfo.zeros(geo),
         )
+
 
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
@@ -7140,7 +7129,7 @@ def body_fun(inputs):
     n_i_bound_right = n_e_right_bc * dilution_factor_edge
     n_impurity_bound_right = (n_e_right_bc -
                               n_i_bound_right * Z_i_edge) / Z_impurity_edge
-    
+
     updated_boundary_conditions = {
         'T_i':
         dict(
