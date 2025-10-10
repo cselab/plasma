@@ -6667,7 +6667,6 @@ def calc_c(
     x: tuple[CellVariable, ...],
     coeffs: Block1DCoeffs,
     convection_dirichlet_mode: str = 'ghost',
-    convection_neumann_mode: str = 'ghost',
 ) -> tuple[jax.Array, jax.Array]:
     d_face = coeffs.d_face
     v_face = coeffs.v_face
@@ -6710,7 +6709,6 @@ def calc_c(
                 d_face_i,
                 x[i],
                 dirichlet_mode=convection_dirichlet_mode,
-                neumann_mode=convection_neumann_mode,
             )
             c_mat[i][i] += conv_mat
             c[i] += conv_vec
@@ -6737,7 +6735,6 @@ def calc_c(
     jax.jit,
     static_argnames=[
         'convection_dirichlet_mode',
-        'convection_neumann_mode',
         'theta_implicit',
     ],
 )
@@ -6749,7 +6746,6 @@ def theta_method_matrix_equation(
     coeffs_new: Block1DCoeffs,
     theta_implicit: float = 1.0,
     convection_dirichlet_mode: str = 'ghost',
-    convection_neumann_mode: str = 'ghost',
 ):
     x_new_guess_vec = cell_variable_tuple_to_vec(x_new_guess)
     theta_exp = 1.0 - theta_implicit
@@ -6763,7 +6759,6 @@ def theta_method_matrix_equation(
         x_new_guess,
         coeffs_new,
         convection_dirichlet_mode,
-        convection_neumann_mode,
     )
     broadcasted = jnp.expand_dims(1 / (tc_out_new * tc_in_new), 1)
     lhs_mat = left_transient - dt * theta_implicit * broadcasted * c_mat_new
@@ -6779,7 +6774,6 @@ def theta_method_matrix_equation(
             x_old,
             coeffs_old,
             convection_dirichlet_mode,
-            convection_neumann_mode,
         )
         broadcasted = jnp.expand_dims(1 / (tc_out_old * tc_in_new), 1)
         rhs_mat = right_transient + dt * theta_exp * broadcasted * c_mat_old
@@ -6797,7 +6791,6 @@ MIN_DELTA: Final[float] = 1e-7
     jax.jit,
     static_argnames=[
         'convection_dirichlet_mode',
-        'convection_neumann_mode',
         'theta_implicit',
     ],
 )
@@ -6809,7 +6802,6 @@ def implicit_solve_block(
     coeffs_new,
     theta_implicit: float = 1.0,
     convection_dirichlet_mode: str = 'ghost',
-    convection_neumann_mode: str = 'ghost',
 ) -> tuple[CellVariable, ...]:
     x_old_vec = cell_variable_tuple_to_vec(x_old)
     lhs_mat, lhs_vec, rhs_mat, rhs_vec = (theta_method_matrix_equation(
@@ -6820,7 +6812,6 @@ def implicit_solve_block(
         coeffs_new=coeffs_new,
         theta_implicit=theta_implicit,
         convection_dirichlet_mode=convection_dirichlet_mode,
-        convection_neumann_mode=convection_neumann_mode,
     ))
     rhs = jnp.dot(rhs_mat, x_old_vec) + rhs_vec - lhs_vec
     x_new = jnp.linalg.solve(lhs_mat, rhs)
@@ -6839,7 +6830,6 @@ class RuntimeParams:
     theta_implicit: float = dataclasses.field(metadata={'static': True})
     convection_dirichlet_mode: str = dataclasses.field(
         metadata={'static': True})
-    convection_neumann_mode: str = dataclasses.field(metadata={'static': True})
 
 
 @functools.partial(
@@ -6879,7 +6869,6 @@ def predictor_corrector_method(
             theta_implicit=solver_params.theta_implicit,
             convection_dirichlet_mode=(
                 solver_params.convection_dirichlet_mode),
-            convection_neumann_mode=(solver_params.convection_neumann_mode),
         )
 
     x_new = fori_loop(
@@ -6936,8 +6925,6 @@ class BaseSolver(BaseModelFrozen, abc.ABC):
     convection_dirichlet_mode: Annotated[Literal['ghost', 'direct',
                                                  'semi-implicit'],
                                          JAX_STATIC] = 'ghost'
-    convection_neumann_mode: Annotated[Literal['ghost', 'semi-implicit'],
-                                       JAX_STATIC] = 'ghost'
 
     @property
     @abc.abstractmethod
@@ -6962,7 +6949,6 @@ class LinearThetaMethod(BaseSolver):
         return RuntimeParams(
             theta_implicit=self.theta_implicit,
             convection_dirichlet_mode=self.convection_dirichlet_mode,
-            convection_neumann_mode=self.convection_neumann_mode,
         )
 
     def build_solver(self):
