@@ -6853,7 +6853,6 @@ def implicit_solve_block(
 @dataclasses.dataclass(frozen=True)
 class RuntimeParams:
     theta_implicit: float = dataclasses.field(metadata={'static': True})
-    n_corrector_steps: int = dataclasses.field(metadata={'static': True})
     convection_dirichlet_mode: str = dataclasses.field(
         metadata={'static': True})
     convection_neumann_mode: str = dataclasses.field(metadata={'static': True})
@@ -6904,7 +6903,7 @@ def predictor_corrector_method(
 
     x_new = fori_loop(
         0,
-        runtime_params_t_plus_dt.solver.n_corrector_steps + 1,
+        g.n_corrector_steps + 1,
         loop_body,
         x_new_guess,
     )
@@ -6939,7 +6938,7 @@ def solver_x_new(dt, runtime_params_t, runtime_params_t_plus_dt, geo_t,
         explicit_source_profiles=explicit_source_profiles,
     )
     inner_solver_iterations = (
-        1 + runtime_params_t_plus_dt.solver.n_corrector_steps)
+        1 + g.n_corrector_steps)
     solver_numeric_outputs = SolverNumericOutputs(
         inner_solver_iterations=inner_solver_iterations,
         outer_solver_iterations=1,
@@ -6953,7 +6952,6 @@ def solver_x_new(dt, runtime_params_t, runtime_params_t_plus_dt, geo_t,
 
 class BaseSolver(BaseModelFrozen, abc.ABC):
     theta_implicit: Annotated[UnitInterval, JAX_STATIC] = 1.0
-    n_corrector_steps: Annotated[pydantic.PositiveInt, JAX_STATIC] = 10
     convection_dirichlet_mode: Annotated[Literal['ghost', 'direct',
                                                  'semi-implicit'],
                                          JAX_STATIC] = 'ghost'
@@ -6990,7 +6988,6 @@ class LinearThetaMethod(BaseSolver):
             use_pereverzev=self.use_pereverzev,
             chi_pereverzev=self.chi_pereverzev,
             D_pereverzev=self.D_pereverzev,
-            n_corrector_steps=self.n_corrector_steps,
         )
 
     def build_solver(self):
@@ -7797,13 +7794,13 @@ CONFIG = {
         'ITG_flux_ratio_correction': 1,
     },
     'solver': {
-        'n_corrector_steps': 1,
         'chi_pereverzev': 30,
         'D_pereverzev': 15,
         'use_pereverzev': True,
     },
 }
 g.tolerance = 1e-7
+g.n_corrector_steps = 1
 g.torax_config = ToraxConfig.from_dict(CONFIG)
 mesh = g.torax_config.geometry.build_provider.torax_mesh
 for submodel in g.torax_config.submodels:
