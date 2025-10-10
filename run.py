@@ -1,8 +1,8 @@
-from collections.abc import Callable, Mapping, Sequence, Set
+from collections.abc import Sequence, Set
 from fusion_surrogates.qlknn import qlknn_model
 from jax import numpy as jnp
 from typing import Annotated, Any, Callable, Final, Literal, Mapping, Sequence, TypeAlias, TypeVar
-from typing_extensions import Annotated, Final, override
+from typing_extensions import override
 import abc
 import chex
 import copy
@@ -7060,13 +7060,6 @@ class RuntimeParams:
 
 
 class Solver(abc.ABC):
-
-    def __init__(self, physics_models):
-        self.physics_models = physics_models
-
-    def __hash__(self) -> int:
-        return hash(self.physics_models)
-
     @functools.partial(
         jax.jit,
         static_argnames=[
@@ -7189,7 +7182,7 @@ class LinearThetaMethod0(Solver):
         x_new_guess = core_profiles_to_solver_x_tuple(core_profiles_t_plus_dt,
                                                       evolving_names)
         coeffs_callback = CoeffsCallback(
-            physics_models=self.physics_models,
+            physics_models=None,
             evolving_names=evolving_names,
         )
         coeffs_exp = coeffs_callback(
@@ -7247,7 +7240,7 @@ class BaseSolver(BaseModelFrozen, abc.ABC):
         pass
 
     @abc.abstractmethod
-    def build_solver(self, physics_models):
+    def build_solver(self):
         pass
 
 
@@ -7274,8 +7267,8 @@ class LinearThetaMethod(BaseSolver):
             n_corrector_steps=self.n_corrector_steps,
         )
 
-    def build_solver(self, physics_models):
-        return LinearThetaMethod0(physics_models=physics_models, )
+    def build_solver(self):
+        return LinearThetaMethod0()
 
 
 def not_done(t, t_final):
@@ -7850,7 +7843,6 @@ class ToraxSimState:
 
 
 def _get_initial_state(runtime_params, geo, step_fn):
-    physics_models = g.solver.physics_models
     initial_core_profiles = initial_core_profiles0(
         runtime_params,
         geo,
@@ -7900,7 +7892,7 @@ def _get_initial_state(runtime_params, geo, step_fn):
 def _finalize_outputs(t, dt, x_new, solver_numeric_outputs, geometry_t_plus_dt,
                       runtime_params_t_plus_dt, core_profiles_t,
                       core_profiles_t_plus_dt, explicit_source_profiles,
-                      physics_models, evolving_names,
+                      evolving_names,
                       input_post_processed_outputs):
     final_core_profiles, final_source_profiles = (
         update_core_and_source_profiles_after_step(
@@ -8106,7 +8098,7 @@ g.pedestal_model = g.torax_config.pedestal.build_pedestal_model()
 g.source_models = g.torax_config.sources.build_models()
 g.transport_model = g.torax_config.transport.build_transport_model()
 g.neoclassical_models = g.torax_config.neoclassical.build_models()
-g.solver = g.torax_config.solver.build_solver(None)
+g.solver = g.torax_config.solver.build_solver()
 g.runtime_params_provider = RuntimeParamsProvider.from_config()
 runtime_params_for_init, geo_for_init = (
     get_consistent_runtime_params_and_geometry(
@@ -8240,7 +8232,6 @@ while not_done(current_state.t, g.runtime_params_provider.numerics.t_final):
         core_profiles_t=current_state.core_profiles,
         core_profiles_t_plus_dt=result[5],
         explicit_source_profiles=explicit_source_profiles,
-        physics_models=g.solver.physics_models,
         evolving_names=evolving_names,
         input_post_processed_outputs=previous_post_processed_outputs,
     )
