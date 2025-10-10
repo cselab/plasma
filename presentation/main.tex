@@ -30,6 +30,28 @@
   \end{itemize}
 \end{frame}
 
+\begin{frame}
+  \frametitle{Numerical Scheme}
+  \begin{itemize}
+    \item \textbf{PDEs:} 1D (in $\rho$) coupled, nonlinear, second-order parabolic transport equations.
+    \item \textbf{Spatial Discretization:} Finite Volume Method on a staggered grid.
+    \begin{itemize}
+        \item Diffusion: Central differencing.
+        \item Convection: Upwind scheme with a Peclet number-dependent flux limiter.
+    \end{itemize}
+    \item \textbf{Boundary Conditions:}
+    \begin{itemize}
+        \item Core ($\rho=0$): Zero-gradient (Neumann).
+        \item Edge ($\rho=1$): Fixed value (Dirichlet).
+    \end{itemize}
+    \item \textbf{Time Stepping:} Fully implicit backward Euler method.
+    \begin{itemize}
+        \item A predictor-corrector or Newton-Raphson method solves the nonlinear system.
+    \end{itemize}
+    \item \textbf{Coefficients \& Sources:} Self-consistently calculated from physics models (e.g., QLKNN, Sauter).
+  \end{itemize}
+\end{frame}
+
 \begin{frame}[allowframebreaks]
   \bibliographystyle{abbrv}
   \bibliography{main}
