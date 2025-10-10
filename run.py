@@ -2110,7 +2110,7 @@ class RuntimeParamsSrc:
     is_explicit: bool = dataclasses.field(metadata={"static": True})
 
 
-class SourceModelBase(BaseModelFrozen, abc.ABC):
+class SourceModelBase(BaseModelFrozen):
     mode: Annotated[Mode, JAX_STATIC] = (Mode.ZERO)
     is_explicit: Annotated[bool, JAX_STATIC] = False
     prescribed_values: tuple[TimeVaryingArray, ...] = (ValidatedDefault(({
@@ -2119,20 +2119,6 @@ class SourceModelBase(BaseModelFrozen, abc.ABC):
             1: 0
         }
     }, )))
-
-    @abc.abstractmethod
-    def build_source(self):
-        pass
-
-    @property
-    @abc.abstractmethod
-    def model_func(self):
-        pass
-
-    @abc.abstractmethod
-    def build_runtime_params(self, t):
-        pass
-
 
 @enum.unique
 class AffectedCoreProfile(enum.IntEnum):
@@ -3410,16 +3396,10 @@ class TurbulentTransport:
 class TransportModel:
 
     def __setattr__(self, attr, value):
-        if getattr(self, "_frozen", False):
-            raise AttributeError("TransportModels are immutable.")
         return super().__setattr__(attr, value)
 
     def __call__(self, runtime_params, geo, core_profiles,
                  pedestal_model_output):
-        if not getattr(self, "_frozen", False):
-            raise RuntimeError(
-                f"Subclass implementation {type(self)} forgot to "
-                "freeze at the end of __init__.")
         transport_runtime_params = runtime_params.transport
         transport_coeffs = self._call_implementation(
             transport_runtime_params,
@@ -4220,10 +4200,6 @@ class QLKNNTransportModel0(QualikizBasedTransportModel):
 
     def __hash__(self):
         return hash(('QLKNNTransportModel' + self.path + self.name))
-
-    def __eq__(self, other):
-        return (isinstance(other, QLKNNTransportModel)
-                and self.path == other.path and self.name == other.name)
 
 
 class QLKNNTransportModel(TransportBase):
