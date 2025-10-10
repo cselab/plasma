@@ -7097,26 +7097,6 @@ def predictor_corrector_method(
     return x_new
 
 
-def solver_call(t, dt, runtime_params_t, runtime_params_t_plus_dt,
-             geo_t, geo_t_plus_dt, core_profiles_t,
-             core_profiles_t_plus_dt, explicit_source_profiles):
-    (
-        x_new,
-        solver_numeric_output,
-    ) = solver_x_new(
-        dt=dt,
-        runtime_params_t=runtime_params_t,
-        runtime_params_t_plus_dt=runtime_params_t_plus_dt,
-        geo_t=geo_t,
-        geo_t_plus_dt=geo_t_plus_dt,
-        core_profiles_t=core_profiles_t,
-        core_profiles_t_plus_dt=core_profiles_t_plus_dt,
-        explicit_source_profiles=explicit_source_profiles,
-    )
-    return (
-        x_new,
-        solver_numeric_output,
-    )
 
 @jax.jit
 def solver_x_new(dt, runtime_params_t, runtime_params_t_plus_dt, geo_t,
@@ -8110,8 +8090,7 @@ while not_done(current_state.t, g.runtime_params_provider.numerics.t_final):
             geo_t_plus_dt=geo_t_plus_dt,
             core_profiles_t=current_state.core_profiles,
         )
-        x_new, solver_numeric_outputs = solver_call(
-            t=current_state.t,
+        x_new, solver_numeric_outputs = solver_x_new(
             dt=dt,
             runtime_params_t=runtime_params_t,
             runtime_params_t_plus_dt=runtime_params_t_plus_dt,
