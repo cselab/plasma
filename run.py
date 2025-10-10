@@ -781,9 +781,6 @@ class RuntimeParamsNumeric:
     fixed_dt: float
     adaptive_T_source_prefactor: float
     adaptive_n_source_prefactor: float
-    evolve_electron_heat: bool = dataclasses.field(metadata={'static': True})
-    evolve_current: bool = dataclasses.field(metadata={'static': True})
-    evolve_density: bool = dataclasses.field(metadata={'static': True})
     exact_t_final: bool = dataclasses.field(metadata={'static': True})
     adaptive_dt: bool = dataclasses.field(metadata={'static': True})
     calcphibdot: bool = dataclasses.field(metadata={'static': True})
@@ -795,9 +792,6 @@ class Numerics(BaseModelFrozen):
     min_dt: Second = 1e-8
     fixed_dt: Second = 1e-1
     adaptive_dt: Annotated[bool, JAX_STATIC] = True
-    evolve_electron_heat: Annotated[bool, JAX_STATIC] = True
-    evolve_current: Annotated[bool, JAX_STATIC] = False
-    evolve_density: Annotated[bool, JAX_STATIC] = False
     calcphibdot: Annotated[bool, JAX_STATIC] = True
     adaptive_T_source_prefactor: pydantic.PositiveFloat = 2.0e10
     adaptive_n_source_prefactor: pydantic.PositiveFloat = 2.0e8
@@ -813,9 +807,6 @@ class Numerics(BaseModelFrozen):
             fixed_dt=self.fixed_dt,
             adaptive_T_source_prefactor=self.adaptive_T_source_prefactor,
             adaptive_n_source_prefactor=self.adaptive_n_source_prefactor,
-            evolve_electron_heat=self.evolve_electron_heat,
-            evolve_current=self.evolve_current,
-            evolve_density=self.evolve_density,
             exact_t_final=self.exact_t_final,
             adaptive_dt=self.adaptive_dt,
             calcphibdot=self.calcphibdot,
@@ -2906,8 +2897,8 @@ def _model_based_qei(runtime_params, geo, core_profiles):
     implicit_ii = -qei_coef
     implicit_ee = -qei_coef
     if ((g.evolve_ion_heat
-         and not runtime_params.numerics.evolve_electron_heat)
-            or (runtime_params.numerics.evolve_electron_heat
+         and not g.evolve_electron_heat)
+            or (g.evolve_electron_heat
                 and not g.evolve_ion_heat)):
         explicit_i = qei_coef * core_profiles.T_e.value
         explicit_e = qei_coef * core_profiles.T_i.value
@@ -5925,7 +5916,7 @@ def initial_core_profiles0(runtime_params, geo, source_models,
                 geo, core_profiles))
         source_profiles = dataclasses.replace(
             source_profiles, bootstrap_current=bootstrap_current)
-    if (not runtime_params.numerics.evolve_current
+    if (not g.evolve_current
             and runtime_params.profile_conditions.psidot is not None):
         psidot_value = runtime_params.profile_conditions.psidot
     else:
@@ -7541,9 +7532,6 @@ CONFIG = {
         },
     },
     'numerics': {
-        'evolve_electron_heat': True,
-        'evolve_current': True,
-        'evolve_density': True,
     },
     'geometry': {
         'geometry_type': 'chease',
