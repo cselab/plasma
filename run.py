@@ -6608,13 +6608,7 @@ class StateHistory:
             if attr_name == "A_impurity":
                 is_constant = np.all(attr_value == attr_value[..., 0:1],
                                      axis=-1)
-                if np.all(is_constant):
-                    data_to_save = attr_value[..., 0]
-                else:
-                    face_value = getattr(stacked_core_profiles,
-                                         "A_impurity_face")
-                    data_to_save = _extend_cell_grid_to_boundaries(
-                        attr_value, face_value)
+                data_to_save = attr_value[..., 0]
                 xr_dict[output_key] = self._pack_into_data_array(
                     output_key, data_to_save)
                 continue
