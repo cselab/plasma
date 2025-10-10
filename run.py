@@ -119,16 +119,14 @@ class _PiecewiseLinearInterpolatedParam:
                 return self.ys[0]
 
 
-def _is_bool(interp_input: InterpolatedVarSingleAxisInput, ) -> bool:
+def _is_bool(interp_input: InterpolatedVarSingleAxisInput):
     if isinstance(interp_input, dict):
         value = list(interp_input.values())[0]
         return isinstance(value, bool)
     return isinstance(interp_input, bool)
 
 
-def _convert_value_to_floats(
-    interp_input: InterpolatedVarSingleAxisInput,
-) -> InterpolatedVarSingleAxisInput:
+def _convert_value_to_floats(interp_input: InterpolatedVarSingleAxisInput):
     if isinstance(interp_input, dict):
         return {key: float(value) for key, value in interp_input.items()}
     return float(interp_input)
@@ -189,11 +187,11 @@ class InterpolatedVarSingleAxis:
         return cls(children, **aux_data)
 
     @property
-    def is_bool_param(self) -> bool:
+    def is_bool_param(self):
         return self._is_bool_param
 
     @property
-    def interpolation_mode(self) -> InterpolationMode:
+    def interpolation_mode(self):
         return self._interpolation_mode
 
     def get_value(
@@ -269,17 +267,17 @@ class BaseModelFrozen(pydantic.BaseModel):
 
     @classmethod
     @functools.cache
-    def _jit_dynamic_kwarg_names(cls) -> tuple[str, ...]:
+    def _jit_dynamic_kwarg_names(cls):
         return tuple(name for name in cls.model_fields.keys()
                      if JAX_STATIC not in cls.model_fields[name].metadata)
 
     @classmethod
     @functools.cache
-    def _jit_static_kwarg_names(cls) -> tuple[str, ...]:
+    def _jit_static_kwarg_names(cls):
         return tuple(name for name in cls.model_fields.keys()
                      if JAX_STATIC in cls.model_fields[name].metadata)
 
-    def tree_flatten(self) -> tuple[DynamicArgs, StaticKwargs]:
+    def tree_flatten(self):
         static_names = self._jit_static_kwarg_names()
         dynamic_names = self._jit_dynamic_kwarg_names()
         static_children = {name: getattr(self, name) for name in static_names}
@@ -332,7 +330,7 @@ class Grid1D(BaseModelFrozen):
     nx: typing_extensions.Annotated[pydantic.conint(ge=4), JAX_STATIC]
 
     @functools.cached_property
-    def dx(self) -> float:
+    def dx(self):
         return 1 / self.nx
 
     @property
@@ -380,7 +378,7 @@ class TimeVaryingArray(BaseModelFrozen):
         return obj
 
     @functools.cached_property
-    def right_boundary_conditions_defined(self) -> bool:
+    def right_boundary_conditions_defined(self):
         for rho_norm, _ in self.value.values():
             if 1.0 not in rho_norm:
                 return False
@@ -399,7 +397,7 @@ class TimeVaryingArray(BaseModelFrozen):
 
     @pydantic.field_validator('value', mode='after')
     @classmethod
-    def _valid_value(cls, value: ValueType) -> ValueType:
+    def _valid_value(cls, value: ValueType):
         value = dict(sorted(value.items()))
         return value
 
@@ -407,7 +405,7 @@ class TimeVaryingArray(BaseModelFrozen):
     @classmethod
     def _conform_data(
             cls,
-            data: TimeRhoInterpolatedInput | dict[str, Any]) -> dict[str, Any]:
+            data: TimeRhoInterpolatedInput | dict[str, Any]):
         if isinstance(data, dict):
             data.pop('_get_cached_interpolated_param_cell_centers', None)
             data.pop('_get_cached_interpolated_param_face_centers', None)
@@ -424,7 +422,7 @@ class TimeVaryingArray(BaseModelFrozen):
         )
 
     @functools.cached_property
-    def _get_cached_interpolated_param_cell(self, ) -> InterpolatedVarTimeRho:
+    def _get_cached_interpolated_param_cell(self, ):
         return InterpolatedVarTimeRho(
             self.value,
             rho_norm=self.grid.cell_centers,
@@ -433,7 +431,7 @@ class TimeVaryingArray(BaseModelFrozen):
         )
 
     @functools.cached_property
-    def _get_cached_interpolated_param_face(self, ) -> InterpolatedVarTimeRho:
+    def _get_cached_interpolated_param_face(self):
         return InterpolatedVarTimeRho(
             self.value,
             rho_norm=self.grid.face_centers,
@@ -443,7 +441,7 @@ class TimeVaryingArray(BaseModelFrozen):
 
     @functools.cached_property
     def _get_cached_interpolated_param_face_right(
-        self, ) -> InterpolatedVarTimeRho:
+        self):
         return InterpolatedVarTimeRho(
             self.value,
             rho_norm=self.grid.face_centers[-1],
@@ -452,7 +450,7 @@ class TimeVaryingArray(BaseModelFrozen):
         )
 
 
-def _is_positive(array: TimeVaryingArray) -> TimeVaryingArray:
+def _is_positive(array: TimeVaryingArray):
     return array
 
 
@@ -495,7 +493,7 @@ class TimeVaryingScalar(BaseModelFrozen):
         return self._get_cached_interpolated_param.get_value(t)
 
     @pydantic.model_validator(mode='after')
-    def _ensure_consistent_arrays(self) -> typing_extensions.Self:
+    def _ensure_consistent_arrays(self):
         return self
 
     @pydantic.model_validator(mode='before')
@@ -514,7 +512,7 @@ class TimeVaryingScalar(BaseModelFrozen):
         )
 
     @functools.cached_property
-    def _get_cached_interpolated_param(self, ) -> InterpolatedVarSingleAxis:
+    def _get_cached_interpolated_param(self):
         return InterpolatedVarSingleAxis(
             value=(self.time, self.value),
             interpolation_mode=self.interpolation_mode,
@@ -658,7 +656,7 @@ def make_ip_consistent(runtime_params, geo):
 
 
 def time_varying_array_defined_at_1(
-    time_varying_array: TimeVaryingArray, ) -> TimeVaryingArray:
+    time_varying_array: TimeVaryingArray):
     if not time_varying_array.right_boundary_conditions_defined:
         logging.debug("""Not defined at rho=1.0.""")
     return time_varying_array
@@ -683,7 +681,7 @@ TimeVaryingArrayDefinedAtRightBoundaryAndBounded: TypeAlias = Annotated[
 ]
 
 
-def _ion_mixture_before_validator(value: Any) -> Any:
+def _ion_mixture_before_validator(value: Any):
     if isinstance(value, str):
         return {value: 1.0}
     return value
@@ -716,7 +714,7 @@ def tridiag(
     diag: jt.Shaped[Array, 'size'],
     above: jt.Shaped[Array, 'size-1'],
     below: jt.Shaped[Array, 'size-1'],
-) -> jt.Shaped[Array, 'size size']:
+):
     return jnp.diag(diag) + jnp.diag(above, 1) + jnp.diag(below, -1)
 
 
@@ -805,7 +803,7 @@ class Numerics(BaseModelFrozen):
 _trapz = jax.scipy.integrate.trapezoid
 
 
-def _zero() -> FloatScalar:
+def _zero():
     return jnp.zeros(())
 
 
@@ -839,7 +837,7 @@ class CellVariable:
     def face_grad(
         self,
         x: jt.Float[chex.Array, 'cell'] | None = None
-    ) -> jt.Float[chex.Array, 'face']:
+    ):
         self._assert_unbatched()
         if x is None:
             forward_difference = jnp.diff(self.value) / self.dr
@@ -851,7 +849,7 @@ class CellVariable:
             grad: jax.Array | None,
             cell: jax.Array,
             right: bool,
-        ) -> jax.Array:
+        ):
             if face is not None:
                 if x is None:
                     dx = self.dr
@@ -878,11 +876,11 @@ class CellVariable:
         right = jnp.expand_dims(right_grad, axis=0)
         return jnp.concatenate([left, forward_difference, right])
 
-    def _left_face_value(self) -> jt.Float[chex.Array, '#t']:
+    def _left_face_value(self):
         value = self.value[..., 0:1]
         return value
 
-    def _right_face_value(self) -> jt.Float[chex.Array, '#t']:
+    def _right_face_value(self):
         if self.right_face_constraint is not None:
             value = self.right_face_constraint
             value = jnp.expand_dims(value, axis=-1)
@@ -893,18 +891,18 @@ class CellVariable:
                 jnp.expand_dims(self.dr, axis=-1) / 2)
         return value
 
-    def face_value(self) -> jt.Float[jax.Array, 't* face']:
+    def face_value(self):
         inner = (self.value[..., :-1] + self.value[..., 1:]) / 2.0
         return jnp.concatenate(
             [self._left_face_value(), inner,
              self._right_face_value()],
             axis=-1)
 
-    def grad(self) -> jt.Float[jax.Array, 't* face']:
+    def grad(self):
         face = self.face_value()
         return jnp.diff(face) / jnp.expand_dims(self.dr, axis=-1)
 
-    def cell_plus_boundaries(self) -> jt.Float[jax.Array, 't* cell+2']:
+    def cell_plus_boundaries(self):
         right_value = self._right_face_value()
         left_value = self._left_face_value()
         return jnp.concatenate(
@@ -977,7 +975,7 @@ def make_convection_terms(v_face,
 
 def make_diffusion_terms(
         d_face: FloatVectorFace,
-        var: CellVariable) -> tuple[FloatMatrixCell, FloatVectorCell]:
+        var: CellVariable):
     denom = var.dr**2
     diag = jnp.asarray(-d_face[1:] - d_face[:-1])
     off = d_face[1:-1]
@@ -1141,7 +1139,7 @@ class Geometry:
     _z_magnetic_axis: FloatScalar | None
 
     @property
-    def q_correction_factor(self) -> chex.Numeric:
+    def q_correction_factor(self):
         return jnp.where(
             self.geometry_type == GeometryType.CIRCULAR.value,
             1.25,
@@ -1190,11 +1188,11 @@ class Geometry:
         return self.drho_norm * self.rho_b
 
     @property
-    def rho_b(self) -> FloatScalar:
+    def rho_b(self):
         return jnp.sqrt(self.Phi_b / np.pi / self.B_0)
 
     @property
-    def Phi_b(self) -> FloatScalar:
+    def Phi_b(self):
         return self.Phi_face[..., -1]
 
     @property
@@ -1206,39 +1204,39 @@ class Geometry:
         return self.g1 / self.vpr**2
 
     @property
-    def g0_over_vpr_face(self) -> jax.Array:
+    def g0_over_vpr_face(self):
         bulk = self.g0_face[..., 1:] / self.vpr_face[..., 1:]
         first_element = jnp.ones_like(self.rho_b) / self.rho_b
         return jnp.concatenate([jnp.expand_dims(first_element, axis=-1), bulk],
                                axis=-1)
 
     @property
-    def g1_over_vpr_face(self) -> jax.Array:
+    def g1_over_vpr_face(self):
         bulk = self.g1_face[..., 1:] / self.vpr_face[..., 1:]
         first_element = jnp.zeros_like(self.rho_b)
         return jnp.concatenate([jnp.expand_dims(first_element, axis=-1), bulk],
                                axis=-1)
 
     @property
-    def g1_over_vpr2_face(self) -> jax.Array:
+    def g1_over_vpr2_face(self):
         bulk = self.g1_face[..., 1:] / self.vpr_face[..., 1:]**2
         first_element = jnp.ones_like(self.rho_b) / self.rho_b**2
         return jnp.concatenate([jnp.expand_dims(first_element, axis=-1), bulk],
                                axis=-1)
 
     @property
-    def gm9(self) -> jax.Array:
+    def gm9(self):
         return 2 * jnp.pi * self.spr / self.vpr
 
     @property
-    def gm9_face(self) -> jax.Array:
+    def gm9_face(self):
         bulk = 2 * jnp.pi * self.spr_face[..., 1:] / self.vpr_face[..., 1:]
         first_element = 1 / self.R_major
         return jnp.concatenate([jnp.expand_dims(first_element, axis=-1), bulk],
                                axis=-1)
 
 
-def stack_geometries(geometries: Sequence[Geometry]) -> Geometry:
+def stack_geometries(geometries: Sequence[Geometry]):
     first_geo = geometries[0]
     torax_mesh = first_geo.torax_mesh
     geometry_type = first_geo.geometry_type
