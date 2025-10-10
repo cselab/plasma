@@ -778,12 +778,9 @@ def volume_average(
 class RuntimeParamsNumeric:
     t_initial: float
     min_dt: float
-    chi_timestep_prefactor: float
     fixed_dt: float
-    dt_reduction_factor: float
     adaptive_T_source_prefactor: float
     adaptive_n_source_prefactor: float
-    evolve_ion_heat: bool = dataclasses.field(metadata={'static': True})
     evolve_electron_heat: bool = dataclasses.field(metadata={'static': True})
     evolve_current: bool = dataclasses.field(metadata={'static': True})
     evolve_density: bool = dataclasses.field(metadata={'static': True})
@@ -796,11 +793,8 @@ class Numerics(BaseModelFrozen):
     t_initial: Second = 0.0
     exact_t_final: Annotated[bool, JAX_STATIC] = True
     min_dt: Second = 1e-8
-    chi_timestep_prefactor: pydantic.PositiveFloat = 50.0
     fixed_dt: Second = 1e-1
     adaptive_dt: Annotated[bool, JAX_STATIC] = True
-    dt_reduction_factor: pydantic.PositiveFloat = 3.0
-    evolve_ion_heat: Annotated[bool, JAX_STATIC] = True
     evolve_electron_heat: Annotated[bool, JAX_STATIC] = True
     evolve_current: Annotated[bool, JAX_STATIC] = False
     evolve_density: Annotated[bool, JAX_STATIC] = False
@@ -816,12 +810,9 @@ class Numerics(BaseModelFrozen):
         return RuntimeParamsNumeric(
             t_initial=self.t_initial,
             min_dt=self.min_dt,
-            chi_timestep_prefactor=self.chi_timestep_prefactor,
             fixed_dt=self.fixed_dt,
-            dt_reduction_factor=self.dt_reduction_factor,
             adaptive_T_source_prefactor=self.adaptive_T_source_prefactor,
             adaptive_n_source_prefactor=self.adaptive_n_source_prefactor,
-            evolve_ion_heat=self.evolve_ion_heat,
             evolve_electron_heat=self.evolve_electron_heat,
             evolve_current=self.evolve_current,
             evolve_density=self.evolve_density,
@@ -2914,10 +2905,10 @@ def _model_based_qei(runtime_params, geo, core_profiles):
     )
     implicit_ii = -qei_coef
     implicit_ee = -qei_coef
-    if ((runtime_params.numerics.evolve_ion_heat
+    if ((g.evolve_ion_heat
          and not runtime_params.numerics.evolve_electron_heat)
             or (runtime_params.numerics.evolve_electron_heat
-                and not runtime_params.numerics.evolve_ion_heat)):
+                and not g.evolve_ion_heat)):
         explicit_i = qei_coef * core_profiles.T_e.value
         explicit_e = qei_coef * core_profiles.T_i.value
         implicit_ie = zeros
@@ -6848,7 +6839,7 @@ def next_dt(t, runtime_params, geo, core_profiles, core_transport):
     chi_max = core_transport.chi_max(geo)
     basic_dt = (3.0 / 4.0) * (geo.drho_norm**2) / chi_max
     dt = jnp.minimum(
-        runtime_params.numerics.chi_timestep_prefactor * basic_dt,
+        g.chi_timestep_prefactor * basic_dt,
         g.max_dt,
     )
     crosses_t_final = (t < g.t_final) * (
@@ -7550,12 +7541,9 @@ CONFIG = {
         },
     },
     'numerics': {
-        'evolve_ion_heat': True,
         'evolve_electron_heat': True,
         'evolve_current': True,
         'evolve_density': True,
-        'chi_timestep_prefactor': 50,
-        'dt_reduction_factor': 3,
     },
     'geometry': {
         'geometry_type': 'chease',
@@ -7753,7 +7741,7 @@ while not_done(current_state.t, g.t_final):
             + solver_numeric_outputs.inner_solver_iterations,
             sawtooth_crash=solver_numeric_outputs.sawtooth_crash,
         )
-        next_dt = dt / runtime_params_t_plus_dt.numerics.dt_reduction_factor
+        next_dt = dt / g.dt_reduction_factor
         return next_dt, (
             x_new,
             dt,
