@@ -6239,16 +6239,15 @@ def cell_variable_tuple_to_vec(x_tuple):
     return jnp.concatenate([x.value for x in x_tuple])
 
 
-def coeffs_callback(
-             runtime_params,
-             geo,
-             core_profiles,
-             x,
-             explicit_source_profiles,
-             allow_pereverzev=False,
-             explicit_call=False):
-    core_profiles = update_core_profiles_during_step(
-        x, runtime_params, geo, core_profiles)
+def coeffs_callback(runtime_params,
+                    geo,
+                    core_profiles,
+                    x,
+                    explicit_source_profiles,
+                    allow_pereverzev=False,
+                    explicit_call=False):
+    core_profiles = update_core_profiles_during_step(x, runtime_params, geo,
+                                                     core_profiles)
     return calc_coeffs(
         runtime_params=runtime_params,
         geo=geo,
@@ -6611,9 +6610,21 @@ def implicit_solve_block(dt, x_old, x_new_guess, coeffs_exp, coeffs_new):
     return out
 
 
-def predictor_corrector_method(dt, runtime_params_t_plus_dt, geo_t_plus_dt,
-                               x_old, x_new_guess, core_profiles_t_plus_dt,
-                               coeffs_exp, explicit_source_profiles):
+@jax.jit
+def solver_x_new(dt, runtime_params_t, runtime_params_t_plus_dt, geo_t,
+                 geo_t_plus_dt, core_profiles_t, core_profiles_t_plus_dt,
+                 explicit_source_profiles):
+    x_old = core_profiles_to_solver_x_tuple(core_profiles_t)
+    x_new_guess = core_profiles_to_solver_x_tuple(core_profiles_t_plus_dt)
+    coeffs_exp = coeffs_callback(
+        runtime_params_t,
+        geo_t,
+        core_profiles_t,
+        x_old,
+        explicit_source_profiles=explicit_source_profiles,
+        allow_pereverzev=True,
+        explicit_call=True,
+    )
 
     def loop_body(i, x_new_guess):
         coeffs_new = coeffs_callback(
@@ -6638,34 +6649,7 @@ def predictor_corrector_method(dt, runtime_params_t_plus_dt, geo_t_plus_dt,
         loop_body,
         x_new_guess,
     )
-    return x_new
 
-
-@jax.jit
-def solver_x_new(dt, runtime_params_t, runtime_params_t_plus_dt, geo_t,
-                 geo_t_plus_dt, core_profiles_t, core_profiles_t_plus_dt,
-                 explicit_source_profiles):
-    x_old = core_profiles_to_solver_x_tuple(core_profiles_t)
-    x_new_guess = core_profiles_to_solver_x_tuple(core_profiles_t_plus_dt)
-    coeffs_exp = coeffs_callback(
-        runtime_params_t,
-        geo_t,
-        core_profiles_t,
-        x_old,
-        explicit_source_profiles=explicit_source_profiles,
-        allow_pereverzev=True,
-        explicit_call=True,
-    )
-    x_new = predictor_corrector_method(
-        dt=dt,
-        runtime_params_t_plus_dt=runtime_params_t_plus_dt,
-        geo_t_plus_dt=geo_t_plus_dt,
-        x_old=x_old,
-        x_new_guess=x_new_guess,
-        core_profiles_t_plus_dt=core_profiles_t_plus_dt,
-        coeffs_exp=coeffs_exp,
-        explicit_source_profiles=explicit_source_profiles,
-    )
     inner_solver_iterations = (1 + g.n_corrector_steps)
     solver_numeric_outputs = SolverNumericOutputs(
         inner_solver_iterations=inner_solver_iterations,
