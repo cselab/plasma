@@ -650,7 +650,6 @@ class RuntimeParamsSlice:
     pedestal: Any
     plasma_composition: Any
     profile_conditions: Any
-    solver: Any
     sources: Any
     transport: Any
 
@@ -6800,12 +6799,6 @@ def implicit_solve_block(
     out = tuple(out)
     return out
 
-
-@jax.tree_util.register_dataclass
-@dataclasses.dataclass(frozen=True)
-class RuntimeParams:
-    pass
-
 @functools.partial(
     jax.jit,
     static_argnames=[
@@ -6813,18 +6806,16 @@ class RuntimeParams:
     ],
 )
 def predictor_corrector_method(
-    dt: jax.Array,
-    runtime_params_t_plus_dt: RuntimeParamsSlice,
-    geo_t_plus_dt: Geometry,
-    x_old: tuple[CellVariable, ...],
-    x_new_guess: tuple[CellVariable, ...],
-    core_profiles_t_plus_dt: CoreProfiles,
+        dt,
+    runtime_params_t_plus_dt,
+    geo_t_plus_dt,
+    x_old,
+    x_new_guess,
+    core_profiles_t_plus_dt,
     coeffs_exp,
-    explicit_source_profiles: SourceProfiles,
-    coeffs_callback: CoeffsCallback,
-) -> tuple[CellVariable, ...]:
-    solver_params = runtime_params_t_plus_dt.solver
-
+    explicit_source_profiles,
+    coeffs_callback
+):
     def loop_body(i, x_new_guess):
         coeffs_new = coeffs_callback(
             runtime_params_t_plus_dt,
@@ -6892,11 +6883,6 @@ def solver_x_new(dt, runtime_params_t, runtime_params_t_plus_dt, geo_t,
 
 
 class BaseSolver(BaseModelFrozen, abc.ABC):
-    @property
-    @abc.abstractmethod
-    def build_runtime_params(self):
-        pass
-
     @abc.abstractmethod
     def build_solver(self):
         pass
@@ -6909,10 +6895,6 @@ class LinearThetaMethod(BaseSolver):
         if 'log_iterations' in x:
             del x['log_iterations']
         return x
-
-    @functools.cached_property
-    def build_runtime_params(self):
-        return RuntimeParams()
 
     def build_solver(self):
         return None
@@ -6969,12 +6951,10 @@ class RuntimeParamsProvider:
 
     @jax.jit
     def __call__(
-        self,
-        t: chex.Numeric,
-    ) -> RuntimeParamsSlice:
+        self, t
+    ):
         return RuntimeParamsSlice(
             transport=self.transport_model.build_runtime_params(t),
-            solver=self.solver.build_runtime_params,
             sources={
                 source_name: source_config.build_runtime_params(t)
                 for source_name, source_config in dict(self.sources).items()
