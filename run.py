@@ -1913,18 +1913,11 @@ class BootstrapCurrent:
         )
 
 
-class BootstrapCurrentModel(abc.ABC):
+class BootstrapCurrentModel:
+    pass
 
-    @abc.abstractmethod
-    def calculate_bootstrap_current(self, geometry, core_profiles):
-        pass
-
-
-class BootstrapCurrentModelConfig(BaseModelFrozen, abc.ABC):
-
-    @abc.abstractmethod
-    def build_model(self):
-        pass
+class BootstrapCurrentModelConfig(BaseModelFrozen):
+    pass
 
 
 class SauterModel(BootstrapCurrentModel):
@@ -2037,15 +2030,8 @@ def _calculate_alpha(f_trap, nu_i_star):
 class NeoclassicalModels:
     conductivity: ConductivityModel
     bootstrap_current: BootstrapCurrentModel
-
     def __hash__(self):
         return hash((self.bootstrap_current, self.conductivity))
-
-    def __eq__(self, other):
-        return (isinstance(other, NeoclassicalModels)
-                and self.conductivity == other.conductivity
-                and self.bootstrap_current == other.bootstrap_current)
-
 
 def exponential_profile(
     geo,
