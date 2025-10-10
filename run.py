@@ -6237,12 +6237,7 @@ class Block1DCoeffs:
     source_cell: tuple[jax.Array | None, ...] | None = None
     auxiliary_outputs: AuxiliaryOutput | None = None
 
-
-Block1DCoeffs: TypeAlias = Block1DCoeffs
-AuxiliaryOutput: TypeAlias = AuxiliaryOutput
-
-
-def cell_variable_tuple_to_vec(x_tuple)
+def cell_variable_tuple_to_vec(x_tuple):
     return jnp.concatenate([x.value for x in x_tuple])
 
 class CoeffsCallback:
