@@ -957,13 +957,9 @@ def make_diffusion_terms(d_face: FloatVectorFace, var: CellVariable):
                                     var.left_face_constraint)
     chex.assert_exactly_one_is_none(var.right_face_grad_constraint,
                                     var.right_face_constraint)
-    if var.left_face_constraint is not None:
-        diag = diag.at[0].set(-2 * d_face[0] - d_face[1])
-        vec = vec.at[0].set(2 * d_face[0] * var.left_face_constraint / denom)
-    else:
-        diag = diag.at[0].set(-d_face[1])
-        vec = vec.at[0].set(-d_face[0] * var.left_face_grad_constraint /
-                            var.dr)
+    diag = diag.at[0].set(-d_face[1])
+    vec = vec.at[0].set(-d_face[0] * var.left_face_grad_constraint /
+                        var.dr)
     if var.right_face_constraint is not None:
         diag = diag.at[-1].set(-2 * d_face[-1] - d_face[-2])
         vec = vec.at[-1].set(2 * d_face[-1] * var.right_face_constraint /
@@ -2766,17 +2762,10 @@ def _model_based_qei(runtime_params, geo, core_profiles):
     )
     implicit_ii = -qei_coef
     implicit_ee = -qei_coef
-    if ((g.evolve_ion_heat and not g.evolve_electron_heat)
-            or (g.evolve_electron_heat and not g.evolve_ion_heat)):
-        explicit_i = qei_coef * core_profiles.T_e.value
-        explicit_e = qei_coef * core_profiles.T_i.value
-        implicit_ie = zeros
-        implicit_ei = zeros
-    else:
-        explicit_i = zeros
-        explicit_e = zeros
-        implicit_ie = qei_coef
-        implicit_ei = qei_coef
+    explicit_i = zeros
+    explicit_e = zeros
+    implicit_ie = qei_coef
+    implicit_ei = qei_coef
     return QeiInfo(
         qei_coef=qei_coef,
         implicit_ii=implicit_ii,
