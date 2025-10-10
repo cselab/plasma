@@ -695,8 +695,6 @@ def volume_average(value, geo):
 class RuntimeParamsNumeric:
     t_initial: float
     fixed_dt: float
-    adaptive_T_source_prefactor: float
-    adaptive_n_source_prefactor: float
     exact_t_final: bool = dataclasses.field(metadata={'static': True})
     adaptive_dt: bool = dataclasses.field(metadata={'static': True})
     calcphibdot: bool = dataclasses.field(metadata={'static': True})
@@ -708,8 +706,6 @@ class Numerics(BaseModelFrozen):
     fixed_dt: Second = 1e-1
     adaptive_dt: Annotated[bool, JAX_STATIC] = True
     calcphibdot: Annotated[bool, JAX_STATIC] = True
-    adaptive_T_source_prefactor: pydantic.PositiveFloat = 2.0e10
-    adaptive_n_source_prefactor: pydantic.PositiveFloat = 2.0e8
 
     @pydantic.model_validator(mode='after')
     def model_validation(self):
@@ -719,8 +715,6 @@ class Numerics(BaseModelFrozen):
         return RuntimeParamsNumeric(
             t_initial=self.t_initial,
             fixed_dt=self.fixed_dt,
-            adaptive_T_source_prefactor=self.adaptive_T_source_prefactor,
-            adaptive_n_source_prefactor=self.adaptive_n_source_prefactor,
             exact_t_final=self.exact_t_final,
             adaptive_dt=self.adaptive_dt,
             calcphibdot=self.calcphibdot,
@@ -5915,10 +5909,10 @@ def _calc_coeffs_full(runtime_params, geo, core_profiles,
     full_v_face_el = geo.g0_face * v_face_el_total
     source_mat_nn = jnp.zeros_like(geo.rho)
     source_n_e = merged_source_profiles.total_sources('n_e', geo)
-    source_n_e += (mask * runtime_params.numerics.adaptive_n_source_prefactor *
+    source_n_e += (mask * g.adaptive_n_source_prefactor *
                    pedestal_model_output.n_e_ped)
     source_mat_nn += -(mask *
-                       runtime_params.numerics.adaptive_n_source_prefactor)
+                       g.adaptive_n_source_prefactor)
     (
         chi_face_per_ion,
         chi_face_per_el,
@@ -5956,12 +5950,12 @@ def _calc_coeffs_full(runtime_params, geo, core_profiles,
     source_e += qei.explicit_e * geo.vpr
     source_mat_ie = qei.implicit_ie * geo.vpr
     source_mat_ei = qei.implicit_ei * geo.vpr
-    source_i += (mask * runtime_params.numerics.adaptive_T_source_prefactor *
+    source_i += (mask * g.adaptive_T_source_prefactor *
                  pedestal_model_output.T_i_ped)
-    source_e += (mask * runtime_params.numerics.adaptive_T_source_prefactor *
+    source_e += (mask * g.adaptive_T_source_prefactor *
                  pedestal_model_output.T_e_ped)
-    source_mat_ii -= mask * runtime_params.numerics.adaptive_T_source_prefactor
-    source_mat_ee -= mask * runtime_params.numerics.adaptive_T_source_prefactor
+    source_mat_ii -= mask * g.adaptive_T_source_prefactor
+    source_mat_ee -= mask * g.adaptive_T_source_prefactor
     d_vpr53_rhon_n_e_drhon = jnp.gradient(
         geo.vpr**(5.0 / 3.0) * geo.rho_norm * core_profiles.n_e.value,
         geo.rho_norm,
@@ -7159,6 +7153,8 @@ g.max_dt = 0.5
 g.min_dt = 1e-8
 g.chi_timestep_prefactor = 50
 g.dt_reduction_factor = 3
+g.adaptive_T_source_prefactor = 2.0e10
+g.adaptive_n_source_prefactor = 2.0e8
 
 mesh = g.torax_config.geometry.build_provider.torax_mesh
 for submodel in g.torax_config.submodels:
