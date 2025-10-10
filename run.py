@@ -7116,7 +7116,7 @@ class LinearThetaMethod0:
             'self',
         ],
     )
-    def __call__(self, t, dt, runtime_params_t, runtime_params_t_plus_dt,
+    def solver_call(self, t, dt, runtime_params_t, runtime_params_t_plus_dt,
                  geo_t, geo_t_plus_dt, core_profiles_t,
                  core_profiles_t_plus_dt, explicit_source_profiles):
         (
@@ -8141,7 +8141,7 @@ while not_done(current_state.t, g.runtime_params_provider.numerics.t_final):
             geo_t_plus_dt=geo_t_plus_dt,
             core_profiles_t=current_state.core_profiles,
         )
-        x_new, solver_numeric_outputs = g.solver(
+        x_new, solver_numeric_outputs = g.solver.solver_call(
             t=current_state.t,
             dt=dt,
             runtime_params_t=runtime_params_t,
