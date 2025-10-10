@@ -588,7 +588,6 @@ ION_SYMBOLS = frozenset(ION_PROPERTIES_DICT.keys())
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class RuntimeParamsSlice:
-    numerics: Any
     pedestal: Any
     plasma_composition: Any
     profile_conditions: Any
@@ -690,25 +689,7 @@ def volume_average(value, geo):
     return cell_integration(value * geo.vpr, geo) / geo.volume_face[-1]
 
 
-@jax.tree_util.register_dataclass
-@dataclasses.dataclass
-class RuntimeParamsNumeric:
-    pass
-
-
-class Numerics(BaseModelFrozen):
-    @pydantic.model_validator(mode='after')
-    def model_validation(self):
-        return self
-
-    def build_runtime_params(self, t):
-        return RuntimeParamsNumeric(
-        )
-
-
 _trapz = jax.scipy.integrate.trapezoid
-
-
 def _zero():
     return jnp.zeros(())
 
@@ -6197,7 +6178,6 @@ def next_dt(t, runtime_params, geo, core_profiles, core_transport):
 @dataclasses.dataclass(frozen=True)
 class RuntimeParamsProvider:
     sources: Any
-    numerics: Any
     profile_conditions: Any
     plasma_composition: Any
     transport_model: Any
@@ -6208,7 +6188,6 @@ class RuntimeParamsProvider:
     def from_config(cls):
         return cls(
             sources=g.torax_config.sources,
-            numerics=g.torax_config.numerics,
             profile_conditions=g.torax_config.profile_conditions,
             plasma_composition=g.torax_config.plasma_composition,
             transport_model=g.torax_config.transport,
@@ -6227,7 +6206,6 @@ class RuntimeParamsProvider:
             },
             plasma_composition=self.plasma_composition.build_runtime_params(t),
             profile_conditions=self.profile_conditions.build_runtime_params(t),
-            numerics=self.numerics.build_runtime_params(t),
             pedestal=self.pedestal.build_runtime_params(t),
         )
 
@@ -6242,7 +6220,6 @@ StaticKwargs: TypeAlias = dict[str, Any]
 DynamicArgs: TypeAlias = list[Any]
 PROFILES = "profiles"
 SCALARS = "scalars"
-NUMERICS = "numerics"
 T_E = "T_e"
 T_I = "T_i"
 PSI = "psi"
@@ -6416,7 +6393,6 @@ class StateHistory:
         scalars = xr.Dataset(scalars_dict)
         data_tree = xr.DataTree(
             children={
-                NUMERICS: xr.DataTree(dataset=numerics),
                 PROFILES: xr.DataTree(dataset=profiles),
                 SCALARS: xr.DataTree(dataset=scalars),
             },
@@ -6806,7 +6782,6 @@ def _get_geo_and_runtime_params_at_t_plus_dt_and_phibdot(t, dt, geo_t):
 
 class ToraxConfig(BaseModelFrozen):
     profile_conditions: ProfileConditions
-    numerics: Numerics
     plasma_composition: PlasmaComposition
     geometry: Geometry0
     sources: Sources
@@ -7047,7 +7022,6 @@ CONFIG = {
             }
         },
     },
-    'numerics': {},
     'geometry': {
         'geometry_type': 'chease',
         'geometry_file': 'ITER_hybrid_citrin_equil_cheasedata.mat2cols',
