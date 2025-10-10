@@ -169,11 +169,7 @@ class InterpolatedVarSingleAxis:
         xs, ys = value
         self._is_bool_param = is_bool_param
         self._interpolation_mode = interpolation_mode
-        match interpolation_mode:
-            case InterpolationMode.PIECEWISE_LINEAR:
-                self._param = _PiecewiseLinearInterpolatedParam(xs=xs, ys=ys)
-            case _:
-                raise ValueError('Unknown interpolation mode.')
+        self._param = _PiecewiseLinearInterpolatedParam(xs=xs, ys=ys)
 
     def tree_flatten(self):
         static_params = {
