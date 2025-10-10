@@ -6261,7 +6261,6 @@ def compute_boundary_conditions_for_t_plus_dt(dt, runtime_params_t,
                 v_loop_lcfs_t=runtime_params_t.profile_conditions.v_loop_lcfs,
                 v_loop_lcfs_t_plus_dt=profile_conditions_t_plus_dt.v_loop_lcfs,
                 psi_lcfs_t=core_profiles_t.psi.right_face_constraint,
-
             ) if runtime_params_t.profile_conditions.
                                    use_v_loop_lcfs_boundary_condition else
                                    None),
@@ -6397,8 +6396,7 @@ class CoeffsCallback:
         )
 
 
-def _calculate_pereverzev_flux(geo, core_profiles,
-                               pedestal_model_output):
+def _calculate_pereverzev_flux(geo, core_profiles, pedestal_model_output):
     geo_factor = jnp.concatenate(
         [jnp.ones(1), geo.g1_over_vpr_face[1:] / geo.g0_face[1:]])
     chi_face_per_ion = (geo.g1_over_vpr_face * core_profiles.n_i.face_value() *
@@ -6465,9 +6463,7 @@ def calc_coeffs(runtime_params,
 
 
 @jax.jit
-def _calc_coeffs_full(runtime_params,
-                      geo,
-                      core_profiles,
+def _calc_coeffs_full(runtime_params, geo, core_profiles,
                       explicit_source_profiles):
     pedestal_model_output = g.pedestal_model(runtime_params, geo,
                                              core_profiles)
@@ -6643,10 +6639,7 @@ def _calc_coeffs_full(runtime_params,
 
 
 @jax.jit
-def _calc_coeffs_reduced(
-    geo: Geometry,
-    core_profiles: CoreProfiles
-):
+def _calc_coeffs_reduced(geo: Geometry, core_profiles: CoreProfiles):
     tic_T_i = core_profiles.n_i.value * geo.vpr**(5.0 / 3.0)
     tic_T_e = core_profiles.n_e.value * geo.vpr**(5.0 / 3.0)
     tic_psi = jnp.ones_like(geo.vpr)
@@ -6662,10 +6655,7 @@ def _calc_coeffs_reduced(
     return coeffs
 
 
-def calc_c(
-    x,
-    coeffs
-):
+def calc_c(x, coeffs):
     d_face = coeffs.d_face
     v_face = coeffs.v_face
     source_mat_cell = coeffs.source_mat_cell
@@ -6774,13 +6764,9 @@ MIN_DELTA: Final[float] = 1e-7
 
 
 @jax.jit
-def implicit_solve_block(
-    dt: jax.Array,
-    x_old: tuple[CellVariable, ...],
-    x_new_guess: tuple[CellVariable, ...],
-    coeffs_old,
-    coeffs_new
-):
+def implicit_solve_block(dt: jax.Array, x_old: tuple[CellVariable, ...],
+                         x_new_guess: tuple[CellVariable,
+                                            ...], coeffs_old, coeffs_new):
     x_old_vec = cell_variable_tuple_to_vec(x_old)
     lhs_mat, lhs_vec, rhs_mat, rhs_vec = (theta_method_matrix_equation(
         dt=dt,
@@ -6799,23 +6785,18 @@ def implicit_solve_block(
     out = tuple(out)
     return out
 
+
 @functools.partial(
     jax.jit,
     static_argnames=[
         'coeffs_callback',
     ],
 )
-def predictor_corrector_method(
-        dt,
-    runtime_params_t_plus_dt,
-    geo_t_plus_dt,
-    x_old,
-    x_new_guess,
-    core_profiles_t_plus_dt,
-    coeffs_exp,
-    explicit_source_profiles,
-    coeffs_callback
-):
+def predictor_corrector_method(dt, runtime_params_t_plus_dt, geo_t_plus_dt,
+                               x_old, x_new_guess, core_profiles_t_plus_dt,
+                               coeffs_exp, explicit_source_profiles,
+                               coeffs_callback):
+
     def loop_body(i, x_new_guess):
         coeffs_new = coeffs_callback(
             runtime_params_t_plus_dt,
@@ -6869,8 +6850,7 @@ def solver_x_new(dt, runtime_params_t, runtime_params_t_plus_dt, geo_t,
         coeffs_callback=coeffs_callback,
         explicit_source_profiles=explicit_source_profiles,
     )
-    inner_solver_iterations = (
-        1 + g.n_corrector_steps)
+    inner_solver_iterations = (1 + g.n_corrector_steps)
     solver_numeric_outputs = SolverNumericOutputs(
         inner_solver_iterations=inner_solver_iterations,
         outer_solver_iterations=1,
@@ -6883,12 +6863,14 @@ def solver_x_new(dt, runtime_params_t, runtime_params_t_plus_dt, geo_t,
 
 
 class BaseSolver(BaseModelFrozen, abc.ABC):
+
     @abc.abstractmethod
     def build_solver(self):
         pass
 
 
 class LinearThetaMethod(BaseSolver):
+
     @pydantic.model_validator(mode='before')
     @classmethod
     def scrub_log_iterations(cls, x: dict[str, Any]) -> dict[str, Any]:
@@ -6950,9 +6932,7 @@ class RuntimeParamsProvider:
         )
 
     @jax.jit
-    def __call__(
-        self, t
-    ):
+    def __call__(self, t):
         return RuntimeParamsSlice(
             transport=self.transport_model.build_runtime_params(t),
             sources={
