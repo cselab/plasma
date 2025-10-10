@@ -7919,16 +7919,6 @@ def step0(input_state, previous_post_processed_outputs):
         neoclassical_models=g.neoclassical_models,
         explicit=True,
     )
-    return _adaptive_step(
-        runtime_params_t,
-        geo_t,
-        explicit_source_profiles,
-        input_state,
-        previous_post_processed_outputs,
-    )
-
-def _adaptive_step(runtime_params_t, geo_t, explicit_source_profiles,
-                   input_state, previous_post_processed_outputs):
     evolving_names = runtime_params_t.numerics.evolving_names
     initial_dt = next_dt(
         input_state.t,
