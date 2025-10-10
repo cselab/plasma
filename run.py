@@ -7471,6 +7471,72 @@ initial_post_processed_outputs = post_processed_outputs
 state_history = [current_state]
 post_processing_history = [initial_post_processed_outputs]
 initial_runtime_params = g.runtime_params_provider(current_state.t)
+
+def body_fun(inputs):
+    dt, output = inputs
+    old_solver_outputs = output[2]
+    runtime_params_t_plus_dt, geo_t_with_phibdot, geo_t_plus_dt = (
+        _get_geo_and_runtime_params_at_t_plus_dt_and_phibdot(
+            current_state.t,
+            dt,
+            geo_t,
+        ))
+    core_profiles_t_plus_dt = provide_core_profiles_t_plus_dt(
+        dt=dt,
+        runtime_params_t=runtime_params_t,
+        runtime_params_t_plus_dt=runtime_params_t_plus_dt,
+        geo_t_plus_dt=geo_t_plus_dt,
+        core_profiles_t=current_state.core_profiles,
+    )
+    x_new, solver_numeric_outputs = solver_x_new(
+        dt=dt,
+        runtime_params_t=runtime_params_t,
+        runtime_params_t_plus_dt=runtime_params_t_plus_dt,
+        geo_t=geo_t_with_phibdot,
+        geo_t_plus_dt=geo_t_plus_dt,
+        core_profiles_t=current_state.core_profiles,
+        core_profiles_t_plus_dt=core_profiles_t_plus_dt,
+        explicit_source_profiles=explicit_source_profiles,
+    )
+    solver_numeric_outputs = SolverNumericOutputs(
+        solver_error_state=solver_numeric_outputs.solver_error_state,
+        outer_solver_iterations=old_solver_outputs.outer_solver_iterations
+        + 1,
+        inner_solver_iterations=old_solver_outputs.inner_solver_iterations
+        + solver_numeric_outputs.inner_solver_iterations,
+    )
+    next_dt = dt / g.dt_reduction_factor
+    return next_dt, (
+        x_new,
+        dt,
+        solver_numeric_outputs,
+        runtime_params_t_plus_dt,
+        geo_t_plus_dt,
+        core_profiles_t_plus_dt,
+    )
+
+def cond_fun(inputs):
+    next_dt, output = inputs
+    solver_outputs = output[2]
+    is_nan_next_dt = jnp.isnan(next_dt)
+    solver_did_not_converge = solver_outputs.solver_error_state == 1
+    if runtime_params_t.numerics.exact_t_final:
+        at_exact_t_final = jnp.allclose(
+            current_state.t + next_dt,
+            g.t_final,
+        )
+    else:
+        at_exact_t_final = array(False)
+    next_dt_too_small = next_dt < runtime_params_t.numerics.min_dt
+    take_another_step = cond(
+        solver_did_not_converge,
+        lambda: cond(at_exact_t_final, lambda: True, lambda:
+                     ~next_dt_too_small),
+        lambda: False,
+    )
+    return take_another_step & ~is_nan_next_dt
+
+
 while not_done(current_state.t, g.t_final):
     previous_post_processed_outputs = post_processing_history[-1]
     runtime_params_t, geo_t = (get_consistent_runtime_params_and_geometry(
@@ -7490,70 +7556,6 @@ while not_done(current_state.t, g.t_final):
         current_state.core_profiles,
         current_state.core_transport,
     )
-
-    def cond_fun(inputs):
-        next_dt, output = inputs
-        solver_outputs = output[2]
-        is_nan_next_dt = jnp.isnan(next_dt)
-        solver_did_not_converge = solver_outputs.solver_error_state == 1
-        if runtime_params_t.numerics.exact_t_final:
-            at_exact_t_final = jnp.allclose(
-                current_state.t + next_dt,
-                g.t_final,
-            )
-        else:
-            at_exact_t_final = array(False)
-        next_dt_too_small = next_dt < runtime_params_t.numerics.min_dt
-        take_another_step = cond(
-            solver_did_not_converge,
-            lambda: cond(at_exact_t_final, lambda: True, lambda:
-                         ~next_dt_too_small),
-            lambda: False,
-        )
-        return take_another_step & ~is_nan_next_dt
-
-    def body_fun(inputs):
-        dt, output = inputs
-        old_solver_outputs = output[2]
-        runtime_params_t_plus_dt, geo_t_with_phibdot, geo_t_plus_dt = (
-            _get_geo_and_runtime_params_at_t_plus_dt_and_phibdot(
-                current_state.t,
-                dt,
-                geo_t,
-            ))
-        core_profiles_t_plus_dt = provide_core_profiles_t_plus_dt(
-            dt=dt,
-            runtime_params_t=runtime_params_t,
-            runtime_params_t_plus_dt=runtime_params_t_plus_dt,
-            geo_t_plus_dt=geo_t_plus_dt,
-            core_profiles_t=current_state.core_profiles,
-        )
-        x_new, solver_numeric_outputs = solver_x_new(
-            dt=dt,
-            runtime_params_t=runtime_params_t,
-            runtime_params_t_plus_dt=runtime_params_t_plus_dt,
-            geo_t=geo_t_with_phibdot,
-            geo_t_plus_dt=geo_t_plus_dt,
-            core_profiles_t=current_state.core_profiles,
-            core_profiles_t_plus_dt=core_profiles_t_plus_dt,
-            explicit_source_profiles=explicit_source_profiles,
-        )
-        solver_numeric_outputs = SolverNumericOutputs(
-            solver_error_state=solver_numeric_outputs.solver_error_state,
-            outer_solver_iterations=old_solver_outputs.outer_solver_iterations
-            + 1,
-            inner_solver_iterations=old_solver_outputs.inner_solver_iterations
-            + solver_numeric_outputs.inner_solver_iterations,
-        )
-        next_dt = dt / g.dt_reduction_factor
-        return next_dt, (
-            x_new,
-            dt,
-            solver_numeric_outputs,
-            runtime_params_t_plus_dt,
-            geo_t_plus_dt,
-            core_profiles_t_plus_dt,
-        )
 
     _, result = while_loop(
         cond_fun,
