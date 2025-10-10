@@ -6144,78 +6144,6 @@ def compute_boundary_conditions_for_t_plus_dt(dt, runtime_params_t,
     }
 
 
-def provide_core_profiles_t_plus_dt(dt, runtime_params_t,
-                                    runtime_params_t_plus_dt, geo_t_plus_dt,
-                                    core_profiles_t):
-    updated_boundary_conditions = compute_boundary_conditions_for_t_plus_dt(
-        dt=dt,
-        runtime_params_t=runtime_params_t,
-        runtime_params_t_plus_dt=runtime_params_t_plus_dt,
-        geo_t_plus_dt=geo_t_plus_dt,
-        core_profiles_t=core_profiles_t,
-    )
-    updated_values = get_prescribed_core_profile_values(
-        runtime_params=runtime_params_t_plus_dt,
-        geo=geo_t_plus_dt,
-        core_profiles=core_profiles_t,
-    )
-    T_i = dataclasses.replace(
-        core_profiles_t.T_i,
-        value=updated_values['T_i'],
-        **updated_boundary_conditions['T_i'],
-    )
-    T_e = dataclasses.replace(
-        core_profiles_t.T_e,
-        value=updated_values['T_e'],
-        **updated_boundary_conditions['T_e'],
-    )
-    psi = dataclasses.replace(core_profiles_t.psi,
-                              **updated_boundary_conditions['psi'])
-    n_e = dataclasses.replace(
-        core_profiles_t.n_e,
-        value=updated_values['n_e'],
-        **updated_boundary_conditions['n_e'],
-    )
-    n_i = dataclasses.replace(
-        core_profiles_t.n_i,
-        value=updated_values['n_i'],
-        **updated_boundary_conditions['n_i'],
-    )
-    n_impurity = dataclasses.replace(
-        core_profiles_t.n_impurity,
-        value=updated_values['n_impurity'],
-        **updated_boundary_conditions['n_impurity'],
-    )
-    Z_i_face = jnp.concatenate([
-        updated_values['Z_i_face'][:-1],
-        jnp.array([updated_boundary_conditions['Z_i_edge']]),
-    ], )
-    Z_impurity_face = jnp.concatenate([
-        updated_values['Z_impurity_face'][:-1],
-        jnp.array([updated_boundary_conditions['Z_impurity_edge']]),
-    ], )
-    core_profiles_t_plus_dt = dataclasses.replace(
-        core_profiles_t,
-        T_i=T_i,
-        T_e=T_e,
-        psi=psi,
-        n_e=n_e,
-        n_i=n_i,
-        n_impurity=n_impurity,
-        impurity_fractions=updated_values['impurity_fractions'],
-        Z_i=updated_values['Z_i'],
-        Z_i_face=Z_i_face,
-        Z_impurity=updated_values['Z_impurity'],
-        Z_impurity_face=Z_impurity_face,
-        A_i=updated_values['A_i'],
-        A_impurity=updated_values['A_impurity'],
-        A_impurity_face=updated_values['A_impurity_face'],
-        Z_eff=updated_values['Z_eff'],
-        Z_eff_face=updated_values['Z_eff_face'],
-    )
-    return core_profiles_t_plus_dt
-
-
 def _update_v_loop_lcfs_from_psi(psi_t, psi_t_plus_dt, dt):
     psi_lcfs_t = psi_t.face_value()[-1]
     psi_lcfs_t_plus_dt = psi_t_plus_dt.face_value()[-1]
@@ -7312,6 +7240,7 @@ class ToraxConfig(BaseModelFrozen):
     transport: QLKNNTransportModel = pydantic.Field(discriminator='model_name')
     pedestal: PedestalConfig = pydantic.Field(discriminator='model_name')
 
+
 def body_fun(inputs):
     dt, output = inputs
     old_solver_outputs = output[2]
@@ -7321,12 +7250,73 @@ def body_fun(inputs):
             dt,
             geo_t,
         ))
-    core_profiles_t_plus_dt = provide_core_profiles_t_plus_dt(
+    ####
+    core_profiles_t = current_state.core_profiles
+    updated_boundary_conditions = compute_boundary_conditions_for_t_plus_dt(
         dt=dt,
         runtime_params_t=runtime_params_t,
         runtime_params_t_plus_dt=runtime_params_t_plus_dt,
         geo_t_plus_dt=geo_t_plus_dt,
-        core_profiles_t=current_state.core_profiles,
+        core_profiles_t=core_profiles_t,
+    )
+    updated_values = get_prescribed_core_profile_values(
+        runtime_params=runtime_params_t_plus_dt,
+        geo=geo_t_plus_dt,
+        core_profiles=core_profiles_t,
+    )
+    T_i = dataclasses.replace(
+        core_profiles_t.T_i,
+        value=updated_values['T_i'],
+        **updated_boundary_conditions['T_i'],
+    )
+    T_e = dataclasses.replace(
+        core_profiles_t.T_e,
+        value=updated_values['T_e'],
+        **updated_boundary_conditions['T_e'],
+    )
+    psi = dataclasses.replace(core_profiles_t.psi,
+                              **updated_boundary_conditions['psi'])
+    n_e = dataclasses.replace(
+        core_profiles_t.n_e,
+        value=updated_values['n_e'],
+        **updated_boundary_conditions['n_e'],
+    )
+    n_i = dataclasses.replace(
+        core_profiles_t.n_i,
+        value=updated_values['n_i'],
+        **updated_boundary_conditions['n_i'],
+    )
+    n_impurity = dataclasses.replace(
+        core_profiles_t.n_impurity,
+        value=updated_values['n_impurity'],
+        **updated_boundary_conditions['n_impurity'],
+    )
+    Z_i_face = jnp.concatenate([
+        updated_values['Z_i_face'][:-1],
+        jnp.array([updated_boundary_conditions['Z_i_edge']]),
+    ], )
+    Z_impurity_face = jnp.concatenate([
+        updated_values['Z_impurity_face'][:-1],
+        jnp.array([updated_boundary_conditions['Z_impurity_edge']]),
+    ], )
+    core_profiles_t_plus_dt = dataclasses.replace(
+        core_profiles_t,
+        T_i=T_i,
+        T_e=T_e,
+        psi=psi,
+        n_e=n_e,
+        n_i=n_i,
+        n_impurity=n_impurity,
+        impurity_fractions=updated_values['impurity_fractions'],
+        Z_i=updated_values['Z_i'],
+        Z_i_face=Z_i_face,
+        Z_impurity=updated_values['Z_impurity'],
+        Z_impurity_face=Z_impurity_face,
+        A_i=updated_values['A_i'],
+        A_impurity=updated_values['A_impurity'],
+        A_impurity_face=updated_values['A_impurity_face'],
+        Z_eff=updated_values['Z_eff'],
+        Z_eff_face=updated_values['Z_eff_face'],
     )
     x_new, solver_numeric_outputs = solver_x_new(
         dt=dt,
@@ -7340,10 +7330,9 @@ def body_fun(inputs):
     )
     solver_numeric_outputs = SolverNumericOutputs(
         solver_error_state=solver_numeric_outputs.solver_error_state,
-        outer_solver_iterations=old_solver_outputs.outer_solver_iterations
-        + 1,
-        inner_solver_iterations=old_solver_outputs.inner_solver_iterations
-        + solver_numeric_outputs.inner_solver_iterations,
+        outer_solver_iterations=old_solver_outputs.outer_solver_iterations + 1,
+        inner_solver_iterations=old_solver_outputs.inner_solver_iterations +
+        solver_numeric_outputs.inner_solver_iterations,
     )
     next_dt = dt / g.dt_reduction_factor
     return next_dt, (
@@ -7354,6 +7343,7 @@ def body_fun(inputs):
         geo_t_plus_dt,
         core_profiles_t_plus_dt,
     )
+
 
 def cond_fun(inputs):
     next_dt, output = inputs
@@ -7370,8 +7360,8 @@ def cond_fun(inputs):
     next_dt_too_small = next_dt < runtime_params_t.numerics.min_dt
     take_another_step = cond(
         solver_did_not_converge,
-        lambda: cond(at_exact_t_final, lambda: True, lambda:
-                     ~next_dt_too_small),
+        lambda: cond(at_exact_t_final, lambda: True, lambda: ~next_dt_too_small
+                     ),
         lambda: False,
     )
     return take_another_step & ~is_nan_next_dt
@@ -7535,7 +7525,6 @@ initial_post_processed_outputs = post_processed_outputs
 state_history = [current_state]
 post_processing_history = [initial_post_processed_outputs]
 initial_runtime_params = g.runtime_params_provider(current_state.t)
-
 
 while not_done(current_state.t, g.t_final):
     previous_post_processed_outputs = post_processing_history[-1]
