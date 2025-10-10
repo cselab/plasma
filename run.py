@@ -6760,14 +6760,13 @@ def _calc_coeffs_full(runtime_params,
                       evolving_names,
                       use_pereverzev=False):
     consts = CONSTANTS
-    pedestal_model_output = g.pedestal_model(
-        runtime_params, geo, core_profiles)
+    pedestal_model_output = g.pedestal_model(runtime_params, geo,
+                                             core_profiles)
     mask = (jnp.zeros_like(
         geo.rho,
         dtype=bool).at[pedestal_model_output.rho_norm_ped_top_idx].set(True))
-    conductivity = (
-        g.neoclassical_models.conductivity.calculate_conductivity(
-            geo, core_profiles))
+    conductivity = (g.neoclassical_models.conductivity.calculate_conductivity(
+        geo, core_profiles))
     merged_source_profiles = build_source_profiles1(
         source_models=g.source_models,
         neoclassical_models=g.neoclassical_models,
@@ -6790,8 +6789,8 @@ def _calc_coeffs_full(runtime_params,
     tic_psi = jnp.ones_like(toc_psi)
     toc_dens_el = jnp.ones_like(geo.vpr)
     tic_dens_el = geo.vpr
-    turbulent_transport = g.transport_model(
-        runtime_params, geo, core_profiles, pedestal_model_output)
+    turbulent_transport = g.transport_model(runtime_params, geo, core_profiles,
+                                            pedestal_model_output)
     chi_face_ion_total = turbulent_transport.chi_face_ion
     chi_face_el_total = turbulent_transport.chi_face_el
     d_face_el_total = turbulent_transport.d_face_el
@@ -7454,11 +7453,11 @@ class RuntimeParamsProvider:
         )
 
 
-def get_consistent_runtime_params_and_geometry(*, t, runtime_params_provider,
-                                               geometry_provider):
-    geo = geometry_provider(t)
-    runtime_params = runtime_params_provider(t=t)
+def get_consistent_runtime_params_and_geometry(*, t):
+    geo = g.geometry_provider(t)
+    runtime_params = g.runtime_params_provider(t=t)
     return make_ip_consistent(runtime_params, geo)
+
 
 StaticKwargs: TypeAlias = dict[str, Any]
 DynamicArgs: TypeAlias = list[Any]
@@ -7999,22 +7998,13 @@ def _get_initial_state(runtime_params, geo, step_fn):
 
 
 class SimulationStepFn:
-
-    def __init__(self, runtime_params_provider, geometry_provider):
-        self._geometry_provider = geometry_provider
-        self._runtime_params_provider = runtime_params_provider
-
     @jit0
     def __call__(
         self,
         input_state,
         previous_post_processed_outputs,
     ):
-        runtime_params_t, geo_t = (get_consistent_runtime_params_and_geometry(
-            t=input_state.t,
-            runtime_params_provider=self._runtime_params_provider,
-            geometry_provider=self._geometry_provider,
-        ))
+        runtime_params_t, geo_t = (get_consistent_runtime_params_and_geometry(t=input_state.t))
         explicit_source_profiles = build_source_profiles0(
             runtime_params=runtime_params_t,
             geo=geo_t,
@@ -8081,9 +8071,7 @@ class SimulationStepFn:
                 _get_geo_and_runtime_params_at_t_plus_dt_and_phibdot(
                     input_state.t,
                     dt,
-                    self._runtime_params_provider,
                     geo_t,
-                    self._geometry_provider,
                 ))
             core_profiles_t_plus_dt = provide_core_profiles_t_plus_dt(
                 dt=dt,
@@ -8210,18 +8198,9 @@ def _finalize_outputs(t, dt, x_new, solver_numeric_outputs, geometry_t_plus_dt,
 
 
 def _get_geo_and_runtime_params_at_t_plus_dt_and_phibdot(
-    t,
-    dt,
-    runtime_params_provider,
-    geo_t,
-    geometry_provider,
-):
+        t, dt, geo_t):
     runtime_params_t_plus_dt, geo_t_plus_dt = (
-        get_consistent_runtime_params_and_geometry(
-            t=t + dt,
-            runtime_params_provider=runtime_params_provider,
-            geometry_provider=geometry_provider,
-        ))
+        get_consistent_runtime_params_and_geometry(t=t + dt))
     if runtime_params_t_plus_dt.numerics.calcphibdot:
         geo_t, geo_t_plus_dt = update_geometries_with_Phibdot(
             dt=dt,
@@ -8387,22 +8366,17 @@ for submodel in g.torax_config.submodels:
         )
         submodel.__dict__['grid'] = new_grid
 
-geometry_provider = g.torax_config.geometry.build_provider
+g.geometry_provider = g.torax_config.geometry.build_provider
 g.pedestal_model = g.torax_config.pedestal.build_pedestal_model()
-g.source_models=g.torax_config.sources.build_models()
-g.transport_model=g.torax_config.transport.build_transport_model()
-g.neoclassical_models=g.torax_config.neoclassical.build_models()
+g.source_models = g.torax_config.sources.build_models()
+g.transport_model = g.torax_config.transport.build_transport_model()
+g.neoclassical_models = g.torax_config.neoclassical.build_models()
 g.solver = g.torax_config.solver.build_solver(None)
-runtime_params_provider = RuntimeParamsProvider.from_config()
-step_fn = SimulationStepFn(
-    geometry_provider=geometry_provider,
-    runtime_params_provider=runtime_params_provider,
-)
+g.runtime_params_provider = RuntimeParamsProvider.from_config()
+step_fn = SimulationStepFn()
 runtime_params_for_init, geo_for_init = (
     get_consistent_runtime_params_and_geometry(
         t=g.torax_config.numerics.t_initial,
-        runtime_params_provider=runtime_params_provider,
-        geometry_provider=geometry_provider,
     ))
 initial_state = _get_initial_state(
     runtime_params=runtime_params_for_init,
@@ -8415,8 +8389,8 @@ initial_post_processed_outputs = post_processed_outputs
 current_state = initial_state
 state_history = [current_state]
 post_processing_history = [initial_post_processed_outputs]
-initial_runtime_params = runtime_params_provider(initial_state.t)
-while not_done(current_state.t, runtime_params_provider.numerics.t_final):
+initial_runtime_params = g.runtime_params_provider(initial_state.t)
+while not_done(current_state.t, g.runtime_params_provider.numerics.t_final):
     current_state, post_processed_outputs = step_fn(
         current_state,
         post_processing_history[-1],
@@ -8425,8 +8399,7 @@ while not_done(current_state.t, runtime_params_provider.numerics.t_final):
     post_processing_history.append(post_processed_outputs)
 state_history = StateHistory(
     state_history=state_history,
-    post_processed_outputs_history=post_processing_history
-)
+    post_processed_outputs_history=post_processing_history)
 data_tree = state_history.simulation_output_to_xr()
 data_tree.to_netcdf("run.nc")
 print(data_tree)
