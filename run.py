@@ -1840,12 +1840,8 @@ class ConductivityModel:
     pass
 
 
-class ConductivityModelConfig(BaseModelFrozen, abc.ABC):
-
-    @abc.abstractmethod
-    def build_model(self) -> ConductivityModel:
-        pass
-
+class ConductivityModelConfig(BaseModelFrozen):
+    pass
 
 @jax.jit
 def _calculate_conductivity0(
