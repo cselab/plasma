@@ -45,12 +45,6 @@ BoolVector: TypeAlias = Any
 FloatVectorCell: TypeAlias = Any
 FloatMatrixCell: TypeAlias = Any
 FloatVectorFace: TypeAlias = Any
-
-
-def jaxtyped(fn):
-    return fn
-
-
 DataTypes: TypeAlias = Any
 DtypeName: TypeAlias = Any
 NestedList: TypeAlias = Any
@@ -682,7 +676,6 @@ class IntegralPreservationQuantity(enum.Enum):
     VALUE = 'value'
 
 
-@jaxtyped
 def tridiag(
     diag: jt.Shaped[Array, 'size'],
     above: jt.Shaped[Array, 'size-1'],
@@ -692,12 +685,10 @@ def tridiag(
 
 
 @jax.jit
-@jaxtyped
 def cell_integration(x, geo):
     return jnp.sum(x * geo.drho_norm)
 
 
-@jaxtyped
 def area_integration(
     value,
     geo,
@@ -705,7 +696,6 @@ def area_integration(
     return cell_integration(value * geo.spr, geo)
 
 
-@jaxtyped
 def volume_integration(
     value,
     geo,
@@ -713,7 +703,6 @@ def volume_integration(
     return cell_integration(value * geo.vpr, geo)
 
 
-@jaxtyped
 def line_average(
     value,
     geo,
@@ -721,7 +710,6 @@ def line_average(
     return cell_integration(value, geo)
 
 
-@jaxtyped
 def volume_average(
     value,
     geo,
