@@ -6611,7 +6611,6 @@ def implicit_solve_block(dt, x_old, x_new_guess, coeffs_exp, coeffs_new):
     return out
 
 
-@jax.jit
 def predictor_corrector_method(dt, runtime_params_t_plus_dt, geo_t_plus_dt,
                                x_old, x_new_guess, core_profiles_t_plus_dt,
                                coeffs_exp, explicit_source_profiles):
