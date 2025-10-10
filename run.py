@@ -6483,8 +6483,6 @@ class CoeffsCallback:
             geo=geo,
             core_profiles=core_profiles,
             explicit_source_profiles=explicit_source_profiles,
-            physics_models=None,
-            evolving_names=None,
             use_pereverzev=use_pereverzev,
             explicit_call=explicit_call,
         )
@@ -6542,15 +6540,13 @@ def calc_coeffs(runtime_params,
                 geo,
                 core_profiles,
                 explicit_source_profiles,
-                physics_models,
-                evolving_names,
                 use_pereverzev=False,
                 explicit_call=False):
     if explicit_call and runtime_params.solver.theta_implicit == 1.0:
         return _calc_coeffs_reduced(
             geo,
             core_profiles,
-            evolving_names,
+            None,
         )
     else:
         return _calc_coeffs_full(
