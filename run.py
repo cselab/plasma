@@ -777,7 +777,6 @@ def volume_average(
 @dataclasses.dataclass
 class RuntimeParamsNumeric:
     t_initial: float
-    max_dt: float
     min_dt: float
     chi_timestep_prefactor: float
     fixed_dt: float
@@ -796,7 +795,6 @@ class RuntimeParamsNumeric:
 class Numerics(BaseModelFrozen):
     t_initial: Second = 0.0
     exact_t_final: Annotated[bool, JAX_STATIC] = True
-    max_dt: Second = 2.0
     min_dt: Second = 1e-8
     chi_timestep_prefactor: pydantic.PositiveFloat = 50.0
     fixed_dt: Second = 1e-1
@@ -817,7 +815,6 @@ class Numerics(BaseModelFrozen):
     def build_runtime_params(self, t):
         return RuntimeParamsNumeric(
             t_initial=self.t_initial,
-            max_dt=self.max_dt,
             min_dt=self.min_dt,
             chi_timestep_prefactor=self.chi_timestep_prefactor,
             fixed_dt=self.fixed_dt,
@@ -6852,7 +6849,7 @@ def next_dt(t, runtime_params, geo, core_profiles, core_transport):
     basic_dt = (3.0 / 4.0) * (geo.drho_norm**2) / chi_max
     dt = jnp.minimum(
         runtime_params.numerics.chi_timestep_prefactor * basic_dt,
-        runtime_params.numerics.max_dt,
+        g.max_dt,
     )
     crosses_t_final = (t < g.t_final) * (
         t + dt > g.t_final)
@@ -7557,7 +7554,6 @@ CONFIG = {
         'evolve_electron_heat': True,
         'evolve_current': True,
         'evolve_density': True,
-        'max_dt': 0.5,
         'chi_timestep_prefactor': 50,
         'dt_reduction_factor': 3,
     },
