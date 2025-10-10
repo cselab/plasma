@@ -2087,16 +2087,6 @@ class SourceProfiles:
     n_e: dict[str, jax.Array] = dataclasses.field(default_factory=dict)
     psi: dict[str, jax.Array] = dataclasses.field(default_factory=dict)
 
-    @classmethod
-    def merge(
-        cls,
-        explicit_source_profiles: typing_extensions.Self,
-        implicit_source_profiles: typing_extensions.Self,
-    ) -> typing_extensions.Self:
-        sum_profiles = lambda a, b: a + b
-        return jax.tree_util.tree_map(sum_profiles, explicit_source_profiles,
-                                      implicit_source_profiles)
-
     def total_psi_sources(self, geo: Geometry) -> jax.Array:
         total = self.bootstrap_current.j_bootstrap
         total += sum(self.psi.values())
@@ -2105,11 +2095,11 @@ class SourceProfiles:
         return -total * prefactor
 
     def total_sources(
-        self,
-        source_type: Literal['n_e', 'T_i', 'T_e'],
-        geo: Geometry,
-    ) -> jax.Array:
-        source: dict[str, jax.Array] = getattr(self, source_type)
+            self,
+        source_type,
+        geo
+    ):
+        source = getattr(self, source_type)
         total = sum(source.values())
         return total * geo.vpr
 
