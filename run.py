@@ -705,10 +705,6 @@ def tridiag(
 @jax.jit
 @jaxtyped
 def cell_integration(x, geo):
-    if x.shape != geo.rho_norm.shape:
-        raise ValueError(
-            'For cell_integration, input "x" must have same shape as the cell grid'
-            f'Got x.shape={x.shape}, expected {geo.rho_norm.shape}.')
     return jnp.sum(x * geo.drho_norm)
 
 
@@ -959,10 +955,6 @@ def make_diffusion_terms(d_face: FloatVectorFace, var: CellVariable):
     diag = jnp.asarray(-d_face[1:] - d_face[:-1])
     off = d_face[1:-1]
     vec = jnp.zeros_like(diag)
-    if vec.shape[0] < 2:
-        raise NotImplementedError(
-            'We do not support the case where a single cell'
-            ' is affected by both boundary conditions.')
     chex.assert_exactly_one_is_none(var.left_face_grad_constraint,
                                     var.left_face_constraint)
     chex.assert_exactly_one_is_none(var.right_face_grad_constraint,
@@ -1265,23 +1257,9 @@ def load_geo_data(geometry_dir, geometry_file, geometry_source):
     filepath = os.path.join(geometry_dir, geometry_file)
     return _load_CHEASE_data(file_path=filepath)
 
-
-class GeometryProvider(typing.Protocol):
-
-    def __call__(
-        self,
-        t: chex.Numeric,
-    ):
-        pass
-
-    @property
-    def torax_mesh(self):
-        pass
-
-
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
-class ConstantGeometryProvider(GeometryProvider):
+class ConstantGeometryProvider:
     geo: Geometry
 
     def __call__(self, t: chex.Numeric):
@@ -1368,8 +1346,6 @@ def calculate_scaling_law_confinement_time(
             'triangularity_exponent': 0.36,
         },
     }
-    if scaling_law not in scaling_params:
-        raise ValueError(f'Unknown scaling law: {scaling_law}')
     params = scaling_params[scaling_law]
     scaled_Ip = core_profiles.Ip_profile_face[-1] / 1e6
     scaled_Ploss = Ploss / 1e6
@@ -5730,8 +5706,6 @@ def get_updated_ions(
                 runtime_params.plasma_composition.Z_eff,
                 runtime_params.plasma_composition.Z_eff_face,
             )
-        case _:
-            raise ValueError("Unknown impurity mode.")
     n_i = CellVariable(
         value=n_e.value * ion_properties.dilution_factor,
         dr=geo.drho_norm,
@@ -6584,11 +6558,6 @@ def calc_c(x, coeffs):
     source_cell = coeffs.source_cell
     num_cells = x[0].value.shape[0]
     num_channels = len(x)
-    for _, x_i in enumerate(x):
-        if x_i.value.shape != (num_cells, ):
-            raise ValueError(
-                f'Expected each x channel to have shape ({num_cells},) '
-                f'but got {x_i.value.shape}.')
     zero_block = jnp.zeros((num_cells, num_cells))
     zero_row_of_blocks = [zero_block] * num_channels
     zero_vec = jnp.zeros((num_cells))
@@ -7000,10 +6969,7 @@ class StateHistory:
         ]
         flat_dict = {}
         for key, value in itertools.chain(*(d.items() for d in all_dicts)):
-            if key not in flat_dict:
-                flat_dict[key] = value
-            else:
-                raise ValueError(f"Duplicate key: {key}")
+            flat_dict[key] = value
         numerics_dict = {
             SAWTOOTH_CRASH:
             xr.DataArray(
