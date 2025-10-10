@@ -6570,9 +6570,9 @@ def calc_c(x, coeffs):
 
     if source_cell is not None:
         c = [add(c_i, source_i) for c_i, source_i in zip(c, source_cell)]
-    c_mat = jnp.block(c_mat)
-    c = jnp.block(c)
-    return c_mat, c
+    c_mat_new = jnp.block(c_mat)
+    c_new = jnp.block(c)
+    return c_mat_new, c_new
 
 
 MIN_DELTA: Final[float] = 1e-7
