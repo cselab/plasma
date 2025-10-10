@@ -6794,7 +6794,6 @@ RHO_FACE = "rho_face"
 RHO_CELL = "rho_cell"
 TIME = "time"
 Q_FUSION = "Q_fusion"
-SIM_ERROR = "sim_error"
 OUTER_SOLVER_ITERATIONS = "outer_solver_iterations"
 INNER_SOLVER_ITERATIONS = "inner_solver_iterations"
 EXCLUDED_GEOMETRY_NAMES = frozenset({
