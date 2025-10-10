@@ -782,7 +782,6 @@ class RuntimeParamsNumeric:
     chi_timestep_prefactor: float
     fixed_dt: float
     dt_reduction_factor: float
-    resistivity_multiplier: FloatScalar
     adaptive_T_source_prefactor: float
     adaptive_n_source_prefactor: float
     evolve_ion_heat: bool = dataclasses.field(metadata={'static': True})
@@ -808,7 +807,6 @@ class Numerics(BaseModelFrozen):
     evolve_current: Annotated[bool, JAX_STATIC] = False
     evolve_density: Annotated[bool, JAX_STATIC] = False
     calcphibdot: Annotated[bool, JAX_STATIC] = True
-    resistivity_multiplier: TimeVaryingScalar = (ValidatedDefault(1.0))
     adaptive_T_source_prefactor: pydantic.PositiveFloat = 2.0e10
     adaptive_n_source_prefactor: pydantic.PositiveFloat = 2.0e8
 
@@ -824,7 +822,6 @@ class Numerics(BaseModelFrozen):
             chi_timestep_prefactor=self.chi_timestep_prefactor,
             fixed_dt=self.fixed_dt,
             dt_reduction_factor=self.dt_reduction_factor,
-            resistivity_multiplier=self.resistivity_multiplier.get_value(t),
             adaptive_T_source_prefactor=self.adaptive_T_source_prefactor,
             adaptive_n_source_prefactor=self.adaptive_n_source_prefactor,
             evolve_ion_heat=self.evolve_ion_heat,
@@ -1547,11 +1544,10 @@ def calculate_psidot_from_psi_sources(
     *,
     psi_sources: FloatVector,
     sigma: FloatVector,
-    resistivity_multiplier: float,
     psi: CellVariable,
     geo: Geometry,
 ) -> jax.Array:
-    toc_psi = (1.0 / resistivity_multiplier * geo.rho_norm * sigma * g.mu_0 *
+    toc_psi = (1.0 / g.resistivity_multiplier * geo.rho_norm * sigma * g.mu_0 *
                16 * jnp.pi**2 * geo.Phi_b**2 / geo.F**2)
     d_face_psi = geo.g2g3_over_rhon_face
     v_face_psi = jnp.zeros_like(d_face_psi)
@@ -5949,8 +5945,6 @@ def initial_core_profiles0(runtime_params, geo, source_models,
         psidot_value = calculate_psidot_from_psi_sources(
             psi_sources=psi_sources,
             sigma=conductivity.sigma,
-            resistivity_multiplier=runtime_params.numerics.
-            resistivity_multiplier,
             psi=psi,
             geo=geo,
         )
@@ -6160,8 +6154,6 @@ def update_core_and_source_profiles_after_step(
     psidot_value = calculate_psidot_from_psi_sources(
         psi_sources=psi_sources,
         sigma=intermediate_core_profiles.sigma,
-        resistivity_multiplier=runtime_params_t_plus_dt.numerics.
-        resistivity_multiplier,
         psi=intermediate_core_profiles.psi,
         geo=geo,
     )
@@ -6479,7 +6471,7 @@ def _calc_coeffs_full(runtime_params, geo, core_profiles,
     tic_T_i = core_profiles.n_i.value * geo.vpr**(5.0 / 3.0)
     toc_T_e = 1.5 * geo.vpr**(-2.0 / 3.0) * g.keV_to_J
     tic_T_e = core_profiles.n_e.value * geo.vpr**(5.0 / 3.0)
-    toc_psi = (1.0 / runtime_params.numerics.resistivity_multiplier *
+    toc_psi = (1.0 / g.resistivity_multiplier *
                geo.rho_norm * conductivity.sigma * g.mu_0 * 16 * jnp.pi**2 *
                geo.Phi_b**2 / geo.F**2)
     tic_psi = jnp.ones_like(toc_psi)
@@ -7561,7 +7553,6 @@ CONFIG = {
         },
     },
     'numerics': {
-        'resistivity_multiplier': 200,
         'evolve_ion_heat': True,
         'evolve_electron_heat': True,
         'evolve_current': True,
