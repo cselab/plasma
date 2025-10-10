@@ -1223,12 +1223,6 @@ def stack_geometries(geometries: Sequence[Geometry]):
     return first_geo.__class__(**stacked_data)
 
 
-@enum.unique
-class GeometrySource(enum.Enum):
-    CHEASE = 0
-    FBT = 1
-    EQDSK = 2
-
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class ConstantGeometryProvider:
@@ -4598,7 +4592,8 @@ class StandardGeometryIntermediates:
         B_0: float,
         hires_factor: int,
     ):
-        file_path = os.path.join("geo", "ITER_hybrid_citrin_equil_cheasedata.mat2cols")
+        file_path = os.path.join(
+            "geo", "ITER_hybrid_citrin_equil_cheasedata.mat2cols")
         with open(file_path, 'r') as file:
             chease_data = {}
             var_labels = file.readline().strip().split()[1:]
@@ -6593,13 +6588,12 @@ def calc_c(x, coeffs):
     return c_mat, c
 
 
-def theta_method_matrix_equation(
-    dt: jax.Array,
-    x_old: tuple[CellVariable, ...],
-    x_new_guess: tuple[CellVariable, ...],
-    coeffs_old: Block1DCoeffs,
-    coeffs_new: Block1DCoeffs,
-):
+MIN_DELTA: Final[float] = 1e-7
+
+
+@jax.jit
+def implicit_solve_block(dt, x_old, x_new_guess, coeffs_old, coeffs_new):
+    x_old_vec = cell_variable_tuple_to_vec(x_old)
     x_new_guess_vec = cell_variable_tuple_to_vec(x_new_guess)
     theta_exp = 1.0 - g.theta_implicit
     tc_in_old = jnp.concatenate(coeffs_old.transient_in_cell)
@@ -6632,22 +6626,6 @@ def theta_method_matrix_equation(
     else:
         rhs_mat = right_transient
         rhs_vec = jnp.zeros_like(x_new_guess_vec)
-    return lhs_mat, lhs_vec, rhs_mat, rhs_vec
-
-
-MIN_DELTA: Final[float] = 1e-7
-
-
-@jax.jit
-def implicit_solve_block(dt, x_old, x_new_guess, coeffs_old, coeffs_new):
-    x_old_vec = cell_variable_tuple_to_vec(x_old)
-    lhs_mat, lhs_vec, rhs_mat, rhs_vec = (theta_method_matrix_equation(
-        dt=dt,
-        x_old=x_old,
-        x_new_guess=x_new_guess,
-        coeffs_old=coeffs_old,
-        coeffs_new=coeffs_new,
-    ))
     rhs = jnp.dot(rhs_mat, x_old_vec) + rhs_vec - lhs_vec
     x_new = jnp.linalg.solve(lhs_mat, rhs)
     x_new = jnp.split(x_new, len(x_old))
