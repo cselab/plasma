@@ -6860,18 +6860,6 @@ def solver_x_new(dt, runtime_params_t, runtime_params_t_plus_dt, geo_t,
     )
 
 
-class LinearThetaMethod(BaseModelFrozen):
-
-    @pydantic.model_validator(mode='before')
-    @classmethod
-    def scrub_log_iterations(cls, x: dict[str, Any]) -> dict[str, Any]:
-        if 'log_iterations' in x:
-            del x['log_iterations']
-        return x
-
-    def build_solver(self):
-        return None
-
 
 def not_done(t, t_final):
     return t < (t_final - g.tolerance)
@@ -6905,7 +6893,6 @@ class RuntimeParamsProvider:
     profile_conditions: Any
     plasma_composition: Any
     transport_model: Any
-    solver: Any
     pedestal: Any
     neoclassical: Any
 
@@ -6917,7 +6904,6 @@ class RuntimeParamsProvider:
             profile_conditions=g.torax_config.profile_conditions,
             plasma_composition=g.torax_config.plasma_composition,
             transport_model=g.torax_config.transport,
-            solver=g.torax_config.solver,
             pedestal=g.torax_config.pedestal,
             neoclassical=g.torax_config.neoclassical,
         )
@@ -7544,7 +7530,6 @@ class ToraxConfig(BaseModelFrozen):
     geometry: Geometry0
     sources: Sources
     neoclassical: Neoclassical0 = Neoclassical0()
-    solver: LinearThetaMethod = LinearThetaMethod()
     transport: QLKNNTransportModel = pydantic.Field(discriminator='model_name')
     pedestal: PedestalConfig = pydantic.Field(discriminator='model_name')
 
@@ -7692,7 +7677,6 @@ g.pedestal_model = g.torax_config.pedestal.build_pedestal_model()
 g.source_models = g.torax_config.sources.build_models()
 g.transport_model = g.torax_config.transport.build_transport_model()
 g.neoclassical_models = g.torax_config.neoclassical.build_models()
-g.solver = g.torax_config.solver.build_solver()
 g.runtime_params_provider = RuntimeParamsProvider.from_config()
 runtime_params_for_init, geo_for_init = (
     get_consistent_runtime_params_and_geometry(
