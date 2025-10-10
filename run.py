@@ -7067,21 +7067,9 @@ class Solver(abc.ABC):
             'self',
         ],
     )
-    def __call__(
-        self,
-        t: jax.Array,
-        dt: jax.Array,
-        runtime_params_t: RuntimeParamsSlice,
-        runtime_params_t_plus_dt: RuntimeParamsSlice,
-        geo_t: Geometry,
-        geo_t_plus_dt: Geometry,
-        core_profiles_t: CoreProfiles,
-        core_profiles_t_plus_dt: CoreProfiles,
-        explicit_source_profiles: SourceProfiles,
-    ) -> tuple[
-            tuple[CellVariable, ...],
-            SolverNumericOutputs,
-    ]:
+    def __call__(self, t, dt, runtime_params_t, runtime_params_t_plus_dt,
+                 geo_t, geo_t_plus_dt, core_profiles_t,
+                 core_profiles_t_plus_dt, explicit_source_profiles):
         (
             x_new,
             solver_numeric_output,
