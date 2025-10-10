@@ -6974,8 +6974,6 @@ class BaseSolver(BaseModelFrozen, abc.ABC):
 
 
 class LinearThetaMethod(BaseSolver):
-    solver_type: Annotated[Literal['linear'], JAX_STATIC] = ('linear')
-
     @pydantic.model_validator(mode='before')
     @classmethod
     def scrub_log_iterations(cls, x: dict[str, Any]) -> dict[str, Any]:
@@ -7799,7 +7797,6 @@ CONFIG = {
         'ITG_flux_ratio_correction': 1,
     },
     'solver': {
-        'solver_type': 'linear',
         'n_corrector_steps': 1,
         'chi_pereverzev': 30,
         'D_pereverzev': 15,
