@@ -564,43 +564,26 @@ ValidatedDefault = functools.partial(pydantic.Field, validate_default=True)
 BooleanNumeric = Any
 thread_context = threading.local()
 
-def py_while(
-        cond_fun,
-        body_fun,
-        init_val
-):
+
+def py_while(cond_fun, body_fun, init_val):
     val = init_val
     while cond_fun(val):
         val = body_fun(val)
     return val
 
 
-def while_loop(
-    cond_fun,
-    body_fun,
-    init_val
-):
+def while_loop(cond_fun, body_fun, init_val):
     return py_while(cond_fun, body_fun, init_val)
 
 
-def py_cond(
-        cond_val,
-        true_fun,
-        false_fun,
-    *operands
-):
+def py_cond(cond_val, true_fun, false_fun, *operands):
     if cond_val:
         return true_fun(*operands)
     else:
         return false_fun(*operands)
 
 
-def cond(
-        cond_val,
-        true_fun,
-        false_fun,
-        *operands,
-):
+def cond(cond_val, true_fun, false_fun, *operands):
     return py_cond(cond_val, true_fun, false_fun, *operands)
 
 
@@ -612,12 +595,7 @@ def py_fori_loop(lower: int, upper: int, body_fun: Callable[[int, T], T],
     return val
 
 
-def fori_loop(
-        lower,
-        upper,
-        body_fun,
-    init_val
-):
+def fori_loop(lower, upper, body_fun, init_val):
     return py_fori_loop(lower, upper, body_fun, init_val)
 
 
