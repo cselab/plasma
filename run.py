@@ -3005,7 +3005,7 @@ class PedestalModelOutput:
     n_e_ped: FloatScalar
 
 
-class PedestalModel(abc.ABC):
+class PedestalModel:
 
     def __setattr__(self, attr, value):
         return super().__setattr__(attr, value)
@@ -3028,24 +3028,6 @@ class PedestalModel(abc.ABC):
                 rho_norm_ped_top_idx=geo.torax_mesh.nx,
             ),
         )
-
-    @abc.abstractmethod
-    def _call_implementation(
-        self,
-        runtime_params,
-        geo,
-        core_profiles,
-    ):
-        pass
-
-    @abc.abstractmethod
-    def __hash__(self):
-        ...
-
-    @abc.abstractmethod
-    def __eq__(self, other):
-        ...
-
 
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
