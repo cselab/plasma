@@ -6059,91 +6059,6 @@ def update_core_and_source_profiles_after_step(
     return core_profiles_t_plus_dt, total_source_profiles
 
 
-def compute_boundary_conditions_for_t_plus_dt(dt, runtime_params_t,
-                                              runtime_params_t_plus_dt,
-                                              geo_t_plus_dt, core_profiles_t):
-    profile_conditions_t_plus_dt = (
-        runtime_params_t_plus_dt.profile_conditions)
-    n_e = get_updated_electron_density(profile_conditions_t_plus_dt,
-                                       geo_t_plus_dt)
-    n_e_right_bc = n_e.right_face_constraint
-    ions_edge = get_updated_ions(
-        runtime_params_t_plus_dt,
-        geo_t_plus_dt,
-        dataclasses.replace(
-            core_profiles_t.n_e,
-            right_face_constraint=profile_conditions_t_plus_dt.n_e_right_bc,
-        ),
-        dataclasses.replace(
-            core_profiles_t.T_e,
-            right_face_constraint=profile_conditions_t_plus_dt.T_e_right_bc,
-        ),
-    )
-    Z_i_edge = ions_edge.Z_i_face[-1]
-    Z_impurity_edge = ions_edge.Z_impurity_face[-1]
-    dilution_factor_edge = calculate_main_ion_dilution_factor(
-        Z_i_edge,
-        Z_impurity_edge,
-        runtime_params_t_plus_dt.plasma_composition.Z_eff_face[-1],
-    )
-    n_i_bound_right = n_e_right_bc * dilution_factor_edge
-    n_impurity_bound_right = (n_e_right_bc -
-                              n_i_bound_right * Z_i_edge) / Z_impurity_edge
-    return {
-        'T_i':
-        dict(
-            left_face_grad_constraint=jnp.zeros(()),
-            right_face_grad_constraint=None,
-            right_face_constraint=profile_conditions_t_plus_dt.T_i_right_bc,
-        ),
-        'T_e':
-        dict(
-            left_face_grad_constraint=jnp.zeros(()),
-            right_face_grad_constraint=None,
-            right_face_constraint=profile_conditions_t_plus_dt.T_e_right_bc,
-        ),
-        'n_e':
-        dict(
-            left_face_grad_constraint=jnp.zeros(()),
-            right_face_grad_constraint=None,
-            right_face_constraint=jnp.array(n_e_right_bc),
-        ),
-        'n_i':
-        dict(
-            left_face_grad_constraint=jnp.zeros(()),
-            right_face_grad_constraint=None,
-            right_face_constraint=jnp.array(n_i_bound_right),
-        ),
-        'n_impurity':
-        dict(
-            left_face_grad_constraint=jnp.zeros(()),
-            right_face_grad_constraint=None,
-            right_face_constraint=jnp.array(n_impurity_bound_right),
-        ),
-        'psi':
-        dict(
-            right_face_grad_constraint=(calculate_psi_grad_constraint_from_Ip(
-                Ip=profile_conditions_t_plus_dt.Ip,
-                geo=geo_t_plus_dt,
-            ) if not runtime_params_t.profile_conditions.
-                                        use_v_loop_lcfs_boundary_condition else
-                                        None),
-            right_face_constraint=(_calculate_psi_value_constraint_from_v_loop(
-                dt=dt,
-                v_loop_lcfs_t=runtime_params_t.profile_conditions.v_loop_lcfs,
-                v_loop_lcfs_t_plus_dt=profile_conditions_t_plus_dt.v_loop_lcfs,
-                psi_lcfs_t=core_profiles_t.psi.right_face_constraint,
-            ) if runtime_params_t.profile_conditions.
-                                   use_v_loop_lcfs_boundary_condition else
-                                   None),
-        ),
-        'Z_i_edge':
-        Z_i_edge,
-        'Z_impurity_edge':
-        Z_impurity_edge,
-    }
-
-
 def _update_v_loop_lcfs_from_psi(psi_t, psi_t_plus_dt, dt):
     psi_lcfs_t = psi_t.face_value()[-1]
     psi_lcfs_t_plus_dt = psi_t_plus_dt.face_value()[-1]
@@ -7252,13 +7167,87 @@ def body_fun(inputs):
         ))
     ####
     core_profiles_t = current_state.core_profiles
-    updated_boundary_conditions = compute_boundary_conditions_for_t_plus_dt(
-        dt=dt,
-        runtime_params_t=runtime_params_t,
-        runtime_params_t_plus_dt=runtime_params_t_plus_dt,
-        geo_t_plus_dt=geo_t_plus_dt,
-        core_profiles_t=core_profiles_t,
+    profile_conditions_t_plus_dt = (
+        runtime_params_t_plus_dt.profile_conditions)
+    n_e = get_updated_electron_density(profile_conditions_t_plus_dt,
+                                       geo_t_plus_dt)
+    n_e_right_bc = n_e.right_face_constraint
+    ions_edge = get_updated_ions(
+        runtime_params_t_plus_dt,
+        geo_t_plus_dt,
+        dataclasses.replace(
+            core_profiles_t.n_e,
+            right_face_constraint=profile_conditions_t_plus_dt.n_e_right_bc,
+        ),
+        dataclasses.replace(
+            core_profiles_t.T_e,
+            right_face_constraint=profile_conditions_t_plus_dt.T_e_right_bc,
+        ),
     )
+    Z_i_edge = ions_edge.Z_i_face[-1]
+    Z_impurity_edge = ions_edge.Z_impurity_face[-1]
+    dilution_factor_edge = calculate_main_ion_dilution_factor(
+        Z_i_edge,
+        Z_impurity_edge,
+        runtime_params_t_plus_dt.plasma_composition.Z_eff_face[-1],
+    )
+    n_i_bound_right = n_e_right_bc * dilution_factor_edge
+    n_impurity_bound_right = (n_e_right_bc -
+                              n_i_bound_right * Z_i_edge) / Z_impurity_edge
+    
+    updated_boundary_conditions = {
+        'T_i':
+        dict(
+            left_face_grad_constraint=jnp.zeros(()),
+            right_face_grad_constraint=None,
+            right_face_constraint=profile_conditions_t_plus_dt.T_i_right_bc,
+        ),
+        'T_e':
+        dict(
+            left_face_grad_constraint=jnp.zeros(()),
+            right_face_grad_constraint=None,
+            right_face_constraint=profile_conditions_t_plus_dt.T_e_right_bc,
+        ),
+        'n_e':
+        dict(
+            left_face_grad_constraint=jnp.zeros(()),
+            right_face_grad_constraint=None,
+            right_face_constraint=jnp.array(n_e_right_bc),
+        ),
+        'n_i':
+        dict(
+            left_face_grad_constraint=jnp.zeros(()),
+            right_face_grad_constraint=None,
+            right_face_constraint=jnp.array(n_i_bound_right),
+        ),
+        'n_impurity':
+        dict(
+            left_face_grad_constraint=jnp.zeros(()),
+            right_face_grad_constraint=None,
+            right_face_constraint=jnp.array(n_impurity_bound_right),
+        ),
+        'psi':
+        dict(
+            right_face_grad_constraint=(calculate_psi_grad_constraint_from_Ip(
+                Ip=profile_conditions_t_plus_dt.Ip,
+                geo=geo_t_plus_dt,
+            ) if not runtime_params_t.profile_conditions.
+                                        use_v_loop_lcfs_boundary_condition else
+                                        None),
+            right_face_constraint=(_calculate_psi_value_constraint_from_v_loop(
+                dt=dt,
+                v_loop_lcfs_t=runtime_params_t.profile_conditions.v_loop_lcfs,
+                v_loop_lcfs_t_plus_dt=profile_conditions_t_plus_dt.v_loop_lcfs,
+                psi_lcfs_t=core_profiles_t.psi.right_face_constraint,
+            ) if runtime_params_t.profile_conditions.
+                                   use_v_loop_lcfs_boundary_condition else
+                                   None),
+        ),
+        'Z_i_edge':
+        Z_i_edge,
+        'Z_impurity_edge':
+        Z_impurity_edge,
+    }
     updated_values = get_prescribed_core_profile_values(
         runtime_params=runtime_params_t_plus_dt,
         geo=geo_t_plus_dt,
