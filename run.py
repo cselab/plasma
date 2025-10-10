@@ -6005,23 +6005,6 @@ def initial_core_profiles0(runtime_params, geo, source_models,
         else None,
         dr=geo.drho_norm,
     )
-    core_profiles = _calculate_all_psi_dependent_profiles(
-        runtime_params=runtime_params,
-        geo=geo,
-        psi=psi,
-        core_profiles=core_profiles,
-        source_profiles=source_profiles,
-        source_models=source_models,
-        neoclassical_models=neoclassical_models,
-        sources_are_calculated=sources_are_calculated,
-    )
-    return core_profiles
-
-
-def _calculate_all_psi_dependent_profiles(runtime_params, geo, psi,
-                                          core_profiles, source_profiles,
-                                          source_models, neoclassical_models,
-                                          sources_are_calculated):
     j_total, j_total_face, Ip_profile_face = calc_j_total(geo, psi)
     core_profiles = dataclasses.replace(
         core_profiles,
