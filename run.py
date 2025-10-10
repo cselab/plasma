@@ -850,16 +850,7 @@ class RuntimeParamsNumeric:
 
     @functools.cached_property
     def evolving_names(self) -> tuple[str, ...]:
-        evolving_names = []
-        if self.evolve_ion_heat:
-            evolving_names.append('T_i')
-        if self.evolve_electron_heat:
-            evolving_names.append('T_e')
-        if self.evolve_current:
-            evolving_names.append('psi')
-        if self.evolve_density:
-            evolving_names.append('n_e')
-        return tuple(evolving_names)
+        return g.evolving_names
 
 
 class Numerics(BaseModelFrozen):
