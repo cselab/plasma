@@ -7206,16 +7206,29 @@ data_tree.to_netcdf("run.nc")
 print(data_tree)
 import matplotlib.pyplot as plt
 
-t = data_tree.time.to_numpy()
-rho = data_tree.rho_norm.to_numpy()
-nt, = np.shape(t)
-for key in g.evolving_names:
-    var = data_tree.profiles[key].to_numpy()
-    lo = np.min(var).item()
-    hi = np.max(var).item()
-    for i, idx in enumerate([0, nt // 4, nt // 2, 3 * nt // 4, nt - 1]):
-        plt.title(f'time: {t[idx]:8.3e}')
-        plt.axis([None, None, lo, hi])
-        plt.plot(rho, var[idx], 'o-')
-        plt.savefig(f'{key}.{i:04d}.png')
-        plt.close()
+fig, axs = plt.subplots(2, 2, figsize=(15, 12))
+fig.suptitle('Time Evolution of Plasma Profiles', fontsize=16)
+axs = axs.flatten()
+
+for i, key in enumerate(g.evolving_names):
+    ax = axs[i]
+    var = data_tree.profiles[key]
+    
+    # Use xarray's plotting capabilities with a colormap
+    var.plot(ax=ax, x='rho_norm', hue='time', add_legend=False, cmap='viridis')
+
+    ax.set_xlabel(r'$\rho_{norm}$')
+    ax.set_ylabel(key)
+    ax.set_title(f'{key} profiles')
+    ax.grid(True)
+
+# Add a colorbar for the time axis
+cbar_ax = fig.add_axes([0.92, 0.15, 0.02, 0.7])
+sm = plt.cm.ScalarMappable(cmap='viridis', norm=plt.Normalize(vmin=data_tree.time.min(), vmax=data_tree.time.max()))
+sm._A = []
+cbar = fig.colorbar(sm, cax=cbar_ax)
+cbar.set_label('Time (s)')
+
+plt.tight_layout(rect=[0, 0, 0.9, 1])
+plt.savefig('presentation/all_profiles.pdf')
+plt.close()
