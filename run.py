@@ -639,19 +639,6 @@ def fori_loop(
         return py_fori_loop(lower, upper, body_fun, init_val)
 
 
-def _get_current_lib():
-    is_jax = getattr(thread_context, 'is_jax', False)
-    if is_jax:
-        return jnp
-    else:
-        return np
-
-
-def __getattr__(name):
-    current_lib = _get_current_lib()
-    return getattr(current_lib, name)
-
-
 _TOLERANCE: Final[float] = 1e-6
 
 
@@ -6066,9 +6053,7 @@ def initial_core_profiles0(runtime_params, geo, source_models,
     return core_profiles
 
 
-def core_profiles_to_solver_x_tuple(
-    core_profiles,
-):
+def core_profiles_to_solver_x_tuple(core_profiles, ):
     x_tuple_for_solver_list = []
     for name in g.evolving_names:
         original_units_cv = getattr(core_profiles, name)
