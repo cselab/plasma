@@ -7109,86 +7109,79 @@ def predictor_corrector_method(
     return x_new
 
 
-class LinearThetaMethod0:
-    @functools.partial(
-        jax.jit,
-        static_argnames=[
-            'self',
-        ],
+@jax.jit
+def solver_call(t, dt, runtime_params_t, runtime_params_t_plus_dt,
+             geo_t, geo_t_plus_dt, core_profiles_t,
+             core_profiles_t_plus_dt, explicit_source_profiles):
+    (
+        x_new,
+        solver_numeric_output,
+    ) = solver_x_new(
+        dt=dt,
+        runtime_params_t=runtime_params_t,
+        runtime_params_t_plus_dt=runtime_params_t_plus_dt,
+        geo_t=geo_t,
+        geo_t_plus_dt=geo_t_plus_dt,
+        core_profiles_t=core_profiles_t,
+        core_profiles_t_plus_dt=core_profiles_t_plus_dt,
+        explicit_source_profiles=explicit_source_profiles,
+        evolving_names=runtime_params_t.numerics.evolving_names,
     )
-    def solver_call(self, t, dt, runtime_params_t, runtime_params_t_plus_dt,
-                 geo_t, geo_t_plus_dt, core_profiles_t,
-                 core_profiles_t_plus_dt, explicit_source_profiles):
-        (
-            x_new,
-            solver_numeric_output,
-        ) = self._x_new(
-            dt=dt,
-            runtime_params_t=runtime_params_t,
-            runtime_params_t_plus_dt=runtime_params_t_plus_dt,
-            geo_t=geo_t,
-            geo_t_plus_dt=geo_t_plus_dt,
-            core_profiles_t=core_profiles_t,
-            core_profiles_t_plus_dt=core_profiles_t_plus_dt,
-            explicit_source_profiles=explicit_source_profiles,
-            evolving_names=runtime_params_t.numerics.evolving_names,
-        )
-        return (
-            x_new,
-            solver_numeric_output,
-        )
+    return (
+        x_new,
+        solver_numeric_output,
+    )
 
-    @functools.partial(
-        jax.jit,
-        static_argnames=[
-            'self',
-            'evolving_names',
-        ],
+@functools.partial(
+    jax.jit,
+    static_argnames=[
+        'evolving_names',
+    ],
+)
+def solver_x_new(dt, runtime_params_t, runtime_params_t_plus_dt, geo_t,
+           geo_t_plus_dt, core_profiles_t, core_profiles_t_plus_dt,
+           explicit_source_profiles, evolving_names):
+    x_old = core_profiles_to_solver_x_tuple(core_profiles_t,
+                                            evolving_names)
+    x_new_guess = core_profiles_to_solver_x_tuple(core_profiles_t_plus_dt,
+                                                  evolving_names)
+    coeffs_callback = CoeffsCallback(
+        evolving_names=evolving_names
     )
-    def _x_new(self, dt, runtime_params_t, runtime_params_t_plus_dt, geo_t,
-               geo_t_plus_dt, core_profiles_t, core_profiles_t_plus_dt,
-               explicit_source_profiles, evolving_names):
-        x_old = core_profiles_to_solver_x_tuple(core_profiles_t,
-                                                evolving_names)
-        x_new_guess = core_profiles_to_solver_x_tuple(core_profiles_t_plus_dt,
-                                                      evolving_names)
-        coeffs_callback = CoeffsCallback(
-            evolving_names=evolving_names
-        )
-        coeffs_exp = coeffs_callback(
-            runtime_params_t,
-            geo_t,
-            core_profiles_t,
-            x_old,
-            explicit_source_profiles=explicit_source_profiles,
-            allow_pereverzev=True,
-            explicit_call=True,
-        )
-        x_new = predictor_corrector_method(
-            dt=dt,
-            runtime_params_t_plus_dt=runtime_params_t_plus_dt,
-            geo_t_plus_dt=geo_t_plus_dt,
-            x_old=x_old,
-            x_new_guess=x_new_guess,
-            core_profiles_t_plus_dt=core_profiles_t_plus_dt,
-            coeffs_exp=coeffs_exp,
-            coeffs_callback=coeffs_callback,
-            explicit_source_profiles=explicit_source_profiles,
-        )
-        if runtime_params_t_plus_dt.solver.use_predictor_corrector:
-            inner_solver_iterations = (
-                1 + runtime_params_t_plus_dt.solver.n_corrector_steps)
-        else:
-            inner_solver_iterations = 1
-        solver_numeric_outputs = SolverNumericOutputs(
-            inner_solver_iterations=inner_solver_iterations,
-            outer_solver_iterations=1,
-            solver_error_state=0,
-        )
-        return (
-            x_new,
-            solver_numeric_outputs,
-        )
+    coeffs_exp = coeffs_callback(
+        runtime_params_t,
+        geo_t,
+        core_profiles_t,
+        x_old,
+        explicit_source_profiles=explicit_source_profiles,
+        allow_pereverzev=True,
+        explicit_call=True,
+    )
+    x_new = predictor_corrector_method(
+        dt=dt,
+        runtime_params_t_plus_dt=runtime_params_t_plus_dt,
+        geo_t_plus_dt=geo_t_plus_dt,
+        x_old=x_old,
+        x_new_guess=x_new_guess,
+        core_profiles_t_plus_dt=core_profiles_t_plus_dt,
+        coeffs_exp=coeffs_exp,
+        coeffs_callback=coeffs_callback,
+        explicit_source_profiles=explicit_source_profiles,
+    )
+    if runtime_params_t_plus_dt.solver.use_predictor_corrector:
+        inner_solver_iterations = (
+            1 + runtime_params_t_plus_dt.solver.n_corrector_steps)
+    else:
+        inner_solver_iterations = 1
+    solver_numeric_outputs = SolverNumericOutputs(
+        inner_solver_iterations=inner_solver_iterations,
+        outer_solver_iterations=1,
+        solver_error_state=0,
+    )
+    return (
+        x_new,
+        solver_numeric_outputs,
+    )
 
 
 class BaseSolver(BaseModelFrozen, abc.ABC):
@@ -7238,7 +7231,7 @@ class LinearThetaMethod(BaseSolver):
         )
 
     def build_solver(self):
-        return LinearThetaMethod0()
+        return None
 
 
 def not_done(t, t_final):
@@ -8141,7 +8134,7 @@ while not_done(current_state.t, g.runtime_params_provider.numerics.t_final):
             geo_t_plus_dt=geo_t_plus_dt,
             core_profiles_t=current_state.core_profiles,
         )
-        x_new, solver_numeric_outputs = g.solver.solver_call(
+        x_new, solver_numeric_outputs = solver_call(
             t=current_state.t,
             dt=dt,
             runtime_params_t=runtime_params_t,
