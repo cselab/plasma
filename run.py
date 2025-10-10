@@ -7919,19 +7919,13 @@ def step0(input_state, previous_post_processed_outputs):
         neoclassical_models=g.neoclassical_models,
         explicit=True,
     )
-
-    def _step():
-        return _adaptive_step(
-            runtime_params_t,
-            geo_t,
-            explicit_source_profiles,
-            input_state,
-            previous_post_processed_outputs,
-        )
-
-    output_state, post_processed_outputs = _step()
-    return output_state, post_processed_outputs
-
+    return _adaptive_step(
+        runtime_params_t,
+        geo_t,
+        explicit_source_profiles,
+        input_state,
+        previous_post_processed_outputs,
+    )
 
 def _adaptive_step(runtime_params_t, geo_t, explicit_source_profiles,
                    input_state, previous_post_processed_outputs):
