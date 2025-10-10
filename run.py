@@ -564,17 +564,11 @@ ValidatedDefault = functools.partial(pydantic.Field, validate_default=True)
 BooleanNumeric = Any
 thread_context = threading.local()
 
-
-def jit0(*args, **kwargs):
-    func = args[0]
-    return func
-
-
 def py_while(
-    cond_fun: Callable[list[T], BooleanNumeric],
-    body_fun: Callable[list[T], T],
-    init_val: T,
-) -> T:
+        cond_fun,
+        body_fun,
+        init_val
+):
     val = init_val
     while cond_fun(val):
         val = body_fun(val)
@@ -582,23 +576,19 @@ def py_while(
 
 
 def while_loop(
-    cond_fun: Callable[list[T], BooleanNumeric],
-    body_fun: Callable[list[T], T],
-    init_val: T,
+    cond_fun,
+    body_fun,
+    init_val
 ):
-    is_jax = getattr(thread_context, 'is_jax', False)
-    if is_jax:
-        return jax.lax.while_loop(cond_fun, body_fun, init_val)
-    else:
-        return py_while(cond_fun, body_fun, init_val)
+    return py_while(cond_fun, body_fun, init_val)
 
 
 def py_cond(
-    cond_val: bool,
-    true_fun: Callable,
-    false_fun: Callable,
-    *operands,
-) -> Any:
+        cond_val,
+        true_fun,
+        false_fun,
+    *operands
+):
     if cond_val:
         return true_fun(*operands)
     else:
@@ -606,16 +596,12 @@ def py_cond(
 
 
 def cond(
-    cond_val: bool,
-    true_fun: Callable[..., Any],
-    false_fun: Callable[..., Any],
-    *operands,
-) -> Any:
-    is_jax = getattr(thread_context, 'is_jax', False)
-    if is_jax:
-        return jax.lax.cond(cond_val, true_fun, false_fun, *operands)
-    else:
-        return py_cond(cond_val, true_fun, false_fun, *operands)
+        cond_val,
+        true_fun,
+        false_fun,
+        *operands,
+):
+    return py_cond(cond_val, true_fun, false_fun, *operands)
 
 
 def py_fori_loop(lower: int, upper: int, body_fun: Callable[[int, T], T],
@@ -627,16 +613,12 @@ def py_fori_loop(lower: int, upper: int, body_fun: Callable[[int, T], T],
 
 
 def fori_loop(
-    lower: int,
-    upper: int,
-    body_fun: Callable[..., Any],
-    init_val: Any,
+        lower,
+        upper,
+        body_fun,
+    init_val
 ):
-    is_jax = getattr(thread_context, 'is_jax', False)
-    if is_jax:
-        return jax.lax.fori_loop(lower, upper, body_fun, init_val)
-    else:
-        return py_fori_loop(lower, upper, body_fun, init_val)
+    return py_fori_loop(lower, upper, body_fun, init_val)
 
 
 _TOLERANCE: Final[float] = 1e-6
