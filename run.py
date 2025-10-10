@@ -693,19 +693,16 @@ def volume_average(value, geo):
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass
 class RuntimeParamsNumeric:
-    t_initial: float
+    pass
 
 
 class Numerics(BaseModelFrozen):
-    t_initial: Second = 0.0
-
     @pydantic.model_validator(mode='after')
     def model_validation(self):
         return self
 
     def build_runtime_params(self, t):
         return RuntimeParamsNumeric(
-            t_initial=self.t_initial,
         )
 
 
@@ -6738,7 +6735,7 @@ def _get_initial_state(runtime_params, geo, step_fn):
         initial_core_profiles,
     ))
     return ToraxSimState(
-        t=np.array(runtime_params.numerics.t_initial),
+        t=np.array(g.t_initial),
         dt=np.zeros(()),
         core_profiles=initial_core_profiles,
         core_sources=initial_core_sources,
@@ -7139,6 +7136,7 @@ g.chi_timestep_prefactor = 50
 g.dt_reduction_factor = 3
 g.adaptive_T_source_prefactor = 2.0e10
 g.adaptive_n_source_prefactor = 2.0e8
+g.t_initial = 0.0
 
 mesh = g.torax_config.geometry.build_provider.torax_mesh
 for submodel in g.torax_config.submodels:
@@ -7158,7 +7156,7 @@ g.neoclassical_models = g.torax_config.neoclassical.build_models()
 g.runtime_params_provider = RuntimeParamsProvider.from_config()
 runtime_params_for_init, geo_for_init = (
     get_consistent_runtime_params_and_geometry(
-        t=g.torax_config.numerics.t_initial, ))
+        t=g.t_initial, ))
 current_state = _get_initial_state(
     runtime_params=runtime_params_for_init,
     geo=geo_for_init,
