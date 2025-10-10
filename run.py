@@ -6155,7 +6155,8 @@ def get_prescribed_core_profile_values(runtime_params, geo, core_profiles):
 
 
 @jax.jit
-def update_core_profiles_during_step(x_new, runtime_params, geo, core_profiles):
+def update_core_profiles_during_step(x_new, runtime_params, geo,
+                                     core_profiles):
     updated_core_profiles = solver_x_tuple_to_core_profiles(
         x_new, None, core_profiles)
     ions = get_updated_ions(
@@ -6473,11 +6474,7 @@ class CoeffsCallback:
         explicit_call: bool = False,
     ):
         core_profiles = update_core_profiles_during_step(
-            x,
-            runtime_params,
-            geo,
-            core_profiles
-        )
+            x, runtime_params, geo, core_profiles)
         if allow_pereverzev:
             use_pereverzev = runtime_params.solver.use_pereverzev
         else:
