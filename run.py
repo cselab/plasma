@@ -6081,7 +6081,7 @@ def core_profiles_to_solver_x_tuple(
     return tuple(x_tuple_for_solver_list)
 
 
-def solver_x_tuple_to_core_profiles(x_new, evolving_names, core_profiles):
+def solver_x_tuple_to_core_profiles(x_new, core_profiles):
     updated_vars = {}
     for i, var_name in enumerate(g.evolving_names):
         solver_x_tuple_cv = x_new[i]
@@ -6158,7 +6158,7 @@ def get_prescribed_core_profile_values(runtime_params, geo, core_profiles):
 def update_core_profiles_during_step(x_new, runtime_params, geo,
                                      core_profiles):
     updated_core_profiles = solver_x_tuple_to_core_profiles(
-        x_new, None, core_profiles)
+        x_new, core_profiles)
     ions = get_updated_ions(
         runtime_params,
         geo,
@@ -6189,7 +6189,7 @@ def update_core_and_source_profiles_after_step(
         core_profiles_t_plus_dt, explicit_source_profiles, source_models,
         neoclassical_models, evolving_names):
     updated_core_profiles_t_plus_dt = solver_x_tuple_to_core_profiles(
-        x_new, evolving_names, core_profiles_t_plus_dt)
+        x_new, core_profiles_t_plus_dt)
     ions = get_updated_ions(
         runtime_params_t_plus_dt,
         geo,
