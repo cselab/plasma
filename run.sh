@@ -1,4 +1,4 @@
 #!/bin/sh
 
-python -m coverage  run --source . run.py &&
+python -m coverage  run run.py &&
     python -m coverage html
