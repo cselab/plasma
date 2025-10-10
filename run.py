@@ -5626,17 +5626,11 @@ def initial_core_profiles0(runtime_params, geo, source_models,
                 geo, core_profiles))
         source_profiles = dataclasses.replace(
             source_profiles, bootstrap_current=bootstrap_current)
-    if (not g.evolve_current
-            and runtime_params.profile_conditions.psidot is not None):
-        psidot_value = runtime_params.profile_conditions.psidot
-    else:
-        psi_sources = source_profiles.total_psi_sources(geo)
-        psidot_value = calculate_psidot_from_psi_sources(
-            psi_sources=psi_sources,
-            sigma=conductivity.sigma,
-            psi=psi,
-            geo=geo,
-        )
+    psi_sources = source_profiles.total_psi_sources(geo)
+    psidot_value = calculate_psidot_from_psi_sources(psi_sources=psi_sources,
+                                                     sigma=conductivity.sigma,
+                                                     psi=psi,
+                                                     geo=geo)
     v_loop_lcfs = (
         runtime_params.profile_conditions.v_loop_lcfs
         if runtime_params.profile_conditions.use_v_loop_lcfs_boundary_condition
@@ -6027,7 +6021,7 @@ def _calc_coeffs_full(runtime_params, geo, core_profiles,
         d_face_per_el,
         v_face_per_el,
     ) = jax.lax.cond(
-        g.use_pereverzev,
+        True,
         lambda: _calculate_pereverzev_flux(
             geo,
             core_profiles,
@@ -7253,17 +7247,12 @@ CONFIG = {
 g.tolerance = 1e-7
 g.n_corrector_steps = 1
 g.torax_config = ToraxConfig.from_dict(CONFIG)
-g.use_pereverzev = True
 g.chi_pereverzev = 30
 g.D_pereverzev = 15
 g.theta_implicit = 1.0
 
 g.t_final = 5
 g.resistivity_multiplier = 200
-g.evolve_ion_heat = True
-g.evolve_electron_heat = True
-g.evolve_current = True
-g.evolve_density = True
 g.max_dt = 0.5
 g.chi_timestep_prefactor = 50
 g.dt_reduction_factor = 3
