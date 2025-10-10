@@ -694,7 +694,6 @@ def volume_average(value, geo):
 @dataclasses.dataclass
 class RuntimeParamsNumeric:
     t_initial: float
-    min_dt: float
     fixed_dt: float
     adaptive_T_source_prefactor: float
     adaptive_n_source_prefactor: float
@@ -706,7 +705,6 @@ class RuntimeParamsNumeric:
 class Numerics(BaseModelFrozen):
     t_initial: Second = 0.0
     exact_t_final: Annotated[bool, JAX_STATIC] = True
-    min_dt: Second = 1e-8
     fixed_dt: Second = 1e-1
     adaptive_dt: Annotated[bool, JAX_STATIC] = True
     calcphibdot: Annotated[bool, JAX_STATIC] = True
@@ -720,7 +718,6 @@ class Numerics(BaseModelFrozen):
     def build_runtime_params(self, t):
         return RuntimeParamsNumeric(
             t_initial=self.t_initial,
-            min_dt=self.min_dt,
             fixed_dt=self.fixed_dt,
             adaptive_T_source_prefactor=self.adaptive_T_source_prefactor,
             adaptive_n_source_prefactor=self.adaptive_n_source_prefactor,
@@ -7029,7 +7026,7 @@ def cond_fun(inputs):
         )
     else:
         at_exact_t_final = array(False)
-    next_dt_too_small = next_dt < runtime_params_t.numerics.min_dt
+    next_dt_too_small = next_dt < g.min_dt
     take_another_step = cond(
         solver_did_not_converge,
         lambda: cond(at_exact_t_final, lambda: True, lambda: ~next_dt_too_small
@@ -7159,6 +7156,7 @@ g.theta_implicit = 1.0
 g.t_final = 5
 g.resistivity_multiplier = 200
 g.max_dt = 0.5
+g.min_dt = 1e-8
 g.chi_timestep_prefactor = 50
 g.dt_reduction_factor = 3
 
