@@ -39,33 +39,15 @@ FloatVectorCell: TypeAlias = Any
 FloatVectorCellPlusBoundaries: TypeAlias = Any
 FloatMatrixCell: TypeAlias = Any
 FloatVectorFace: TypeAlias = Any
-
-
 def jaxtyped(fn):
     return fn
-
 
 DataTypes: TypeAlias = Any
 DtypeName: TypeAlias = Any
 NestedList: TypeAlias = Any
 NumpySerialized: TypeAlias = Any
-
-
-def _numpy_array_is_rank_1(x: np.ndarray):
-    return x
-
-
-def _numpy_array_is_sorted(x: np.ndarray):
-    return x
-
-
 NumpyArray = Any
 NumpyArray1D = Any
-
-
-def _array_is_unit_interval(array: np.ndarray):
-    return array
-
 
 NumpyArray1DUnitInterval = Any
 TIME_INVARIANT: Final[str] = '_pydantic_time_invariant_field'
@@ -135,9 +117,6 @@ class _PiecewiseLinearInterpolatedParam:
 
 def _is_bool(interp_input: InterpolatedVarSingleAxisInput, ) -> bool:
     if isinstance(interp_input, dict):
-        if not interp_input:
-            raise ValueError(
-                'InterpolatedVarSingleAxisInput must include values.')
         value = list(interp_input.values())[0]
         return isinstance(value, bool)
     return isinstance(interp_input, bool)
