@@ -6455,7 +6455,6 @@ def calc_coeffs(runtime_params,
         return _calc_coeffs_reduced(
             geo,
             core_profiles,
-            None,
         )
     else:
         return _calc_coeffs_full(
@@ -6644,16 +6643,10 @@ def _calc_coeffs_full(runtime_params,
     return coeffs
 
 
-@functools.partial(
-    jax.jit,
-    static_argnames=[
-        'evolving_names',
-    ],
-)
+@jax.jit
 def _calc_coeffs_reduced(
     geo: Geometry,
-    core_profiles: CoreProfiles,
-    evolving_names: tuple[str, ...],
+    core_profiles: CoreProfiles
 ):
     tic_T_i = core_profiles.n_i.value * geo.vpr**(5.0 / 3.0)
     tic_T_e = core_profiles.n_e.value * geo.vpr**(5.0 / 3.0)
