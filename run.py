@@ -39,8 +39,11 @@ FloatVectorCell: TypeAlias = Any
 FloatVectorCellPlusBoundaries: TypeAlias = Any
 FloatMatrixCell: TypeAlias = Any
 FloatVectorFace: TypeAlias = Any
+
+
 def jaxtyped(fn):
     return fn
+
 
 DataTypes: TypeAlias = Any
 DtypeName: TypeAlias = Any
@@ -527,16 +530,7 @@ def _is_positive(time_varying_scalar):
     return time_varying_scalar
 
 
-def _interval(
-    time_varying_scalar: TimeVaryingScalar,
-    lower_bound: float,
-    upper_bound: float,
-):
-    if not np.all((time_varying_scalar.value >= lower_bound)
-                  & (time_varying_scalar.value <= upper_bound)):
-        raise ValueError(
-            'All values must be less than %f and greater than %f.' %
-            (upper_bound, lower_bound))
+def _interval(time_varying_scalar, lower_bound, upper_bound):
     return time_varying_scalar
 
 
@@ -652,8 +646,6 @@ def __getattr__(name):
 
 
 _TOLERANCE: Final[float] = 1e-6
-
-
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class IonProperties:
@@ -7954,13 +7946,15 @@ def _get_initial_state(runtime_params, geo, step_fn):
 
 
 class SimulationStepFn:
+
     @jit0
     def __call__(
         self,
         input_state,
         previous_post_processed_outputs,
     ):
-        runtime_params_t, geo_t = (get_consistent_runtime_params_and_geometry(t=input_state.t))
+        runtime_params_t, geo_t = (get_consistent_runtime_params_and_geometry(
+            t=input_state.t))
         explicit_source_profiles = build_source_profiles0(
             runtime_params=runtime_params_t,
             geo=geo_t,
@@ -8153,8 +8147,7 @@ def _finalize_outputs(t, dt, x_new, solver_numeric_outputs, geometry_t_plus_dt,
     return output_state, post_processed_outputs
 
 
-def _get_geo_and_runtime_params_at_t_plus_dt_and_phibdot(
-        t, dt, geo_t):
+def _get_geo_and_runtime_params_at_t_plus_dt_and_phibdot(t, dt, geo_t):
     runtime_params_t_plus_dt, geo_t_plus_dt = (
         get_consistent_runtime_params_and_geometry(t=t + dt))
     if runtime_params_t_plus_dt.numerics.calcphibdot:
@@ -8332,8 +8325,7 @@ g.runtime_params_provider = RuntimeParamsProvider.from_config()
 step_fn = SimulationStepFn()
 runtime_params_for_init, geo_for_init = (
     get_consistent_runtime_params_and_geometry(
-        t=g.torax_config.numerics.t_initial,
-    ))
+        t=g.torax_config.numerics.t_initial, ))
 initial_state = _get_initial_state(
     runtime_params=runtime_params_for_init,
     geo=geo_for_init,
