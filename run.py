@@ -6242,11 +6242,8 @@ Block1DCoeffs: TypeAlias = Block1DCoeffs
 AuxiliaryOutput: TypeAlias = AuxiliaryOutput
 
 
-def cell_variable_tuple_to_vec(
-    x_tuple: tuple[CellVariable, ...], ) -> jax.Array:
-    x_vec = jnp.concatenate([x.value for x in x_tuple])
-    return x_vec
-
+def cell_variable_tuple_to_vec(x_tuple)
+    return jnp.concatenate([x.value for x in x_tuple])
 
 class CoeffsCallback:
 
@@ -6610,22 +6607,9 @@ def implicit_solve_block(dt, x_old, x_new_guess, coeffs_old, coeffs_new):
     lhs_mat = left_transient - dt * g.theta_implicit * broadcasted * c_mat_new
     lhs_vec = -g.theta_implicit * dt * (1 / (tc_out_new * tc_in_new)) * c_new
     if theta_exp > 0.0:
-        tc_out_old = jnp.concatenate(coeffs_old.transient_out_cell)
-        tc_in_new = error_if(
-            tc_in_new,
-            jnp.any(jnp.abs(tc_out_old * tc_in_new) < eps),
-            msg='|tc_out_old*tc_in_new| unexpectedly < eps',
-        )
-        c_mat_old, c_old = discrete_system.calc_c(
-            x_old,
-            coeffs_old,
-        )
-        broadcasted = jnp.expand_dims(1 / (tc_out_old * tc_in_new), 1)
-        rhs_mat = right_transient + dt * theta_exp * broadcasted * c_mat_old
-        rhs_vec = dt * theta_exp * (1 / (tc_out_old * tc_in_new)) * c_old
-    else:
-        rhs_mat = right_transient
-        rhs_vec = jnp.zeros_like(x_new_guess_vec)
+        assert False
+    rhs_mat = right_transient
+    rhs_vec = jnp.zeros_like(x_new_guess_vec)
     rhs = jnp.dot(rhs_mat, x_old_vec) + rhs_vec - lhs_vec
     x_new = jnp.linalg.solve(lhs_mat, rhs)
     x_new = jnp.split(x_new, len(x_old))
