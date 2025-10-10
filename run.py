@@ -344,9 +344,6 @@ class Grid1D(BaseModelFrozen):
     def cell_centers(self):
         return _get_cell_centers(nx=self.nx, dx=self.dx)
 
-    def __eq__(self, other: typing_extensions.Self) -> bool:
-        return self.nx == other.nx and self.dx == other.dx
-
 
 class TimeVaryingArray(BaseModelFrozen):
     value: ValueType
