@@ -4964,12 +4964,8 @@ PARTICLE_SOURCE_TRANSFORMATIONS = {
 }
 
 
-def _get_integrated_source_value(
-    source_profiles_dict: dict[str, FloatVector],
-    internal_source_name: str,
-    geo: Geometry,
-    integration_fn: Callable[[FloatVector, Geometry], jax.Array],
-):
+def _get_integrated_source_value(source_profiles_dict, internal_source_name,
+                                 geo, integration_fn):
     if internal_source_name in source_profiles_dict:
         return integration_fn(source_profiles_dict[internal_source_name], geo)
     else:
