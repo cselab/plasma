@@ -2484,8 +2484,6 @@ def get_all_source_profiles(runtime_params, geo, core_profiles, source_models,
 @dataclasses.dataclass(frozen=True)
 class PedestalModelOutput:
     rho_norm_ped_top_idx: Any
-    T_i_ped: Any
-    T_e_ped: Any
 
 
 class PedestalModel:
@@ -2499,8 +2497,6 @@ class PedestalModel:
             lambda: self._call_implementation(runtime_params, geo,
                                               core_profiles),
             lambda: PedestalModelOutput(
-                T_i_ped=0.0,
-                T_e_ped=0.0,
                 rho_norm_ped_top_idx=g.n_rho,
             ),
         )
@@ -2509,8 +2505,6 @@ class PedestalModel:
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class RuntimeParamsPED:
-    T_i_ped: Any
-    T_e_ped: Any
     n_e_ped_is_fGW: Any
 
 
@@ -2531,8 +2525,6 @@ class SetTemperatureDensityPedestalModel(PedestalModel):
             g.n_e_ped,
         )
         return PedestalModelOutput(
-            T_i_ped=pedestal_params.T_i_ped,
-            T_e_ped=pedestal_params.T_e_ped,
             rho_norm_ped_top_idx=jnp.abs(
                 geo.rho_norm - g.rho_norm_ped_top).argmin(),
         )
@@ -2541,8 +2533,6 @@ class SetTemperatureDensityPedestalModel(PedestalModel):
 class PedestalConfig(BaseModelFrozen):
     n_e_ped: TimeVaryingScalar = ValidatedDefault(0.7e20)
     n_e_ped_is_fGW: bool = False
-    T_i_ped: TimeVaryingScalar = ValidatedDefault(5.0)
-    T_e_ped: TimeVaryingScalar = ValidatedDefault(5.0)
     rho_norm_ped_top: TimeVaryingScalar = (ValidatedDefault(0.91))
 
     def build_pedestal_model(self):
@@ -2551,8 +2541,6 @@ class PedestalConfig(BaseModelFrozen):
     def build_runtime_params(self, t):
         return RuntimeParamsPED(
             n_e_ped_is_fGW=self.n_e_ped_is_fGW,
-            T_i_ped=self.T_i_ped.get_value(t),
-            T_e_ped=self.T_e_ped.get_value(t),
         )
 
 
@@ -5237,9 +5225,8 @@ def _calc_coeffs_full(runtime_params, geo, core_profiles,
     source_mat_ie = qei.implicit_ie * geo.vpr
     source_mat_ei = qei.implicit_ei * geo.vpr
     source_i += (mask * g.adaptive_T_source_prefactor *
-                 pedestal_model_output.T_i_ped)
-    source_e += (mask * g.adaptive_T_source_prefactor *
-                 pedestal_model_output.T_e_ped)
+                 g.T_i_ped)
+    source_e += (mask * g.adaptive_T_source_prefactor * g.T_e_ped)
     source_mat_ii -= mask * g.adaptive_T_source_prefactor
     source_mat_ee -= mask * g.adaptive_T_source_prefactor
     d_vpr53_rhon_n_e_drhon = jnp.gradient(
@@ -6287,8 +6274,7 @@ CONFIG = {
         'ei_exchange': {},
     },
     'pedestal': {
-        'T_i_ped': 4.5,
-        'T_e_ped': 4.5,
+
     },
     'transport': {
         'model_name': 'qlknn',
@@ -6347,7 +6333,8 @@ g.hires_factor = 4
 g.Qei_multiplier = 1.0
 g.rho_norm_ped_top = 0.9
 g.n_e_ped = 0.62e20
-
+g.T_i_ped = 4.5
+g.T_e_ped = 4.5
 
 g.geo = CheaseConfig().build_geometry()
 g.pedestal_model = g.torax_config.pedestal.build_pedestal_model()
