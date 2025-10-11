@@ -3789,9 +3789,7 @@ class Neoclassical0(BaseModelFrozen):
     @pydantic.model_validator(mode="before")
     @classmethod
     def _defaults(cls, data):
-        configurable_data = copy.deepcopy(data)
-        configurable_data["bootstrap_current"] = {"model_name": "sauter"}
-        return configurable_data
+        return {'bootstrap_current': {"model_name": "sauter"}}
 
     def build_models(self):
         return NeoclassicalModels(
@@ -4089,9 +4087,6 @@ class CheaseConfig(BaseModelFrozen):
             Phi_b_dot=np.asarray(0.0),
             _z_magnetic_axis=intermediate.z_magnetic_axis,
         )
-
-
-
 
 
 @jax.tree_util.register_dataclass
