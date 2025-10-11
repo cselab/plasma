@@ -4898,6 +4898,7 @@ def initial_core_profiles0(runtime_params, geo, source_models):
         runtime_params.profile_conditions.Ip,
         geo,
     ))
+    assert not runtime_params.profile_conditions.use_v_loop_lcfs_boundary_condition
     psi = CellVariable(
         value=geo.psi_from_Ip,
         right_face_grad_constraint=None
