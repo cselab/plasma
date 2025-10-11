@@ -2598,14 +2598,9 @@ def _impurity_before_validator(value):
     return {value: 1.0}
 
 
-def _impurity_after_validator(value):
-    return value
-
-
 ImpurityMapping: TypeAlias = Annotated[
     Mapping[str, NonNegativeTimeVaryingArray],
     pydantic.BeforeValidator(_impurity_before_validator),
-    pydantic.AfterValidator(_impurity_after_validator),
 ]
 
 
@@ -2622,8 +2617,8 @@ class RuntimeParamsIF:
 class ImpurityFractions(BaseModelFrozen):
     impurity_mode: Annotated[Literal['fractions'], JAX_STATIC] = ('fractions')
     species: ImpurityMapping = ValidatedDefault({'Ne': 1.0})
-    Z_override: TimeVaryingScalar | None = None
-    A_override: TimeVaryingScalar | None = None
+    Z_override: Any = None
+    A_override: Any = None
 
     def build_runtime_params(self, t):
         ions = self.species.keys()
