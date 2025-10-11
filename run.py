@@ -289,11 +289,6 @@ class BaseModelFrozen(pydantic.BaseModel):
 
 
 ValueType: TypeAlias = Any
-
-
-class Grid1D(BaseModelFrozen):
-    pass
-
 class TimeVaryingArray(BaseModelFrozen):
     value: ValueType
     rho_interpolation_mode: Any = InterpolationMode.PIECEWISE_LINEAR
@@ -921,7 +916,6 @@ def face_to_cell(face: FloatVectorFace, ):
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class Geometry:
-    torax_mesh: None
     Phi: Array
     Phi_face: Array
     R_major: FloatScalar
@@ -1066,7 +1060,6 @@ class Geometry:
 
 def stack_geometries(geometries):
     first_geo = geometries[0]
-    torax_mesh = first_geo.torax_mesh
     stacked_data = {}
     for field in dataclasses.fields(first_geo):
         field_name = field.name
@@ -4272,7 +4265,6 @@ class CheaseConfig(BaseModelFrozen):
         j_total_face_axis = j_total_face_bulk[0]
         j_total = np.concatenate(
             [np.array([j_total_face_axis]), j_total_face_bulk])
-        mesh = Grid1D()
         rho_b = rho_intermediate[-1]
         rho_face_norm = g.face_centers
         rho_norm = g.cell_centers
@@ -4335,7 +4327,6 @@ class CheaseConfig(BaseModelFrozen):
         area_face = rhon_interpolation_func(rho_face_norm, area_intermediate)
         area = rhon_interpolation_func(rho_norm, area_intermediate)
         return StandardGeometry(
-            torax_mesh=mesh,
             Phi=Phi,
             Phi_face=Phi_face,
             R_major=intermediate.R_major,
@@ -6410,7 +6401,6 @@ class StateHistory:
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class Geometry:
-    torax_mesh: Any
     Phi: Array
     Phi_face: Array
     R_major: FloatScalar
@@ -6885,8 +6875,6 @@ g.n_rho = 25
 g.dx = 1 / g.n_rho
 g.face_centers = np.linspace(0, g.n_rho * g.dx, g.n_rho + 1)
 g.cell_centers = np.linspace(g.dx * 0.5, (g.n_rho - 0.5) * g.dx, g.n_rho)
-mesh = g.torax_config.geometry.build_provider.geo.torax_mesh
-g.grid = Grid1D.model_construct()
 g.geometry_provider = g.torax_config.geometry.build_provider
 g.pedestal_model = g.torax_config.pedestal.build_pedestal_model()
 g.source_models = g.torax_config.sources.build_models()
