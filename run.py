@@ -310,7 +310,7 @@ class TimeVaryingArray(BaseModelFrozen):
 
     @pydantic.field_validator('value', mode='after')
     @classmethod
-    def _valid_value(cls, value: ValueType):
+    def _valid_value(cls, value):
         value = dict(sorted(value.items()))
         return value
 
