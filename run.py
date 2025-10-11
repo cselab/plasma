@@ -2724,7 +2724,6 @@ class RuntimeParamsPC:
     nbar: Any
     n_e_nbar_is_fGW: Any
     n_e_right_bc: Any
-    n_e_right_bc_is_fGW: Any
     current_profile_nu: Any
     initial_psi_from_j: Any
     normalize_n_e_to_nbar: Any = dataclasses.field(metadata={'static': True})
@@ -2753,7 +2752,6 @@ class ProfileConditions(BaseModelFrozen):
     nbar: TimeVaryingScalar = ValidatedDefault(0.85e20)
     n_e_nbar_is_fGW: bool = False
     n_e_right_bc: TimeVaryingScalar | None = None
-    n_e_right_bc_is_fGW: bool = False
     current_profile_nu: float = 1.0
     initial_psi_from_j: bool = False
 
@@ -4691,7 +4689,7 @@ def get_updated_electron_density(profile_conditions_params, geo):
         profile_conditions_params.n_e,
     )
     n_e_right_bc = jnp.where(
-        profile_conditions_params.n_e_right_bc_is_fGW,
+        False,
         profile_conditions_params.n_e_right_bc * nGW,
         profile_conditions_params.n_e_right_bc,
     )
