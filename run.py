@@ -2483,7 +2483,6 @@ def get_all_source_profiles(runtime_params, geo, core_profiles, source_models,
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class PedestalModelOutput:
-    rho_norm_ped_top: Any
     rho_norm_ped_top_idx: Any
     T_i_ped: Any
     T_e_ped: Any
@@ -2501,7 +2500,6 @@ class PedestalModel:
             lambda: self._call_implementation(runtime_params, geo,
                                               core_profiles),
             lambda: PedestalModelOutput(
-                rho_norm_ped_top=jnp.inf,
                 T_i_ped=0.0,
                 T_e_ped=0.0,
                 n_e_ped=0.0,
@@ -2516,7 +2514,6 @@ class RuntimeParamsPED:
     n_e_ped: Any
     T_i_ped: Any
     T_e_ped: Any
-    rho_norm_ped_top: Any
     n_e_ped_is_fGW: Any
 
 
@@ -2540,9 +2537,8 @@ class SetTemperatureDensityPedestalModel(PedestalModel):
             n_e_ped=n_e_ped,
             T_i_ped=pedestal_params.T_i_ped,
             T_e_ped=pedestal_params.T_e_ped,
-            rho_norm_ped_top=pedestal_params.rho_norm_ped_top,
             rho_norm_ped_top_idx=jnp.abs(
-                geo.rho_norm - pedestal_params.rho_norm_ped_top).argmin(),
+                geo.rho_norm - g.rho_norm_ped_top).argmin(),
         )
 
 
@@ -2562,7 +2558,6 @@ class PedestalConfig(BaseModelFrozen):
             n_e_ped_is_fGW=self.n_e_ped_is_fGW,
             T_i_ped=self.T_i_ped.get_value(t),
             T_e_ped=self.T_e_ped.get_value(t),
-            rho_norm_ped_top=self.rho_norm_ped_top.get_value(t),
         )
 
 
@@ -2852,7 +2847,7 @@ class TransportModel:
         active_mask = (
             (geo.rho_face_norm > transport_runtime_params.rho_min)
             & (geo.rho_face_norm <= transport_runtime_params.rho_max)
-            & (geo.rho_face_norm <= pedestal_model_output.rho_norm_ped_top))
+            & (geo.rho_face_norm <= g.rho_norm_ped_top))
         active_mask = (jnp.asarray(active_mask).at[0].set(
             transport_runtime_params.rho_min == 0))
         chi_face_ion = jnp.where(active_mask, transport_coeffs.chi_face_ion,
@@ -3015,7 +3010,7 @@ def _build_smoothing_matrix(transport_runtime_params, runtime_params, geo,
             transport_runtime_params.apply_outer_patch,
         ),
         lambda: transport_runtime_params.rho_outer - g.eps,
-        lambda: pedestal_model_output.rho_norm_ped_top - g.eps,
+        lambda: g.rho_norm_ped_top - g.eps,
     )
     mask_inner_edge = jax.lax.cond(
         transport_runtime_params.apply_inner_patch,
@@ -3454,7 +3449,7 @@ class QLKNNRuntimeConfigInputs:
         assert isinstance(transport_runtime_params, RuntimeParams0)
         return QLKNNRuntimeConfigInputs(
             transport=transport_runtime_params,
-            Ped_top=pedestal_model_output.rho_norm_ped_top,
+            Ped_top=g.rho_norm_ped_top,
         )
 
 
@@ -5105,12 +5100,12 @@ def _calculate_pereverzev_flux(geo, core_profiles, pedestal_model_output):
                      core_profiles.n_e.face_value() * d_face_per_el *
                      geo_factor)
     chi_face_per_ion = jnp.where(
-        geo.rho_face_norm > pedestal_model_output.rho_norm_ped_top,
+        geo.rho_face_norm > g.rho_norm_ped_top,
         0.0,
         chi_face_per_ion,
     )
     chi_face_per_el = jnp.where(
-        geo.rho_face_norm > pedestal_model_output.rho_norm_ped_top,
+        geo.rho_face_norm > g.rho_norm_ped_top,
         0.0,
         chi_face_per_el,
     )
@@ -5119,12 +5114,12 @@ def _calculate_pereverzev_flux(geo, core_profiles, pedestal_model_output):
     v_heat_face_el = (core_profiles.T_e.face_grad() /
                       core_profiles.T_e.face_value() * chi_face_per_el)
     d_face_per_el = jnp.where(
-        geo.rho_face_norm > pedestal_model_output.rho_norm_ped_top,
+        geo.rho_face_norm > g.rho_norm_ped_top,
         0.0,
         d_face_per_el * geo.g1_over_vpr_face,
     )
     v_face_per_el = jnp.where(
-        geo.rho_face_norm > pedestal_model_output.rho_norm_ped_top,
+        geo.rho_face_norm > g.rho_norm_ped_top,
         0.0,
         v_face_per_el * geo.g0_face,
     )
@@ -6300,7 +6295,6 @@ CONFIG = {
         'T_i_ped': 4.5,
         'T_e_ped': 4.5,
         'n_e_ped': 0.62e20,
-        'rho_norm_ped_top': 0.9,
     },
     'transport': {
         'model_name': 'qlknn',
@@ -6357,6 +6351,7 @@ g.cell_centers = np.linspace(g.dx * 0.5, (g.n_rho - 0.5) * g.dx, g.n_rho)
 g.hires_factor = 4
 
 g.Qei_multiplier = 1.0
+g.rho_norm_ped_top = 0.9
 
 g.geo = CheaseConfig().build_geometry()
 g.pedestal_model = g.torax_config.pedestal.build_pedestal_model()
