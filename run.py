@@ -2726,7 +2726,6 @@ class RuntimeParamsPC:
     n_e_right_bc: Any
     n_e_right_bc_is_fGW: Any
     current_profile_nu: Any
-    initial_j_is_total_current: Any
     initial_psi_from_j: Any
     normalize_n_e_to_nbar: Any = dataclasses.field(metadata={'static': True})
     use_v_loop_lcfs_boundary_condition: Any = dataclasses.field(
@@ -2756,7 +2755,6 @@ class ProfileConditions(BaseModelFrozen):
     n_e_right_bc: TimeVaryingScalar | None = None
     n_e_right_bc_is_fGW: bool = False
     current_profile_nu: float = 1.0
-    initial_j_is_total_current: bool = False
     initial_psi_from_j: bool = False
 
     def build_runtime_params(self, t):
