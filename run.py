@@ -897,7 +897,6 @@ class Geometry:
     Phi_b_dot: Any
     _z_magnetic_axis: Any
 
-
     @property
     def q_correction_factor(self):
         return jnp.where(
@@ -1853,7 +1852,6 @@ class RuntimeParamsGcS(RuntimeParamsSrc):
     use_absolute_current: Any
 
 
-
 def calculate_generic_current(runtime_params, geo, source_name, unused_state,
                               unused_calculated_source_profiles,
                               unused_conductivity):
@@ -1933,7 +1931,6 @@ class RuntimeParamsGeIO(RuntimeParamsSrc):
     P_total: Any
     electron_heat_fraction: Any
     absorption_fraction: Any
-
 
 
 def calc_generic_heat_source(geo, gaussian_location, gaussian_width, P_total,
@@ -2050,7 +2047,6 @@ class RuntimeParamsPaSo(RuntimeParamsSrc):
     S_total: Any
 
 
-
 class GenericParticleSourceConfig(SourceModelBase):
     model_name: Annotated[Literal['gaussian'], JAX_STATIC] = ('gaussian')
     particle_width: TimeVaryingScalar = (ValidatedDefault(0.25))
@@ -2108,7 +2104,6 @@ class RuntimeParamsPE(RuntimeParamsSrc):
     pellet_width: Any
     pellet_deposition_location: Any
     S_total: Any
-
 
 
 class PelletSourceConfig(SourceModelBase):
@@ -2237,14 +2232,8 @@ class RuntimeParamsPS(RuntimeParamsSrc):
     S_total: Any
 
 
-def calc_puff_source(
-    runtime_params,
-    geo,
-    source_name,
-    unused_state,
-    unused_calculated_source_profiles,
-    unused_conductivity
-):
+def calc_puff_source(runtime_params, geo, source_name, unused_state,
+                     unused_calculated_source_profiles, unused_conductivity):
     source_params = runtime_params.sources[source_name]
     return (exponential_profile(
         decay_start=1.0,
@@ -2642,7 +2631,6 @@ class RuntimeParamsPED:
     T_e_ped: Any
     rho_norm_ped_top: Any
     n_e_ped_is_fGW: Any
-
 
 
 class SetTemperatureDensityPedestalModel(PedestalModel):
@@ -6208,7 +6196,6 @@ class Geometry:
     _z_magnetic_axis: Any
 
 
-
 def update_geometries_with_Phibdot(*, dt, geo_t, geo_t_plus_dt):
     Phibdot = (geo_t_plus_dt.Phi_b - geo_t.Phi_b) / dt
     geo_t = dataclasses.replace(geo_t, Phi_b_dot=Phibdot)
@@ -6226,7 +6213,6 @@ class ToraxSimState:
     core_sources: Any
     geometry: Any
     solver_numeric_outputs: Any
-
 
 
 def _get_initial_state(runtime_params, geo, step_fn):
@@ -6542,12 +6528,7 @@ CONFIG = {
             }
         },
     },
-    'geometry': {
-        'geometry_type': 'chease',
-        'R_major': 6.2,
-        'a_minor': 2.0,
-        'B_0': 5.3,
-    },
+    'geometry': {},
     'sources': {
         'generic_current': {
             'fraction_of_total_current': 0.46,
@@ -6609,6 +6590,11 @@ CONFIG = {
         'An_min': 0.05,
     },
 }
+
+g.geometry_geometry_type = 'chease'
+g.geometry_R_major = 6.2
+g.geometry_a_minor = 2.0
+g.geometry_B_0 = 5.3
 
 g.tolerance = 1e-7
 g.n_corrector_steps = 1
