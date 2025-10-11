@@ -665,9 +665,6 @@ class CellVariable:
         dataclasses.field(default_factory=_zero))
 
     def __post_init__(self):
-        for field in dataclasses.fields(self):
-            value = getattr(self, field.name)
-            name = field.name
         left_and = (self.left_face_constraint is not None
                     and self.left_face_grad_constraint is not None)
         left_or = (self.left_face_constraint is not None
