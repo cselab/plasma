@@ -2706,9 +2706,6 @@ class SetTemperatureDensityPedestalModel(PedestalModel):
                 geo.rho_norm - pedestal_params.rho_norm_ped_top).argmin(),
         )
 
-    def __hash__(self):
-        return hash('SetTemperatureDensityPedestalModel')
-
 
 class BasePedestal(BaseModelFrozen):
     set_pedestal: TimeVaryingScalar = (ValidatedDefault(False))
