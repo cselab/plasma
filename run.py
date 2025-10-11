@@ -3975,13 +3975,7 @@ class CheaseConfig(BaseModelFrozen):
     B_0: Tesla = 5.3
 
     def build_geometry(self):
-        kwargs = self.__dict__
-        relevant_kwargs = [
-            i.name for i in inspect.signature(
-                StandardGeometryIntermediates.from_chease).parameters.values()
-        ]
-        kwargs = {k: kwargs[k] for k in relevant_kwargs}
-        intermediate = StandardGeometryIntermediates.from_chease(**kwargs)
+        intermediate = StandardGeometryIntermediates.from_chease(self.R_major, self.a_minor, self.B_0)
         rho_intermediate = np.sqrt(intermediate.Phi /
                                    (np.pi * intermediate.B_0))
         rho_norm_intermediate = rho_intermediate / rho_intermediate[-1]
