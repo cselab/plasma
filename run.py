@@ -4129,7 +4129,8 @@ class QLKNNTransportModel(TransportBase):
 
 @jax.jit
 def calculate_total_transport_coeffs(runtime_params, geo, core_profiles):
-    pedestal_model_output = g.pedestal_model(runtime_params, geo, core_profiles)
+    pedestal_model_output = g.pedestal_model(runtime_params, geo,
+                                             core_profiles)
     turbulent_transport = g.transport_model(
         runtime_params=runtime_params,
         geo=geo,
@@ -5940,62 +5941,6 @@ def _calc_coeffs_reduced(geo: Geometry, core_profiles: CoreProfiles):
     return coeffs
 
 
-def calc_c(x, coeffs):
-    d_face = coeffs.d_face
-    v_face = coeffs.v_face
-    source_mat_cell = coeffs.source_mat_cell
-    source_cell = coeffs.source_cell
-    num_cells = x[0].value.shape[0]
-    num_channels = len(x)
-    zero_block = jnp.zeros((num_cells, num_cells))
-    zero_row_of_blocks = [zero_block] * num_channels
-    zero_vec = jnp.zeros((num_cells))
-    zero_block_vec = [zero_vec] * num_channels
-    c_mat = [zero_row_of_blocks.copy() for _ in range(num_channels)]
-    c = zero_block_vec.copy()
-    if d_face is not None:
-        for i in range(num_channels):
-            (
-                diffusion_mat,
-                diffusion_vec,
-            ) = make_diffusion_terms(
-                d_face[i],
-                x[i],
-            )
-            c_mat[i][i] += diffusion_mat
-            c[i] += diffusion_vec
-    if v_face is not None:
-        for i in range(num_channels):
-            d_face_i = d_face[i] if d_face is not None else None
-            d_face_i = jnp.zeros_like(
-                v_face[i]) if d_face_i is None else d_face_i
-            (
-                conv_mat,
-                conv_vec,
-            ) = make_convection_terms(
-                v_face[i],
-                d_face_i,
-                x[i],
-            )
-            c_mat[i][i] += conv_mat
-            c[i] += conv_vec
-    if source_mat_cell is not None:
-        for i in range(num_channels):
-            for j in range(num_channels):
-                source = source_mat_cell[i][j]
-                if source is not None:
-                    c_mat[i][j] += jnp.diag(source)
-
-    def add(left, right):
-        return left + right
-
-    if source_cell is not None:
-        c = [add(c_i, source_i) for c_i, source_i in zip(c, source_cell)]
-    c_mat_new = jnp.block(c_mat)
-    c_new = jnp.block(c)
-    return c_mat_new, c_new
-
-
 MIN_DELTA: Final[float] = 1e-7
 
 
@@ -6031,10 +5976,61 @@ def solver_x_new(dt, runtime_params_t, runtime_params_t_plus_dt, geo_t,
         eps = 1e-7
         left_transient = jnp.identity(len(x_new_guess_vec))
         right_transient = jnp.diag(jnp.squeeze(tc_in_old / tc_in_new))
-        c_mat_new, c_new = calc_c(
-            x_new_guess,
-            coeffs_new,
-        )
+        x = x_new_guess
+        coeffs = coeffs_new
+        d_face = coeffs.d_face
+        v_face = coeffs.v_face
+        source_mat_cell = coeffs.source_mat_cell
+        source_cell = coeffs.source_cell
+        num_cells = x[0].value.shape[0]
+        num_channels = len(x)
+        zero_block = jnp.zeros((num_cells, num_cells))
+        zero_row_of_blocks = [zero_block] * num_channels
+        zero_vec = jnp.zeros((num_cells))
+        zero_block_vec = [zero_vec] * num_channels
+        c_mat = [zero_row_of_blocks.copy() for _ in range(num_channels)]
+        c = zero_block_vec.copy()
+        if d_face is not None:
+            for i in range(num_channels):
+                (
+                    diffusion_mat,
+                    diffusion_vec,
+                ) = make_diffusion_terms(
+                    d_face[i],
+                    x[i],
+                )
+                c_mat[i][i] += diffusion_mat
+                c[i] += diffusion_vec
+        if v_face is not None:
+            for i in range(num_channels):
+                d_face_i = d_face[i] if d_face is not None else None
+                d_face_i = jnp.zeros_like(
+                    v_face[i]) if d_face_i is None else d_face_i
+                (
+                    conv_mat,
+                    conv_vec,
+                ) = make_convection_terms(
+                    v_face[i],
+                    d_face_i,
+                    x[i],
+                )
+                c_mat[i][i] += conv_mat
+                c[i] += conv_vec
+        if source_mat_cell is not None:
+            for i in range(num_channels):
+                for j in range(num_channels):
+                    source = source_mat_cell[i][j]
+                    if source is not None:
+                        c_mat[i][j] += jnp.diag(source)
+
+        def add(left, right):
+            return left + right
+
+        if source_cell is not None:
+            c = [add(c_i, source_i) for c_i, source_i in zip(c, source_cell)]
+        c_mat_new = jnp.block(c_mat)
+        c_new = jnp.block(c)
+
         broadcasted = jnp.expand_dims(1 / (tc_out_new * tc_in_new), 1)
         lhs_mat = left_transient - dt * g.theta_implicit * broadcasted * c_mat_new
         lhs_vec = -g.theta_implicit * dt * (1 /
