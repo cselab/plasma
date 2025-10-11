@@ -1441,11 +1441,7 @@ def _calculate_weighted_Z_eff(core_profiles: CoreProfiles, ) -> jax.Array:
             core_profiles.A_impurity) / core_profiles.n_e.value
 
 
-def _calculate_log_tau_e_Z1(
-    T_e: jax.Array,
-    n_e: jax.Array,
-    log_lambda_ei: jax.Array,
-) -> jax.Array:
+def _calculate_log_tau_e_Z1(T_e, n_e, log_lambda_ei):
     return (jnp.log(12 * jnp.pi**1.5 / (n_e * log_lambda_ei)) -
             4 * jnp.log(g.q_e) + 0.5 * jnp.log(g.m_e / 2.0) +
             2 * jnp.log(g.epsilon_0) + 1.5 * jnp.log(T_e * g.keV_to_J))
