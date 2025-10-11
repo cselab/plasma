@@ -1792,11 +1792,7 @@ def _calculate_bootstrap_current(*, Z_eff_face, Z_i_face, n_e, n_i, T_e, T_i,
     )
 
 
-def _calculate_L34(
-    f_trap,
-    nu_e_star,
-    Z_eff,
-):
+def _calculate_L34(f_trap, nu_e_star, Z_eff):
     ft34 = f_trap / (1.0 + (1 - 0.1 * f_trap) * jnp.sqrt(nu_e_star) + 0.5 *
                      (1.0 - 0.5 * f_trap) * nu_e_star / Z_eff)
     return ((1 + 1.4 / (Z_eff + 1)) * ft34 - 1.9 / (Z_eff + 1) * ft34**2 +
@@ -1821,13 +1817,7 @@ class NeoclassicalModels:
         return hash((self.bootstrap_current, self.conductivity))
 
 
-def exponential_profile(
-    geo,
-    *,
-    decay_start,
-    width,
-    total,
-):
+def exponential_profile(geo, *, decay_start, width, total):
     r = geo.rho_norm
     S = jnp.exp(-(decay_start - r) / width)
     C = total / volume_integration(S, geo)
