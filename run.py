@@ -301,10 +301,6 @@ class Grid1D(BaseModelFrozen):
     def face_centers(self):
         return np.linspace(0, g.n_rho * self.dx, g.n_rho + 1)
 
-    @property
-    def cell_centers(self):
-        return np.linspace(self.dx * 0.5, (g.n_rho - 0.5) * self.dx, g.n_rho)
-
 
 class TimeVaryingArray(BaseModelFrozen):
     value: ValueType
@@ -376,7 +372,7 @@ class TimeVaryingArray(BaseModelFrozen):
     def _get_cached_interpolated_param_cell(self, ):
         return InterpolatedVarTimeRho(
             self.value,
-            rho_norm=g.grid.cell_centers,
+            rho_norm=g.cell_centers,
             time_interpolation_mode=self.time_interpolation_mode,
             rho_interpolation_mode=self.rho_interpolation_mode,
         )
@@ -988,7 +984,7 @@ class Geometry:
 
     @property
     def rho_norm(self):
-        return self.torax_mesh.cell_centers
+        return g.cell_centers
 
     @property
     def rho_face_norm(self):
@@ -4287,7 +4283,7 @@ class CheaseConfig(BaseModelFrozen):
         mesh = Grid1D()
         rho_b = rho_intermediate[-1]
         rho_face_norm = mesh.face_centers
-        rho_norm = mesh.cell_centers
+        rho_norm = g.cell_centers
         rho_hires_norm = np.linspace(0, 1, g.n_rho * intermediate.hires_factor)
         rho_hires = rho_hires_norm * rho_b
         rhon_interpolation_func = lambda x, y: np.interp(
@@ -6894,13 +6890,12 @@ g.ITG_flux_ratio_correction = 1
 
 # {'n_rho': 25, 'R_major': 6.2, 'a_minor': 2.0, 'B_0': 5.3, 'hires_factor': 4}
 g.n_rho = 25
-mesh = g.torax_config.geometry.build_provider.geo.torax_mesh
-g.grid = Grid1D.model_construct(face_centers=mesh.face_centers,
-                                cell_centers=mesh.cell_centers)
-g.geometry_provider = g.torax_config.geometry.build_provider
 dx = 1 / g.n_rho
 g.face_centers = np.linspace(0, g.n_rho * dx, g.n_rho + 1)
 g.cell_centers = np.linspace(dx * 0.5, (g.n_rho - 0.5) * dx, g.n_rho)
+mesh = g.torax_config.geometry.build_provider.geo.torax_mesh
+g.grid = Grid1D.model_construct(face_centers=mesh.face_centers)
+g.geometry_provider = g.torax_config.geometry.build_provider
 g.pedestal_model = g.torax_config.pedestal.build_pedestal_model()
 g.source_models = g.torax_config.sources.build_models()
 g.transport_model = g.torax_config.transport.build_transport_model()
