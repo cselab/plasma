@@ -5108,8 +5108,7 @@ def _calculate_Z_eff(Z_i, Z_impurity, n_i, n_impurity, n_e):
     return (Z_i**2 * n_i + Z_impurity**2 * n_impurity) / n_e
 
 
-def initial_core_profiles0(runtime_params, geo, source_models,
-                           neoclassical_models):
+def initial_core_profiles0(runtime_params, geo, source_models):
     T_i = get_updated_ion_temperature(runtime_params.profile_conditions, geo)
     T_e = get_updated_electron_temperature(runtime_params.profile_conditions,
                                            geo)
@@ -5177,7 +5176,7 @@ def initial_core_profiles0(runtime_params, geo, source_models,
         j_total_face=j_total_face,
         Ip_profile_face=Ip_profile_face,
     )
-    conductivity = neoclassical_models.conductivity.calculate_conductivity(
+    conductivity = g.neoclassical_models.conductivity.calculate_conductivity(
         geo,
         core_profiles,
     )
@@ -5192,7 +5191,7 @@ def initial_core_profiles0(runtime_params, geo, source_models,
             calculated_source_profiles=source_profiles,
         )
         bootstrap_current = (
-            neoclassical_models.bootstrap_current.calculate_bootstrap_current(
+            g.neoclassical_models.bootstrap_current.calculate_bootstrap_current(
                 geo, core_profiles))
         source_profiles = dataclasses.replace(
             source_profiles, bootstrap_current=bootstrap_current)
@@ -6347,8 +6346,7 @@ def _get_initial_state(runtime_params, geo, step_fn):
     initial_core_profiles = initial_core_profiles0(
         runtime_params,
         geo,
-        source_models=g.source_models,
-        neoclassical_models=g.neoclassical_models,
+        source_models=g.source_models
     )
     initial_core_sources = get_all_source_profiles(
         runtime_params=runtime_params,
