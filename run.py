@@ -377,7 +377,7 @@ class TimeVaryingArray(BaseModelFrozen):
     def _get_cached_interpolated_param_cell(self, ):
         return InterpolatedVarTimeRho(
             self.value,
-            rho_norm=self.grid.cell_centers,
+            rho_norm=g.grid.cell_centers,
             time_interpolation_mode=self.time_interpolation_mode,
             rho_interpolation_mode=self.rho_interpolation_mode,
         )
@@ -386,7 +386,7 @@ class TimeVaryingArray(BaseModelFrozen):
     def _get_cached_interpolated_param_face(self):
         return InterpolatedVarTimeRho(
             self.value,
-            rho_norm=self.grid.face_centers,
+            rho_norm=g.grid.face_centers,
             time_interpolation_mode=self.time_interpolation_mode,
             rho_interpolation_mode=self.rho_interpolation_mode,
         )
@@ -395,7 +395,7 @@ class TimeVaryingArray(BaseModelFrozen):
     def _get_cached_interpolated_param_face_right(self):
         return InterpolatedVarTimeRho(
             self.value,
-            rho_norm=self.grid.face_centers[-1],
+            rho_norm=g.grid.face_centers[-1],
             time_interpolation_mode=self.time_interpolation_mode,
             rho_interpolation_mode=self.rho_interpolation_mode,
         )
@@ -6911,13 +6911,9 @@ g.t_initial = 0.0
 g.ITG_flux_ratio_correction = 1
 
 mesh = g.torax_config.geometry.build_provider.geo.torax_mesh
-new_grid = Grid1D.model_construct(nx=mesh.nx,
-                                  face_centers=mesh.face_centers,
-                                  cell_centers=mesh.cell_centers)
-for submodel in g.torax_config.submodels:
-    if isinstance(submodel, TimeVaryingArray):
-        submodel.__dict__['grid'] = new_grid
-
+g.grid = Grid1D.model_construct(nx=mesh.nx,
+                                face_centers=mesh.face_centers,
+                                cell_centers=mesh.cell_centers)
 g.geometry_provider = g.torax_config.geometry.build_provider
 g.pedestal_model = g.torax_config.pedestal.build_pedestal_model()
 g.source_models = g.torax_config.sources.build_models()
