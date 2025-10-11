@@ -476,10 +476,10 @@ _TOLERANCE: Final[float] = 1e-6
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class IonProperties:
-    symbol: str
-    name: str
-    A: float
-    Z: float
+    symbol: Any
+    name: Any
+    A: Any
+    Z: Any
 
 
 g.keV_to_J = 1e3 * 1.602176634e-19
