@@ -289,6 +289,8 @@ class BaseModelFrozen(pydantic.BaseModel):
 
 
 ValueType: TypeAlias = Any
+
+
 class TimeVaryingArray(BaseModelFrozen):
     value: ValueType
     rho_interpolation_mode: Any = InterpolationMode.PIECEWISE_LINEAR
@@ -1246,29 +1248,17 @@ def calc_li3(
     return 4 * Wpol / (g.mu_0 * Ip_total**2 * R_major)
 
 
-def calc_q95(
-    psi_norm_face: FloatVector,
-    q_face: FloatVector,
-):
+def calc_q95(psi_norm_face, q_face):
     q95 = jnp.interp(0.95, psi_norm_face, q_face)
     return q95
 
 
-def calculate_psi_grad_constraint_from_Ip(
-    Ip: FloatScalar,
-    geo: Geometry,
-):
+def calculate_psi_grad_constraint_from_Ip(Ip, geo):
     return (Ip * (16 * jnp.pi**3 * g.mu_0 * geo.Phi_b) /
             (geo.g2g3_over_rhon_face[-1] * geo.F_face[-1]))
 
 
-def calculate_psidot_from_psi_sources(
-    *,
-    psi_sources: FloatVector,
-    sigma: FloatVector,
-    psi: CellVariable,
-    geo: Geometry,
-) -> jax.Array:
+def calculate_psidot_from_psi_sources(*, psi_sources, sigma, psi, geo):
     toc_psi = (1.0 / g.resistivity_multiplier * geo.rho_norm * sigma * g.mu_0 *
                16 * jnp.pi**2 * geo.Phi_b**2 / geo.F**2)
     d_face_psi = geo.g2g3_over_rhon_face
@@ -1284,16 +1274,11 @@ def calculate_psidot_from_psi_sources(
     return psidot
 
 
-def calculate_main_ion_dilution_factor(
-    Z_i: FloatScalar,
-    Z_impurity: FloatVector,
-    Z_eff: FloatVector,
-) -> FloatVector:
+def calculate_main_ion_dilution_factor(Z_i, Z_impurity, Z_eff):
     return (Z_impurity - Z_eff) / (Z_i * (Z_impurity - Z_i))
 
 
-def calculate_pressure(
-    core_profiles: CoreProfiles, ) -> tuple[CellVariable, ...]:
+def calculate_pressure(core_profiles):
     pressure_thermal_el = CellVariable(
         value=core_profiles.n_e.value * core_profiles.T_e.value * g.keV_to_J,
         dr=core_profiles.n_e.dr,
