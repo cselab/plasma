@@ -3817,12 +3817,7 @@ class QLKNNTransportModel0(QualikizBasedTransportModel):
         )
         return self._combined(runtime_config_inputs, geo, core_profiles)
 
-    def _combined(
-        self,
-        runtime_config_inputs: QLKNNRuntimeConfigInputs,
-        geo: Geometry,
-        core_profiles: CoreProfiles,
-    ):
+    def _combined(self, runtime_config_inputs, geo, core_profiles):
         qualikiz_inputs = self._prepare_qualikiz_inputs(
             transport=runtime_config_inputs.transport,
             geo=geo,
