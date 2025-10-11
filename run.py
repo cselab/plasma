@@ -2486,7 +2486,6 @@ class PedestalModelOutput:
     rho_norm_ped_top_idx: Any
     T_i_ped: Any
     T_e_ped: Any
-    n_e_ped: Any
 
 
 class PedestalModel:
@@ -2502,7 +2501,6 @@ class PedestalModel:
             lambda: PedestalModelOutput(
                 T_i_ped=0.0,
                 T_e_ped=0.0,
-                n_e_ped=0.0,
                 rho_norm_ped_top_idx=g.n_rho,
             ),
         )
@@ -2511,7 +2509,6 @@ class PedestalModel:
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class RuntimeParamsPED:
-    n_e_ped: Any
     T_i_ped: Any
     T_e_ped: Any
     n_e_ped_is_fGW: Any
@@ -2530,11 +2527,10 @@ class SetTemperatureDensityPedestalModel(PedestalModel):
                (jnp.pi * geo.a_minor**2) * 1e20)
         n_e_ped = jnp.where(
             pedestal_params.n_e_ped_is_fGW,
-            pedestal_params.n_e_ped * nGW,
-            pedestal_params.n_e_ped,
+            g.n_e_ped * nGW,
+            g.n_e_ped,
         )
         return PedestalModelOutput(
-            n_e_ped=n_e_ped,
             T_i_ped=pedestal_params.T_i_ped,
             T_e_ped=pedestal_params.T_e_ped,
             rho_norm_ped_top_idx=jnp.abs(
@@ -2554,7 +2550,6 @@ class PedestalConfig(BaseModelFrozen):
 
     def build_runtime_params(self, t):
         return RuntimeParamsPED(
-            n_e_ped=self.n_e_ped.get_value(t),
             n_e_ped_is_fGW=self.n_e_ped_is_fGW,
             T_i_ped=self.T_i_ped.get_value(t),
             T_e_ped=self.T_e_ped.get_value(t),
@@ -5202,7 +5197,7 @@ def _calc_coeffs_full(runtime_params, geo, core_profiles,
     source_mat_nn = jnp.zeros_like(geo.rho)
     source_n_e = merged_source_profiles.total_sources('n_e', geo)
     source_n_e += (mask * g.adaptive_n_source_prefactor *
-                   pedestal_model_output.n_e_ped)
+                   g.n_e_ped)
     source_mat_nn += -(mask * g.adaptive_n_source_prefactor)
     (
         chi_face_per_ion,
@@ -6294,7 +6289,6 @@ CONFIG = {
     'pedestal': {
         'T_i_ped': 4.5,
         'T_e_ped': 4.5,
-        'n_e_ped': 0.62e20,
     },
     'transport': {
         'model_name': 'qlknn',
@@ -6352,6 +6346,8 @@ g.hires_factor = 4
 
 g.Qei_multiplier = 1.0
 g.rho_norm_ped_top = 0.9
+g.n_e_ped = 0.62e20
+
 
 g.geo = CheaseConfig().build_geometry()
 g.pedestal_model = g.torax_config.pedestal.build_pedestal_model()
