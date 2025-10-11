@@ -292,15 +292,7 @@ ValueType: TypeAlias = Any
 
 
 class Grid1D(BaseModelFrozen):
-
-    @functools.cached_property
-    def dx(self):
-        return 1 / g.n_rho
-
-    @property
-    def face_centers(self):
-        return np.linspace(0, g.n_rho * self.dx, g.n_rho + 1)
-
+    pass
 
 class TimeVaryingArray(BaseModelFrozen):
     value: ValueType
@@ -381,7 +373,7 @@ class TimeVaryingArray(BaseModelFrozen):
     def _get_cached_interpolated_param_face(self):
         return InterpolatedVarTimeRho(
             self.value,
-            rho_norm=g.grid.face_centers,
+            rho_norm=g.face_centers,
             time_interpolation_mode=self.time_interpolation_mode,
             rho_interpolation_mode=self.rho_interpolation_mode,
         )
@@ -390,7 +382,7 @@ class TimeVaryingArray(BaseModelFrozen):
     def _get_cached_interpolated_param_face_right(self):
         return InterpolatedVarTimeRho(
             self.value,
-            rho_norm=g.grid.face_centers[-1],
+            rho_norm=g.face_centers[-1],
             time_interpolation_mode=self.time_interpolation_mode,
             rho_interpolation_mode=self.rho_interpolation_mode,
         )
@@ -988,11 +980,11 @@ class Geometry:
 
     @property
     def rho_face_norm(self):
-        return self.torax_mesh.face_centers
+        return g.face_centers
 
     @property
     def drho_norm(self):
-        return jnp.array(self.torax_mesh.dx)
+        return jnp.array(g.dx)
 
     @property
     def rho_face(self):
@@ -4282,7 +4274,7 @@ class CheaseConfig(BaseModelFrozen):
             [np.array([j_total_face_axis]), j_total_face_bulk])
         mesh = Grid1D()
         rho_b = rho_intermediate[-1]
-        rho_face_norm = mesh.face_centers
+        rho_face_norm = g.face_centers
         rho_norm = g.cell_centers
         rho_hires_norm = np.linspace(0, 1, g.n_rho * intermediate.hires_factor)
         rho_hires = rho_hires_norm * rho_b
@@ -6890,11 +6882,11 @@ g.ITG_flux_ratio_correction = 1
 
 # {'n_rho': 25, 'R_major': 6.2, 'a_minor': 2.0, 'B_0': 5.3, 'hires_factor': 4}
 g.n_rho = 25
-dx = 1 / g.n_rho
-g.face_centers = np.linspace(0, g.n_rho * dx, g.n_rho + 1)
-g.cell_centers = np.linspace(dx * 0.5, (g.n_rho - 0.5) * dx, g.n_rho)
+g.dx = 1 / g.n_rho
+g.face_centers = np.linspace(0, g.n_rho * g.dx, g.n_rho + 1)
+g.cell_centers = np.linspace(g.dx * 0.5, (g.n_rho - 0.5) * g.dx, g.n_rho)
 mesh = g.torax_config.geometry.build_provider.geo.torax_mesh
-g.grid = Grid1D.model_construct(face_centers=mesh.face_centers)
+g.grid = Grid1D.model_construct()
 g.geometry_provider = g.torax_config.geometry.build_provider
 g.pedestal_model = g.torax_config.pedestal.build_pedestal_model()
 g.source_models = g.torax_config.sources.build_models()
