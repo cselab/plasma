@@ -3762,17 +3762,12 @@ def calculate_total_transport_coeffs(runtime_params, geo, core_profiles):
 class Neoclassical0(BaseModelFrozen):
     bootstrap_current: SauterModelConfig = pydantic.Field(
         discriminator="model_name")
-    conductivity: SauterModelConfigCond = (ValidatedDefault(
-        SauterModelConfigCond()))
+    conductivity: SauterModelConfigCond = SauterModelConfigCond()
 
     @pydantic.model_validator(mode="before")
     @classmethod
     def _defaults(cls, data):
         return {'bootstrap_current': {"model_name": "sauter"}}
-
-    def build_models(self):
-        return self.conductivity.build_model(), self.bootstrap_current.build_model()
-
 
 _RHO_SMOOTHING_LIMIT = 0.1
 
