@@ -2279,14 +2279,9 @@ def calc_fusion(geo, core_profiles, runtime_params):
     return P_total, Pfus_i, Pfus_e
 
 
-def fusion_heat_model_func(
-    runtime_params: RuntimeParamsSlice,
-    geo: Geometry,
-    unused_source_name: str,
-    core_profiles: CoreProfiles,
-    unused_calculated_source_profiles: SourceProfiles | None,
-    unused_conductivity: Conductivity | None,
-):
+def fusion_heat_model_func(runtime_params, geo, unused_source_name,
+                           core_profiles, unused_calculated_source_profiles,
+                           unused_conductivity):
     _, Pfus_i, Pfus_e = calc_fusion(geo, core_profiles, runtime_params)
     return (Pfus_i, Pfus_e)
 
