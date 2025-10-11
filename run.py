@@ -511,20 +511,6 @@ class RuntimeParamsSlice:
     transport: Any
 
 
-def make_ip_consistent(runtime_params, geo):
-    param_Ip = runtime_params.profile_conditions.Ip
-    Ip_scale_factor = param_Ip / geo.Ip_profile_face[-1]
-    geo = dataclasses.replace(
-        geo,
-        Ip_profile_face=geo.Ip_profile_face * Ip_scale_factor,
-        psi_from_Ip=geo.psi_from_Ip * Ip_scale_factor,
-        psi_from_Ip_face=geo.psi_from_Ip_face * Ip_scale_factor,
-        j_total=geo.j_total * Ip_scale_factor,
-        j_total_face=geo.j_total_face * Ip_scale_factor,
-    )
-    return runtime_params, geo
-
-
 def time_varying_array_defined_at_1(time_varying_array):
     if not time_varying_array.right_boundary_conditions_defined:
         logging.debug("""Not defined at rho=1.0.""")
@@ -3959,8 +3945,10 @@ def _smooth_savgol(data, idx_limit, polyorder):
 
 class CheaseConfig(BaseModelFrozen):
     geometry_type: Annotated[Literal['chease'], TIME_INVARIANT] = 'chease'
+
     def build_geometry(self):
-        intermediate = StandardGeometryIntermediates.from_chease(g.R_major, g.a_minor, g.B_0)
+        intermediate = StandardGeometryIntermediates.from_chease(
+            g.R_major, g.a_minor, g.B_0)
         rho_intermediate = np.sqrt(intermediate.Phi /
                                    (np.pi * intermediate.B_0))
         rho_norm_intermediate = rho_intermediate / rho_intermediate[-1]
@@ -5752,9 +5740,18 @@ class RuntimeParamsProvider:
 
 
 def get_consistent_runtime_params_and_geometry(*, t):
-    geo = g.geometry_provider
     runtime_params = g.runtime_params_provider(t=t)
-    return make_ip_consistent(runtime_params, geo)
+    param_Ip = runtime_params.profile_conditions.Ip
+    Ip_scale_factor = param_Ip / g.geo.Ip_profile_face[-1]
+    geo = dataclasses.replace(
+        g.geo,
+        Ip_profile_face=g.geo.Ip_profile_face * Ip_scale_factor,
+        psi_from_Ip=g.geo.psi_from_Ip * Ip_scale_factor,
+        psi_from_Ip_face=g.geo.psi_from_Ip_face * Ip_scale_factor,
+        j_total=g.geo.j_total * Ip_scale_factor,
+        j_total_face=g.geo.j_total_face * Ip_scale_factor,
+    )
+    return runtime_params, geo
 
 
 PROFILES = "profiles"
@@ -6599,10 +6596,9 @@ g.face_centers = np.linspace(0, g.n_rho * g.dx, g.n_rho + 1)
 g.cell_centers = np.linspace(g.dx * 0.5, (g.n_rho - 0.5) * g.dx, g.n_rho)
 g.hires_factor = 4
 
-
 g.Qei_multiplier = 1.0
 
-g.geometry_provider = g.torax_config.geometry.build_provider
+g.geo = g.torax_config.geometry.build_provider
 g.pedestal_model = g.torax_config.pedestal.build_pedestal_model()
 g.source_models = g.torax_config.sources.build_models()
 g.transport_model = g.torax_config.transport.build_transport_model()
