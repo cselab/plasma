@@ -38,14 +38,9 @@ jax.config.update('jax_enable_x64', True)
 T = TypeVar('T')
 Array: TypeAlias = jax.Array | np.ndarray
 FloatScalar: TypeAlias = jt.Float[Array | float, ""]
-BoolScalar: TypeAlias = Any
-IntScalar: TypeAlias = Any
-FloatVector: TypeAlias = Any
-BoolVector: TypeAlias = Any
 NumpyArray = Any
 NumpyArray1D = Any
 
-NumpyArray1DUnitInterval = Any
 TIME_INVARIANT: Final[str] = '_pydantic_time_invariant_field'
 JAX_STATIC: Final[str] = '_pydantic_jax_static_field'
 
@@ -848,7 +843,7 @@ class CoreTransport:
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass
 class SolverNumericOutputs:
-    solver_error_state: IntScalar = 0
+    solver_error_state: Any = 0
 
 
 def face_to_cell(face):
@@ -858,49 +853,50 @@ def face_to_cell(face):
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class Geometry:
-    Phi: Array
-    Phi_face: Array
-    R_major: FloatScalar
-    a_minor: FloatScalar
-    B_0: FloatScalar
-    volume: Array
-    volume_face: Array
-    area: Array
-    area_face: Array
-    vpr: Array
-    vpr_face: Array
-    spr: Array
-    spr_face: Array
-    delta_face: Array
-    elongation: Array
-    elongation_face: Array
-    g0: Array
-    g0_face: Array
-    g1: Array
-    g1_face: Array
-    g2: Array
-    g2_face: Array
-    g3: Array
-    g3_face: Array
-    gm4: Array
-    gm4_face: Array
-    gm5: Array
-    gm5_face: Array
-    g2g3_over_rhon: Array
-    g2g3_over_rhon_face: Array
-    g2g3_over_rhon_hires: Array
-    F: Array
-    F_face: Array
-    F_hires: Array
-    R_in: Array
-    R_in_face: Array
-    R_out: Array
-    R_out_face: Array
-    spr_hires: Array
-    rho_hires_norm: Array
-    rho_hires: Array
-    Phi_b_dot: FloatScalar
-    _z_magnetic_axis: FloatScalar | None
+    Phi: Any
+    Phi_face: Any
+    R_major: Any
+    a_minor: Any
+    B_0: Any
+    volume: Any
+    volume_face: Any
+    area: Any
+    area_face: Any
+    vpr: Any
+    vpr_face: Any
+    spr: Any
+    spr_face: Any
+    delta_face: Any
+    elongation: Any
+    elongation_face: Any
+    g0: Any
+    g0_face: Any
+    g1: Any
+    g1_face: Any
+    g2: Any
+    g2_face: Any
+    g3: Any
+    g3_face: Any
+    gm4: Any
+    gm4_face: Any
+    gm5: Any
+    gm5_face: Any
+    g2g3_over_rhon: Any
+    g2g3_over_rhon_face: Any
+    g2g3_over_rhon_hires: Any
+    F: Any
+    F_face: Any
+    F_hires: Any
+    R_in: Any
+    R_in_face: Any
+    R_out: Any
+    R_out_face: Any
+    spr_hires: Any
+    rho_hires_norm: Any
+    rho_hires: Any
+    Phi_b_dot: Any
+    _z_magnetic_axis: Any
+
 
     @property
     def q_correction_factor(self):
@@ -1809,7 +1805,7 @@ class Mode(enum.Enum):
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class RuntimeParamsSrc:
-    prescribed_values: tuple[FloatVector, ...]
+    prescribed_values: Any
     mode: Mode = dataclasses.field(metadata={"static": True})
     is_explicit: bool = dataclasses.field(metadata={"static": True})
 
@@ -1850,11 +1846,12 @@ class Source:
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class RuntimeParamsGcS(RuntimeParamsSrc):
-    I_generic: FloatScalar
-    fraction_of_total_current: FloatScalar
-    gaussian_width: FloatScalar
-    gaussian_location: FloatScalar
-    use_absolute_current: bool
+    I_generic: Any
+    fraction_of_total_current: Any
+    gaussian_width: Any
+    gaussian_location: Any
+    use_absolute_current: Any
+
 
 
 def calculate_generic_current(runtime_params, geo, source_name, unused_state,
@@ -1931,11 +1928,12 @@ class GenericCurrentSourceConfig(SourceModelBase):
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class RuntimeParamsGeIO(RuntimeParamsSrc):
-    gaussian_width: FloatScalar
-    gaussian_location: FloatScalar
-    P_total: FloatScalar
-    electron_heat_fraction: FloatScalar
-    absorption_fraction: FloatScalar
+    gaussian_width: Any
+    gaussian_location: Any
+    P_total: Any
+    electron_heat_fraction: Any
+    absorption_fraction: Any
+
 
 
 def calc_generic_heat_source(geo, gaussian_location, gaussian_width, P_total,
@@ -2047,9 +2045,10 @@ class GenericParticleSource(Source):
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class RuntimeParamsPaSo(RuntimeParamsSrc):
-    particle_width: FloatScalar
-    deposition_location: FloatScalar
-    S_total: FloatScalar
+    particle_width: Any
+    deposition_location: Any
+    S_total: Any
+
 
 
 class GenericParticleSourceConfig(SourceModelBase):
@@ -2106,9 +2105,10 @@ class PelletSource(Source):
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class RuntimeParamsPE(RuntimeParamsSrc):
-    pellet_width: FloatScalar
-    pellet_deposition_location: FloatScalar
-    S_total: FloatScalar
+    pellet_width: Any
+    pellet_deposition_location: Any
+    S_total: Any
+
 
 
 class PelletSourceConfig(SourceModelBase):
@@ -2233,8 +2233,8 @@ class FusionHeatSourceConfig(SourceModelBase):
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class RuntimeParamsPS(RuntimeParamsSrc):
-    puff_decay_length: FloatScalar
-    S_total: FloatScalar
+    puff_decay_length: Any
+    S_total: Any
 
 
 def calc_puff_source(
@@ -2243,7 +2243,7 @@ def calc_puff_source(
     source_name,
     unused_state,
     unused_calculated_source_profiles,
-    unused_conductivity,
+    unused_conductivity
 ):
     source_params = runtime_params.sources[source_name]
     return (exponential_profile(
@@ -2636,12 +2636,13 @@ class PedestalModel:
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class RuntimeParamsPED:
-    set_pedestal: BoolScalar
-    n_e_ped: FloatScalar
-    T_i_ped: FloatScalar
-    T_e_ped: FloatScalar
-    rho_norm_ped_top: FloatScalar
-    n_e_ped_is_fGW: BoolScalar
+    set_pedestal: Any
+    n_e_ped: Any
+    T_i_ped: Any
+    T_e_ped: Any
+    rho_norm_ped_top: Any
+    n_e_ped_is_fGW: Any
+
 
 
 class SetTemperatureDensityPedestalModel(PedestalModel):
@@ -6169,49 +6170,50 @@ class StateHistory:
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class Geometry:
-    Phi: Array
-    Phi_face: Array
-    R_major: FloatScalar
-    a_minor: FloatScalar
-    B_0: FloatScalar
-    volume: Array
-    volume_face: Array
-    area: Array
-    area_face: Array
-    vpr: Array
-    vpr_face: Array
-    spr: Array
-    spr_face: Array
-    delta_face: Array
-    elongation: Array
-    elongation_face: Array
-    g0: Array
-    g0_face: Array
-    g1: Array
-    g1_face: Array
-    g2: Array
-    g2_face: Array
-    g3: Array
-    g3_face: Array
-    gm4: Array
-    gm4_face: Array
-    gm5: Array
-    gm5_face: Array
-    g2g3_over_rhon: Array
-    g2g3_over_rhon_face: Array
-    g2g3_over_rhon_hires: Array
-    F: Array
-    F_face: Array
-    F_hires: Array
-    R_in: Array
-    R_in_face: Array
-    R_out: Array
-    R_out_face: Array
-    spr_hires: Array
-    rho_hires_norm: Array
-    rho_hires: Array
-    Phi_b_dot: FloatScalar
-    _z_magnetic_axis: FloatScalar | None
+    Phi: Any
+    Phi_face: Any
+    R_major: Any
+    a_minor: Any
+    B_0: Any
+    volume: Any
+    volume_face: Any
+    area: Any
+    area_face: Any
+    vpr: Any
+    vpr_face: Any
+    spr: Any
+    spr_face: Any
+    delta_face: Any
+    elongation: Any
+    elongation_face: Any
+    g0: Any
+    g0_face: Any
+    g1: Any
+    g1_face: Any
+    g2: Any
+    g2_face: Any
+    g3: Any
+    g3_face: Any
+    gm4: Any
+    gm4_face: Any
+    gm5: Any
+    gm5_face: Any
+    g2g3_over_rhon: Any
+    g2g3_over_rhon_face: Any
+    g2g3_over_rhon_hires: Any
+    F: Any
+    F_face: Any
+    F_hires: Any
+    R_in: Any
+    R_in_face: Any
+    R_out: Any
+    R_out_face: Any
+    spr_hires: Any
+    rho_hires_norm: Any
+    rho_hires: Any
+    Phi_b_dot: Any
+    _z_magnetic_axis: Any
+
 
 
 def update_geometries_with_Phibdot(*, dt, geo_t, geo_t_plus_dt):
@@ -6224,13 +6226,14 @@ def update_geometries_with_Phibdot(*, dt, geo_t, geo_t_plus_dt):
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass
 class ToraxSimState:
-    t: FloatScalar
-    dt: FloatScalar
-    core_profiles: CoreProfiles
-    core_transport: CoreTransport
-    core_sources: SourceProfiles
+    t: Any
+    dt: Any
+    core_profiles: Any
+    core_transport: Any
+    core_sources: Any
     geometry: Any
-    solver_numeric_outputs: SolverNumericOutputs
+    solver_numeric_outputs: Any
+
 
 
 def _get_initial_state(runtime_params, geo, step_fn):
