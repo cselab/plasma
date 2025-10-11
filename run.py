@@ -3072,14 +3072,6 @@ class ImpurityFractions(BaseModelFrozen):
             del data['legacy']
         return data
 
-
-_MIN_IP_AMPS: Final[float] = 1e3
-_MIN_DENSITY_M3: Final[float] = 1e10
-_MAX_DENSITY_GW: Final[float] = 1e2
-_MAX_TEMPERATURE_KEV: Final[float] = 1e3
-_MAX_TEMPERATURE_BC_KEV: Final[float] = 5e1
-
-
 class InitialPsiMode(enum.StrEnum):
     PROFILE_CONDITIONS = 'profile_conditions'
     GEOMETRY = 'geometry'
