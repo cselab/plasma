@@ -6867,12 +6867,13 @@ g.adaptive_n_source_prefactor = 2.0e8
 g.t_initial = 0.0
 g.ITG_flux_ratio_correction = 1
 
-# {'n_rho': 25, 'R_major': 6.2, 'a_minor': 2.0, 'B_0': 5.3, 'hires_factor': 4}
+# {'n_rho': 25, 'a_minor': 2.0, 'B_0': 5.3}
 g.n_rho = 25
 g.dx = 1 / g.n_rho
 g.face_centers = np.linspace(0, g.n_rho * g.dx, g.n_rho + 1)
 g.cell_centers = np.linspace(g.dx * 0.5, (g.n_rho - 0.5) * g.dx, g.n_rho)
 g.hires_factor = 4
+g.R_major = 6.2
 
 g.geometry_provider = g.torax_config.geometry.build_provider
 g.pedestal_model = g.torax_config.pedestal.build_pedestal_model()
