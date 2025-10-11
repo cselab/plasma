@@ -5536,7 +5536,6 @@ def get_consistent_runtime_params_and_geometry(*, t):
     return runtime_params, geo
 
 
-SCALARS = "scalars"
 T_E = "T_e"
 T_I = "T_i"
 PSI = "psi"
