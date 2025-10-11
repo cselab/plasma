@@ -3845,8 +3845,7 @@ class QLKNNModelWrapper:
     def __init__(self, path, name, flux_name_map=None):
         self.path = path
         self.name = name
-        flux_name_map = _FLUX_NAME_MAP
-        self._flux_name_map = flux_name_map
+        self._flux_name_map = _FLUX_NAME_MAP
         self._model = qlknn_model.QLKNNModel.load_default_model()
 
     @property
