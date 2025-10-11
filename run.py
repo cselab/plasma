@@ -6425,10 +6425,8 @@ g.bootstrap_current = SauterModelConfig().build_model()
 g.runtime_params_provider = RuntimeParamsProvider.from_config()
 runtime_params_for_init, geo_for_init = (
     get_consistent_runtime_params_and_geometry(t=g.t_initial, ))
-current_state = _get_initial_state(
-    runtime_params=runtime_params_for_init,
-    geo=geo_for_init
-)
+current_state = _get_initial_state(runtime_params=runtime_params_for_init,
+                                   geo=geo_for_init)
 post_processed_outputs = make_post_processed_outputs(current_state,
                                                      runtime_params_for_init)
 initial_post_processed_outputs = post_processed_outputs
