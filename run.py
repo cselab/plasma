@@ -2385,12 +2385,6 @@ class GasPuffSourceConfig(SourceModelBase):
         return GasPuffSource(model_func=self.model_func)
 
 
-@jax.tree_util.register_dataclass
-@dataclasses.dataclass(frozen=True)
-class RuntimeParamsQ(RuntimeParamsSrc):
-    pass
-
-
 @dataclasses.dataclass(kw_only=True, frozen=True, eq=True)
 class QeiSource(Source):
     SOURCE_NAME: typing.ClassVar[str] = 'ei_exchange'
@@ -2471,7 +2465,7 @@ class QeiSourceConfig(SourceModelBase):
         self,
         t: chex.Numeric,
     ):
-        return RuntimeParamsQ(prescribed_values=tuple(
+        return RuntimeParamsSrc(prescribed_values=tuple(
             [v.get_value(t) for v in self.prescribed_values]),
                               mode=self.mode,
                               is_explicit=self.is_explicit)
