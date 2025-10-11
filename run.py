@@ -393,10 +393,6 @@ class TimeVaryingScalar(BaseModelFrozen):
     def get_value(self, t):
         return self._get_cached_interpolated_param.get_value(t)
 
-    @pydantic.model_validator(mode='after')
-    def _ensure_consistent_arrays(self):
-        return self
-
     @pydantic.model_validator(mode='before')
     @classmethod
     def _conform_data(cls, data):
@@ -2869,10 +2865,6 @@ class ProfileConditions(BaseModelFrozen):
     current_profile_nu: float = 1.0
     initial_j_is_total_current: bool = False
     initial_psi_from_j: bool = False
-
-    @pydantic.model_validator(mode='after')
-    def after_validator(self):
-        return self
 
     def build_runtime_params(self, t):
         runtime_params = {
