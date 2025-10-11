@@ -2722,10 +2722,7 @@ class RuntimeParamsPC:
     psidot: Any
     n_e: Any
     nbar: Any
-    n_e_nbar_is_fGW: Any
     n_e_right_bc: Any
-    current_profile_nu: Any
-    normalize_n_e_to_nbar: Any = dataclasses.field(metadata={'static': True})
     use_v_loop_lcfs_boundary_condition: Any = dataclasses.field(
         metadata={'static': True})
     n_e_right_bc_is_absolute: Any = dataclasses.field(
@@ -2747,11 +2744,8 @@ class ProfileConditions(BaseModelFrozen):
             0: 1.2e20,
             1: 0.8e20
         }}))
-    normalize_n_e_to_nbar: Annotated[bool, JAX_STATIC] = False
     nbar: TimeVaryingScalar = ValidatedDefault(0.85e20)
-    n_e_nbar_is_fGW: bool = False
     n_e_right_bc: TimeVaryingScalar | None = None
-    current_profile_nu: float = 1.0
 
     def build_runtime_params(self, t):
         runtime_params = {
@@ -4681,9 +4675,8 @@ def get_updated_electron_temperature(profile_conditions_params, geo):
 def get_updated_electron_density(profile_conditions_params, geo):
     nGW = (profile_conditions_params.Ip / 1e6 / (jnp.pi * geo.a_minor**2) *
            1e20)
-    assert profile_conditions_params.n_e_nbar_is_fGW
     n_e_value = jnp.where(
-        profile_conditions_params.n_e_nbar_is_fGW,
+        True,
         profile_conditions_params.n_e * nGW,
         profile_conditions_params.n_e,
     )
@@ -4699,7 +4692,7 @@ def get_updated_electron_density(profile_conditions_params, geo):
         [face_left[None], face_inner, face_right[None]], )
     a_minor_out = geo.R_out_face[-1] - geo.R_out_face[0]
     target_nbar = jnp.where(
-        profile_conditions_params.n_e_nbar_is_fGW,
+        True,
         profile_conditions_params.nbar * nGW,
         profile_conditions_params.nbar,
     )
@@ -6386,8 +6379,6 @@ CONFIG = {
         },
         'T_e_right_bc': 0.2,
         'n_e_right_bc': 0.25e20,
-        'n_e_nbar_is_fGW': True,
-        'normalize_n_e_to_nbar': True,
         'nbar': 0.8,
         'n_e': {
             0: {
