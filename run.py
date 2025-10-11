@@ -4252,6 +4252,11 @@ class CheaseConfig(BaseModelFrozen):
         f = StandardGeometryIntermediates.from_chease
         kwargs = self.__dict__
         intermediate = _apply_relevant_kwargs(f, kwargs)
+        relevant_kwargs = [
+            i.name for i in inspect.signature(f).parameters.values()
+        ]
+        kwargs = {k: kwargs[k] for k in relevant_kwargs}
+        intermediate = f(**kwargs)
         rho_intermediate = np.sqrt(intermediate.Phi /
                                    (np.pi * intermediate.B_0))
         rho_norm_intermediate = rho_intermediate / rho_intermediate[-1]
@@ -4440,14 +4445,6 @@ def _conform_user_data(data):
     configs_time_dependent = data_copy.pop('geometry_configs', None)
     constructor_args['geometry_configs'] = {'config': data_copy}
     return constructor_args
-
-
-def _apply_relevant_kwargs(f, kwargs):
-    relevant_kwargs = [
-        i.name for i in inspect.signature(f).parameters.values()
-    ]
-    kwargs = {k: kwargs[k] for k in relevant_kwargs}
-    return f(**kwargs)
 
 
 @jax.tree_util.register_dataclass
