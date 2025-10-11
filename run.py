@@ -3331,9 +3331,9 @@ class RuntimeParams00(RuntimeParamsX):
 
 
 def calculate_normalized_logarithmic_gradient(
-    var: CellVariable,
-    radial_coordinate: jax.Array,
-    reference_length: jax.Array,
+    var,
+    radial_coordinate,
+    reference_length,
 ):
     result = jnp.where(
         jnp.abs(var.face_value()) < g.eps,
