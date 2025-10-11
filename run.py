@@ -2461,14 +2461,11 @@ class QeiSourceConfig(SourceModelBase):
     def model_func(self):
         return None
 
-    def build_runtime_params(
-        self,
-        t: chex.Numeric,
-    ):
+    def build_runtime_params(self, t):
         return RuntimeParamsSrc(prescribed_values=tuple(
             [v.get_value(t) for v in self.prescribed_values]),
-                              mode=self.mode,
-                              is_explicit=self.is_explicit)
+                                mode=self.mode,
+                                is_explicit=self.is_explicit)
 
     def build_source(self):
         return QeiSource(model_func=self.model_func)
@@ -6778,7 +6775,7 @@ g.dx = 1 / g.n_rho
 g.face_centers = np.linspace(0, g.n_rho * g.dx, g.n_rho + 1)
 g.cell_centers = np.linspace(g.dx * 0.5, (g.n_rho - 0.5) * g.dx, g.n_rho)
 g.hires_factor = 4
-g.R_major = 6.2
+# g.R_major = 6.2
 
 g.Qei_multiplier = 1.0
 
