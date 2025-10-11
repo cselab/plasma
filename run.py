@@ -6911,15 +6911,11 @@ g.t_initial = 0.0
 g.ITG_flux_ratio_correction = 1
 
 mesh = g.torax_config.geometry.build_provider.geo.torax_mesh
-g.nx = mesh.nx
-
+new_grid = Grid1D.model_construct(nx=mesh.nx,
+                                  face_centers=mesh.face_centers,
+                                  cell_centers=mesh.cell_centers)
 for submodel in g.torax_config.submodels:
     if isinstance(submodel, TimeVaryingArray):
-        new_grid = Grid1D.model_construct(
-            nx=mesh.nx,
-            face_centers=mesh.face_centers,
-            cell_centers=mesh.cell_centers,
-        )
         submodel.__dict__['grid'] = new_grid
 
 g.geometry_provider = g.torax_config.geometry.build_provider
