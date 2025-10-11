@@ -1485,10 +1485,6 @@ class Conductivity:
     sigma_face: Any
 
 
-class ConductivityModelConfig(BaseModelFrozen):
-    pass
-
-
 @jax.jit
 def _calculate_conductivity0(*, Z_eff_face, n_e, T_e, q_face, geo):
     f_trap = calculate_f_trap(geo)
@@ -1526,7 +1522,7 @@ def calculate_conductivity(geometry, core_profiles):
     return Conductivity(sigma=result.sigma, sigma_face=result.sigma_face)
 
 
-class SauterModelConfigCond(ConductivityModelConfig):
+class SauterModelConfigCond(BaseModelFrozen):
 
     def build_model(self):
         return SauterModelCond()
