@@ -7035,7 +7035,6 @@ CONFIG = {
 g.tolerance = 1e-7
 g.n_corrector_steps = 1
 g.torax_config = ToraxConfig.from_dict(CONFIG)
-g.geometry = g.torax_config.geometry
 g.chi_pereverzev = 30
 g.D_pereverzev = 15
 g.theta_implicit = 1.0
