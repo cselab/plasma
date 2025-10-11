@@ -2695,15 +2695,6 @@ class Sources(BaseModelFrozen):
         )
 
 
-@dataclasses.dataclass(kw_only=True, frozen=True, eq=True)
-class ImpurityRadiationHeatSink(Source):
-    SOURCE_NAME = "impurity_radiation"
-    model_func: Any
-
-
-_FINAL_SOURCES = frozenset([ImpurityRadiationHeatSink.SOURCE_NAME])
-
-
 @functools.partial(
     jax.jit,
     static_argnames=[
