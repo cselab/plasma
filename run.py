@@ -1227,10 +1227,7 @@ def calculate_scaling_law_confinement_time(
     return tau_scaling
 
 
-def calc_q_face(
-    geo: Geometry,
-    psi: CellVariable,
-):
+def calc_q_face(geo, psi):
     inv_iota = jnp.abs(
         (2 * geo.Phi_b * geo.rho_face_norm[1:]) / psi.face_grad()[1:])
     inv_iota0 = jnp.expand_dims(
@@ -1239,10 +1236,7 @@ def calc_q_face(
     return q_face * geo.q_correction_factor
 
 
-def calc_j_total(
-    geo: Geometry,
-    psi: CellVariable,
-):
+def calc_j_total(geo, psi):
     Ip_profile_face = (psi.face_grad() * geo.g2g3_over_rhon_face * geo.F_face /
                        geo.Phi_b / (16 * jnp.pi**3 * g.mu_0))
     Ip_profile = (psi.grad() * geo.g2g3_over_rhon * geo.F / geo.Phi_b /
@@ -4217,8 +4211,7 @@ class StandardGeometryIntermediates:
         self.vpr[:] = _smooth_savgol(self.vpr, idx_limit, 1)
 
     @classmethod
-    def from_chease(cls, n_rho, R_major, a_minor, B_0,
-                    hires_factor):
+    def from_chease(cls, n_rho, R_major, a_minor, B_0, hires_factor):
         file_path = os.path.join(
             "geo", "ITER_hybrid_citrin_equil_cheasedata.mat2cols")
         with open(file_path, 'r') as file:
