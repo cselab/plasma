@@ -1337,10 +1337,7 @@ def calc_pprime(core_profiles: CoreProfiles, ) -> FloatVector:
     return pprime_face
 
 
-def calc_FFprime(
-    core_profiles: CoreProfiles,
-    geo: Geometry,
-) -> FloatVector:
+def calc_FFprime(core_profiles, geo):
     mu0 = g.mu_0
     pprime = calc_pprime(core_profiles)
     g3 = geo.g3_face
@@ -1349,33 +1346,21 @@ def calc_FFprime(
     return FFprime_face
 
 
-def calculate_stored_thermal_energy(
-    p_el: CellVariable,
-    p_ion: CellVariable,
-    p_tot: CellVariable,
-    geo: Geometry,
-) -> tuple[FloatScalar, ...]:
+def calculate_stored_thermal_energy(p_el, p_ion, p_tot, geo):
     wth_el = volume_integration(1.5 * p_el.value, geo)
     wth_ion = volume_integration(1.5 * p_ion.value, geo)
     wth_tot = volume_integration(1.5 * p_tot.value, geo)
     return wth_el, wth_ion, wth_tot
 
 
-def calculate_greenwald_fraction(
-    n_e_avg: FloatScalar,
-    core_profiles: CoreProfiles,
-    geo: Geometry,
-) -> FloatScalar:
+def calculate_greenwald_fraction(n_e_avg, core_profiles, geo):
     gw_limit = (core_profiles.Ip_profile_face[-1] * 1e-6 /
                 (jnp.pi * geo.a_minor**2))
     fgw = n_e_avg / (gw_limit * 1e20)
     return fgw
 
 
-def calculate_betas(
-    core_profiles: CoreProfiles,
-    geo: Geometry,
-) -> FloatScalar:
+def calculate_betas(core_profiles, geo):
     _, _, p_total = calculate_pressure(core_profiles)
     p_total_volume_avg = volume_average(p_total.value, geo)
     magnetic_pressure_on_axis = geo.B_0**2 / (2 * g.mu_0)
@@ -1388,10 +1373,7 @@ def calculate_betas(
     return beta_tor, beta_pol, beta_N
 
 
-def coll_exchange(
-    core_profiles: CoreProfiles,
-    Qei_multiplier: float,
-) -> jax.Array:
+def coll_exchange(core_profiles, Qei_multiplier):
     log_lambda_ei = calculate_log_lambda_ei(core_profiles.T_e.value,
                                             core_profiles.n_e.value)
     log_tau_e_Z1 = _calculate_log_tau_e_Z1(
@@ -1407,11 +1389,7 @@ def coll_exchange(
     return Qei_coef
 
 
-def calc_nu_star(
-    geo: Geometry,
-    core_profiles: CoreProfiles,
-    collisionality_multiplier: float,
-) -> jax.Array:
+def calc_nu_star(geo, core_profiles, collisionality_multiplier):
     log_lambda_ei_face = calculate_log_lambda_ei(
         core_profiles.T_e.face_value(),
         core_profiles.n_e.face_value(),
@@ -1434,11 +1412,7 @@ def calc_nu_star(
     return nustar
 
 
-def fast_ion_fractional_heating_formula(
-    birth_energy: float | FloatVector,
-    T_e: FloatVector,
-    fast_ion_mass: float,
-) -> FloatVector:
+def fast_ion_fractional_heating_formula(birth_energy, T_e, fast_ion_mass):
     critical_energy = 10 * fast_ion_mass * T_e
     energy_ratio = birth_energy / critical_energy
     x_squared = energy_ratio
@@ -1450,19 +1424,12 @@ def fast_ion_fractional_heating_formula(
     return frac_i
 
 
-def calculate_log_lambda_ei(
-    T_e: jax.Array,
-    n_e: jax.Array,
-) -> jax.Array:
+def calculate_log_lambda_ei(T_e, n_e):
     T_e_ev = T_e * 1e3
     return 31.3 - 0.5 * jnp.log(n_e) + jnp.log(T_e_ev)
 
 
-def calculate_log_lambda_ii(
-    T_i: jax.Array,
-    n_i: jax.Array,
-    Z_i: jax.Array,
-) -> jax.Array:
+def calculate_log_lambda_ii(T_i, n_i, Z_i):
     T_i_ev = T_i * 1e3
     return 30.0 - 0.5 * jnp.log(n_i) + 1.5 * jnp.log(T_i_ev) - 3.0 * jnp.log(
         Z_i)
