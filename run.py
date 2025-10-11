@@ -2791,11 +2791,6 @@ class ImpurityFractions(BaseModelFrozen):
         return data
 
 
-class InitialPsiMode(enum.StrEnum):
-    GEOMETRY = 'geometry'
-    J = 'j'
-
-
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass
 class RuntimeParamsPC:
@@ -6614,6 +6609,7 @@ CONFIG = {
         'An_min': 0.05,
     },
 }
+
 g.tolerance = 1e-7
 g.n_corrector_steps = 1
 g.torax_config = ToraxConfig.from_dict(CONFIG)
