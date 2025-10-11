@@ -2906,8 +2906,6 @@ class RuntimeParamsPC:
         metadata={'static': True})
     n_e_right_bc_is_absolute: bool = dataclasses.field(
         metadata={'static': True})
-    initial_psi_mode: InitialPsiMode = dataclasses.field(
-        metadata={'static': True})
 
 
 class ProfileConditions(BaseModelFrozen):
@@ -2933,8 +2931,6 @@ class ProfileConditions(BaseModelFrozen):
     current_profile_nu: float = 1.0
     initial_j_is_total_current: bool = False
     initial_psi_from_j: bool = False
-    initial_psi_mode: Annotated[InitialPsiMode, JAX_STATIC] = (
-        InitialPsiMode.PROFILE_CONDITIONS)
 
     @pydantic.model_validator(mode='after')
     def after_validator(self):
