@@ -2877,7 +2877,6 @@ class ImpurityFractions(BaseModelFrozen):
 
 
 class InitialPsiMode(enum.StrEnum):
-    PROFILE_CONDITIONS = 'profile_conditions'
     GEOMETRY = 'geometry'
     J = 'j'
 
