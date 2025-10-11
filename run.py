@@ -6048,13 +6048,6 @@ class Geometry:
     _z_magnetic_axis: Any
 
 
-def update_geometries_with_Phibdot(*, dt, geo_t, geo_t_plus_dt):
-    Phibdot = (geo_t_plus_dt.Phi_b - geo_t.Phi_b) / dt
-    geo_t = dataclasses.replace(geo_t, Phi_b_dot=Phibdot)
-    geo_t_plus_dt = dataclasses.replace(geo_t_plus_dt, Phi_b_dot=Phibdot)
-    return geo_t, geo_t_plus_dt
-
-
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass
 class ToraxSimState:
@@ -6136,8 +6129,9 @@ def _finalize_outputs(t, dt, x_new, solver_numeric_outputs, geometry_t_plus_dt,
 def _get_geo_and_runtime_params_at_t_plus_dt_and_phibdot(t, dt, geo_t):
     runtime_params_t_plus_dt, geo_t_plus_dt = (
         get_consistent_runtime_params_and_geometry(t=t + dt))
-    geo_t, geo_t_plus_dt = update_geometries_with_Phibdot(
-        dt=dt, geo_t=geo_t, geo_t_plus_dt=geo_t_plus_dt)
+    Phibdot = (geo_t_plus_dt.Phi_b - geo_t.Phi_b) / dt
+    geo_t = dataclasses.replace(geo_t, Phi_b_dot=Phibdot)
+    geo_t_plus_dt = dataclasses.replace(geo_t_plus_dt, Phi_b_dot=Phibdot)
     return (runtime_params_t_plus_dt, geo_t, geo_t_plus_dt)
 
 
