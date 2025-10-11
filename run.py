@@ -4336,14 +4336,12 @@ class StandardGeometryIntermediates:
 
 def _smooth_savgol(data, idx_limit, polyorder):
     window_length = 5
-    preserve_first = True
     smoothed_data = scipy.signal.savgol_filter(data,
                                                window_length,
                                                polyorder,
                                                mode='nearest')
-    first_point = data[0] if preserve_first else smoothed_data[0]
     return np.concatenate([
-        np.array([first_point]), smoothed_data[1:idx_limit], data[idx_limit:]
+        np.array([data[0]]), smoothed_data[1:idx_limit], data[idx_limit:]
     ])
 
 
