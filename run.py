@@ -427,7 +427,6 @@ MeterSquaredPerSecond: TypeAlias = pydantic.NonNegativeFloat
 Pascal: TypeAlias = pydantic.PositiveFloat
 PositiveMeterSquaredPerSecond: TypeAlias = pydantic.PositiveFloat
 Second: TypeAlias = pydantic.NonNegativeFloat
-Tesla: TypeAlias = pydantic.PositiveFloat
 UnitInterval: TypeAlias = Annotated[float, pydantic.Field(ge=0.0, le=1.0)]
 OpenUnitInterval: TypeAlias = Annotated[float, pydantic.Field(gt=0.0, lt=1.0)]
 ValidatedDefault = functools.partial(pydantic.Field, validate_default=True)
@@ -3970,10 +3969,6 @@ def _smooth_savgol(data, idx_limit, polyorder):
 
 class CheaseConfig(BaseModelFrozen):
     geometry_type: Annotated[Literal['chease'], TIME_INVARIANT] = 'chease'
-    R_major: Meter = 6.2
-    a_minor: Meter = 2.0
-    B_0: Tesla = 5.3
-
     def build_geometry(self):
         intermediate = StandardGeometryIntermediates.from_chease(g.R_major, g.a_minor, g.B_0)
         rho_intermediate = np.sqrt(intermediate.Phi /
