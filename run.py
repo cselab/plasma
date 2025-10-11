@@ -5667,7 +5667,6 @@ class RuntimeParamsProvider:
     plasma_composition: Any
     transport_model: Any
     pedestal: Any
-    neoclassical: Any
 
     @classmethod
     def from_config(cls):
@@ -5677,7 +5676,6 @@ class RuntimeParamsProvider:
             plasma_composition=g.torax_config.plasma_composition,
             transport_model=g.torax_config.transport,
             pedestal=g.torax_config.pedestal,
-            neoclassical=g.torax_config.neoclassical,
         )
 
     @jax.jit
@@ -6226,7 +6224,6 @@ class ToraxConfig(BaseModelFrozen):
     profile_conditions: ProfileConditions
     plasma_composition: PlasmaComposition
     sources: Sources
-    neoclassical: Neoclassical0 = Neoclassical0()
     transport: QLKNNTransportModel = pydantic.Field(discriminator='model_name')
     pedestal: PedestalConfig = pydantic.Field(discriminator='model_name')
 
@@ -6555,8 +6552,6 @@ g.geo = CheaseConfig().build_geometry()
 g.pedestal_model = g.torax_config.pedestal.build_pedestal_model()
 g.source_models = g.torax_config.sources.build_models()
 g.transport_model = g.torax_config.transport.build_transport_model()
-
-g.neoclassical_models = g.torax_config.neoclassical.build_models()
 g.neoclassical_models = Neoclassical0().build_models()
 
 g.runtime_params_provider = RuntimeParamsProvider.from_config()
