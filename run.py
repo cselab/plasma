@@ -3817,9 +3817,6 @@ class QLKNNTransportModel0(QualikizBasedTransportModel):
             gyrobohm_flux_reference_length=geo.a_minor,
         )
 
-    def __hash__(self):
-        return hash(('QLKNNTransportModel' + self.path + self.name))
-
 
 class QLKNNTransportModel(TransportBase):
     model_name: Annotated[Literal['qlknn'], JAX_STATIC] = 'qlknn'
