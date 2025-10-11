@@ -6654,16 +6654,10 @@ def _get_initial_state(runtime_params, geo, step_fn):
     )
 
 
-@functools.partial(
-    jax.jit,
-    static_argnames=[
-        'evolving_names',
-    ],
-)
 def _finalize_outputs(t, dt, x_new, solver_numeric_outputs, geometry_t_plus_dt,
                       runtime_params_t_plus_dt, core_profiles_t,
                       core_profiles_t_plus_dt, explicit_source_profiles,
-                      evolving_names, input_post_processed_outputs):
+                      input_post_processed_outputs):
     final_core_profiles, final_source_profiles = (
         update_core_and_source_profiles_after_step(
             dt=dt,
@@ -7115,7 +7109,6 @@ while not_done(current_state.t, g.t_final):
         core_profiles_t=current_state.core_profiles,
         core_profiles_t_plus_dt=result[5],
         explicit_source_profiles=explicit_source_profiles,
-        evolving_names=None,
         input_post_processed_outputs=previous_post_processed_outputs,
     )
     current_state = output_state
