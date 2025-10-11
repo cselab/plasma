@@ -4146,7 +4146,7 @@ class Geometry0(BaseModelFrozen):
     @pydantic.model_validator(mode='before')
     @classmethod
     def _conform_data(cls, data):
-        geometry_type = data['geometry_type']
+        geometry_type = g.geometry_geometry_type
         return _conform_user_data(data)
 
     @functools.cached_property
@@ -4160,7 +4160,7 @@ class Geometry0(BaseModelFrozen):
 
 def _conform_user_data(data):
     data_copy = data.copy()
-    data_copy['geometry_type'] = data['geometry_type'].lower()
+    data_copy['geometry_type'] = g.geometry_geometry_type
     constructor_args = {}
     configs_time_dependent = data_copy.pop('geometry_configs', None)
     constructor_args['geometry_configs'] = {'config': data_copy}
