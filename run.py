@@ -5190,9 +5190,8 @@ def initial_core_profiles0(runtime_params, geo, source_models):
             calculate_anyway=True,
             calculated_source_profiles=source_profiles,
         )
-        bootstrap_current = (
-            g.neoclassical_models.bootstrap_current.calculate_bootstrap_current(
-                geo, core_profiles))
+        bootstrap_current = (g.neoclassical_models.bootstrap_current.
+                             calculate_bootstrap_current(geo, core_profiles))
         source_profiles = dataclasses.replace(
             source_profiles, bootstrap_current=bootstrap_current)
     psi_sources = source_profiles.total_psi_sources(geo)
@@ -6344,10 +6343,7 @@ class ToraxSimState:
 
 def _get_initial_state(runtime_params, geo, step_fn):
     initial_core_profiles = initial_core_profiles0(
-        runtime_params,
-        geo,
-        source_models=g.source_models
-    )
+        runtime_params, geo, source_models=g.source_models)
     initial_core_sources = get_all_source_profiles(
         runtime_params=runtime_params,
         geo=geo,
