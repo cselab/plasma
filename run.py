@@ -2388,7 +2388,7 @@ class GasPuffSourceConfig(SourceModelBase):
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class RuntimeParamsQ(RuntimeParamsSrc):
-    Qei_multiplier: float
+    pass
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True, eq=True)
@@ -2441,7 +2441,7 @@ def _model_based_qei(runtime_params, geo, core_profiles):
     zeros = jnp.zeros_like(geo.rho_norm)
     qei_coef = coll_exchange(
         core_profiles=core_profiles,
-        Qei_multiplier=source_params.Qei_multiplier,
+        Qei_multiplier=g.Qei_multiplier,
     )
     implicit_ii = -qei_coef
     implicit_ee = -qei_coef
@@ -2461,7 +2461,6 @@ def _model_based_qei(runtime_params, geo, core_profiles):
 
 
 class QeiSourceConfig(SourceModelBase):
-    Qei_multiplier: float = 1.0
     mode: Annotated[Mode, JAX_STATIC] = (Mode.MODEL_BASED)
 
     @property
@@ -2472,13 +2471,10 @@ class QeiSourceConfig(SourceModelBase):
         self,
         t: chex.Numeric,
     ):
-        return RuntimeParamsQ(
-            prescribed_values=tuple(
-                [v.get_value(t) for v in self.prescribed_values]),
-            mode=self.mode,
-            is_explicit=self.is_explicit,
-            Qei_multiplier=self.Qei_multiplier,
-        )
+        return RuntimeParamsQ(prescribed_values=tuple(
+            [v.get_value(t) for v in self.prescribed_values]),
+                              mode=self.mode,
+                              is_explicit=self.is_explicit)
 
     def build_source(self):
         return QeiSource(model_func=self.model_func)
@@ -6730,9 +6726,7 @@ CONFIG = {
             'electron_heat_fraction': 0.68,
         },
         'fusion': {},
-        'ei_exchange': {
-            'Qei_multiplier': 1.0,
-        },
+        'ei_exchange': {},
     },
     'pedestal': {
         'model_name': 'set_T_ped_n_ped',
@@ -6791,6 +6785,8 @@ g.face_centers = np.linspace(0, g.n_rho * g.dx, g.n_rho + 1)
 g.cell_centers = np.linspace(g.dx * 0.5, (g.n_rho - 0.5) * g.dx, g.n_rho)
 g.hires_factor = 4
 g.R_major = 6.2
+
+g.Qei_multiplier = 1.0
 
 g.geometry_provider = g.torax_config.geometry.build_provider
 g.pedestal_model = g.torax_config.pedestal.build_pedestal_model()
