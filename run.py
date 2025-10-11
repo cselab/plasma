@@ -6894,11 +6894,13 @@ g.ITG_flux_ratio_correction = 1
 
 # {'n_rho': 25, 'R_major': 6.2, 'a_minor': 2.0, 'B_0': 5.3, 'hires_factor': 4}
 g.n_rho = 25
-
 mesh = g.torax_config.geometry.build_provider.geo.torax_mesh
 g.grid = Grid1D.model_construct(face_centers=mesh.face_centers,
                                 cell_centers=mesh.cell_centers)
 g.geometry_provider = g.torax_config.geometry.build_provider
+dx = 1 / g.n_rho
+g.face_centers = np.linspace(0, g.n_rho * dx, g.n_rho + 1)
+g.cell_centers = np.linspace(dx * 0.5, (g.n_rho - 0.5) * dx, g.n_rho)
 g.pedestal_model = g.torax_config.pedestal.build_pedestal_model()
 g.source_models = g.torax_config.sources.build_models()
 g.transport_model = g.torax_config.transport.build_transport_model()
