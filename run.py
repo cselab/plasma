@@ -263,6 +263,7 @@ class BaseModelFrozen(pydantic.BaseModel):
 
 ValueType: TypeAlias = Any
 
+
 class TimeVaryingArray(BaseModelFrozen):
     value: ValueType
     rho_interpolation_mode: Any = InterpolationMode.PIECEWISE_LINEAR
@@ -587,6 +588,7 @@ class IntegralPreservationQuantity(enum.Enum):
     VOLUME = 'volume'
     SURFACE = 'surface'
     VALUE = 'value'
+
 
 @jax.jit
 def cell_integration(x, geo):
