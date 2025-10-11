@@ -3845,10 +3845,9 @@ class QLKNNModelWrapper:
     def __init__(self, path, name, flux_name_map=None):
         self.path = path
         self.name = name
-        if flux_name_map is None:
-            flux_name_map = _FLUX_NAME_MAP
-            self._flux_name_map = flux_name_map
-            self._model = qlknn_model.QLKNNModel.load_default_model()
+        flux_name_map = _FLUX_NAME_MAP
+        self._flux_name_map = flux_name_map
+        self._model = qlknn_model.QLKNNModel.load_default_model()
 
     @property
     def inputs_and_ranges(self):
