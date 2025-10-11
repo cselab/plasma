@@ -1106,10 +1106,6 @@ class ConstantGeometryProvider:
         del t
         return self.geo
 
-    @property
-    def torax_mesh(self):
-        return self.geo.torax_mesh
-
 
 def calculate_plh_scaling_factor(
     geo: Geometry,
@@ -6914,7 +6910,7 @@ g.adaptive_n_source_prefactor = 2.0e8
 g.t_initial = 0.0
 g.ITG_flux_ratio_correction = 1
 
-mesh = g.torax_config.geometry.build_provider.torax_mesh
+mesh = g.torax_config.geometry.build_provider.geo.torax_mesh
 for submodel in g.torax_config.submodels:
     if isinstance(submodel, TimeVaryingArray):
         new_grid = Grid1D.model_construct(
