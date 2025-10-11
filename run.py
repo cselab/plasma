@@ -521,17 +521,20 @@ ValidatedDefault = functools.partial(pydantic.Field, validate_default=True)
 BooleanNumeric = Any
 thread_context = threading.local()
 
+
 def while_loop(cond_fun, body_fun, init_val):
     val = init_val
     while cond_fun(val):
         val = body_fun(val)
     return val
 
+
 def cond(cond_val, true_fun, false_fun, *operands):
     if cond_val:
         return true_fun(*operands)
     else:
         return false_fun(*operands)
+
 
 def fori_loop(lower, upper, body_fun, init_val):
     val = init_val
@@ -690,6 +693,8 @@ def volume_average(value, geo):
 
 
 _trapz = jax.scipy.integrate.trapezoid
+
+
 def _zero():
     return jnp.zeros(())
 
@@ -4261,17 +4266,8 @@ class StandardGeometryIntermediates:
         self.vpr[:] = _smooth_savgol(self.vpr, idx_limit, 1)
 
     @classmethod
-    def from_chease(
-        cls,
-        geometry_directory: str | None,
-        geometry_file: str,
-        Ip_from_parameters: bool,
-        n_rho: int,
-        R_major: float,
-        a_minor: float,
-        B_0: float,
-        hires_factor: int,
-    ):
+    def from_chease(cls, geometry_directory, geometry_file, Ip_from_parameters,
+                    n_rho, R_major, a_minor, B_0, hires_factor):
         file_path = os.path.join(
             "geo", "ITER_hybrid_citrin_equil_cheasedata.mat2cols")
         with open(file_path, 'r') as file:
@@ -4337,6 +4333,7 @@ class StandardGeometryIntermediates:
             z_magnetic_axis=None,
         )
 
+
 def _smooth_savgol(
     data: np.ndarray,
     idx_limit: int,
@@ -4375,8 +4372,10 @@ class CheaseConfig(BaseModelFrozen):
         return self
 
     def build_geometry(self):
-        intermediate = _apply_relevant_kwargs(StandardGeometryIntermediates.from_chease, self.__dict__)
-        rho_intermediate = np.sqrt(intermediate.Phi / (np.pi * intermediate.B_0))
+        intermediate = _apply_relevant_kwargs(
+            StandardGeometryIntermediates.from_chease, self.__dict__)
+        rho_intermediate = np.sqrt(intermediate.Phi /
+                                   (np.pi * intermediate.B_0))
         rho_norm_intermediate = rho_intermediate / rho_intermediate[-1]
         C1 = intermediate.int_dl_over_Bp
         C0 = intermediate.flux_surf_avg_RBp * C1
@@ -4411,7 +4410,8 @@ class CheaseConfig(BaseModelFrozen):
             y=vpr, x=rho_norm_intermediate, initial=0.0)
         area_intermediate = scipy.integrate.cumulative_trapezoid(
             y=spr, x=rho_norm_intermediate, initial=0.0)
-        dI_tot_drhon = np.gradient(intermediate.Ip_profile, rho_norm_intermediate)
+        dI_tot_drhon = np.gradient(intermediate.Ip_profile,
+                                   rho_norm_intermediate)
         j_total_face_bulk = dI_tot_drhon[1:] / spr[1:]
         j_total_face_axis = j_total_face_bulk[0]
         j_total = np.concatenate(
@@ -4423,17 +4423,17 @@ class CheaseConfig(BaseModelFrozen):
         rho_hires_norm = np.linspace(
             0, 1, intermediate.n_rho * intermediate.hires_factor)
         rho_hires = rho_hires_norm * rho_b
-        rhon_interpolation_func = lambda x, y: np.interp(x, rho_norm_intermediate,
-                                                         y)
+        rhon_interpolation_func = lambda x, y: np.interp(
+            x, rho_norm_intermediate, y)
         vpr_face = rhon_interpolation_func(rho_face_norm, vpr)
         vpr = rhon_interpolation_func(rho_norm, vpr)
         spr_face = rhon_interpolation_func(rho_face_norm, spr)
         spr_cell = rhon_interpolation_func(rho_norm, spr)
         spr_hires = rhon_interpolation_func(rho_hires_norm, spr)
-        delta_upper_face = rhon_interpolation_func(rho_face_norm,
-                                                   intermediate.delta_upper_face)
-        delta_lower_face = rhon_interpolation_func(rho_face_norm,
-                                                   intermediate.delta_lower_face)
+        delta_upper_face = rhon_interpolation_func(
+            rho_face_norm, intermediate.delta_upper_face)
+        delta_lower_face = rhon_interpolation_func(
+            rho_face_norm, intermediate.delta_lower_face)
         delta_face = 0.5 * (delta_upper_face + delta_lower_face)
         elongation = rhon_interpolation_func(rho_norm, intermediate.elongation)
         elongation_face = rhon_interpolation_func(rho_face_norm,
@@ -4469,12 +4469,13 @@ class CheaseConfig(BaseModelFrozen):
         g2g3_over_rhon = rhon_interpolation_func(rho_norm, g2g3_over_rhon)
         gm4 = rhon_interpolation_func(rho_norm,
                                       intermediate.flux_surf_avg_1_over_B2)
-        gm4_face = rhon_interpolation_func(rho_face_norm,
-                                           intermediate.flux_surf_avg_1_over_B2)
+        gm4_face = rhon_interpolation_func(
+            rho_face_norm, intermediate.flux_surf_avg_1_over_B2)
         gm5 = rhon_interpolation_func(rho_norm, intermediate.flux_surf_avg_B2)
         gm5_face = rhon_interpolation_func(rho_face_norm,
                                            intermediate.flux_surf_avg_B2)
-        volume_face = rhon_interpolation_func(rho_face_norm, volume_intermediate)
+        volume_face = rhon_interpolation_func(rho_face_norm,
+                                              volume_intermediate)
         volume = rhon_interpolation_func(rho_norm, volume_intermediate)
         area_face = rhon_interpolation_func(rho_face_norm, area_intermediate)
         area = rhon_interpolation_func(rho_norm, area_intermediate)
@@ -5868,8 +5869,7 @@ def _calc_coeffs_full(runtime_params, geo, core_profiles,
     source_n_e = merged_source_profiles.total_sources('n_e', geo)
     source_n_e += (mask * g.adaptive_n_source_prefactor *
                    pedestal_model_output.n_e_ped)
-    source_mat_nn += -(mask *
-                       g.adaptive_n_source_prefactor)
+    source_mat_nn += -(mask * g.adaptive_n_source_prefactor)
     (
         chi_face_per_ion,
         chi_face_per_el,
@@ -7120,8 +7120,7 @@ g.transport_model = g.torax_config.transport.build_transport_model()
 g.neoclassical_models = g.torax_config.neoclassical.build_models()
 g.runtime_params_provider = RuntimeParamsProvider.from_config()
 runtime_params_for_init, geo_for_init = (
-    get_consistent_runtime_params_and_geometry(
-        t=g.t_initial, ))
+    get_consistent_runtime_params_and_geometry(t=g.t_initial, ))
 current_state = _get_initial_state(
     runtime_params=runtime_params_for_init,
     geo=geo_for_init,
@@ -7196,6 +7195,7 @@ data_tree = state_history.simulation_output_to_xr()
 data_tree.to_netcdf("run.nc")
 print(data_tree)
 import matplotlib.pyplot as plt
+
 t = data_tree.time.to_numpy()
 rho = data_tree.rho_norm.to_numpy()
 nt, = np.shape(t)
