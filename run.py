@@ -3842,12 +3842,7 @@ _FLUX_NAME_MAP: Final[Mapping[str, str]] = immutabledict.immutabledict({
 
 class QLKNNModelWrapper:
 
-    def __init__(
-        self,
-        path: str,
-        name: str = '',
-        flux_name_map: Mapping[str, str] | None = None,
-    ):
+    def __init__(self, path, name, flux_name_map=None):
         self.path = path
         self.name = name
         if flux_name_map is None:
