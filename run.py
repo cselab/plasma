@@ -4148,7 +4148,6 @@ class StandardGeometryIntermediates:
     delta_lower_face: Array
     elongation: Array
     vpr: Array
-    n_rho: int
     hires_factor: int
     z_magnetic_axis: FloatScalar | None
 
@@ -4165,7 +4164,7 @@ class StandardGeometryIntermediates:
         self.vpr[:] = _smooth_savgol(self.vpr, idx_limit, 1)
 
     @classmethod
-    def from_chease(cls, n_rho, R_major, a_minor, B_0, hires_factor):
+    def from_chease(cls, R_major, a_minor, B_0, hires_factor):
         file_path = os.path.join(
             "geo", "ITER_hybrid_citrin_equil_cheasedata.mat2cols")
         with open(file_path, 'r') as file:
@@ -4224,7 +4223,6 @@ class StandardGeometryIntermediates:
             delta_lower_face=chease_data['delta_bottom'],
             elongation=chease_data['elongation'],
             vpr=vpr,
-            n_rho=n_rho,
             hires_factor=hires_factor,
             z_magnetic_axis=None,
         )
@@ -4242,7 +4240,6 @@ def _smooth_savgol(data, idx_limit, polyorder):
 
 class CheaseConfig(BaseModelFrozen):
     geometry_type: Annotated[Literal['chease'], TIME_INVARIANT] = 'chease'
-    n_rho: Annotated[pydantic.PositiveInt, TIME_INVARIANT] = 25
     hires_factor: pydantic.PositiveInt = 4
     R_major: Meter = 6.2
     a_minor: Meter = 2.0
@@ -4298,12 +4295,12 @@ class CheaseConfig(BaseModelFrozen):
         j_total_face_axis = j_total_face_bulk[0]
         j_total = np.concatenate(
             [np.array([j_total_face_axis]), j_total_face_bulk])
-        mesh = Grid1D(nx=intermediate.n_rho)
+        mesh = Grid1D(nx=g.n_rho)
         rho_b = rho_intermediate[-1]
         rho_face_norm = mesh.face_centers
         rho_norm = mesh.cell_centers
         rho_hires_norm = np.linspace(
-            0, 1, intermediate.n_rho * intermediate.hires_factor)
+            0, 1, g.n_rho * intermediate.hires_factor)
         rho_hires = rho_hires_norm * rho_b
         rhon_interpolation_func = lambda x, y: np.interp(
             x, rho_norm_intermediate, y)
