@@ -948,7 +948,6 @@ class CoreTransport:
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass
 class SolverNumericOutputs:
-    outer_solver_iterations: IntScalar = 0
     solver_error_state: IntScalar = 0
 
 
@@ -6115,7 +6114,6 @@ def solver_x_new(dt, runtime_params_t, runtime_params_t_plus_dt, geo_t,
     )
 
     solver_numeric_outputs = SolverNumericOutputs(
-        outer_solver_iterations=1,
         solver_error_state=0,
     )
     return (
@@ -6233,7 +6231,6 @@ RHO_FACE = "rho_face"
 RHO_CELL = "rho_cell"
 TIME = "time"
 Q_FUSION = "Q_fusion"
-OUTER_SOLVER_ITERATIONS = "outer_solver_iterations"
 EXCLUDED_GEOMETRY_NAMES = frozenset({
     RHO_FACE,
     RHO_CELL,
@@ -6337,12 +6334,6 @@ class StateHistory:
         for key, value in itertools.chain(*(d.items() for d in all_dicts)):
             flat_dict[key] = value
         numerics_dict = {
-            OUTER_SOLVER_ITERATIONS:
-            xr.DataArray(
-                self._stacked_solver_numeric_outputs.outer_solver_iterations,
-                dims=[TIME],
-                name=OUTER_SOLVER_ITERATIONS,
-            ),
         }
         numerics = xr.Dataset(numerics_dict)
         profiles_dict = {
@@ -6684,7 +6675,6 @@ def _get_initial_state(runtime_params, geo, step_fn):
         core_transport=transport_coeffs,
         solver_numeric_outputs=SolverNumericOutputs(
             solver_error_state=0,
-            outer_solver_iterations=0,
         ),
         geometry=geo,
     )
@@ -6917,7 +6907,6 @@ def body_fun(inputs):
     )
     solver_numeric_outputs = SolverNumericOutputs(
         solver_error_state=solver_numeric_outputs.solver_error_state,
-        outer_solver_iterations=old_solver_outputs.outer_solver_iterations + 1,
     )
     next_dt = dt / g.dt_reduction_factor
     return next_dt, (
@@ -7135,7 +7124,6 @@ while not_done(current_state.t, g.t_final):
                 initial_dt,
                 SolverNumericOutputs(
                     solver_error_state=1,
-                    outer_solver_iterations=0,
                 ),
                 runtime_params_t,
                 geo_t,
