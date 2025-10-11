@@ -3662,7 +3662,6 @@ class QuasilinearTransportModel(TransportModel):
 @dataclasses.dataclass(frozen=True)
 class RuntimeParams(RuntimeParams00):
     collisionality_multiplier: float
-    avoid_big_negative_s: bool
     smag_alpha_correction: bool
     q_sawtooth_proxy: bool
 
@@ -3757,7 +3756,7 @@ class QualikizBasedTransportModel(QuasilinearTransportModel):
         )
         smag = jnp.where(
             jnp.logical_and(
-                transport.avoid_big_negative_s,
+                True,
                 smag - alpha < -0.2,
             ),
             alpha - 0.2,
@@ -4079,7 +4078,6 @@ class QLKNNTransportModel(TransportBase):
     clip_inputs: bool = False
     clip_margin: float = 0.95
     collisionality_multiplier: float = 1.0
-    avoid_big_negative_s: bool = True
     smag_alpha_correction: bool = True
     q_sawtooth_proxy: bool = True
     DV_effective: bool = False
@@ -4109,7 +4107,6 @@ class QLKNNTransportModel(TransportBase):
             clip_inputs=self.clip_inputs,
             clip_margin=self.clip_margin,
             collisionality_multiplier=self.collisionality_multiplier,
-            avoid_big_negative_s=self.avoid_big_negative_s,
             smag_alpha_correction=self.smag_alpha_correction,
             q_sawtooth_proxy=self.q_sawtooth_proxy,
             DV_effective=self.DV_effective,
@@ -6937,7 +6934,6 @@ CONFIG = {
         'include_ITG': True,
         'include_TEM': True,
         'include_ETG': True,
-        'avoid_big_negative_s': True,
         'An_min': 0.05,
         'ITG_flux_ratio_correction': 1,
     },
