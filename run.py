@@ -6592,7 +6592,7 @@ CONFIG = {
 }
 
 g.geometry_geometry_type = 'chease'
-g.geometry_R_major = 6.2
+g.R_major = 6.2
 g.geometry_a_minor = 2.0
 g.geometry_B_0 = 5.3
 
@@ -6620,7 +6620,7 @@ g.dx = 1 / g.n_rho
 g.face_centers = np.linspace(0, g.n_rho * g.dx, g.n_rho + 1)
 g.cell_centers = np.linspace(g.dx * 0.5, (g.n_rho - 0.5) * g.dx, g.n_rho)
 g.hires_factor = 4
-# g.R_major = 6.2
+
 
 g.Qei_multiplier = 1.0
 
