@@ -6234,7 +6234,6 @@ def _get_geo_and_runtime_params_at_t_plus_dt_and_phibdot(t, dt, geo_t):
 class ToraxConfig(BaseModelFrozen):
     profile_conditions: ProfileConditions
     plasma_composition: PlasmaComposition
-    geometry: CheaseConfig
     sources: Sources
     neoclassical: Neoclassical0 = Neoclassical0()
     transport: QLKNNTransportModel = pydantic.Field(discriminator='model_name')
@@ -6468,7 +6467,6 @@ CONFIG = {
             }
         },
     },
-    'geometry': {},
     'sources': {
         'generic_current': {
             'fraction_of_total_current': 0.46,
@@ -6563,7 +6561,7 @@ g.hires_factor = 4
 
 g.Qei_multiplier = 1.0
 
-g.geo = g.torax_config.geometry.build_geometry()
+g.geo = CheaseConfig().build_geometry()
 g.pedestal_model = g.torax_config.pedestal.build_pedestal_model()
 g.source_models = g.torax_config.sources.build_models()
 g.transport_model = g.torax_config.transport.build_transport_model()
