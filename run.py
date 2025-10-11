@@ -3902,7 +3902,6 @@ class RuntimeParams0(RuntimeParams):
     include_ITG: bool
     include_TEM: bool
     include_ETG: bool
-    ITG_flux_ratio_correction: float
     ETG_correction_factor: float
     clip_inputs: bool
     clip_margin: float
@@ -4044,7 +4043,7 @@ class QLKNNTransportModel0(QualikizBasedTransportModel):
         qi_itg_squeezed = model_output['qi_itg'].squeeze()
         qi = qi_itg_squeezed + model_output['qi_tem'].squeeze()
         qe = (model_output['qe_itg'].squeeze() *
-              runtime_config_inputs.transport.ITG_flux_ratio_correction +
+              g.ITG_flux_ratio_correction +
               model_output['qe_tem'].squeeze() +
               model_output['qe_etg'].squeeze() *
               runtime_config_inputs.transport.ETG_correction_factor)
@@ -4073,7 +4072,6 @@ class QLKNNTransportModel(TransportBase):
     include_ITG: bool = True
     include_TEM: bool = True
     include_ETG: bool = True
-    ITG_flux_ratio_correction: float = 1.0
     ETG_correction_factor: float = 1.0 / 3.0
     clip_inputs: bool = False
     clip_margin: float = 0.95
@@ -4102,7 +4100,6 @@ class QLKNNTransportModel(TransportBase):
             include_ITG=self.include_ITG,
             include_TEM=self.include_TEM,
             include_ETG=self.include_ETG,
-            ITG_flux_ratio_correction=self.ITG_flux_ratio_correction,
             ETG_correction_factor=self.ETG_correction_factor,
             clip_inputs=self.clip_inputs,
             clip_margin=self.clip_margin,
@@ -6935,7 +6932,6 @@ CONFIG = {
         'include_TEM': True,
         'include_ETG': True,
         'An_min': 0.05,
-        'ITG_flux_ratio_correction': 1,
     },
 }
 g.tolerance = 1e-7
@@ -6954,6 +6950,7 @@ g.dt_reduction_factor = 3
 g.adaptive_T_source_prefactor = 2.0e10
 g.adaptive_n_source_prefactor = 2.0e8
 g.t_initial = 0.0
+g.ITG_flux_ratio_correction = 1
 
 mesh = g.torax_config.geometry.build_provider.torax_mesh
 for submodel in g.torax_config.submodels:
