@@ -4168,13 +4168,9 @@ class Geometry0(BaseModelFrozen):
 
     @functools.cached_property
     def build_provider(self):
-        if hasattr(self.geometry_configs, 'config'):
-            geometries = self.geometry_configs.config.build_geometry()
-        else:
-            # Handle case where geometry_configs is a dict
-            config_data = self.geometry_configs['config']
-            config = CheaseConfig(**config_data)
-            geometries = config.build_geometry()
+        config_data = self.geometry_configs['config']
+        config = CheaseConfig(**config_data)
+        geometries = config.build_geometry()
         provider = ConstantGeometryProvider
         return provider(geometries)
 
