@@ -1541,18 +1541,13 @@ def _calculate_conductivity0(*, Z_eff_face, n_e, T_e, q_face, geo):
     )
 
 
-class SauterModelCond:
-
-    def calculate_conductivity(self, geometry, core_profiles):
-        result = _calculate_conductivity0(Z_eff_face=core_profiles.Z_eff_face,
-                                          n_e=core_profiles.n_e,
-                                          T_e=core_profiles.T_e,
-                                          q_face=core_profiles.q_face,
-                                          geo=geometry)
-        return Conductivity(sigma=result.sigma, sigma_face=result.sigma_face)
-
-    def __hash__(self):
-        return hash(self.__class__)
+def calculate_conductivity(geometry, core_profiles):
+    result = _calculate_conductivity0(Z_eff_face=core_profiles.Z_eff_face,
+                                      n_e=core_profiles.n_e,
+                                      T_e=core_profiles.T_e,
+                                      q_face=core_profiles.q_face,
+                                      geo=geometry)
+    return Conductivity(sigma=result.sigma, sigma_face=result.sigma_face)
 
 
 class SauterModelConfigCond(ConductivityModelConfig):
@@ -2435,9 +2430,8 @@ def build_source_profiles1(runtime_params,
         geo=geo,
         core_profiles=core_profiles,
     )
-    bootstrap_current = (
-        g.bootstrap_current.calculate_bootstrap_current(
-            geo, core_profiles))
+    bootstrap_current = (g.bootstrap_current.calculate_bootstrap_current(
+        geo, core_profiles))
     profiles = SourceProfiles(
         bootstrap_current=bootstrap_current,
         qei=qei,
@@ -3760,13 +3754,13 @@ def calculate_total_transport_coeffs(runtime_params, geo, core_profiles):
 
 
 class Neoclassical0(BaseModelFrozen):
-    bootstrap_current: SauterModelConfig = pydantic.Field(
-        discriminator="model_name")
+    bootstrap_current: SauterModelConfig = SauterModelConfig()
 
     @pydantic.model_validator(mode="before")
     @classmethod
     def _defaults(cls, data):
         return {'bootstrap_current': {"model_name": "sauter"}}
+
 
 _RHO_SMOOTHING_LIMIT = 0.1
 
@@ -4947,7 +4941,7 @@ def initial_core_profiles0(runtime_params, geo, source_models):
         j_total_face=j_total_face,
         Ip_profile_face=Ip_profile_face,
     )
-    conductivity = g.conductivity.calculate_conductivity(
+    conductivity = calculate_conductivity(
         geo,
         core_profiles,
     )
@@ -4961,8 +4955,8 @@ def initial_core_profiles0(runtime_params, geo, source_models):
             calculate_anyway=True,
             calculated_source_profiles=source_profiles,
         )
-        bootstrap_current = (g.bootstrap_current.
-                             calculate_bootstrap_current(geo, core_profiles))
+        bootstrap_current = (g.bootstrap_current.calculate_bootstrap_current(
+            geo, core_profiles))
         source_profiles = dataclasses.replace(
             source_profiles, bootstrap_current=bootstrap_current)
     psi_sources = source_profiles.total_psi_sources(geo)
@@ -5106,8 +5100,7 @@ def update_core_profiles_during_step(x_new, runtime_params, geo,
 
 def update_core_and_source_profiles_after_step(
         dt, x_new, runtime_params_t_plus_dt, geo, core_profiles_t,
-        core_profiles_t_plus_dt, explicit_source_profiles, source_models
-        ):
+        core_profiles_t_plus_dt, explicit_source_profiles, source_models):
     updated_core_profiles_t_plus_dt = solver_x_tuple_to_core_profiles(
         x_new, core_profiles_t_plus_dt)
     ions = get_updated_ions(
@@ -5155,8 +5148,7 @@ def update_core_and_source_profiles_after_step(
         j_total_face=j_total_face,
         Ip_profile_face=Ip_profile_face,
     )
-    conductivity = g.conductivity.calculate_conductivity(
-        geo, intermediate_core_profiles)
+    conductivity = calculate_conductivity(geo, intermediate_core_profiles)
     intermediate_core_profiles = dataclasses.replace(
         intermediate_core_profiles,
         sigma=conductivity.sigma,
@@ -5305,8 +5297,7 @@ def _calc_coeffs_full(runtime_params, geo, core_profiles,
     mask = (jnp.zeros_like(
         geo.rho,
         dtype=bool).at[pedestal_model_output.rho_norm_ped_top_idx].set(True))
-    conductivity = (g.conductivity.calculate_conductivity(
-        geo, core_profiles))
+    conductivity = calculate_conductivity(geo, core_profiles)
     merged_source_profiles = build_source_profiles1(
         source_models=g.source_models,
         runtime_params=runtime_params,
@@ -6519,7 +6510,7 @@ g.pedestal_model = g.torax_config.pedestal.build_pedestal_model()
 g.source_models = g.torax_config.sources.build_models()
 g.transport_model = g.torax_config.transport.build_transport_model()
 neo = Neoclassical0()
-g.conductivity = SauterModelCond()
+g.conductivity = None
 g.bootstrap_current = neo.bootstrap_current.build_model()
 
 g.runtime_params_provider = RuntimeParamsProvider.from_config()
