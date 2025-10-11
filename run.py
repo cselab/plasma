@@ -43,8 +43,6 @@ IntScalar: TypeAlias = Any
 FloatVector: TypeAlias = Any
 BoolVector: TypeAlias = Any
 FloatVectorCell: TypeAlias = Any
-FloatMatrixCell: TypeAlias = Any
-DataTypes: TypeAlias = Any
 NumpyArray = Any
 NumpyArray1D = Any
 
