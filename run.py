@@ -309,11 +309,9 @@ class Grid1D(BaseModelFrozen):
 
 class TimeVaryingArray(BaseModelFrozen):
     value: ValueType
-    rho_interpolation_mode: typing_extensions.Annotated[
-        InterpolationMode, JAX_STATIC] = InterpolationMode.PIECEWISE_LINEAR
-    time_interpolation_mode: typing_extensions.Annotated[
-        InterpolationMode, JAX_STATIC] = InterpolationMode.PIECEWISE_LINEAR
-    grid: Grid1D | None = None
+    rho_interpolation_mode: Any = InterpolationMode.PIECEWISE_LINEAR
+    time_interpolation_mode: Any = InterpolationMode.PIECEWISE_LINEAR
+    grid: Any = None
 
     def tree_flatten(self):
         children = (
