@@ -4887,14 +4887,15 @@ def get_updated_electron_density(profile_conditions_params, geo):
 
 @dataclasses.dataclass(frozen=True)
 class _IonProperties:
-    A_impurity: FloatVectorCell
-    A_impurity_face: FloatVectorFace
-    Z_impurity: FloatVectorCell
-    Z_impurity_face: FloatVectorFace
-    Z_eff: FloatVectorCell
-    dilution_factor: FloatVectorCell
-    dilution_factor_edge: FloatScalar
-    impurity_fractions: FloatVector
+    A_impurity: Any
+    A_impurity_face: Any
+    Z_impurity: Any
+    Z_impurity_face: Any
+    Z_eff: Any
+    dilution_factor: Any
+    dilution_factor_edge: Any
+    impurity_fractions: Any
+
 
 
 def _get_ion_properties_from_fractions(impurity_symbols, impurity_params, T_e,
