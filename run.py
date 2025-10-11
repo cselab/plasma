@@ -2528,7 +2528,6 @@ class SetTemperatureDensityPedestalModel(PedestalModel):
 
 
 class PedestalConfig(BaseModelFrozen):
-    n_e_ped: TimeVaryingScalar = ValidatedDefault(0.7e20)
     n_e_ped_is_fGW: bool = False
     rho_norm_ped_top: TimeVaryingScalar = (ValidatedDefault(0.91))
 
