@@ -1522,12 +1522,6 @@ def calculate_conductivity(geometry, core_profiles):
     return Conductivity(sigma=result.sigma, sigma_face=result.sigma_face)
 
 
-class SauterModelConfigCond(BaseModelFrozen):
-
-    def build_model(self):
-        return SauterModelCond()
-
-
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(kw_only=True, frozen=True)
 class BootstrapCurrent:
