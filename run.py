@@ -42,14 +42,12 @@ BoolScalar: TypeAlias = Any
 IntScalar: TypeAlias = Any
 FloatVector: TypeAlias = Any
 BoolVector: TypeAlias = Any
-FloatVectorCell: TypeAlias = Any
 NumpyArray = Any
 NumpyArray1D = Any
 
 NumpyArray1DUnitInterval = Any
 TIME_INVARIANT: Final[str] = '_pydantic_time_invariant_field'
 JAX_STATIC: Final[str] = '_pydantic_jax_static_field'
-StaticKwargs: TypeAlias = Any
 
 RHO_NORM: Final[str] = 'rho_norm'
 _interp_fn = jax.jit(jnp.interp)
@@ -1389,75 +1387,81 @@ def _calculate_log_tau_e_Z1(T_e, n_e, log_lambda_ei):
             2 * jnp.log(g.epsilon_0) + 1.5 * jnp.log(T_e * g.keV_to_J))
 
 
-_MAVRIN_Z_COEFFS: Final[Mapping[str, FloatVector]] = (
-    immutabledict.immutabledict({
-        'C':
-        np.array([
-            [-7.2007e00, -1.2217e01, -7.3521e00, -1.7632e00, 5.8588e00],
-            [0.0000e00, 0.0000e00, 0.0000e00, 0.0000e00, 6.0000e00],
-        ]),
-        'N':
-        np.array([
-            [0.0000e00, 3.3818e00, 1.8861e00, 1.5668e-01, 6.9728e00],
-            [0.0000e00, 0.0000e00, 0.0000e00, 0.0000e00, 7.0000e00],
-        ]),
-        'O':
-        np.array([
-            [0.0000e00, -1.8560e01, -3.8664e01, -2.2093e01, 4.0451e00],
-            [-4.3092e00, -4.6261e-01, -3.7050e-02, 8.0180e-02, 7.9878e00],
-            [0.0000e00, 0.0000e00, 0.0000e00, 0.0000e00, 8.0000e00],
-        ]),
-        'Ne':
-        np.array([
-            [-2.5303e01, -6.4696e01, -5.3631e01, -1.3242e01, 8.9737e00],
-            [-7.0678e00, 3.6868e00, -8.0723e-01, 2.1413e-01, 9.9532e00],
-            [0.0000e00, 0.0000e00, 0.0000e00, 0.0000e00, 1.0000e01],
-        ]),
-        'Ar':
-        np.array([
-            [6.8717e00, -1.1595e01, -4.3776e01, -2.0781e01, 1.3171e01],
-            [-4.8830e-02, 1.8455e00, 2.5023e00, 1.1413e00, 1.5986e01],
-            [-5.9213e-01, 3.5667e00, -8.0048e00, 7.9986e00, 1.4948e01],
-        ]),
-        'Kr':
-        np.array([
-            [1.3630e02, 4.6320e02, 5.6890e02, 3.0638e02, 7.7040e01],
-            [-1.0279e02, 6.8446e01, 1.5744e01, 1.5186e00, 2.4728e01],
-            [-2.4682e00, 1.3215e01, -2.5703e01, 2.3443e01, 2.5368e01],
-        ]),
-        'Xe':
-        np.array([
-            [5.8178e02, 1.9967e03, 2.5189e03, 1.3973e03, 3.0532e02],
-            [8.6824e01, -2.9061e01, -4.8384e01, 1.6271e01, 3.2616e01],
-            [4.0756e02, -9.0008e02, 6.6739e02, -1.7259e02, 4.8066e01],
-            [-1.0019e01, 7.3261e01, -1.9931e02, 2.4056e02, -5.7527e01],
-        ]),
-        'W':
-        np.array([
-            [1.6823e01, 3.4582e01, 2.1027e01, 1.6518e01, 2.6703e01],
-            [-2.5887e02, -1.0577e01, 2.5532e02, -7.9611e01, 3.6902e01],
-            [1.5119e01, -8.4207e01, 1.5985e02, -1.0011e02, 6.3795e01],
-        ]),
-    }))
-_TEMPERATURE_INTERVALS: Final[Mapping[str, FloatVector]] = (
-    immutabledict.immutabledict({
-        'C': np.array([0.7]),
-        'N': np.array([0.7]),
-        'O': np.array([0.3, 1.5]),
-        'Ne': np.array([0.5, 2.0]),
-        'Ar': np.array([0.6, 3.0]),
-        'Kr': np.array([0.447, 4.117]),
-        'Xe': np.array([0.3, 1.5, 8.0]),
-        'W': np.array([1.5, 4.0]),
-    }))
+_MAVRIN_Z_COEFFS = (immutabledict.immutabledict({
+    'C':
+    np.array([
+        [-7.2007e00, -1.2217e01, -7.3521e00, -1.7632e00, 5.8588e00],
+        [0.0000e00, 0.0000e00, 0.0000e00, 0.0000e00, 6.0000e00],
+    ]),
+    'N':
+    np.array([
+        [0.0000e00, 3.3818e00, 1.8861e00, 1.5668e-01, 6.9728e00],
+        [0.0000e00, 0.0000e00, 0.0000e00, 0.0000e00, 7.0000e00],
+    ]),
+    'O':
+    np.array([
+        [0.0000e00, -1.8560e01, -3.8664e01, -2.2093e01, 4.0451e00],
+        [-4.3092e00, -4.6261e-01, -3.7050e-02, 8.0180e-02, 7.9878e00],
+        [0.0000e00, 0.0000e00, 0.0000e00, 0.0000e00, 8.0000e00],
+    ]),
+    'Ne':
+    np.array([
+        [-2.5303e01, -6.4696e01, -5.3631e01, -1.3242e01, 8.9737e00],
+        [-7.0678e00, 3.6868e00, -8.0723e-01, 2.1413e-01, 9.9532e00],
+        [0.0000e00, 0.0000e00, 0.0000e00, 0.0000e00, 1.0000e01],
+    ]),
+    'Ar':
+    np.array([
+        [6.8717e00, -1.1595e01, -4.3776e01, -2.0781e01, 1.3171e01],
+        [-4.8830e-02, 1.8455e00, 2.5023e00, 1.1413e00, 1.5986e01],
+        [-5.9213e-01, 3.5667e00, -8.0048e00, 7.9986e00, 1.4948e01],
+    ]),
+    'Kr':
+    np.array([
+        [1.3630e02, 4.6320e02, 5.6890e02, 3.0638e02, 7.7040e01],
+        [-1.0279e02, 6.8446e01, 1.5744e01, 1.5186e00, 2.4728e01],
+        [-2.4682e00, 1.3215e01, -2.5703e01, 2.3443e01, 2.5368e01],
+    ]),
+    'Xe':
+    np.array([
+        [5.8178e02, 1.9967e03, 2.5189e03, 1.3973e03, 3.0532e02],
+        [8.6824e01, -2.9061e01, -4.8384e01, 1.6271e01, 3.2616e01],
+        [4.0756e02, -9.0008e02, 6.6739e02, -1.7259e02, 4.8066e01],
+        [-1.0019e01, 7.3261e01, -1.9931e02, 2.4056e02, -5.7527e01],
+    ]),
+    'W':
+    np.array([
+        [1.6823e01, 3.4582e01, 2.1027e01, 1.6518e01, 2.6703e01],
+        [-2.5887e02, -1.0577e01, 2.5532e02, -7.9611e01, 3.6902e01],
+        [1.5119e01, -8.4207e01, 1.5985e02, -1.0011e02, 6.3795e01],
+    ]),
+}))
+_TEMPERATURE_INTERVALS = (immutabledict.immutabledict({
+    'C':
+    np.array([0.7]),
+    'N':
+    np.array([0.7]),
+    'O':
+    np.array([0.3, 1.5]),
+    'Ne':
+    np.array([0.5, 2.0]),
+    'Ar':
+    np.array([0.6, 3.0]),
+    'Kr':
+    np.array([0.447, 4.117]),
+    'Xe':
+    np.array([0.3, 1.5, 8.0]),
+    'W':
+    np.array([1.5, 4.0]),
+}))
 
 
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class ChargeStateInfo:
-    Z_avg: FloatVector
-    Z2_avg: FloatVector
-    Z_per_species: FloatVector
+    Z_avg: Any
+    Z2_avg: Any
+    Z_per_species: Any
 
     @property
     def Z_mixture(self):
@@ -1503,11 +1507,7 @@ def calculate_f_trap(geo):
         1.0 + 2.0 * jnp.sqrt(epsilon_effective))
 
 
-def calculate_L31(
-    f_trap,
-    nu_e_star,
-    Z_eff
-):
+def calculate_L31(f_trap, nu_e_star, Z_eff):
     denom = (1.0 + (1 - 0.1 * f_trap) * jnp.sqrt(nu_e_star) + 0.5 *
              (1.0 - f_trap) * nu_e_star / Z_eff)
     ft31 = f_trap / denom
@@ -1518,11 +1518,7 @@ def calculate_L31(
     return term_0 + term_1 + term_2 + term_3
 
 
-def calculate_L32(
-    f_trap,
-    nu_e_star,
-    Z_eff
-):
+def calculate_L32(f_trap, nu_e_star, Z_eff):
     ft32ee = f_trap / (1 + 0.26 * (1 - f_trap) * jnp.sqrt(nu_e_star) + 0.18 *
                        (1 - 0.37 * f_trap) * nu_e_star / jnp.sqrt(Z_eff))
     ft32ei = f_trap / (1 + (1 + 0.6 * f_trap) * jnp.sqrt(nu_e_star) + 0.85 *
@@ -1564,14 +1560,7 @@ class ConductivityModelConfig(BaseModelFrozen):
 
 
 @jax.jit
-def _calculate_conductivity0(
-    *,
-    Z_eff_face,
-    n_e,
-    T_e,
-    q_face,
-    geo
-):
+def _calculate_conductivity0(*, Z_eff_face, n_e, T_e, q_face, geo):
     f_trap = calculate_f_trap(geo)
     NZ = 0.58 + 0.74 / (0.76 + Z_eff_face)
     log_lambda_ei = calculate_log_lambda_ei(T_e.face_value(), n_e.face_value())
@@ -2547,7 +2536,7 @@ def build_standard_source_profiles(*,
                                    geo,
                                    core_profiles,
                                    source_models,
-                                   explicit = True,
+                                   explicit=True,
                                    conductivity=None,
                                    calculate_anyway=False,
                                    psi_only=False):
@@ -2622,7 +2611,6 @@ class PedestalModelOutput:
     T_i_ped: Any
     T_e_ped: Any
     n_e_ped: Any
-
 
 
 class PedestalModel:
@@ -2770,7 +2758,6 @@ class RuntimeParamsIF:
     Z_override: Any
 
 
-
 class ImpurityFractions(BaseModelFrozen):
     impurity_mode: Annotated[Literal['fractions'], JAX_STATIC] = ('fractions')
     species: ImpurityMapping = ValidatedDefault({'Ne': 1.0})
@@ -2893,7 +2880,6 @@ class RuntimeParamsP:
     Z_eff_face: Any
 
 
-
 @jax.tree_util.register_pytree_node_class
 class PlasmaComposition(BaseModelFrozen):
     impurity: Annotated[
@@ -3001,7 +2987,6 @@ class RuntimeParamsX:
     chi_e_outer: Any
     rho_outer: Any
     smoothing_width: Any
-
 
 
 @jax.tree_util.register_dataclass
@@ -3267,7 +3252,6 @@ class NormalizedLogarithmicGradients:
     lref_over_lni0: Any
     lref_over_lni1: Any
 
-
     @classmethod
     def from_profiles(cls, core_profiles, radial_coordinate, reference_length):
         gradients = {}
@@ -3427,7 +3411,6 @@ class QualikizInputs(QuasilinearInputs):
     normni: Any
     alpha: Any
     epsilon_lcfs: Any
-
 
     @property
     def Ati(self):
@@ -3914,7 +3897,6 @@ class StandardGeometryIntermediates:
     elongation: Any
     vpr: Any
     z_magnetic_axis: Any
-
 
     def __post_init__(self):
         assert (not self.flux_surf_avg_Bp2[-1] < 1e-10)
@@ -4823,7 +4805,6 @@ class Ions:
     Z_eff_face: Any
 
 
-
 def get_updated_ion_temperature(profile_conditions_params, geo):
     T_i = CellVariable(
         value=profile_conditions_params.T_i,
@@ -4895,7 +4876,6 @@ class _IonProperties:
     dilution_factor: Any
     dilution_factor_edge: Any
     impurity_fractions: Any
-
 
 
 def _get_ion_properties_from_fractions(impurity_symbols, impurity_params, T_e,
@@ -5817,8 +5797,6 @@ def get_consistent_runtime_params_and_geometry(*, t):
     return make_ip_consistent(runtime_params, geo)
 
 
-StaticKwargs: TypeAlias = dict[str, Any]
-DynamicArgs: TypeAlias = list[Any]
 PROFILES = "profiles"
 SCALARS = "scalars"
 T_E = "T_e"
@@ -5872,10 +5850,7 @@ EXCLUDED_GEOMETRY_NAMES = frozenset({
 })
 
 
-def _extend_cell_grid_to_boundaries(
-        cell_var,
-        face_var
-):
+def _extend_cell_grid_to_boundaries(cell_var, face_var):
     left_value = np.expand_dims(face_var[:, 0], axis=-1)
     right_value = np.expand_dims(face_var[:, -1], axis=-1)
     return np.concatenate([left_value, cell_var, right_value], axis=-1)
