@@ -67,9 +67,6 @@ class InterpolationMode(enum.Enum):
     PIECEWISE_LINEAR = 'piecewise_linear'
 
 
-InterpolationModeLiteral: TypeAlias = Any
-_ArrayOrListOfFloats: TypeAlias = Any
-InterpolatedVarSingleAxisInput: TypeAlias = Any
 InterpolatedVarTimeRhoInput: TypeAlias = Any
 TimeInterpolatedInput: TypeAlias = Any
 TimeRhoInterpolatedInput: TypeAlias = Any
@@ -107,7 +104,7 @@ class _PiecewiseLinearInterpolatedParam:
                 return self.ys[0]
 
 
-def _is_bool(interp_input: InterpolatedVarSingleAxisInput):
+def _is_bool(interp_input):
     if isinstance(interp_input, dict):
         value = list(interp_input.values())[0]
         return isinstance(value, bool)
