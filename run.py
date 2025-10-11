@@ -2539,7 +2539,7 @@ class PedestalModel:
 
     def __call__(self, runtime_params, geo, core_profiles):
         return jax.lax.cond(
-            runtime_params.pedestal.set_pedestal,
+            True,
             lambda: self._call_implementation(runtime_params, geo,
                                               core_profiles),
             lambda: PedestalModelOutput(
@@ -2555,7 +2555,6 @@ class PedestalModel:
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class RuntimeParamsPED:
-    set_pedestal: Any
     n_e_ped: Any
     T_i_ped: Any
     T_e_ped: Any
@@ -2590,7 +2589,7 @@ class SetTemperatureDensityPedestalModel(PedestalModel):
 
 
 class BasePedestal(BaseModelFrozen):
-    set_pedestal: TimeVaryingScalar = (ValidatedDefault(False))
+    pass
 
 
 class PedestalConfig(BasePedestal):
@@ -2605,7 +2604,6 @@ class PedestalConfig(BasePedestal):
 
     def build_runtime_params(self, t):
         return RuntimeParamsPED(
-            set_pedestal=self.set_pedestal.get_value(t),
             n_e_ped=self.n_e_ped.get_value(t),
             n_e_ped_is_fGW=self.n_e_ped_is_fGW,
             T_i_ped=self.T_i_ped.get_value(t),
@@ -3025,7 +3023,7 @@ class TransportModel:
             jnp.logical_and(
                 jnp.logical_and(
                     transport_runtime_params.apply_outer_patch,
-                    jnp.logical_not(runtime_params.pedestal.set_pedestal),
+                    jnp.logical_not(True),
                 ),
                 geo.rho_face_norm > transport_runtime_params.rho_outer - g.eps,
             ),
@@ -3036,7 +3034,7 @@ class TransportModel:
             jnp.logical_and(
                 jnp.logical_and(
                     transport_runtime_params.apply_outer_patch,
-                    jnp.logical_not(runtime_params.pedestal.set_pedestal),
+                    jnp.logical_not(True),
                 ),
                 geo.rho_face_norm > transport_runtime_params.rho_outer - g.eps,
             ),
@@ -3047,7 +3045,7 @@ class TransportModel:
             jnp.logical_and(
                 jnp.logical_and(
                     transport_runtime_params.apply_outer_patch,
-                    jnp.logical_not(runtime_params.pedestal.set_pedestal),
+                    jnp.logical_not(True),
                 ),
                 geo.rho_face_norm > transport_runtime_params.rho_outer - g.eps,
             ),
@@ -3058,7 +3056,7 @@ class TransportModel:
             jnp.logical_and(
                 jnp.logical_and(
                     transport_runtime_params.apply_outer_patch,
-                    jnp.logical_not(runtime_params.pedestal.set_pedestal),
+                    jnp.logical_not(True),
                 ),
                 geo.rho_face_norm > transport_runtime_params.rho_outer - g.eps,
             ),
@@ -3101,7 +3099,7 @@ def _build_smoothing_matrix(transport_runtime_params, runtime_params, geo,
         (transport_runtime_params.smoothing_width**2 + g.eps))
     mask_outer_edge = jax.lax.cond(
         jnp.logical_and(
-            jnp.logical_not(runtime_params.pedestal.set_pedestal),
+            jnp.logical_not(True),
             transport_runtime_params.apply_outer_patch,
         ),
         lambda: transport_runtime_params.rho_outer - g.eps,
@@ -3537,7 +3535,6 @@ _EPSILON_NN: Final[float] = (1 / 3)
 class QLKNNRuntimeConfigInputs:
     transport: RuntimeParams0
     Ped_top: float
-    set_pedestal: bool
 
     @staticmethod
     def from_runtime_params_slice(transport_runtime_params, runtime_params,
@@ -3546,7 +3543,6 @@ class QLKNNRuntimeConfigInputs:
         return QLKNNRuntimeConfigInputs(
             transport=transport_runtime_params,
             Ped_top=pedestal_model_output.rho_norm_ped_top,
-            set_pedestal=runtime_params.pedestal.set_pedestal,
         )
 
 
@@ -6412,7 +6408,6 @@ CONFIG = {
         'ei_exchange': {},
     },
     'pedestal': {
-        'set_pedestal': True,
         'T_i_ped': 4.5,
         'T_e_ped': 4.5,
         'n_e_ped': 0.62e20,
