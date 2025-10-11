@@ -597,16 +597,6 @@ class CellVariable:
     right_face_grad_constraint: jt.Float[chex.Array, 't*'] | None = (
         dataclasses.field(default_factory=_zero))
 
-    def __post_init__(self):
-        left_and = (self.left_face_constraint is not None
-                    and self.left_face_grad_constraint is not None)
-        left_or = (self.left_face_constraint is not None
-                   or self.left_face_grad_constraint is not None)
-        right_and = (self.right_face_constraint is not None
-                     and self.right_face_grad_constraint is not None)
-        right_or = (self.right_face_constraint is not None
-                    or self.right_face_grad_constraint is not None)
-
     def _assert_unbatched(self):
         pass
 
