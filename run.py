@@ -6911,6 +6911,8 @@ g.t_initial = 0.0
 g.ITG_flux_ratio_correction = 1
 
 mesh = g.torax_config.geometry.build_provider.geo.torax_mesh
+g.nx = mesh.nx
+
 for submodel in g.torax_config.submodels:
     if isinstance(submodel, TimeVaryingArray):
         new_grid = Grid1D.model_construct(
