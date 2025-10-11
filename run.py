@@ -260,36 +260,8 @@ class BaseModelFrozen(pydantic.BaseModel):
     def from_dict(cls, cfg):
         return cls.model_validate(cfg)
 
-    @property
-    def _direct_submodels(self):
-
-        def is_leaf(x):
-            if isinstance(x, (Mapping, Sequence, Set)):
-                return False
-            return True
-
-        leaves = {
-            k: self.__dict__[k]
-            for k in self.__class__.model_fields.keys()
-        }
-        leaves = jax.tree.flatten(leaves, is_leaf=is_leaf)[0]
-        return tuple(i for i in leaves if isinstance(i, BaseModelFrozen))
-
-    @property
-    def submodels(self):
-        all_submodels = [self]
-        new_submodels = self._direct_submodels
-        while new_submodels:
-            new_submodels_temp = []
-            for model in new_submodels:
-                all_submodels.append(model)
-                new_submodels_temp += model._direct_submodels
-            new_submodels = new_submodels_temp
-        return tuple(all_submodels)
-
 
 ValueType: TypeAlias = Any
-
 
 class TimeVaryingArray(BaseModelFrozen):
     value: ValueType
