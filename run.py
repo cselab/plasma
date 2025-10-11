@@ -6907,6 +6907,9 @@ g.adaptive_n_source_prefactor = 2.0e8
 g.t_initial = 0.0
 g.ITG_flux_ratio_correction = 1
 
+# {'n_rho': 25, 'R_major': 6.2, 'a_minor': 2.0, 'B_0': 5.3, 'hires_factor': 4}
+g.n_rho = 25
+
 mesh = g.torax_config.geometry.build_provider.geo.torax_mesh
 g.grid = Grid1D.model_construct(nx=mesh.nx,
                                 face_centers=mesh.face_centers,
