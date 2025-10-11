@@ -6555,7 +6555,10 @@ g.geo = CheaseConfig().build_geometry()
 g.pedestal_model = g.torax_config.pedestal.build_pedestal_model()
 g.source_models = g.torax_config.sources.build_models()
 g.transport_model = g.torax_config.transport.build_transport_model()
+
 g.neoclassical_models = g.torax_config.neoclassical.build_models()
+g.neoclassical_models = Neoclassical0().build_models()
+
 g.runtime_params_provider = RuntimeParamsProvider.from_config()
 runtime_params_for_init, geo_for_init = (
     get_consistent_runtime_params_and_geometry(t=g.t_initial, ))
