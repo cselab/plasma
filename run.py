@@ -588,15 +588,6 @@ class IntegralPreservationQuantity(enum.Enum):
     SURFACE = 'surface'
     VALUE = 'value'
 
-
-def tridiag(
-    diag: jt.Shaped[Array, 'size'],
-    above: jt.Shaped[Array, 'size-1'],
-    below: jt.Shaped[Array, 'size-1'],
-):
-    return jnp.diag(diag) + jnp.diag(above, 1) + jnp.diag(below, -1)
-
-
 @jax.jit
 def cell_integration(x, geo):
     return jnp.sum(x * geo.drho_norm)
