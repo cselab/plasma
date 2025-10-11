@@ -348,13 +348,11 @@ class TimeVaryingArray(BaseModelFrozen):
             data.pop('_get_cached_interpolated_param_cell_centers', None)
             data.pop('_get_cached_interpolated_param_face_centers', None)
             data.pop('_get_cached_interpolated_param_face_right_centers', None)
-        time_interpolation_mode = (InterpolationMode.PIECEWISE_LINEAR)
-        rho_interpolation_mode = (InterpolationMode.PIECEWISE_LINEAR)
         value = _load_from_primitives(data)
         return dict(
             value=value,
-            time_interpolation_mode=time_interpolation_mode,
-            rho_interpolation_mode=rho_interpolation_mode,
+            time_interpolation_mode=InterpolationMode.PIECEWISE_LINEAR,
+            rho_interpolation_mode=InterpolationMode.PIECEWISE_LINEAR,
         )
 
     @functools.cached_property
