@@ -4095,30 +4095,7 @@ class CheaseConfig(BaseModelFrozen):
         )
 
 
-class Geometry0(BaseModelFrozen):
-    geometry_configs: Any
 
-    @pydantic.model_validator(mode='before')
-    @classmethod
-    def _conform_data(cls, data):
-        geometry_type = g.geometry_geometry_type
-        return _conform_user_data(data)
-
-    @functools.cached_property
-    def build_provider(self):
-        config_data = self.geometry_configs['config']
-        config = CheaseConfig(**config_data)
-        geometries = config.build_geometry()
-        return geometries
-
-
-def _conform_user_data(data):
-    data_copy = data.copy()
-    data_copy['geometry_type'] = g.geometry_geometry_type
-    constructor_args = {}
-    configs_time_dependent = data_copy.pop('geometry_configs', None)
-    constructor_args['geometry_configs'] = {'config': data_copy}
-    return constructor_args
 
 
 @jax.tree_util.register_dataclass
@@ -6257,7 +6234,7 @@ def _get_geo_and_runtime_params_at_t_plus_dt_and_phibdot(t, dt, geo_t):
 class ToraxConfig(BaseModelFrozen):
     profile_conditions: ProfileConditions
     plasma_composition: PlasmaComposition
-    geometry: Geometry0
+    geometry: CheaseConfig
     sources: Sources
     neoclassical: Neoclassical0 = Neoclassical0()
     transport: QLKNNTransportModel = pydantic.Field(discriminator='model_name')
@@ -6586,7 +6563,7 @@ g.hires_factor = 4
 
 g.Qei_multiplier = 1.0
 
-g.geo = g.torax_config.geometry.build_provider
+g.geo = g.torax_config.geometry.build_geometry()
 g.pedestal_model = g.torax_config.pedestal.build_pedestal_model()
 g.source_models = g.torax_config.sources.build_models()
 g.transport_model = g.torax_config.transport.build_transport_model()
