@@ -177,15 +177,8 @@ class InterpolatedVarSingleAxis:
 @jax.tree_util.register_pytree_node_class
 class InterpolatedVarTimeRho:
 
-    def __init__(
-        self,
-        values: Mapping[float, tuple[Array, Array]],
-        rho_norm: Array,
-        time_interpolation_mode: InterpolationMode = (
-            InterpolationMode.PIECEWISE_LINEAR),
-        rho_interpolation_mode: InterpolationMode = (
-            InterpolationMode.PIECEWISE_LINEAR),
-    ):
+    def __init__(self, values, rho_norm, time_interpolation_mode,
+                 rho_interpolation_mode):
         self._rho_interpolation_mode = rho_interpolation_mode
         self._time_interpolation_mode = time_interpolation_mode
         sorted_indices = np.array(sorted(values.keys()))
@@ -4039,8 +4032,7 @@ class QLKNNTransportModel0(QualikizBasedTransportModel):
         )
         qi_itg_squeezed = model_output['qi_itg'].squeeze()
         qi = qi_itg_squeezed + model_output['qi_tem'].squeeze()
-        qe = (model_output['qe_itg'].squeeze() *
-              g.ITG_flux_ratio_correction +
+        qe = (model_output['qe_itg'].squeeze() * g.ITG_flux_ratio_correction +
               model_output['qe_tem'].squeeze() +
               model_output['qe_etg'].squeeze() *
               runtime_config_inputs.transport.ETG_correction_factor)
