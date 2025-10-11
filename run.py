@@ -315,7 +315,7 @@ class TimeVaryingArray(BaseModelFrozen):
 
     @pydantic.model_validator(mode='before')
     @classmethod
-    def _conform_data(cls, data: TimeRhoInterpolatedInput | dict[str, Any]):
+    def _conform_data(cls, data):
         if isinstance(data, dict):
             data.pop('_get_cached_interpolated_param_cell_centers', None)
             data.pop('_get_cached_interpolated_param_face_centers', None)

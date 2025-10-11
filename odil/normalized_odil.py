@@ -3,7 +3,6 @@
 import torch
 import numpy as np
 import argparse
-from torch.sparse import sparse_coo_tensor
 
 # Optional matplotlib import
 try:
@@ -13,58 +12,7 @@ except ImportError:
     HAS_MATPLOTLIB = False
 
 
-def create_sparse_laplacian_matrix(n, dx, device):
-    """
-    Create a sparse Laplacian matrix for finite difference second derivative.
-    This is much more memory efficient than dense matrices.
-    """
-    # Create sparse matrix for second derivative: d²u/dx²
-    # Interior points: (u[i+1] - 2*u[i] + u[i-1]) / dx²
-    
-    # Indices for sparse matrix
-    indices = []
-    values = []
-    
-    # Interior points (central differences)
-    for i in range(1, n-1):
-        # u[i-1] term
-        indices.append([i, i-1])
-        values.append(1.0 / (dx**2))
-        
-        # u[i] term
-        indices.append([i, i])
-        values.append(-2.0 / (dx**2))
-        
-        # u[i+1] term
-        indices.append([i, i+1])
-        values.append(1.0 / (dx**2))
-    
-    # Boundary points
-    # At i=0: u[0] = 0 (Dirichlet), so we use forward difference
-    # d²u/dx²[0] = (u[1] - 2*u[0] + 0) / dx²
-    indices.append([0, 0])
-    values.append(-2.0 / (dx**2))
-    indices.append([0, 1])
-    values.append(1.0 / (dx**2))
-    
-    # At i=n-1: u[n-1] = 0 (Dirichlet), so we use backward difference
-    # d²u/dx²[n-1] = (0 - 2*u[n-1] + u[n-2]) / dx²
-    indices.append([n-1, n-1])
-    values.append(-2.0 / (dx**2))
-    indices.append([n-1, n-2])
-    values.append(1.0 / (dx**2))
-    
-    # Convert to tensors
-    indices = torch.tensor(indices).T.to(device)
-    values = torch.tensor(values).to(device)
-    
-    # Create sparse matrix
-    sparse_matrix = sparse_coo_tensor(indices, values, size=(n, n), device=device)
-    
-    return sparse_matrix
-
-
-def compute_residual_loss_sparse(Ti, Te, ne, psi, params):
+def compute_residual_loss(Ti, Te, ne, psi, params):
     """
     Compute the residual loss for the ODIL solver.
     Normalized approach to avoid numerical issues.

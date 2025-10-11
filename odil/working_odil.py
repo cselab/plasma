@@ -3,7 +3,6 @@
 import torch
 import numpy as np
 import argparse
-from torch.sparse import sparse_coo_tensor
 
 # Optional matplotlib import
 try:
@@ -13,61 +12,10 @@ except ImportError:
     HAS_MATPLOTLIB = False
 
 
-def create_sparse_laplacian_matrix(n, dx, device):
-    """
-    Create a sparse Laplacian matrix for finite difference second derivative.
-    This is much more memory efficient than dense matrices.
-    """
-    # Create sparse matrix for second derivative: d²u/dx²
-    # Interior points: (u[i+1] - 2*u[i] + u[i-1]) / dx²
-    
-    # Indices for sparse matrix
-    indices = []
-    values = []
-    
-    # Interior points (central differences)
-    for i in range(1, n-1):
-        # u[i-1] term
-        indices.append([i, i-1])
-        values.append(1.0 / (dx**2))
-        
-        # u[i] term
-        indices.append([i, i])
-        values.append(-2.0 / (dx**2))
-        
-        # u[i+1] term
-        indices.append([i, i+1])
-        values.append(1.0 / (dx**2))
-    
-    # Boundary points
-    # At i=0: u[0] = 0 (Dirichlet), so we use forward difference
-    # d²u/dx²[0] = (u[1] - 2*u[0] + 0) / dx²
-    indices.append([0, 0])
-    values.append(-2.0 / (dx**2))
-    indices.append([0, 1])
-    values.append(1.0 / (dx**2))
-    
-    # At i=n-1: u[n-1] = 0 (Dirichlet), so we use backward difference
-    # d²u/dx²[n-1] = (0 - 2*u[n-1] + u[n-2]) / dx²
-    indices.append([n-1, n-1])
-    values.append(-2.0 / (dx**2))
-    indices.append([n-1, n-2])
-    values.append(1.0 / (dx**2))
-    
-    # Convert to tensors
-    indices = torch.tensor(indices).T.to(device)
-    values = torch.tensor(values).to(device)
-    
-    # Create sparse matrix
-    sparse_matrix = sparse_coo_tensor(indices, values, size=(n, n), device=device)
-    
-    return sparse_matrix
-
-
-def compute_residual_loss_sparse(Ti, Te, ne, psi, params):
+def compute_residual_loss(Ti, Te, ne, psi, params):
     """
     Compute the residual loss for the ODIL solver.
-    Normalized approach to avoid numerical issues.
+    Simplified approach based on working heat equation example.
     """
     grid = params['grid']
     nrho = grid['nrho']
@@ -81,10 +29,10 @@ def compute_residual_loss_sparse(Ti, Te, ne, psi, params):
     ne_2d = ne.view(nrho, nt + 1)
     psi_2d = psi.view(nrho, nt + 1)
     
-    # Transport coefficients (normalized)
+    # Transport coefficients
     D_i = 0.01  # Ion thermal diffusivity
     D_e = 0.01  # Electron thermal diffusivity
-    D_n = 0.01  # Particle diffusivity
+    D_n = 0.005 # Particle diffusivity
     D_psi = 0.01 # Resistivity
     
     loss = 0.0
@@ -146,11 +94,11 @@ def compute_residual_loss_sparse(Ti, Te, ne, psi, params):
         loss += torch.mean(res_ne[1:-1]**2)
         loss += torch.mean(res_psi[1:-1]**2)
         
-        # Boundary conditions
-        loss += 100 * (bc_residual_Ti_0**2 + bc_residual_Ti_1**2)
-        loss += 100 * (bc_residual_Te_0**2 + bc_residual_Te_1**2)
-        loss += 100 * (bc_residual_ne_0**2 + bc_residual_ne_1**2)
-        loss += 100 * (bc_residual_psi_0**2 + bc_residual_psi_1**2)
+        # Boundary conditions (moderate enforcement)
+        loss += 1.0 * (bc_residual_Ti_0**2 + bc_residual_Ti_1**2)
+        loss += 1.0 * (bc_residual_Te_0**2 + bc_residual_Te_1**2)
+        loss += 1.0 * (bc_residual_ne_0**2 + bc_residual_ne_1**2)
+        loss += 1.0 * (bc_residual_psi_0**2 + bc_residual_psi_1**2)
     
     # Initial conditions
     if 'initial_profiles' in params:
@@ -164,10 +112,10 @@ def compute_residual_loss_sparse(Ti, Te, ne, psi, params):
         ic_residual_ne = ne_2d[:, 0] - ne_init
         ic_residual_psi = psi_2d[:, 0] - psi_init
         
-        loss += 100 * torch.mean(ic_residual_Ti**2)
-        loss += 100 * torch.mean(ic_residual_Te**2)
-        loss += 100 * torch.mean(ic_residual_ne**2)
-        loss += 100 * torch.mean(ic_residual_psi**2)
+        loss += 1.0 * torch.mean(ic_residual_Ti**2)
+        loss += 1.0 * torch.mean(ic_residual_Te**2)
+        loss += 1.0 * torch.mean(ic_residual_ne**2)
+        loss += 1.0 * torch.mean(ic_residual_psi**2)
     
     return loss
 
@@ -190,11 +138,11 @@ def main():
     # Create grid
     rho = np.linspace(0, 1, nrho, endpoint=True)
     
-    # Initial profiles (normalized, zero at boundaries)
-    Ti_init = (1 - rho**2)  # Normalized ion temperature
-    Te_init = (1 - rho**2)  # Normalized electron temperature
-    ne_init = (1 - rho**2)  # Normalized electron density
-    psi_init = (1 - rho**2)  # Normalized poloidal flux
+    # Initial profiles (parabolic, zero at boundaries)
+    Ti_init = 10.0 * (1 - rho**2)  # keV
+    Te_init = 8.0 * (1 - rho**2)   # keV
+    ne_init = 1e20 * (1 - rho**2)  # m^-3
+    psi_init = 0.1 * (1 - rho**2)  # Wb
     
     # Convert to torch tensors
     Ti_init = torch.from_numpy(Ti_init).to(device)
@@ -250,10 +198,9 @@ def main():
     psi_final = psi.detach().view(nrho, nt + 1)
     
     print(f"\nFinal loss: {losses[-1]:.6e}")
-    print(f"Ti range: {Ti_final.min().item():.3f} - {Ti_final.max().item():.3f}")
-    print(f"Te range: {Te_final.min().item():.3f} - {Te_final.max().item():.3f}")
-    print(f"ne range: {ne_final.min().item():.3f} - {ne_final.max().item():.3f}")
-    print(f"psi range: {psi_final.min().item():.3f} - {psi_final.max().item():.3f}")
+    print(f"Ti range: {Ti_final.min().item():.3f} - {Ti_final.max().item():.3f} keV")
+    print(f"Te range: {Te_final.min().item():.3f} - {Te_final.max().item():.3f} keV")
+    print(f"ne range: {ne_final.min().item()/1e19:.2f} - {ne_final.max().item()/1e19:.2f} ×10^19 m^-3")
     
     # Plot results
     if show_plots and HAS_MATPLOTLIB:
@@ -266,7 +213,7 @@ def main():
         # Plot 1: Ion temperature
         plt.subplot(2, 3, 1)
         plt.contourf(t_grid, rho_grid, Ti_final.cpu().numpy(), levels=20)
-        plt.colorbar(label='Ti (normalized)')
+        plt.colorbar(label='Ti (keV)')
         plt.xlabel('Time')
         plt.ylabel('rho')
         plt.title('Ion Temperature')
@@ -274,15 +221,15 @@ def main():
         # Plot 2: Electron temperature
         plt.subplot(2, 3, 2)
         plt.contourf(t_grid, rho_grid, Te_final.cpu().numpy(), levels=20)
-        plt.colorbar(label='Te (normalized)')
+        plt.colorbar(label='Te (keV)')
         plt.xlabel('Time')
         plt.ylabel('rho')
         plt.title('Electron Temperature')
         
         # Plot 3: Electron density
         plt.subplot(2, 3, 3)
-        plt.contourf(t_grid, rho_grid, ne_final.cpu().numpy(), levels=20)
-        plt.colorbar(label='ne (normalized)')
+        plt.contourf(t_grid, rho_grid, ne_final.cpu().numpy()/1e19, levels=20)
+        plt.colorbar(label='ne (10^19 m^-3)')
         plt.xlabel('Time')
         plt.ylabel('rho')
         plt.title('Electron Density')
@@ -290,7 +237,7 @@ def main():
         # Plot 4: Poloidal flux
         plt.subplot(2, 3, 4)
         plt.contourf(t_grid, rho_grid, psi_final.cpu().numpy(), levels=20)
-        plt.colorbar(label='psi (normalized)')
+        plt.colorbar(label='psi (Wb)')
         plt.xlabel('Time')
         plt.ylabel('rho')
         plt.title('Poloidal Flux')
@@ -311,13 +258,13 @@ def main():
             plt.plot(rho_grid, Ti_final[:, t_idx].cpu().numpy(), 
                     color=colors[i], label=f't={t_grid[t_idx]:.2f}')
         plt.xlabel('rho')
-        plt.ylabel('Ti (normalized)')
+        plt.ylabel('Ti (keV)')
         plt.title('Ti Evolution')
         plt.legend()
         plt.grid(True)
         
         plt.tight_layout()
-        plt.savefig('odil_normalized_results.png', dpi=150, bbox_inches='tight')
+        plt.savefig('odil_working_results.png', dpi=150, bbox_inches='tight')
         plt.show()
     elif show_plots and not HAS_MATPLOTLIB:
         print("Matplotlib not available. Cannot show plots.")
