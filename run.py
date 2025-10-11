@@ -2529,7 +2529,7 @@ class SetTemperatureDensityPedestalModel(PedestalModel):
 
 class PedestalConfig(BaseModelFrozen):
     n_e_ped_is_fGW: bool = False
-    rho_norm_ped_top: TimeVaryingScalar = (ValidatedDefault(0.91))
+    rho_norm_ped_top: TimeVaryingScalar = 0.91
 
     def build_pedestal_model(self):
         return SetTemperatureDensityPedestalModel()
@@ -6321,6 +6321,7 @@ g.rho_norm_ped_top = 0.9
 g.n_e_ped = 0.62e20
 g.T_i_ped = 4.5
 g.T_e_ped = 4.5
+g.rho_norm_ped_top = 0.91
 
 g.geo = CheaseConfig().build_geometry()
 g.pedestal_model = g.torax_config.pedestal.build_pedestal_model()
