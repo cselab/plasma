@@ -6170,8 +6170,8 @@ class ToraxConfig(BaseModelFrozen):
     profile_conditions: ProfileConditions
     plasma_composition: PlasmaComposition
     sources: Sources
-    transport: QLKNNTransportModel = pydantic.Field(discriminator='model_name')
-    pedestal: PedestalConfig = pydantic.Field(discriminator='model_name')
+    transport: QLKNNTransportModel
+    pedestal: PedestalConfig
 
 
 def body_fun(inputs):
