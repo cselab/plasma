@@ -957,11 +957,7 @@ def face_to_cell(face: FloatVectorFace, ):
 
 @enum.unique
 class GeometryType(enum.IntEnum):
-    CIRCULAR = 0
     CHEASE = 1
-    FBT = 2
-    EQDSK = 3
-    IMAS = 4
 
 
 @jax.tree_util.register_dataclass
@@ -1016,7 +1012,7 @@ class Geometry:
     @property
     def q_correction_factor(self):
         return jnp.where(
-            self.geometry_type == GeometryType.CIRCULAR.value,
+            False,
             1.25,
             1,
         )
