@@ -5525,7 +5525,7 @@ def not_done(t, t_final):
     return t < (t_final - g.tolerance)
 
 
-def next_dt(t, runtime_params, geo, core_profiles, core_transport):
+def next_dt(t, runtime_params, geo, core_transport):
     chi_max = core_transport.chi_max(geo)
     basic_dt = (3.0 / 4.0) * (geo.drho_norm**2) / chi_max
     dt = jnp.minimum(
@@ -6444,27 +6444,17 @@ while not_done(current_state.t, g.t_final):
         core_profiles=current_state.core_profiles,
         source_models=g.source_models,
     )
-    initial_dt = next_dt(
-        current_state.t,
-        runtime_params_t,
-        geo_t,
-        current_state.core_profiles,
-        current_state.core_transport,
-    )
+    initial_dt = next_dt(current_state.t, runtime_params_t, geo_t,
+                         current_state.core_transport)
 
     _, result = while_loop(
         cond_fun,
         body_fun,
         (
             initial_dt,
-            (
-                core_profiles_to_solver_x_tuple(current_state.core_profiles),
-                initial_dt,
-                SolverNumericOutputs(solver_error_state=1, ),
-                runtime_params_t,
-                geo_t,
-                current_state.core_profiles,
-            ),
+            (core_profiles_to_solver_x_tuple(current_state.core_profiles),
+             initial_dt, SolverNumericOutputs(solver_error_state=1, ),
+             runtime_params_t, geo_t, current_state.core_profiles),
         ),
     )
     output_state, post_processed_outputs = _finalize_outputs(
