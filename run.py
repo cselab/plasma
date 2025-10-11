@@ -4217,7 +4217,7 @@ class StandardGeometryIntermediates:
         self.vpr[:] = _smooth_savgol(self.vpr, idx_limit, 1)
 
     @classmethod
-    def from_chease(cls, geometry_directory, n_rho, R_major, a_minor, B_0,
+    def from_chease(cls, n_rho, R_major, a_minor, B_0,
                     hires_factor):
         file_path = os.path.join(
             "geo", "ITER_hybrid_citrin_equil_cheasedata.mat2cols")
@@ -4298,7 +4298,6 @@ class CheaseConfig(BaseModelFrozen):
     geometry_type: Annotated[Literal['chease'], TIME_INVARIANT] = 'chease'
     n_rho: Annotated[pydantic.PositiveInt, TIME_INVARIANT] = 25
     hires_factor: pydantic.PositiveInt = 4
-    geometry_directory: Annotated[str | None, TIME_INVARIANT] = None
     R_major: Meter = 6.2
     a_minor: Meter = 2.0
     B_0: Tesla = 5.3
