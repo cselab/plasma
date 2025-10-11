@@ -4338,8 +4338,7 @@ class StandardGeometryIntermediates:
         )
 
 
-def build_standard_geometry(
-    intermediate: StandardGeometryIntermediates, ) -> StandardGeometry:
+def build_standard_geometry(intermediate):
     rho_intermediate = np.sqrt(intermediate.Phi / (np.pi * intermediate.B_0))
     rho_norm_intermediate = rho_intermediate / rho_intermediate[-1]
     C1 = intermediate.int_dl_over_Bp
