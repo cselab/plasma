@@ -4142,12 +4142,10 @@ class QLKNNTransportModel(TransportBase):
         )
 
 
-@functools.partial(jax.jit, static_argnums=(0, 1, 2))
-def calculate_total_transport_coeffs(pedestal_model, transport_model,
-                                     neoclassical_models, runtime_params, geo,
-                                     core_profiles):
-    pedestal_model_output = pedestal_model(runtime_params, geo, core_profiles)
-    turbulent_transport = transport_model(
+@jax.jit
+def calculate_total_transport_coeffs(runtime_params, geo, core_profiles):
+    pedestal_model_output = g.pedestal_model(runtime_params, geo, core_profiles)
+    turbulent_transport = g.transport_model(
         runtime_params=runtime_params,
         geo=geo,
         core_profiles=core_profiles,
@@ -6611,9 +6609,6 @@ def _get_initial_state(runtime_params, geo, step_fn):
         ),
     )
     transport_coeffs = (calculate_total_transport_coeffs(
-        g.pedestal_model,
-        g.transport_model,
-        g.neoclassical_models,
         runtime_params,
         geo,
         initial_core_profiles,
@@ -6646,9 +6641,6 @@ def _finalize_outputs(t, dt, x_new, solver_numeric_outputs, geometry_t_plus_dt,
             neoclassical_models=g.neoclassical_models,
         ))
     final_total_transport = (calculate_total_transport_coeffs(
-        g.pedestal_model,
-        g.transport_model,
-        g.neoclassical_models,
         runtime_params_t_plus_dt,
         geometry_t_plus_dt,
         final_core_profiles,
