@@ -5669,7 +5669,6 @@ def coeffs_callback(runtime_params,
                     core_profiles,
                     x,
                     explicit_source_profiles,
-                    allow_pereverzev=False,
                     explicit_call=False):
     core_profiles = update_core_profiles_during_step(x, runtime_params, geo,
                                                      core_profiles)
@@ -5955,7 +5954,6 @@ def solver_x_new(dt, runtime_params_t, runtime_params_t_plus_dt, geo_t,
         core_profiles_t,
         x_old,
         explicit_source_profiles=explicit_source_profiles,
-        allow_pereverzev=True,
         explicit_call=True)
 
     def loop_body(i, x_new_guess):
@@ -5964,8 +5962,7 @@ def solver_x_new(dt, runtime_params_t, runtime_params_t_plus_dt, geo_t,
             geo_t_plus_dt,
             core_profiles_t_plus_dt,
             x_new_guess,
-            explicit_source_profiles=explicit_source_profiles,
-            allow_pereverzev=True)
+            explicit_source_profiles=explicit_source_profiles)
         x_old_vec = cell_variable_tuple_to_vec(x_old)
         x_new_guess_vec = cell_variable_tuple_to_vec(x_new_guess)
         theta_exp = 1.0 - g.theta_implicit
