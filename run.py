@@ -2713,14 +2713,11 @@ class PlasmaComposition(BaseModelFrozen):
     main_ion: IonMapping = (ValidatedDefault({'D': 0.5, 'T': 0.5}))
     Z_eff: (TimeVaryingArrayDefinedAtRightBoundaryAndBounded
             ) = ValidatedDefault(1.0)
-    A_i_override: TimeVaryingScalar | None = None
-    A_impurity_override: TimeVaryingScalar | None = None
 
     @pydantic.model_validator(mode='before')
     @classmethod
     def _conform_impurity_data(cls, data):
         configurable_data = copy.deepcopy(data)
-        A_impurity_override = configurable_data.get('A_impurity_override')
         impurity_data = configurable_data['impurity']
         configurable_data['impurity'] = {
             'impurity_mode': _IMPURITY_MODE_FRACTIONS,
@@ -2734,8 +2731,6 @@ class PlasmaComposition(BaseModelFrozen):
             self.main_ion,
             self.impurity,
             self.Z_eff,
-            self.A_i_override,
-            self.A_impurity_override,
             self._main_ion_mixture,
         )
         aux_data = ()
@@ -2747,10 +2742,8 @@ class PlasmaComposition(BaseModelFrozen):
             main_ion=children[0],
             impurity=children[1],
             Z_eff=children[2],
-            A_i_override=children[3],
-            A_impurity_override=children[4],
         )
-        obj._main_ion_mixture = children[5]
+        obj._main_ion_mixture = children[3]
         return obj
 
     @functools.cached_property
