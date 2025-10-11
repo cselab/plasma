@@ -617,12 +617,7 @@ class CellVariable:
         else:
             forward_difference = jnp.diff(self.value) / jnp.diff(x)
 
-        def constrained_grad(
-            face: jax.Array | None,
-            grad: jax.Array | None,
-            cell: jax.Array,
-            right: bool,
-        ):
+        def constrained_grad(face, grad, cell, right):
             if face is not None:
                 if x is None:
                     dx = self.dr
