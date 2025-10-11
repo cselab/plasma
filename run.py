@@ -1025,14 +1025,14 @@ def calculate_plh_scaling_factor(
 ):
     line_avg_n_e = line_average(core_profiles.n_e.value, geo)
     P_LH_hi_dens_D = (2.15 * (line_avg_n_e / 1e20)**0.782 * geo.B_0**0.772 *
-                      geo.a_minor**0.975 * geo.R_major**0.999 * 1e6)
+                      geo.a_minor**0.975 * g.R_major**0.999 * 1e6)
     A_deuterium = ION_PROPERTIES_DICT['D'].A
     P_LH_hi_dens = P_LH_hi_dens_D * A_deuterium / core_profiles.A_i
     Ip_total = core_profiles.Ip_profile_face[..., -1]
     n_e_min_P_LH = (0.7 * (Ip_total / 1e6)**0.34 * geo.a_minor**-0.95 *
-                    geo.B_0**0.62 * (geo.R_major / geo.a_minor)**0.4 * 1e19)
+                    geo.B_0**0.62 * (g.R_major / geo.a_minor)**0.4 * 1e19)
     P_LH_min_D = (0.36 * (Ip_total / 1e6)**0.27 * geo.B_0**1.25 *
-                  geo.R_major**1.23 * (geo.R_major / geo.a_minor)**0.08 * 1e6)
+                  g.R_major**1.23 * (g.R_major / geo.a_minor)**0.08 * 1e6)
     P_LH_min = P_LH_min_D * A_deuterium / core_profiles.A_i
     P_LH = jnp.maximum(P_LH_min, P_LH_hi_dens)
     return P_LH_hi_dens, P_LH_min, P_LH, n_e_min_P_LH
@@ -1099,8 +1099,8 @@ def calculate_scaling_law_confinement_time(
     scaled_Ploss = Ploss / 1e6
     B = geo.B_0
     line_avg_n_e = (line_average(core_profiles.n_e.value, geo) / 1e19)
-    R = geo.R_major
-    inverse_aspect_ratio = geo.a_minor / geo.R_major
+    R = g.R_major
+    inverse_aspect_ratio = geo.a_minor / g.R_major
     elongation = geo.area_face[-1] / (jnp.pi * geo.a_minor**2)
     effective_mass = core_profiles.A_i
     triangularity = geo.delta_face[-1]
@@ -1276,7 +1276,7 @@ def calc_FFprime(core_profiles, geo):
     mu0 = g.mu_0
     pprime = calc_pprime(core_profiles)
     g3 = geo.g3_face
-    jtor_over_R = core_profiles.j_total_face / geo.R_major
+    jtor_over_R = core_profiles.j_total_face / g.R_major
     FFprime_face = -(jtor_over_R / (2 * jnp.pi) + pprime) * mu0 / g3
     return FFprime_face
 
@@ -1302,7 +1302,7 @@ def calculate_betas(core_profiles, geo):
     beta_tor = p_total_volume_avg / (magnetic_pressure_on_axis + g.eps)
     beta_pol = (
         4.0 * geo.volume[-1] * p_total_volume_avg /
-        (g.mu_0 * core_profiles.Ip_profile_face[-1]**2 * geo.R_major + g.eps))
+        (g.mu_0 * core_profiles.Ip_profile_face[-1]**2 * g.R_major + g.eps))
     beta_N = (1e8 * beta_tor * (geo.a_minor * geo.B_0 /
                                 (core_profiles.Ip_profile_face[-1] + g.eps)))
     return beta_tor, beta_pol, beta_N
@@ -1336,10 +1336,10 @@ def calc_nu_star(geo, core_profiles, collisionality_multiplier):
     )
     nu_e = (1 / jnp.exp(log_tau_e_Z1) * core_profiles.Z_eff_face *
             collisionality_multiplier)
-    epsilon = geo.rho_face / geo.R_major
+    epsilon = geo.rho_face / g.R_major
     epsilon = jnp.clip(epsilon, g.eps)
     tau_bounce = (
-        core_profiles.q_face * geo.R_major /
+        core_profiles.q_face * g.R_major /
         (epsilon**1.5 *
          jnp.sqrt(core_profiles.T_e.face_value() * g.keV_to_J / g.m_e)))
     tau_bounce = tau_bounce.at[0].set(tau_bounce[1])
@@ -1530,12 +1530,12 @@ def calculate_L32(f_trap, nu_e_star, Z_eff):
 
 
 def calculate_nu_e_star(q, geo, n_e, T_e, Z_eff, log_lambda_ei):
-    return (6.921e-18 * q * geo.R_major * n_e * Z_eff * log_lambda_ei /
+    return (6.921e-18 * q * g.R_major * n_e * Z_eff * log_lambda_ei /
             (((T_e * 1e3)**2) * (geo.epsilon_face + g.eps)**1.5))
 
 
 def calculate_nu_i_star(q, geo, n_i, T_i, Z_eff, log_lambda_ii):
-    return (4.9e-18 * q * geo.R_major * n_i * Z_eff**4 * log_lambda_ii /
+    return (4.9e-18 * q * g.R_major * n_i * Z_eff**4 * log_lambda_ii /
             (((T_i * 1e3)**2) * (geo.epsilon_face + g.eps)**1.5))
 
 
@@ -3427,14 +3427,14 @@ class QualikizBasedTransportModel(QuasilinearTransportModel):
         normalized_logarithmic_gradients = NormalizedLogarithmicGradients.from_profiles(
             core_profiles=core_profiles,
             radial_coordinate=rmid,
-            reference_length=geo.R_major,
+            reference_length=g.R_major,
         )
         q = core_profiles.q_face
         smag = calc_s_rmid(
             geo,
             core_profiles.psi,
         )
-        epsilon_lcfs = rmid_face[-1] / geo.R_major
+        epsilon_lcfs = rmid_face[-1] / g.R_major
         x = rmid_face / rmid_face[-1]
         x = jnp.where(jnp.abs(x) < g.eps, g.eps, x)
         Ti_Te = core_profiles.T_i.face_value() / core_profiles.T_e.face_value()
@@ -3495,7 +3495,7 @@ class QualikizBasedTransportModel(QuasilinearTransportModel):
             log_nu_star_face=log_nu_star_face,
             normni=normni,
             chiGB=chiGB,
-            Rmaj=geo.R_major,
+            Rmaj=g.R_major,
             Rmin=geo.a_minor,
             alpha=alpha,
             epsilon_lcfs=epsilon_lcfs,
@@ -3756,7 +3756,7 @@ class QLKNNTransportModel0(QualikizBasedTransportModel):
             transport=runtime_config_inputs.transport,
             geo=geo,
             core_profiles=core_profiles,
-            gradient_reference_length=geo.R_major,
+            gradient_reference_length=g.R_major,
             gyrobohm_flux_reference_length=geo.a_minor,
         )
 
