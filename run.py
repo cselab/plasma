@@ -2713,7 +2713,6 @@ class PlasmaComposition(BaseModelFrozen):
     main_ion: IonMapping = (ValidatedDefault({'D': 0.5, 'T': 0.5}))
     Z_eff: (TimeVaryingArrayDefinedAtRightBoundaryAndBounded
             ) = ValidatedDefault(1.0)
-    Z_i_override: TimeVaryingScalar | None = None
     A_i_override: TimeVaryingScalar | None = None
     A_impurity_override: TimeVaryingScalar | None = None
 
@@ -2735,7 +2734,6 @@ class PlasmaComposition(BaseModelFrozen):
             self.main_ion,
             self.impurity,
             self.Z_eff,
-            self.Z_i_override,
             self.A_i_override,
             self.A_impurity_override,
             self._main_ion_mixture,
@@ -2749,11 +2747,10 @@ class PlasmaComposition(BaseModelFrozen):
             main_ion=children[0],
             impurity=children[1],
             Z_eff=children[2],
-            Z_i_override=children[3],
-            A_i_override=children[4],
-            A_impurity_override=children[5],
+            A_i_override=children[3],
+            A_impurity_override=children[4],
         )
-        obj._main_ion_mixture = children[6]
+        obj._main_ion_mixture = children[5]
         return obj
 
     @functools.cached_property
