@@ -936,15 +936,9 @@ def face_to_cell(face: FloatVectorFace, ):
     return 0.5 * (face[:-1] + face[1:])
 
 
-@enum.unique
-class GeometryType(enum.IntEnum):
-    CHEASE = 1
-
-
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class Geometry:
-    geometry_type: GeometryType
     torax_mesh: None
     Phi: Array
     Phi_face: Array
@@ -1091,7 +1085,6 @@ class Geometry:
 def stack_geometries(geometries: Sequence[Geometry]):
     first_geo = geometries[0]
     torax_mesh = first_geo.torax_mesh
-    geometry_type = first_geo.geometry_type
     stacked_data = {}
     for field in dataclasses.fields(first_geo):
         field_name = field.name
@@ -4138,7 +4131,6 @@ class StandardGeometry(Geometry):
 
 @dataclasses.dataclass(frozen=True)
 class StandardGeometryIntermediates:
-    geometry_type: GeometryType
     R_major: FloatScalar
     a_minor: FloatScalar
     B_0: FloatScalar
@@ -4215,7 +4207,6 @@ class StandardGeometryIntermediates:
         rhon = np.sqrt(Phi / Phi[-1])
         vpr = 4 * np.pi * Phi[-1] * rhon / (F * flux_surf_avg_1_over_R2)
         return cls(
-            geometry_type=GeometryType.CHEASE,
             R_major=np.array(R_major),
             a_minor=np.array(a_minor),
             B_0=np.array(B_0),
@@ -4370,7 +4361,6 @@ class CheaseConfig(BaseModelFrozen):
         area_face = rhon_interpolation_func(rho_face_norm, area_intermediate)
         area = rhon_interpolation_func(rho_norm, area_intermediate)
         return StandardGeometry(
-            geometry_type=intermediate.geometry_type,
             torax_mesh=mesh,
             Phi=Phi,
             Phi_face=Phi_face,
@@ -4431,7 +4421,6 @@ class GeometryConfig(BaseModelFrozen):
 
 
 class Geometry0(BaseModelFrozen):
-    geometry_type: GeometryType
     geometry_configs: GeometryConfig | dict[Second, GeometryConfig]
 
     @pydantic.model_validator(mode='before')
@@ -4450,8 +4439,7 @@ class Geometry0(BaseModelFrozen):
 def _conform_user_data(data):
     data_copy = data.copy()
     data_copy['geometry_type'] = data['geometry_type'].lower()
-    geometry_type = getattr(GeometryType, data['geometry_type'].upper())
-    constructor_args = {'geometry_type': geometry_type}
+    constructor_args = {}
     configs_time_dependent = data_copy.pop('geometry_configs', None)
     constructor_args['geometry_configs'] = {'config': data_copy}
     return constructor_args
@@ -6456,7 +6444,6 @@ class StateHistory:
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class Geometry:
-    geometry_type: GeometryType
     torax_mesh: Any
     Phi: Array
     Phi_face: Array
