@@ -1309,7 +1309,7 @@ def calculate_pressure(core_profiles):
     )
 
 
-def calc_pprime(core_profiles: CoreProfiles, ) -> FloatVector:
+def calc_pprime(core_profiles):
     _, _, p_total = calculate_pressure(core_profiles)
     psi = core_profiles.psi.face_value()
     n_e = core_profiles.n_e.face_value()
@@ -1435,7 +1435,7 @@ def calculate_log_lambda_ii(T_i, n_i, Z_i):
         Z_i)
 
 
-def _calculate_weighted_Z_eff(core_profiles: CoreProfiles, ) -> jax.Array:
+def _calculate_weighted_Z_eff(core_profiles):
     return (core_profiles.n_i.value * core_profiles.Z_i**2 / core_profiles.A_i
             + core_profiles.n_impurity.value * core_profiles.Z_impurity**2 /
             core_profiles.A_impurity) / core_profiles.n_e.value
@@ -1518,14 +1518,11 @@ class ChargeStateInfo:
     Z_per_species: FloatVector
 
     @property
-    def Z_mixture(self) -> FloatVector:
+    def Z_mixture(self):
         return self.Z2_avg / self.Z_avg
 
 
-def calculate_average_charge_state_single_species(
-    T_e: FloatVector,
-    ion_symbol: str,
-):
+def calculate_average_charge_state_single_species(T_e, ion_symbol):
     if ion_symbol not in _MAVRIN_Z_COEFFS:
         return jnp.ones_like(T_e) * ION_PROPERTIES_DICT[ion_symbol].Z
     T_e_allowed_range = (0.1, 100.0)
@@ -1683,7 +1680,7 @@ class SauterModelCond(ConductivityModel):
                                           geo=geometry)
         return Conductivity(sigma=result.sigma, sigma_face=result.sigma_face)
 
-    def __hash__(self) -> int:
+    def __hash__(self):
         return hash(self.__class__)
 
 
@@ -1735,7 +1732,7 @@ class SauterModel(BootstrapCurrentModel):
             j_bootstrap_face=result.j_bootstrap_face,
         )
 
-    def __hash__(self) -> int:
+    def __hash__(self):
         return hash(self.__class__)
 
 
@@ -1882,7 +1879,7 @@ class SourceProfiles:
     n_e: dict[str, jax.Array] = dataclasses.field(default_factory=dict)
     psi: dict[str, jax.Array] = dataclasses.field(default_factory=dict)
 
-    def total_psi_sources(self, geo: Geometry) -> jax.Array:
+    def total_psi_sources(self, geo):
         total = self.bootstrap_current.j_bootstrap
         total += sum(self.psi.values())
         mu0 = g.mu_0
@@ -2006,10 +2003,7 @@ class GenericCurrentSourceConfig(SourceModelBase):
     def model_func(self):
         return calculate_generic_current
 
-    def build_runtime_params(
-        self,
-        t,
-    ):
+    def build_runtime_params(self, t):
         return RuntimeParamsGcS(
             prescribed_values=tuple(
                 [v.get_value(t) for v in self.prescribed_values]),
@@ -2023,7 +2017,7 @@ class GenericCurrentSourceConfig(SourceModelBase):
             use_absolute_current=self.use_absolute_current,
         )
 
-    def build_source(self) -> GenericCurrentSource:
+    def build_source(self):
         return GenericCurrentSource(model_func=self.model_func)
 
 
@@ -2037,14 +2031,8 @@ class RuntimeParamsGeIO(RuntimeParamsSrc):
     absorption_fraction: FloatScalar
 
 
-def calc_generic_heat_source(
-    geo: Geometry,
-    gaussian_location: float,
-    gaussian_width: float,
-    P_total: float,
-    electron_heat_fraction: float,
-    absorption_fraction: float,
-) -> tuple[FloatVectorCell, FloatVectorCell]:
+def calc_generic_heat_source(geo, gaussian_location, gaussian_width, P_total,
+                             electron_heat_fraction, absorption_fraction):
     absorbed_power = P_total * absorption_fraction
     profile = gaussian_profile(geo,
                                center=gaussian_location,
@@ -2118,18 +2106,14 @@ class GenericIonElHeatSourceConfig(SourceModelBase):
             absorption_fraction=self.absorption_fraction.get_value(t),
         )
 
-    def build_source(self) -> GenericIonElectronHeatSource:
+    def build_source(self):
         return GenericIonElectronHeatSource(model_func=self.model_func)
 
 
-def calc_generic_particle_source(
-    runtime_params: RuntimeParamsSlice,
-    geo: Geometry,
-    source_name: str,
-    unused_state: CoreProfiles,
-    unused_calculated_source_profiles: SourceProfiles | None,
-    unused_conductivity: Conductivity | None,
-) -> tuple[FloatVectorCell, ...]:
+def calc_generic_particle_source(runtime_params, geo, source_name,
+                                 unused_state,
+                                 unused_calculated_source_profiles,
+                                 unused_conductivity):
     source_params = runtime_params.sources[source_name]
     return (gaussian_profile(
         center=source_params.deposition_location,
@@ -2183,18 +2167,12 @@ class GenericParticleSourceConfig(SourceModelBase):
             S_total=self.S_total.get_value(t),
         )
 
-    def build_source(self) -> GenericParticleSource:
+    def build_source(self):
         return GenericParticleSource(model_func=self.model_func)
 
 
-def calc_pellet_source(
-    runtime_params: RuntimeParamsSlice,
-    geo: Geometry,
-    source_name: str,
-    unused_state: CoreProfiles,
-    unused_calculated_source_profiles: SourceProfiles | None,
-    unused_conductivity: Conductivity | None,
-) -> tuple[FloatVectorCell, ...]:
+def calc_pellet_source(runtime_params, geo, source_name, unused_state,
+                       unused_calculated_source_profiles, unused_conductivity):
     source_params = runtime_params.sources[source_name]
     return (gaussian_profile(
         center=source_params.pellet_deposition_location,
@@ -2249,7 +2227,7 @@ class PelletSourceConfig(SourceModelBase):
             S_total=self.S_total.get_value(t),
         )
 
-    def build_source(self) -> PelletSource:
+    def build_source(self):
         return PelletSource(model_func=self.model_func)
 
 
@@ -2309,11 +2287,7 @@ def fusion_heat_model_func(
     unused_calculated_source_profiles: SourceProfiles | None,
     unused_conductivity: Conductivity | None,
 ):
-    _, Pfus_i, Pfus_e = calc_fusion(
-        geo,
-        core_profiles,
-        runtime_params,
-    )
+    _, Pfus_i, Pfus_e = calc_fusion(geo, core_profiles, runtime_params)
     return (Pfus_i, Pfus_e)
 
 
@@ -2323,7 +2297,7 @@ class FusionHeatSource(Source):
     model_func: Any = fusion_heat_model_func
 
     @property
-    def source_name(self) -> str:
+    def source_name(self):
         return self.SOURCE_NAME
 
     @property
@@ -2350,7 +2324,7 @@ class FusionHeatSourceConfig(SourceModelBase):
             is_explicit=self.is_explicit,
         )
 
-    def build_source(self) -> FusionHeatSource:
+    def build_source(self):
         return FusionHeatSource(model_func=self.model_func)
 
 
@@ -6083,10 +6057,10 @@ class StateHistory:
         return self._rho_norm
 
     @property
-    def geometries(self) -> Sequence[Geometry]:
+    def geometries(self):
         return self._geometries
 
-    def simulation_output_to_xr(self) -> xr.DataTree:
+    def simulation_output_to_xr(self):
         time = xr.DataArray(self.times, dims=[TIME], name=TIME)
         rho_face_norm = xr.DataArray(self.rho_face_norm,
                                      dims=[RHO_FACE_NORM],
