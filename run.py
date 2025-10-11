@@ -827,10 +827,6 @@ def make_diffusion_terms(d_face: FloatVectorFace, var: CellVariable):
     diag = jnp.asarray(-d_face[1:] - d_face[:-1])
     off = d_face[1:-1]
     vec = jnp.zeros_like(diag)
-    chex.assert_exactly_one_is_none(var.left_face_grad_constraint,
-                                    var.left_face_constraint)
-    chex.assert_exactly_one_is_none(var.right_face_grad_constraint,
-                                    var.right_face_constraint)
     diag = diag.at[0].set(-d_face[1])
     vec = vec.at[0].set(-d_face[0] * var.left_face_grad_constraint / var.dr)
     if var.right_face_constraint is not None:
@@ -3362,12 +3358,7 @@ class NormalizedLogarithmicGradients:
     lref_over_lni1: FloatVectorFace
 
     @classmethod
-    def from_profiles(
-        cls,
-        core_profiles: CoreProfiles,
-        radial_coordinate: jnp.ndarray,
-        reference_length: jnp.ndarray,
-    ):
+    def from_profiles(cls, core_profiles, radial_coordinate, reference_length):
         gradients = {}
         for name, profile in {
                 "lref_over_lti": core_profiles.T_i,
@@ -3384,12 +3375,8 @@ class NormalizedLogarithmicGradients:
         return cls(**gradients)
 
 
-def calculate_chiGB(
-    reference_temperature: Array,
-    reference_magnetic_field: chex.Numeric,
-    reference_mass: chex.Numeric,
-    reference_length: chex.Numeric,
-):
+def calculate_chiGB(reference_temperature, reference_magnetic_field,
+                    reference_mass, reference_length):
     return ((reference_mass * g.m_amu)**0.5 /
             (reference_magnetic_field * g.q_e)**2 *
             (reference_temperature * g.keV_to_J)**1.5 / reference_length)
