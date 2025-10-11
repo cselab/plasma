@@ -65,8 +65,6 @@ _interp_fn_vmap = jax.jit(jax.vmap(jnp.interp, in_axes=(None, None, 1)))
 @enum.unique
 class InterpolationMode(enum.Enum):
     PIECEWISE_LINEAR = 'piecewise_linear'
-    STEP = 'step'
-
 
 InterpolationModeLiteral: TypeAlias = Any
 _ArrayOrListOfFloats: TypeAlias = Any
