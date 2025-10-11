@@ -4681,6 +4681,7 @@ def get_updated_electron_temperature(profile_conditions_params, geo):
 def get_updated_electron_density(profile_conditions_params, geo):
     nGW = (profile_conditions_params.Ip / 1e6 / (jnp.pi * geo.a_minor**2) *
            1e20)
+    assert profile_conditions_params.n_e_nbar_is_fGW
     n_e_value = jnp.where(
         profile_conditions_params.n_e_nbar_is_fGW,
         profile_conditions_params.n_e * nGW,
