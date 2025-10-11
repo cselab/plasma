@@ -4537,12 +4537,8 @@ class CheaseConfig(BaseModelFrozen):
         return self
 
     def build_geometry(self):
-        return build_standard_geometry(
-            _apply_relevant_kwargs(
-                StandardGeometryIntermediates.from_chease,
-                self.__dict__,
-            ))
-
+        intermediate = _apply_relevant_kwargs(StandardGeometryIntermediates.from_chease, self.__dict__)
+        return build_standard_geometry(intermediate)
 
 class GeometryConfig(BaseModelFrozen):
     config: (CheaseConfig) = pydantic.Field(discriminator='geometry_type')
