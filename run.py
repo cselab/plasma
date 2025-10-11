@@ -2620,11 +2620,12 @@ def get_all_source_profiles(runtime_params, geo, core_profiles, source_models,
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class PedestalModelOutput:
-    rho_norm_ped_top: FloatScalar
-    rho_norm_ped_top_idx: IntScalar
-    T_i_ped: FloatScalar
-    T_e_ped: FloatScalar
-    n_e_ped: FloatScalar
+    rho_norm_ped_top: Any
+    rho_norm_ped_top_idx: Any
+    T_i_ped: Any
+    T_e_ped: Any
+    n_e_ped: Any
+
 
 
 class PedestalModel:
@@ -2765,11 +2766,12 @@ ImpurityMapping: TypeAlias = Annotated[
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class RuntimeParamsIF:
-    fractions: jt.Float[Array, 'ion_symbol rhon']
-    fractions_face: jt.Float[Array, 'ion_symbol rhon+1']
-    A_avg: FloatVectorCell
-    A_avg_face: FloatVectorFace
-    Z_override: FloatScalar | None = None
+    fractions: Any
+    fractions_face: Any
+    A_avg: Any
+    A_avg_face: Any
+    Z_override: Any
+
 
 
 class ImpurityFractions(BaseModelFrozen):
@@ -2812,26 +2814,26 @@ class InitialPsiMode(enum.StrEnum):
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass
 class RuntimeParamsPC:
-    Ip: FloatScalar
-    v_loop_lcfs: FloatScalar
-    T_i_right_bc: FloatScalar
-    T_e_right_bc: FloatScalar
-    T_e: FloatVector
-    T_i: FloatVector
-    psi: FloatVector | None
-    psidot: FloatVector | None
-    n_e: FloatVector
-    nbar: FloatScalar
-    n_e_nbar_is_fGW: bool
-    n_e_right_bc: FloatScalar
-    n_e_right_bc_is_fGW: bool
-    current_profile_nu: float
-    initial_j_is_total_current: bool
-    initial_psi_from_j: bool
-    normalize_n_e_to_nbar: bool = dataclasses.field(metadata={'static': True})
-    use_v_loop_lcfs_boundary_condition: bool = dataclasses.field(
+    Ip: Any
+    v_loop_lcfs: Any
+    T_i_right_bc: Any
+    T_e_right_bc: Any
+    T_e: Any
+    T_i: Any
+    psi: Any
+    psidot: Any
+    n_e: Any
+    nbar: Any
+    n_e_nbar_is_fGW: Any
+    n_e_right_bc: Any
+    n_e_right_bc_is_fGW: Any
+    current_profile_nu: Any
+    initial_j_is_total_current: Any
+    initial_psi_from_j: Any
+    normalize_n_e_to_nbar: Any = dataclasses.field(metadata={'static': True})
+    use_v_loop_lcfs_boundary_condition: Any = dataclasses.field(
         metadata={'static': True})
-    n_e_right_bc_is_absolute: bool = dataclasses.field(
+    n_e_right_bc_is_absolute: Any = dataclasses.field(
         metadata={'static': True})
 
 
