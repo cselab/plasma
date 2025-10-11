@@ -66,6 +66,7 @@ _interp_fn_vmap = jax.jit(jax.vmap(jnp.interp, in_axes=(None, None, 1)))
 class InterpolationMode(enum.Enum):
     PIECEWISE_LINEAR = 'piecewise_linear'
 
+
 InterpolationModeLiteral: TypeAlias = Any
 _ArrayOrListOfFloats: TypeAlias = Any
 InterpolatedVarSingleAxisInput: TypeAlias = Any
@@ -88,10 +89,7 @@ class _PiecewiseLinearInterpolatedParam:
     def ys(self):
         return self._ys
 
-    def get_value(
-        self,
-        x: chex.Numeric,
-    ):
+    def get_value(self, x):
         x_shape = getattr(x, 'shape', ())
         is_jax = isinstance(x, jax.Array)
         interp = _interp_fn if is_jax else np.interp
@@ -172,10 +170,7 @@ class InterpolatedVarSingleAxis:
     def interpolation_mode(self):
         return self._interpolation_mode
 
-    def get_value(
-        self,
-        x: chex.Numeric,
-    ):
+    def get_value(self, x):
         value = self._param.get_value(x)
         if self._is_bool_param:
             return jnp.bool_(value > 0.5)
@@ -224,7 +219,7 @@ class InterpolatedVarTimeRho:
         obj._time_interpolation_mode = aux_data[1]
         return obj
 
-    def get_value(self, x: chex.Numeric):
+    def get_value(self, x):
         return self._time_interpolated_var.get_value(x)
 
 
@@ -457,7 +452,7 @@ class TimeVaryingScalar(BaseModelFrozen):
     interpolation_mode: typing_extensions.Annotated[
         InterpolationMode, JAX_STATIC] = InterpolationMode.PIECEWISE_LINEAR
 
-    def get_value(self, t: chex.Numeric):
+    def get_value(self, t):
         return self._get_cached_interpolated_param.get_value(t)
 
     @pydantic.model_validator(mode='after')
@@ -1126,7 +1121,7 @@ def stack_geometries(geometries: Sequence[Geometry]):
 class ConstantGeometryProvider:
     geo: Geometry
 
-    def __call__(self, t: chex.Numeric):
+    def __call__(self, t):
         del t
         return self.geo
 
@@ -2216,10 +2211,7 @@ class GenericIonElHeatSourceConfig(SourceModelBase):
     def model_func(self):
         return default_formula
 
-    def build_runtime_params(
-        self,
-        t: chex.Numeric,
-    ):
+    def build_runtime_params(self, t):
         return RuntimeParamsGeIO(
             prescribed_values=tuple(
                 [v.get_value(t) for v in self.prescribed_values]),
@@ -2286,10 +2278,7 @@ class GenericParticleSourceConfig(SourceModelBase):
     def model_func(self):
         return calc_generic_particle_source
 
-    def build_runtime_params(
-        self,
-        t: chex.Numeric,
-    ):
+    def build_runtime_params(self, t):
         return RuntimeParamsPaSo(
             prescribed_values=tuple(
                 [v.get_value(t) for v in self.prescribed_values]),
@@ -2459,10 +2448,7 @@ class FusionHeatSourceConfig(SourceModelBase):
     def model_func(self):
         return fusion_heat_model_func
 
-    def build_runtime_params(
-        self,
-        t: chex.Numeric,
-    ) -> RuntimeParamsSrc:
+    def build_runtime_params(self, t):
         return RuntimeParamsSrc(
             prescribed_values=tuple(
                 [v.get_value(t) for v in self.prescribed_values]),
@@ -2980,6 +2966,7 @@ class PedestalConfig(BasePedestal):
             rho_norm_ped_top=self.rho_norm_ped_top.get_value(t),
         )
 
+
 _IMPURITY_MODE_FRACTIONS: Final[str] = 'fractions'
 
 
@@ -3071,6 +3058,7 @@ class ImpurityFractions(BaseModelFrozen):
         if 'legacy' in data:
             del data['legacy']
         return data
+
 
 class InitialPsiMode(enum.StrEnum):
     PROFILE_CONDITIONS = 'profile_conditions'
@@ -3645,8 +3633,8 @@ class QuasilinearTransportModel(TransportModel):
         transport,
         geo: Geometry,
         core_profiles: CoreProfiles,
-        gradient_reference_length: chex.Numeric,
-        gyrobohm_flux_reference_length: chex.Numeric,
+        gradient_reference_length: Any,
+        gyrobohm_flux_reference_length: Any,
     ):
         pfe_SI = (pfe * core_profiles.n_e.face_value() *
                   quasilinear_inputs.chiGB / gyrobohm_flux_reference_length)
@@ -4134,7 +4122,7 @@ class QLKNNTransportModel(TransportBase):
         return QLKNNTransportModel0(path=self.model_path,
                                     name=self.qlknn_model_name)
 
-    def build_runtime_params(self, t: chex.Numeric):
+    def build_runtime_params(self, t):
         base_kwargs = dataclasses.asdict(super().build_runtime_params(t))
         return RuntimeParams0(
             include_ITG=self.include_ITG,
@@ -4245,8 +4233,8 @@ class StandardGeometryIntermediates:
         self.vpr[:] = _smooth_savgol(self.vpr, idx_limit, 1)
 
     @classmethod
-    def from_chease(cls, geometry_directory,
-                    n_rho, R_major, a_minor, B_0, hires_factor):
+    def from_chease(cls, geometry_directory, n_rho, R_major, a_minor, B_0,
+                    hires_factor):
         file_path = os.path.join(
             "geo", "ITER_hybrid_citrin_equil_cheasedata.mat2cols")
         with open(file_path, 'r') as file:
@@ -4318,9 +4306,8 @@ def _smooth_savgol(data, idx_limit, polyorder):
                                                window_length,
                                                polyorder,
                                                mode='nearest')
-    return np.concatenate([
-        np.array([data[0]]), smoothed_data[1:idx_limit], data[idx_limit:]
-    ])
+    return np.concatenate(
+        [np.array([data[0]]), smoothed_data[1:idx_limit], data[idx_limit:]])
 
 
 class CheaseConfig(BaseModelFrozen):
@@ -6090,9 +6077,7 @@ def solver_x_new(dt, runtime_params_t, runtime_params_t_plus_dt, geo_t,
         x_new_guess,
     )
 
-    solver_numeric_outputs = SolverNumericOutputs(
-        solver_error_state=0,
-    )
+    solver_numeric_outputs = SolverNumericOutputs(solver_error_state=0, )
     return (
         x_new,
         solver_numeric_outputs,
@@ -6310,8 +6295,7 @@ class StateHistory:
         flat_dict = {}
         for key, value in itertools.chain(*(d.items() for d in all_dicts)):
             flat_dict[key] = value
-        numerics_dict = {
-        }
+        numerics_dict = {}
         numerics = xr.Dataset(numerics_dict)
         profiles_dict = {
             k: v
@@ -6499,8 +6483,8 @@ class StateHistory:
             if ("hires" in field_name or
                 (field_name.endswith("_face")
                  and field_name.removesuffix("_face") in geometry_attributes)
-                    or field_name == "geometry_type"
-                    or field_name == "j_total" or not isinstance(data, Array)):
+                    or field_name == "geometry_type" or field_name == "j_total"
+                    or not isinstance(data, Array)):
                 continue
             if f"{field_name}_face" in geometry_attributes:
                 data = _extend_cell_grid_to_boundaries(
@@ -6640,9 +6624,7 @@ def _get_initial_state(runtime_params, geo, step_fn):
         core_profiles=initial_core_profiles,
         core_sources=initial_core_sources,
         core_transport=transport_coeffs,
-        solver_numeric_outputs=SolverNumericOutputs(
-            solver_error_state=0,
-        ),
+        solver_numeric_outputs=SolverNumericOutputs(solver_error_state=0, ),
         geometry=geo,
     )
 
@@ -6867,8 +6849,7 @@ def body_fun(inputs):
         explicit_source_profiles=explicit_source_profiles,
     )
     solver_numeric_outputs = SolverNumericOutputs(
-        solver_error_state=solver_numeric_outputs.solver_error_state,
-    )
+        solver_error_state=solver_numeric_outputs.solver_error_state, )
     next_dt = dt / g.dt_reduction_factor
     return next_dt, (
         x_new,
@@ -7081,9 +7062,7 @@ while not_done(current_state.t, g.t_final):
             (
                 core_profiles_to_solver_x_tuple(current_state.core_profiles),
                 initial_dt,
-                SolverNumericOutputs(
-                    solver_error_state=1,
-                ),
+                SolverNumericOutputs(solver_error_state=1, ),
                 runtime_params_t,
                 geo_t,
                 current_state.core_profiles,
