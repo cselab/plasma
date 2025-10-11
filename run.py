@@ -4251,7 +4251,8 @@ class CheaseConfig(BaseModelFrozen):
     def build_geometry(self):
         kwargs = self.__dict__
         relevant_kwargs = [
-            i.name for i in inspect.signature(f).parameters.values()
+            i.name for i in inspect.signature(
+                StandardGeometryIntermediates.from_chease).parameters.values()
         ]
         kwargs = {k: kwargs[k] for k in relevant_kwargs}
         intermediate = StandardGeometryIntermediates.from_chease(**kwargs)
