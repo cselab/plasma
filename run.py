@@ -517,11 +517,9 @@ def time_varying_array_defined_at_1(time_varying_array):
     return time_varying_array
 
 
-def time_varying_array_bounded(
-    time_varying_array,
-    lower_bound = -np.inf,
-    upper_bound = np.inf
-):
+def time_varying_array_bounded(time_varying_array,
+                               lower_bound=-np.inf,
+                               upper_bound=np.inf):
     return time_varying_array
 
 
@@ -669,9 +667,7 @@ class CellVariable:
         )
 
 
-def make_convection_terms(v_face,
-                          d_face,
-                          var):
+def make_convection_terms(v_face, d_face, var):
     eps = 1e-20
     is_neg = d_face < 0.0
     nonzero_sign = jnp.ones_like(is_neg) - 2 * is_neg
@@ -6022,7 +6018,7 @@ class ToraxSimState:
     solver_numeric_outputs: Any
 
 
-def _get_initial_state(runtime_params, geo, step_fn):
+def _get_initial_state(runtime_params, geo):
     initial_core_profiles = initial_core_profiles0(
         runtime_params, geo, source_models=g.source_models)
     initial_core_sources = get_all_source_profiles(
@@ -6431,8 +6427,7 @@ runtime_params_for_init, geo_for_init = (
     get_consistent_runtime_params_and_geometry(t=g.t_initial, ))
 current_state = _get_initial_state(
     runtime_params=runtime_params_for_init,
-    geo=geo_for_init,
-    step_fn=None,
+    geo=geo_for_init
 )
 post_processed_outputs = make_post_processed_outputs(current_state,
                                                      runtime_params_for_init)
