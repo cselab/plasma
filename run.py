@@ -586,20 +586,16 @@ def _zero():
 
 @chex.dataclass(frozen=True)
 class CellVariable:
-    value: jt.Float[chex.Array, 't* cell']
-    dr: jt.Float[chex.Array, 't*']
-    left_face_constraint: jt.Float[chex.Array, 't*'] | None = None
-    right_face_constraint: jt.Float[chex.Array, 't*'] | None = None
-    left_face_grad_constraint: jt.Float[chex.Array, 't*'] | None = (
+    value: Any
+    dr: Any
+    left_face_constraint: Any = None
+    right_face_constraint: Any = None
+    left_face_grad_constraint: Any = (
         dataclasses.field(default_factory=_zero))
-    right_face_grad_constraint: jt.Float[chex.Array, 't*'] | None = (
+    right_face_grad_constraint: Any = (
         dataclasses.field(default_factory=_zero))
-
-    def _assert_unbatched(self):
-        pass
 
     def face_grad(self, x=None):
-        self._assert_unbatched()
         if x is None:
             forward_difference = jnp.diff(self.value) / self.dr
         else:
@@ -4000,8 +3996,6 @@ def _fit_polynomial_to_intervals_of_three(rho_norm: jax.Array,
     @jax.vmap
     def batch_polyfit(q_face_interval: jax.Array,
                       rho_norm_interval: jax.Array):
-        chex.assert_shape(q_face_interval, (3, ))
-        chex.assert_shape(rho_norm_interval, (3, ))
         rho_norm_squared = rho_norm_interval**2
         A = jnp.array([
             [rho_norm_squared[0], rho_norm_interval[0], 1],
