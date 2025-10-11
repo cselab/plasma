@@ -2547,10 +2547,10 @@ def build_source_profiles1(runtime_params,
 def build_standard_source_profiles(*,
                                    calculated_source_profiles,
                                    runtime_params,
-                                   geo: Geometry,
+                                   geo,
                                    core_profiles,
                                    source_models,
-                                   explicit: bool = True,
+                                   explicit = True,
                                    conductivity=None,
                                    calculate_anyway=False,
                                    psi_only=False):
@@ -2574,12 +2574,8 @@ def build_standard_source_profiles(*,
             calculate_source(source_name, source)
 
 
-def _update_standard_source_profiles(
-    calculated_source_profiles: SourceProfiles,
-    source_name: str,
-    affected_core_profiles: tuple[AffectedCoreProfile, ...],
-    profile: tuple[FloatVectorCell, ...],
-):
+def _update_standard_source_profiles(calculated_source_profiles, source_name,
+                                     affected_core_profiles, profile):
     for profile, affected_core_profile in zip(profile,
                                               affected_core_profiles,
                                               strict=True):
@@ -4214,7 +4210,6 @@ class SafetyFactorFit:
     rho_q_3_2_second: Any
     rho_q_2_1_second: Any
     rho_q_3_1_second: Any
-
 
 
 def _sliding_window_of_three(flat_array):
