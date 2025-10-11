@@ -2485,8 +2485,7 @@ class PedestalModelOutput:
     rho_norm_ped_top_idx: Any
 
 
-class PedestalModel:
-
+class SetTemperatureDensityPedestalModel:
     def __setattr__(self, attr, value):
         return super().__setattr__(attr, value)
 
@@ -2498,14 +2497,6 @@ class PedestalModel:
             lambda: PedestalModelOutput(rho_norm_ped_top_idx=g.n_rho, ),
         )
 
-
-class SetTemperatureDensityPedestalModel(PedestalModel):
-
-    def __init__(self, ):
-        super().__init__()
-        self._frozen = True
-
-    @override
     def _call_implementation(self, runtime_params, geo, core_profiles):
         nGW = (runtime_params.profile_conditions.Ip / 1e6 /
                (jnp.pi * geo.a_minor**2) * 1e20)
