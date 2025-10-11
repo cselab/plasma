@@ -303,7 +303,7 @@ class Grid1D(BaseModelFrozen):
 
     @property
     def cell_centers(self):
-        return _get_cell_centers(nx=g.n_rho, dx=self.dx)
+        return np.linspace(self.dx * 0.5, (g.n_rho - 0.5) * self.dx, g.n_rho)
 
 
 class TimeVaryingArray(BaseModelFrozen):
@@ -420,11 +420,6 @@ def _load_from_primitives(primitive_values):
 
 def _is_non_negative(time_varying_array):
     return time_varying_array
-
-
-@functools.cache
-def _get_cell_centers(nx: int, dx: float):
-    return np.linspace(dx * 0.5, (nx - 0.5) * dx, nx)
 
 
 NonNegativeTimeVaryingArray: TypeAlias = typing_extensions.Annotated[
