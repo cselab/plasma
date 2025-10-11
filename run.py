@@ -4334,13 +4334,11 @@ class StandardGeometryIntermediates:
         )
 
 
-def _smooth_savgol(
-    data: np.ndarray,
-    idx_limit: int,
-    polyorder: int,
-    window_length: int = 5,
-    preserve_first: bool = True,
-):
+def _smooth_savgol(data,
+                   idx_limit,
+                   polyorder,
+                   window_length=5,
+                   preserve_first=True):
     smoothed_data = scipy.signal.savgol_filter(data,
                                                window_length,
                                                polyorder,
