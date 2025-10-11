@@ -1,9 +1,8 @@
 from collections.abc import Sequence, Set
 from fusion_surrogates.qlknn import qlknn_model
 from jax import numpy as jnp
-from typing import Annotated, Any, Callable, Final, Literal, Mapping, Sequence, TypeAlias, TypeVar
+from typing import Annotated, Any, Final, Literal, Mapping, Sequence, TypeAlias, TypeVar
 from typing_extensions import override
-import abc
 import chex
 import copy
 import dataclasses
@@ -23,6 +22,7 @@ import threading
 import typing
 import typing_extensions
 import xarray as xr
+import matplotlib.pyplot as plt
 
 
 class g:
@@ -6417,7 +6417,6 @@ class ToraxConfig(BaseModelFrozen):
 
 def body_fun(inputs):
     dt, output = inputs
-    old_solver_outputs = output[2]
     runtime_params_t_plus_dt, geo_t_with_phibdot, geo_t_plus_dt = (
         _get_geo_and_runtime_params_at_t_plus_dt_and_phibdot(
             current_state.t,
@@ -6812,7 +6811,6 @@ state_history = StateHistory(
 data_tree = state_history.simulation_output_to_xr()
 data_tree.to_netcdf("run.nc")
 print(data_tree)
-import matplotlib.pyplot as plt
 
 t = data_tree.time.to_numpy()
 rho = data_tree.rho_norm.to_numpy()
