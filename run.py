@@ -2958,7 +2958,7 @@ class BasePedestal(BaseModelFrozen):
     set_pedestal: TimeVaryingScalar = (ValidatedDefault(False))
 
 
-class SetTpedNped(BasePedestal):
+class PedestalConfig(BasePedestal):
     model_name: Annotated[Literal['set_T_ped_n_ped'],
                           JAX_STATIC] = 'set_T_ped_n_ped'
     n_e_ped: TimeVaryingScalar = ValidatedDefault(0.7e20)
@@ -2979,9 +2979,6 @@ class SetTpedNped(BasePedestal):
             T_e_ped=self.T_e_ped.get_value(t),
             rho_norm_ped_top=self.rho_norm_ped_top.get_value(t),
         )
-
-
-PedestalConfig = SetTpedNped
 
 _IMPURITY_MODE_FRACTIONS: Final[str] = 'fractions'
 
