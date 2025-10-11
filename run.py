@@ -543,7 +543,7 @@ def make_ip_consistent(runtime_params, geo):
     return runtime_params, geo
 
 
-def time_varying_array_defined_at_1(time_varying_array: TimeVaryingArray):
+def time_varying_array_defined_at_1(time_varying_array):
     if not time_varying_array.right_boundary_conditions_defined:
         logging.debug("""Not defined at rho=1.0.""")
     return time_varying_array
@@ -642,7 +642,7 @@ class CellVariable:
     def _assert_unbatched(self):
         pass
 
-    def face_grad(self, x: jt.Float[chex.Array, 'cell'] | None = None):
+    def face_grad(self, x=None):
         self._assert_unbatched()
         if x is None:
             forward_difference = jnp.diff(self.value) / self.dr
@@ -863,7 +863,7 @@ class SolverNumericOutputs:
     solver_error_state: IntScalar = 0
 
 
-def face_to_cell(face: FloatVectorFace, ):
+def face_to_cell(face):
     return 0.5 * (face[:-1] + face[1:])
 
 
@@ -1158,7 +1158,7 @@ def calc_j_total(geo, psi):
     return j_total, j_total_face, Ip_profile_face
 
 
-def calc_s_face(geo: Geometry, psi: CellVariable):
+def calc_s_face(geo, psi):
     iota_scaled = jnp.abs((psi.face_grad()[1:] / geo.rho_face_norm[1:]))
     iota_scaled0 = jnp.expand_dims(jnp.abs(psi.face_grad()[1] / geo.drho_norm),
                                    axis=0)
@@ -1168,7 +1168,7 @@ def calc_s_face(geo: Geometry, psi: CellVariable):
     return s_face
 
 
-def calc_s_rmid(geo: Geometry, psi: CellVariable):
+def calc_s_rmid(geo, psi):
     iota_scaled = jnp.abs((psi.face_grad()[1:] / geo.rho_face_norm[1:]))
     iota_scaled0 = jnp.expand_dims(jnp.abs(psi.face_grad()[1] / geo.drho_norm),
                                    axis=0)
@@ -1178,7 +1178,7 @@ def calc_s_rmid(geo: Geometry, psi: CellVariable):
     return s_face
 
 
-def _calc_bpol2(geo: Geometry, psi: CellVariable):
+def _calc_bpol2(geo, psi):
     bpol2_bulk = ((psi.face_grad()[1:] / (2 * jnp.pi))**2 * geo.g2_face[1:] /
                   geo.vpr_face[1:]**2)
     bpol2_axis = jnp.array([0.0], dtype=jnp.float64)
@@ -1186,7 +1186,7 @@ def _calc_bpol2(geo: Geometry, psi: CellVariable):
     return bpol2_face
 
 
-def calc_Wpol(geo: Geometry, psi: CellVariable):
+def calc_Wpol(geo, psi):
     bpol2 = _calc_bpol2(geo, psi)
     Wpol = _trapz(bpol2 * geo.vpr_face, geo.rho_face_norm) / (2 * g.mu_0)
     return Wpol
@@ -1504,7 +1504,7 @@ def get_average_charge_state(ion_symbols, T_e, fractions, Z_override):
     )
 
 
-def calculate_f_trap(geo: Geometry, ):
+def calculate_f_trap(geo):
     epsilon_effective = (
         0.67 * (1.0 - 1.4 * jnp.abs(geo.delta_face) * geo.delta_face) *
         geo.epsilon_face)
@@ -3643,7 +3643,7 @@ class QLKNNModelWrapper:
             dtype=jnp.float64,
         ).T
 
-    def predict(self, inputs: jax.Array):
+    def predict(self, inputs):
         model_predictions = self._model.predict(inputs)
         return {
             self._flux_name_map.get(flux_name, flux_name): flux_value
@@ -3699,7 +3699,7 @@ def _filter_model_output(
         'qe_etg': include_ETG,
     }
 
-    def filter_flux(flux_name: str, value: jax.Array):
+    def filter_flux(flux_name, value):
         return jax.lax.cond(
             filter_map.get(flux_name, True),
             lambda: value,
