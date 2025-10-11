@@ -74,7 +74,7 @@ TimeRhoInterpolatedInput: TypeAlias = Any
 
 class _PiecewiseLinearInterpolatedParam:
 
-    def __init__(self, xs: Array, ys: Array):
+    def __init__(self, xs, ys):
         self._xs = xs
         self._ys = ys
 
@@ -248,7 +248,7 @@ class BaseModelFrozen(pydantic.BaseModel):
         return (dynamic_children, static_children)
 
     @classmethod
-    def tree_unflatten(cls, aux_data: StaticKwargs, children):
+    def tree_unflatten(cls, aux_data, children):
         dynamic_kwargs = {
             name: value
             for name, value in zip(
@@ -4217,14 +4217,15 @@ def _conform_user_data(data):
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class SafetyFactorFit:
-    rho_q_min: FloatScalar
-    q_min: FloatScalar
-    rho_q_3_2_first: FloatScalar
-    rho_q_2_1_first: FloatScalar
-    rho_q_3_1_first: FloatScalar
-    rho_q_3_2_second: FloatScalar
-    rho_q_2_1_second: FloatScalar
-    rho_q_3_1_second: FloatScalar
+    rho_q_min: Any
+    q_min: Any
+    rho_q_3_2_first: Any
+    rho_q_2_1_first: Any
+    rho_q_3_1_first: Any
+    rho_q_3_2_second: Any
+    rho_q_2_1_second: Any
+    rho_q_3_1_second: Any
+
 
 
 def _sliding_window_of_three(flat_array):
