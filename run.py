@@ -1008,16 +1008,6 @@ def stack_geometries(geometries):
     return first_geo.__class__(**stacked_data)
 
 
-@jax.tree_util.register_dataclass
-@dataclasses.dataclass(frozen=True)
-class ConstantGeometryProvider:
-    geo: Geometry
-
-    def __call__(self, t):
-        del t
-        return self.geo
-
-
 def calculate_plh_scaling_factor(
     geo: Geometry,
     core_profiles: CoreProfiles,
@@ -4143,8 +4133,7 @@ class Geometry0(BaseModelFrozen):
         config_data = self.geometry_configs['config']
         config = CheaseConfig(**config_data)
         geometries = config.build_geometry()
-        provider = ConstantGeometryProvider
-        return provider(geometries)
+        return geometries
 
 
 def _conform_user_data(data):
@@ -5763,7 +5752,7 @@ class RuntimeParamsProvider:
 
 
 def get_consistent_runtime_params_and_geometry(*, t):
-    geo = g.geometry_provider(t)
+    geo = g.geometry_provider
     runtime_params = g.runtime_params_provider(t=t)
     return make_ip_consistent(runtime_params, geo)
 
