@@ -44,7 +44,6 @@ FloatVector: TypeAlias = Any
 BoolVector: TypeAlias = Any
 FloatVectorCell: TypeAlias = Any
 FloatMatrixCell: TypeAlias = Any
-FloatVectorFace: TypeAlias = Any
 DataTypes: TypeAlias = Any
 NumpyArray = Any
 NumpyArray1D = Any
@@ -1507,9 +1506,9 @@ def calculate_f_trap(geo):
 
 
 def calculate_L31(
-    f_trap: FloatVectorFace,
-    nu_e_star: FloatVectorFace,
-    Z_eff: FloatVectorFace,
+    f_trap,
+    nu_e_star,
+    Z_eff
 ):
     denom = (1.0 + (1 - 0.1 * f_trap) * jnp.sqrt(nu_e_star) + 0.5 *
              (1.0 - f_trap) * nu_e_star / Z_eff)
@@ -1522,9 +1521,9 @@ def calculate_L31(
 
 
 def calculate_L32(
-    f_trap: FloatVectorFace,
-    nu_e_star: FloatVectorFace,
-    Z_eff: FloatVectorFace,
+    f_trap,
+    nu_e_star,
+    Z_eff
 ):
     ft32ee = f_trap / (1 + 0.26 * (1 - f_trap) * jnp.sqrt(nu_e_star) + 0.18 *
                        (1 - 0.37 * f_trap) * nu_e_star / jnp.sqrt(Z_eff))
@@ -1554,8 +1553,8 @@ def calculate_nu_i_star(q, geo, n_i, T_i, Z_eff, log_lambda_ii):
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(kw_only=True, frozen=True)
 class Conductivity:
-    sigma: FloatVectorCell
-    sigma_face: FloatVectorFace
+    sigma: Any
+    sigma_face: Any
 
 
 class ConductivityModel:
@@ -1569,11 +1568,11 @@ class ConductivityModelConfig(BaseModelFrozen):
 @jax.jit
 def _calculate_conductivity0(
     *,
-    Z_eff_face: FloatVectorFace,
-    n_e: CellVariable,
-    T_e: CellVariable,
-    q_face: FloatVectorFace,
-    geo: Geometry,
+    Z_eff_face,
+    n_e,
+    T_e,
+    q_face,
+    geo
 ):
     f_trap = calculate_f_trap(geo)
     NZ = 0.58 + 0.74 / (0.76 + Z_eff_face)
@@ -2890,10 +2889,11 @@ class RuntimeParamsP:
                           ...] = dataclasses.field(metadata={'static': True})
     impurity_names: tuple[str,
                           ...] = dataclasses.field(metadata={'static': True})
-    main_ion: RuntimeParamsIM
-    impurity: RuntimeParamsIM
-    Z_eff: FloatVectorCell
-    Z_eff_face: FloatVectorFace
+    main_ion: Any
+    impurity: Any
+    Z_eff: Any
+    Z_eff_face: Any
+
 
 
 @jax.tree_util.register_pytree_node_class
@@ -3420,15 +3420,16 @@ class RuntimeParams(RuntimeParams00):
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class QualikizInputs(QuasilinearInputs):
-    Z_eff_face: FloatVectorFace
-    q: FloatVectorFace
-    smag: FloatVectorFace
-    x: FloatVectorFace
-    Ti_Te: FloatVectorFace
-    log_nu_star_face: FloatVectorFace
-    normni: FloatVectorFace
-    alpha: FloatVectorFace
-    epsilon_lcfs: FloatScalar
+    Z_eff_face: Any
+    q: Any
+    smag: Any
+    x: Any
+    Ti_Te: Any
+    log_nu_star_face: Any
+    normni: Any
+    alpha: Any
+    epsilon_lcfs: Any
+
 
     @property
     def Ati(self):
@@ -4810,18 +4811,19 @@ _trapz = jax.scipy.integrate.trapezoid
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class Ions:
-    n_i: CellVariable
-    n_impurity: CellVariable
-    impurity_fractions: Mapping[str, FloatVectorCell]
-    Z_i: FloatVectorCell
-    Z_i_face: FloatVectorFace
-    Z_impurity: FloatVectorCell
-    Z_impurity_face: FloatVectorFace
-    A_i: FloatScalar
-    A_impurity: FloatVectorCell
-    A_impurity_face: FloatVectorFace
-    Z_eff: FloatVectorCell
-    Z_eff_face: FloatVectorFace
+    n_i: Any
+    n_impurity: Any
+    impurity_fractions: Any
+    Z_i: Any
+    Z_i_face: Any
+    Z_impurity: Any
+    Z_impurity_face: Any
+    A_i: Any
+    A_impurity: Any
+    A_impurity_face: Any
+    Z_eff: Any
+    Z_eff_face: Any
+
 
 
 def get_updated_ion_temperature(profile_conditions_params, geo):
@@ -5873,8 +5875,8 @@ EXCLUDED_GEOMETRY_NAMES = frozenset({
 
 
 def _extend_cell_grid_to_boundaries(
-    cell_var: FloatVectorCell,
-    face_var: FloatVectorFace,
+        cell_var,
+        face_var
 ):
     left_value = np.expand_dims(face_var[:, 0], axis=-1)
     right_value = np.expand_dims(face_var[:, -1], axis=-1)
