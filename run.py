@@ -4296,7 +4296,7 @@ def _minimum_location_value_in_interval(coeffs: jax.Array,
     return overall_minimum_location, overall_minimum_value
 
 
-def _find_roots_quadratic(coeffs: jax.Array):
+def _find_roots_quadratic(coeffs):
     a, b, c = coeffs[0], coeffs[1], coeffs[2]
     determinant = b**2 - 4.0 * a * c
     roots_exist = jnp.greater(determinant, 0)
@@ -5630,7 +5630,7 @@ def _calc_coeffs_full(runtime_params, geo, core_profiles,
 
 
 @jax.jit
-def _calc_coeffs_reduced(geo: Geometry, core_profiles: CoreProfiles):
+def _calc_coeffs_reduced(geo, core_profiles):
     tic_T_i = core_profiles.n_i.value * geo.vpr**(5.0 / 3.0)
     tic_T_e = core_profiles.n_e.value * geo.vpr**(5.0 / 3.0)
     tic_psi = jnp.ones_like(geo.vpr)
