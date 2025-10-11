@@ -4157,12 +4157,8 @@ class CheaseConfig(BaseModelFrozen):
         )
 
 
-class GeometryConfig(BaseModelFrozen):
-    config: (CheaseConfig) = pydantic.Field(discriminator='geometry_type')
-
-
 class Geometry0(BaseModelFrozen):
-    geometry_configs: GeometryConfig | dict[Second, GeometryConfig]
+    geometry_configs: Any
 
     @pydantic.model_validator(mode='before')
     @classmethod
@@ -4172,7 +4168,13 @@ class Geometry0(BaseModelFrozen):
 
     @functools.cached_property
     def build_provider(self):
-        geometries = self.geometry_configs.config.build_geometry()
+        if hasattr(self.geometry_configs, 'config'):
+            geometries = self.geometry_configs.config.build_geometry()
+        else:
+            # Handle case where geometry_configs is a dict
+            config_data = self.geometry_configs['config']
+            config = CheaseConfig(**config_data)
+            geometries = config.build_geometry()
         provider = ConstantGeometryProvider
         return provider(geometries)
 
