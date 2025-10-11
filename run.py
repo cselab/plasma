@@ -778,7 +778,7 @@ def make_convection_terms(v_face,
     return mat, vec
 
 
-def make_diffusion_terms(d_face: FloatVectorFace, var: CellVariable):
+def make_diffusion_terms(d_face, var):
     denom = var.dr**2
     diag = jnp.asarray(-d_face[1:] - d_face[:-1])
     off = d_face[1:-1]
