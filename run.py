@@ -1411,7 +1411,7 @@ def calculate_average_charge_state_single_species(T_e, ion_symbol):
     return Zavg
 
 
-def get_average_charge_state(ion_symbols, T_e, fractions, Z_override):
+def get_average_charge_state(ion_symbols, T_e, fractions):
     Z_per_species = jnp.stack([
         calculate_average_charge_state_single_species(T_e, ion_symbol)
         for ion_symbol in ion_symbols
@@ -2574,24 +2574,19 @@ _IMPURITY_MODE_FRACTIONS: Final[str] = 'fractions'
 class RuntimeParamsIM:
     fractions: Any
     A_avg: Any
-    Z_override: Any
 
 
 class IonMixture(BaseModelFrozen):
     species: IonMapping
-    Z_override: TimeVaryingScalar | None = None
-    A_override: TimeVaryingScalar | None = None
 
     def build_runtime_params(self, t):
         ions = self.species.keys()
         fractions = jnp.array([self.species[ion].get_value(t) for ion in ions])
-        Z_override = None if not self.Z_override else self.Z_override.get_value(
-            t)
         As = jnp.array([ION_PROPERTIES_DICT[ion].A for ion in ions])
         A_avg = jnp.sum(As * fractions)
         return RuntimeParamsIM(fractions=fractions,
-                               A_avg=A_avg,
-                               Z_override=Z_override)
+                               A_avg=A_avg
+                               )
 
 
 def _impurity_before_validator(value):
@@ -2611,22 +2606,17 @@ class RuntimeParamsIF:
     fractions_face: Any
     A_avg: Any
     A_avg_face: Any
-    Z_override: Any
 
 
 class ImpurityFractions(BaseModelFrozen):
     impurity_mode: Annotated[Literal['fractions'], JAX_STATIC] = ('fractions')
     species: ImpurityMapping = ValidatedDefault({'Ne': 1.0})
-    Z_override: Any = None
-    A_override: Any = None
 
     def build_runtime_params(self, t):
         ions = self.species.keys()
         fractions = jnp.array([self.species[ion].get_value(t) for ion in ions])
         fractions_face = jnp.array(
             [self.species[ion].get_value(t, grid_type='face') for ion in ions])
-        Z_override = None if not self.Z_override else self.Z_override.get_value(
-            t)
         As = jnp.array([ION_PROPERTIES_DICT[ion].A for ion in ions])
         A_avg = jnp.sum(As[..., jnp.newaxis] * fractions, axis=0)
         A_avg_face = jnp.sum(As[..., jnp.newaxis] * fractions_face, axis=0)
@@ -2635,7 +2625,6 @@ class ImpurityFractions(BaseModelFrozen):
             fractions_face=fractions_face,
             A_avg=A_avg,
             A_avg_face=A_avg_face,
-            Z_override=Z_override,
         )
 
     @pydantic.model_validator(mode='before')
@@ -2726,21 +2715,17 @@ class PlasmaComposition(BaseModelFrozen):
             ) = ValidatedDefault(1.0)
     Z_i_override: TimeVaryingScalar | None = None
     A_i_override: TimeVaryingScalar | None = None
-    Z_impurity_override: TimeVaryingScalar | None = None
     A_impurity_override: TimeVaryingScalar | None = None
 
     @pydantic.model_validator(mode='before')
     @classmethod
     def _conform_impurity_data(cls, data):
         configurable_data = copy.deepcopy(data)
-        Z_impurity_override = configurable_data.get('Z_impurity_override')
         A_impurity_override = configurable_data.get('A_impurity_override')
         impurity_data = configurable_data['impurity']
         configurable_data['impurity'] = {
             'impurity_mode': _IMPURITY_MODE_FRACTIONS,
             'species': impurity_data,
-            'Z_override': Z_impurity_override,
-            'A_override': A_impurity_override,
             'legacy': True,
         }
         return configurable_data
@@ -2752,7 +2737,6 @@ class PlasmaComposition(BaseModelFrozen):
             self.Z_eff,
             self.Z_i_override,
             self.A_i_override,
-            self.Z_impurity_override,
             self.A_impurity_override,
             self._main_ion_mixture,
         )
@@ -2767,18 +2751,15 @@ class PlasmaComposition(BaseModelFrozen):
             Z_eff=children[2],
             Z_i_override=children[3],
             A_i_override=children[4],
-            Z_impurity_override=children[5],
-            A_impurity_override=children[6],
+            A_impurity_override=children[5],
         )
-        obj._main_ion_mixture = children[7]
+        obj._main_ion_mixture = children[6]
         return obj
 
     @functools.cached_property
     def _main_ion_mixture(self):
         return IonMixture.model_construct(
             species=self.main_ion,
-            Z_override=self.Z_i_override,
-            A_override=self.A_i_override,
         )
 
     def get_main_ion_names(self):
@@ -4126,7 +4107,6 @@ def calculate_impurity_species_output(sim_state, runtime_params):
         T_e=sim_state.core_profiles.T_e.value,
         fractions=jnp.stack(
             [impurity_fractions[symbol] for symbol in impurity_names]),
-        Z_override=runtime_params.plasma_composition.impurity.Z_override,
     )
     for i, symbol in enumerate(impurity_names):
         core_profiles = sim_state.core_profiles
@@ -4656,13 +4636,11 @@ def _get_ion_properties_from_fractions(impurity_symbols, impurity_params, T_e,
         ion_symbols=impurity_symbols,
         T_e=T_e.value,
         fractions=impurity_params.fractions,
-        Z_override=impurity_params.Z_override,
     ).Z_mixture
     Z_impurity_face = get_average_charge_state(
         ion_symbols=impurity_symbols,
         T_e=T_e.face_value(),
         fractions=impurity_params.fractions_face,
-        Z_override=impurity_params.Z_override,
     ).Z_mixture
     Z_eff = Z_eff_from_config
     Z_eff_edge = Z_eff_face_from_config[-1]
@@ -4700,13 +4678,11 @@ def get_updated_ions(
         ion_symbols=runtime_params.plasma_composition.main_ion_names,
         T_e=T_e.value,
         fractions=runtime_params.plasma_composition.main_ion.fractions,
-        Z_override=runtime_params.plasma_composition.main_ion.Z_override,
     ).Z_mixture
     Z_i_face = get_average_charge_state(
         ion_symbols=runtime_params.plasma_composition.main_ion_names,
         T_e=T_e.face_value(),
         fractions=runtime_params.plasma_composition.main_ion.fractions,
-        Z_override=runtime_params.plasma_composition.main_ion.Z_override,
     ).Z_mixture
     impurity_params = runtime_params.plasma_composition.impurity
     match impurity_params:
