@@ -6529,7 +6529,6 @@ CONFIG = {
     },
 }
 
-g.geometry_geometry_type = 'chease'
 g.R_major = 6.2
 g.a_minor = 2.0
 g.B_0 = 5.3
