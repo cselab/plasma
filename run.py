@@ -4194,7 +4194,6 @@ _RHO_SMOOTHING_LIMIT = 0.1
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class StandardGeometry(Geometry):
-    Ip_from_parameters: bool = dataclasses.field(metadata=dict(static=True))
     Ip_profile_face: FloatVectorFace
     psi: FloatVectorCell
     psi_from_Ip: FloatVectorCell
@@ -4208,7 +4207,6 @@ class StandardGeometry(Geometry):
 @dataclasses.dataclass(frozen=True)
 class StandardGeometryIntermediates:
     geometry_type: GeometryType
-    Ip_from_parameters: bool
     R_major: FloatScalar
     a_minor: FloatScalar
     B_0: FloatScalar
@@ -4247,7 +4245,7 @@ class StandardGeometryIntermediates:
         self.vpr[:] = _smooth_savgol(self.vpr, idx_limit, 1)
 
     @classmethod
-    def from_chease(cls, geometry_directory, geometry_file, Ip_from_parameters,
+    def from_chease(cls, geometry_directory, geometry_file,
                     n_rho, R_major, a_minor, B_0, hires_factor):
         file_path = os.path.join(
             "geo", "ITER_hybrid_citrin_equil_cheasedata.mat2cols")
@@ -4287,7 +4285,6 @@ class StandardGeometryIntermediates:
         vpr = 4 * np.pi * Phi[-1] * rhon / (F * flux_surf_avg_1_over_R2)
         return cls(
             geometry_type=GeometryType.CHEASE,
-            Ip_from_parameters=Ip_from_parameters,
             R_major=np.array(R_major),
             a_minor=np.array(a_minor),
             B_0=np.array(B_0),
@@ -4331,7 +4328,6 @@ class CheaseConfig(BaseModelFrozen):
     n_rho: Annotated[pydantic.PositiveInt, TIME_INVARIANT] = 25
     hires_factor: pydantic.PositiveInt = 4
     geometry_directory: Annotated[str | None, TIME_INVARIANT] = None
-    Ip_from_parameters: Annotated[bool, TIME_INVARIANT] = True
     geometry_file: str = 'ITER_hybrid_citrin_equil_cheasedata.mat2cols'
     R_major: Meter = 6.2
     a_minor: Meter = 2.0
@@ -4484,7 +4480,6 @@ class CheaseConfig(BaseModelFrozen):
             R_in_face=Rin_face,
             R_out=Rout,
             R_out_face=Rout_face,
-            Ip_from_parameters=intermediate.Ip_from_parameters,
             Ip_profile_face=Ip_profile_face,
             psi=psi,
             psi_from_Ip=psi_from_Ip,
@@ -6506,7 +6501,6 @@ class StateHistory:
                 (field_name.endswith("_face")
                  and field_name.removesuffix("_face") in geometry_attributes)
                     or field_name == "geometry_type"
-                    or field_name == "Ip_from_parameters"
                     or field_name == "j_total" or not isinstance(data, Array)):
                 continue
             if f"{field_name}_face" in geometry_attributes:
@@ -6945,7 +6939,6 @@ CONFIG = {
     'geometry': {
         'geometry_type': 'chease',
         'geometry_file': 'ITER_hybrid_citrin_equil_cheasedata.mat2cols',
-        'Ip_from_parameters': True,
         'R_major': 6.2,
         'a_minor': 2.0,
         'B_0': 5.3,
