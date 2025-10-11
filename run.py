@@ -2982,27 +2982,28 @@ class PlasmaComposition(BaseModelFrozen):
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class RuntimeParamsX:
-    chi_min: float
-    chi_max: float
-    D_e_min: float
-    D_e_max: float
-    V_e_min: float
-    V_e_max: float
-    rho_min: FloatScalar
-    rho_max: FloatScalar
-    apply_inner_patch: BoolScalar
-    D_e_inner: FloatScalar
-    V_e_inner: FloatScalar
-    chi_i_inner: FloatScalar
-    chi_e_inner: FloatScalar
-    rho_inner: FloatScalar
-    apply_outer_patch: BoolScalar
-    D_e_outer: FloatScalar
-    V_e_outer: FloatScalar
-    chi_i_outer: FloatScalar
-    chi_e_outer: FloatScalar
-    rho_outer: FloatScalar
-    smoothing_width: float
+    chi_min: Any
+    chi_max: Any
+    D_e_min: Any
+    D_e_max: Any
+    V_e_min: Any
+    V_e_max: Any
+    rho_min: Any
+    rho_max: Any
+    apply_inner_patch: Any
+    D_e_inner: Any
+    V_e_inner: Any
+    chi_i_inner: Any
+    chi_e_inner: Any
+    rho_inner: Any
+    apply_outer_patch: Any
+    D_e_outer: Any
+    V_e_outer: Any
+    chi_i_outer: Any
+    chi_e_outer: Any
+    rho_outer: Any
+    smoothing_width: Any
+
 
 
 @jax.tree_util.register_dataclass
@@ -3262,11 +3263,12 @@ def _build_smoothing_matrix(transport_runtime_params, runtime_params, geo,
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class NormalizedLogarithmicGradients:
-    lref_over_lti: FloatVectorFace
-    lref_over_lte: FloatVectorFace
-    lref_over_lne: FloatVectorFace
-    lref_over_lni0: FloatVectorFace
-    lref_over_lni1: FloatVectorFace
+    lref_over_lti: Any
+    lref_over_lte: Any
+    lref_over_lne: Any
+    lref_over_lni0: Any
+    lref_over_lni1: Any
+
 
     @classmethod
     def from_profiles(cls, core_profiles, radial_coordinate, reference_length):
@@ -3339,14 +3341,14 @@ def calculate_normalized_logarithmic_gradient(
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class QuasilinearInputs:
-    chiGB: (FloatVectorFace)
-    Rmin: FloatScalar
-    Rmaj: FloatScalar
-    lref_over_lti: FloatVectorFace
-    lref_over_lte: FloatVectorFace
-    lref_over_lne: FloatVectorFace
-    lref_over_lni0: FloatVectorFace
-    lref_over_lni1: FloatVectorFace
+    chiGB: Any
+    Rmin: Any
+    Rmaj: Any
+    lref_over_lti: Any
+    lref_over_lte: Any
+    lref_over_lne: Any
+    lref_over_lni0: Any
+    lref_over_lni1: Any
 
 
 class QuasilinearTransportModel(TransportModel):
@@ -3879,40 +3881,41 @@ _RHO_SMOOTHING_LIMIT = 0.1
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class StandardGeometry(Geometry):
-    Ip_profile_face: FloatVectorFace
-    psi: FloatVectorCell
-    psi_from_Ip: FloatVectorCell
-    psi_from_Ip_face: FloatVectorFace
-    j_total: Array
-    j_total_face: FloatVectorFace
-    delta_upper_face: FloatVectorFace
-    delta_lower_face: FloatVectorFace
+    Ip_profile_face: Any
+    psi: Any
+    psi_from_Ip: Any
+    psi_from_Ip_face: Any
+    j_total: Any
+    j_total_face: Any
+    delta_upper_face: Any
+    delta_lower_face: Any
 
 
 @dataclasses.dataclass(frozen=True)
 class StandardGeometryIntermediates:
-    R_major: FloatScalar
-    a_minor: FloatScalar
-    B_0: FloatScalar
-    psi: Array
-    Ip_profile: Array
-    Phi: Array
-    R_in: Array
-    R_out: Array
-    F: Array
-    int_dl_over_Bp: Array
-    flux_surf_avg_1_over_R: Array
-    flux_surf_avg_1_over_R2: Array
-    flux_surf_avg_Bp2: Array
-    flux_surf_avg_RBp: Array
-    flux_surf_avg_R2Bp2: Array
-    flux_surf_avg_B2: Array
-    flux_surf_avg_1_over_B2: Array
-    delta_upper_face: Array
-    delta_lower_face: Array
-    elongation: Array
-    vpr: Array
-    z_magnetic_axis: FloatScalar | None
+    R_major: Any
+    a_minor: Any
+    B_0: Any
+    psi: Any
+    Ip_profile: Any
+    Phi: Any
+    R_in: Any
+    R_out: Any
+    F: Any
+    int_dl_over_Bp: Any
+    flux_surf_avg_1_over_R: Any
+    flux_surf_avg_1_over_R2: Any
+    flux_surf_avg_Bp2: Any
+    flux_surf_avg_RBp: Any
+    flux_surf_avg_R2Bp2: Any
+    flux_surf_avg_B2: Any
+    flux_surf_avg_1_over_B2: Any
+    delta_upper_face: Any
+    delta_lower_face: Any
+    elongation: Any
+    vpr: Any
+    z_magnetic_axis: Any
+
 
     def __post_init__(self):
         assert (not self.flux_surf_avg_Bp2[-1] < 1e-10)
@@ -4354,9 +4357,9 @@ IMPURITY_DIM = "impurity_symbol"
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class ImpuritySpeciesOutput:
-    radiation: FloatVectorCell
-    n_impurity: FloatVectorCell
-    Z_impurity: FloatVectorCell
+    radiation: Any
+    n_impurity: Any
+    Z_impurity: Any
 
 
 def calculate_impurity_species_output(sim_state, runtime_params):
@@ -4387,88 +4390,88 @@ def calculate_impurity_species_output(sim_state, runtime_params):
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True, eq=False)
 class PostProcessedOutputs:
-    pressure_thermal_i: CellVariable
-    pressure_thermal_e: CellVariable
-    pressure_thermal_total: CellVariable
-    pprime: FloatVector
-    W_thermal_i: FloatScalar
-    W_thermal_e: FloatScalar
-    W_thermal_total: FloatScalar
-    tau_E: FloatScalar
-    H89P: FloatScalar
-    H98: FloatScalar
-    H97L: FloatScalar
-    H20: FloatScalar
-    FFprime: FloatVector
-    psi_norm: FloatVector
-    P_SOL_i: FloatScalar
-    P_SOL_e: FloatScalar
-    P_SOL_total: FloatScalar
-    P_aux_i: FloatScalar
-    P_aux_e: FloatScalar
-    P_aux_total: FloatScalar
-    P_external_injected: FloatScalar
-    P_external_total: FloatScalar
-    P_ei_exchange_i: FloatScalar
-    P_ei_exchange_e: FloatScalar
-    P_aux_generic_i: FloatScalar
-    P_aux_generic_e: FloatScalar
-    P_aux_generic_total: FloatScalar
-    P_alpha_i: FloatScalar
-    P_alpha_e: FloatScalar
-    P_alpha_total: FloatScalar
-    P_ohmic_e: FloatScalar
-    P_bremsstrahlung_e: FloatScalar
-    P_cyclotron_e: FloatScalar
-    P_ecrh_e: FloatScalar
-    P_radiation_e: FloatScalar
-    I_ecrh: FloatScalar
-    I_aux_generic: FloatScalar
-    P_fusion: FloatScalar
-    Q_fusion: FloatScalar
-    P_icrh_e: FloatScalar
-    P_icrh_i: FloatScalar
-    P_icrh_total: FloatScalar
-    P_LH_high_density: FloatScalar
-    P_LH_min: FloatScalar
-    P_LH: FloatScalar
-    n_e_min_P_LH: FloatScalar
-    E_fusion: FloatScalar
-    E_aux_total: FloatScalar
-    E_ohmic_e: FloatScalar
-    E_external_injected: FloatScalar
-    E_external_total: FloatScalar
-    T_e_volume_avg: FloatScalar
-    T_i_volume_avg: FloatScalar
-    n_e_volume_avg: FloatScalar
-    n_i_volume_avg: FloatScalar
-    n_e_line_avg: FloatScalar
-    n_i_line_avg: FloatScalar
-    fgw_n_e_volume_avg: FloatScalar
-    fgw_n_e_line_avg: FloatScalar
-    q95: FloatScalar
-    W_pol: FloatScalar
-    li3: FloatScalar
-    dW_thermal_dt: FloatScalar
-    rho_q_min: FloatScalar
-    q_min: FloatScalar
-    rho_q_3_2_first: FloatScalar
-    rho_q_3_2_second: FloatScalar
-    rho_q_2_1_first: FloatScalar
-    rho_q_2_1_second: FloatScalar
-    rho_q_3_1_first: FloatScalar
-    rho_q_3_1_second: FloatScalar
-    I_bootstrap: FloatScalar
-    j_external: FloatVector
-    j_ohmic: FloatVector
-    S_gas_puff: FloatScalar
-    S_pellet: FloatScalar
-    S_generic_particle: FloatScalar
-    beta_tor: FloatScalar
-    beta_pol: FloatScalar
-    beta_N: FloatScalar
-    S_total: FloatScalar
-    impurity_species: dict[str, ImpuritySpeciesOutput]
+    pressure_thermal_i: Any
+    pressure_thermal_e: Any
+    pressure_thermal_total: Any
+    pprime: Any
+    W_thermal_i: Any
+    W_thermal_e: Any
+    W_thermal_total: Any
+    tau_E: Any
+    H89P: Any
+    H98: Any
+    H97L: Any
+    H20: Any
+    FFprime: Any
+    psi_norm: Any
+    P_SOL_i: Any
+    P_SOL_e: Any
+    P_SOL_total: Any
+    P_aux_i: Any
+    P_aux_e: Any
+    P_aux_total: Any
+    P_external_injected: Any
+    P_external_total: Any
+    P_ei_exchange_i: Any
+    P_ei_exchange_e: Any
+    P_aux_generic_i: Any
+    P_aux_generic_e: Any
+    P_aux_generic_total: Any
+    P_alpha_i: Any
+    P_alpha_e: Any
+    P_alpha_total: Any
+    P_ohmic_e: Any
+    P_bremsstrahlung_e: Any
+    P_cyclotron_e: Any
+    P_ecrh_e: Any
+    P_radiation_e: Any
+    I_ecrh: Any
+    I_aux_generic: Any
+    P_fusion: Any
+    Q_fusion: Any
+    P_icrh_e: Any
+    P_icrh_i: Any
+    P_icrh_total: Any
+    P_LH_high_density: Any
+    P_LH_min: Any
+    P_LH: Any
+    n_e_min_P_LH: Any
+    E_fusion: Any
+    E_aux_total: Any
+    E_ohmic_e: Any
+    E_external_injected: Any
+    E_external_total: Any
+    T_e_volume_avg: Any
+    T_i_volume_avg: Any
+    n_e_volume_avg: Any
+    n_i_volume_avg: Any
+    n_e_line_avg: Any
+    n_i_line_avg: Any
+    fgw_n_e_volume_avg: Any
+    fgw_n_e_line_avg: Any
+    q95: Any
+    W_pol: Any
+    li3: Any
+    dW_thermal_dt: Any
+    rho_q_min: Any
+    q_min: Any
+    rho_q_3_2_first: Any
+    rho_q_3_2_second: Any
+    rho_q_2_1_first: Any
+    rho_q_2_1_second: Any
+    rho_q_3_1_first: Any
+    rho_q_3_1_second: Any
+    I_bootstrap: Any
+    j_external: Any
+    j_ohmic: Any
+    S_gas_puff: Any
+    S_pellet: Any
+    S_generic_particle: Any
+    beta_tor: Any
+    beta_pol: Any
+    beta_N: Any
+    S_total: Any
+    impurity_species: Any
 
 
 ION_EL_HEAT_SOURCE_TRANSFORMATIONS = {
