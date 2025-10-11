@@ -5536,7 +5536,6 @@ def get_consistent_runtime_params_and_geometry(*, t):
     return runtime_params, geo
 
 
-PROFILES = "profiles"
 SCALARS = "scalars"
 T_E = "T_e"
 T_I = "T_i"
@@ -5691,8 +5690,8 @@ class StateHistory:
         scalars = xr.Dataset(scalars_dict)
         data_tree = xr.DataTree(
             children={
-                PROFILES: xr.DataTree(dataset=profiles),
-                SCALARS: xr.DataTree(dataset=scalars),
+                'profiles': xr.DataTree(dataset=profiles),
+                'scalars': xr.DataTree(dataset=scalars),
             },
             dataset=xr.Dataset(
                 data_vars=None,
