@@ -836,7 +836,7 @@ def make_convection_terms(v_face,
     above = above[:-1]
     below = (1.0 - left_alpha) * left_v / var.dr
     below = below[1:]
-    mat = tridiag(diag, above, below)
+    mat = jnp.diag(diag) + jnp.diag(above, 1) + jnp.diag(below, -1)
     vec = jnp.zeros_like(diag)
     mat_value = (v_face[0] - right_alpha[0] * v_face[1]) / var.dr
     vec_value = (-v_face[0] * (1.0 - left_alpha[0]) *
@@ -876,7 +876,7 @@ def make_diffusion_terms(d_face: FloatVectorFace, var: CellVariable):
         diag = diag.at[-1].set(-d_face[-2])
         vec = vec.at[-1].set(d_face[-1] * var.right_face_grad_constraint /
                              var.dr)
-    mat = tridiag(diag, off, off) / denom
+    mat = (jnp.diag(diag) + jnp.diag(off, 1) + jnp.diag(off, -1)) / denom
     return mat, vec
 
 
