@@ -1576,10 +1576,6 @@ class BootstrapCurrent:
         )
 
 
-class BootstrapCurrentModelConfig(BaseModelFrozen):
-    pass
-
-
 class SauterModel:
 
     def calculate_bootstrap_current(self, geometry, core_profiles):
@@ -1603,7 +1599,7 @@ class SauterModel:
         return hash(self.__class__)
 
 
-class SauterModelConfig(BootstrapCurrentModelConfig):
+class SauterModelConfig(BaseModelFrozen):
     model_name: Annotated[Literal['sauter'], JAX_STATIC] = 'sauter'
     bootstrap_multiplier: float = 1.0
 
