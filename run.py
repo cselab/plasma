@@ -292,19 +292,18 @@ ValueType: TypeAlias = Any
 
 
 class Grid1D(BaseModelFrozen):
-    nx: typing_extensions.Annotated[pydantic.conint(ge=4), JAX_STATIC]
 
     @functools.cached_property
     def dx(self):
-        return 1 / self.nx
+        return 1 / g.n_rho
 
     @property
     def face_centers(self):
-        return np.linspace(0, self.nx * self.dx, self.nx + 1)
+        return np.linspace(0, g.n_rho * self.dx, g.n_rho + 1)
 
     @property
     def cell_centers(self):
-        return _get_cell_centers(nx=self.nx, dx=self.dx)
+        return _get_cell_centers(nx=g.n_rho, dx=self.dx)
 
 
 class TimeVaryingArray(BaseModelFrozen):
@@ -2836,12 +2835,7 @@ class PedestalModel:
     def __setattr__(self, attr, value):
         return super().__setattr__(attr, value)
 
-    def __call__(
-        self,
-        runtime_params,
-        geo,
-        core_profiles,
-    ):
+    def __call__(self, runtime_params, geo, core_profiles):
         return jax.lax.cond(
             runtime_params.pedestal.set_pedestal,
             lambda: self._call_implementation(runtime_params, geo,
@@ -2851,7 +2845,7 @@ class PedestalModel:
                 T_i_ped=0.0,
                 T_e_ped=0.0,
                 n_e_ped=0.0,
-                rho_norm_ped_top_idx=geo.torax_mesh.nx,
+                rho_norm_ped_top_idx=g.n_rho,
             ),
         )
 
@@ -4295,12 +4289,11 @@ class CheaseConfig(BaseModelFrozen):
         j_total_face_axis = j_total_face_bulk[0]
         j_total = np.concatenate(
             [np.array([j_total_face_axis]), j_total_face_bulk])
-        mesh = Grid1D(nx=g.n_rho)
+        mesh = Grid1D()
         rho_b = rho_intermediate[-1]
         rho_face_norm = mesh.face_centers
         rho_norm = mesh.cell_centers
-        rho_hires_norm = np.linspace(
-            0, 1, g.n_rho * intermediate.hires_factor)
+        rho_hires_norm = np.linspace(0, 1, g.n_rho * intermediate.hires_factor)
         rho_hires = rho_hires_norm * rho_b
         rhon_interpolation_func = lambda x, y: np.interp(
             x, rho_norm_intermediate, y)
@@ -6908,8 +6901,7 @@ g.ITG_flux_ratio_correction = 1
 g.n_rho = 25
 
 mesh = g.torax_config.geometry.build_provider.geo.torax_mesh
-g.grid = Grid1D.model_construct(nx=mesh.nx,
-                                face_centers=mesh.face_centers,
+g.grid = Grid1D.model_construct(face_centers=mesh.face_centers,
                                 cell_centers=mesh.cell_centers)
 g.geometry_provider = g.torax_config.geometry.build_provider
 g.pedestal_model = g.torax_config.pedestal.build_pedestal_model()
