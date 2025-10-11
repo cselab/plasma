@@ -6018,12 +6018,8 @@ def solver_x_new(dt, runtime_params_t, runtime_params_t_plus_dt, geo_t,
                     source = source_mat_cell[i][j]
                     if source is not None:
                         c_mat[i][j] += jnp.diag(source)
-
-        def add(left, right):
-            return left + right
-
         if source_cell is not None:
-            c = [add(c_i, source_i) for c_i, source_i in zip(c, source_cell)]
+            c = [(c_i + source_i) for c_i, source_i in zip(c, source_cell)]
         c_mat_new = jnp.block(c_mat)
         c_new = jnp.block(c)
 
