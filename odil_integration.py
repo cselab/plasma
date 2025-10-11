@@ -14,7 +14,8 @@ sys.path.append(os.path.join(os.path.dirname(__file__), 'odil'))
 
 import torch
 import numpy as np
-from odil.main import compute_residual_loss
+from torch import sparse_coo_tensor
+from odil.main import compute_residual_loss_sparse
 
 class ODILSolver:
     """
@@ -85,7 +86,7 @@ class ODILSolver:
     
     def solve(self, num_epochs=100, lr=0.01, verbose=True):
         """
-        Solve the plasma transport equations using ODIL.
+        Solve the plasma transport equations using ODIL with sparse matrices.
         
         Args:
             num_epochs: Number of optimization epochs
@@ -102,7 +103,7 @@ class ODILSolver:
         
         for epoch in range(num_epochs):
             optimizer.zero_grad()
-            loss = compute_residual_loss(self.Ti, self.Te, self.ne, self.psi, self.params)
+            loss = compute_residual_loss_sparse(self.Ti, self.Te, self.ne, self.psi, self.params)
             loss.backward()
             optimizer.step()
             
@@ -130,7 +131,7 @@ class ODILSolver:
     def get_residuals(self):
         """Compute the current residuals for analysis."""
         with torch.no_grad():
-            loss = compute_residual_loss(self.Ti, self.Te, self.ne, self.psi, self.params)
+            loss = compute_residual_loss_sparse(self.Ti, self.Te, self.ne, self.psi, self.params)
         return loss.item()
 
 

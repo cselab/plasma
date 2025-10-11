@@ -3,7 +3,7 @@
 import torch
 import numpy as np
 import argparse
-from torch.sparse import sparse_coo_tensor
+from torch import sparse_coo_tensor
 
 # Optional matplotlib import
 try:
@@ -56,7 +56,7 @@ def create_sparse_laplacian_matrix(n, dx, device):
     
     # Convert to tensors
     indices = torch.tensor(indices).T.to(device)
-    values = torch.tensor(values).to(device)
+    values = torch.tensor(values, dtype=torch.float32).to(device)
     
     # Create sparse matrix
     sparse_matrix = sparse_coo_tensor(indices, values, size=(n, n), device=device)
@@ -66,14 +66,21 @@ def create_sparse_laplacian_matrix(n, dx, device):
 
 def compute_residual_loss_sparse(Ti, Te, ne, psi, params):
     """
-    Compute the residual loss for the ODIL solver.
-    Normalized approach to avoid numerical issues.
+    Compute the residual loss for the ODIL solver using sparse matrices.
+    Much more memory efficient for larger grids.
     """
     grid = params['grid']
     nrho = grid['nrho']
     nt = grid['nt']
     dt = grid['dt']
     dx = grid['drho']
+    device = Ti.device
+    
+    # Create sparse Laplacian matrix once (reused for all equations)
+    if not hasattr(params, '_sparse_laplacian'):
+        params['_sparse_laplacian'] = create_sparse_laplacian_matrix(nrho, dx, device)
+    
+    sparse_laplacian = params['_sparse_laplacian']
     
     # Reshape fields from flattened to 2D (rho, t)
     Ti_2d = Ti.view(nrho, nt + 1)
@@ -101,28 +108,12 @@ def compute_residual_loss_sparse(Ti, Te, ne, psi, params):
         psi_curr = psi_2d[:, t]
         psi_prev = psi_2d[:, t-1]
         
-        # Compute second derivatives using finite differences
-        d2Ti_dx2 = torch.zeros_like(Ti_curr)
-        d2Te_dx2 = torch.zeros_like(Te_curr)
-        d2ne_dx2 = torch.zeros_like(ne_curr)
-        d2psi_dx2 = torch.zeros_like(psi_curr)
-        
-        # Interior points
-        d2Ti_dx2[1:-1] = (Ti_curr[2:] - 2*Ti_curr[1:-1] + Ti_curr[:-2]) / (dx**2)
-        d2Te_dx2[1:-1] = (Te_curr[2:] - 2*Te_curr[1:-1] + Te_curr[:-2]) / (dx**2)
-        d2ne_dx2[1:-1] = (ne_curr[2:] - 2*ne_curr[1:-1] + ne_curr[:-2]) / (dx**2)
-        d2psi_dx2[1:-1] = (psi_curr[2:] - 2*psi_curr[1:-1] + psi_curr[:-2]) / (dx**2)
-        
-        # Boundary points
-        d2Ti_dx2[0] = (Ti_curr[1] - 2*Ti_curr[0] + 0) / (dx**2)  # u(-1) = 0
-        d2Te_dx2[0] = (Te_curr[1] - 2*Te_curr[0] + 0) / (dx**2)
-        d2ne_dx2[0] = (ne_curr[1] - 2*ne_curr[0] + 0) / (dx**2)
-        d2psi_dx2[0] = (psi_curr[1] - 2*psi_curr[0] + 0) / (dx**2)
-        
-        d2Ti_dx2[-1] = (0 - 2*Ti_curr[-1] + Ti_curr[-2]) / (dx**2)  # u(nx) = 0
-        d2Te_dx2[-1] = (0 - 2*Te_curr[-1] + Te_curr[-2]) / (dx**2)
-        d2ne_dx2[-1] = (0 - 2*ne_curr[-1] + ne_curr[-2]) / (dx**2)
-        d2psi_dx2[-1] = (0 - 2*psi_curr[-1] + psi_curr[-2]) / (dx**2)
+        # Compute second derivatives using sparse matrix multiplication
+        # This is much more efficient than manual finite differences
+        d2Ti_dx2 = torch.sparse.mm(sparse_laplacian, Ti_curr.unsqueeze(1).float()).squeeze(1)
+        d2Te_dx2 = torch.sparse.mm(sparse_laplacian, Te_curr.unsqueeze(1).float()).squeeze(1)
+        d2ne_dx2 = torch.sparse.mm(sparse_laplacian, ne_curr.unsqueeze(1).float()).squeeze(1)
+        d2psi_dx2 = torch.sparse.mm(sparse_laplacian, psi_curr.unsqueeze(1).float()).squeeze(1)
         
         # PDE residuals: ∂u/∂t - D ∂²u/∂x² = 0
         res_Ti = (Ti_curr - Ti_prev) / dt - D_i * d2Ti_dx2
@@ -172,6 +163,12 @@ def compute_residual_loss_sparse(Ti, Te, ne, psi, params):
     return loss
 
 
+# Keep the old function for backward compatibility
+def compute_residual_loss(Ti, Te, ne, psi, params):
+    """Backward compatibility wrapper for sparse implementation."""
+    return compute_residual_loss_sparse(Ti, Te, ne, psi, params)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--show-plots', action='store_true', default=False, help='show plots if set')
@@ -181,9 +178,9 @@ def main():
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # Grid parameters
-    nrho = 16
-    nt = 10
+    # Grid parameters - using larger grid to demonstrate sparse matrix benefits
+    nrho = 64  # Larger grid for sparse matrix demonstration
+    nt = 20    # More time steps
     dx = 1.0 / nrho
     dt = 0.01
 
@@ -197,10 +194,10 @@ def main():
     psi_init = (1 - rho**2)  # Normalized poloidal flux
     
     # Convert to torch tensors
-    Ti_init = torch.from_numpy(Ti_init).to(device)
-    Te_init = torch.from_numpy(Te_init).to(device)
-    ne_init = torch.from_numpy(ne_init).to(device)
-    psi_init = torch.from_numpy(psi_init).to(device)
+    Ti_init = torch.from_numpy(Ti_init).to(device).float()
+    Te_init = torch.from_numpy(Te_init).to(device).float()
+    ne_init = torch.from_numpy(ne_init).to(device).float()
+    psi_init = torch.from_numpy(psi_init).to(device).float()
     
     # Create full solution arrays
     Ti = Ti_init.unsqueeze(0).repeat(nt + 1, 1).T  # Shape: (nrho, nt+1)
@@ -236,7 +233,7 @@ def main():
         loss = compute_residual_loss(Ti, Te, ne, psi, params)
         loss.backward()
         optimizer.step()
-        
+
         if epoch % 20 == 0:
             l = loss.detach().item()
             print(f"epoch {epoch:06d}, loss {l:.6e}")
