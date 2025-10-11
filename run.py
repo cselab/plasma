@@ -3975,7 +3975,7 @@ class CheaseConfig(BaseModelFrozen):
     B_0: Tesla = 5.3
 
     def build_geometry(self):
-        intermediate = StandardGeometryIntermediates.from_chease(self.R_major, self.a_minor, self.B_0)
+        intermediate = StandardGeometryIntermediates.from_chease(g.R_major, g.a_minor, g.B_0)
         rho_intermediate = np.sqrt(intermediate.Phi /
                                    (np.pi * intermediate.B_0))
         rho_norm_intermediate = rho_intermediate / rho_intermediate[-1]
@@ -6587,8 +6587,8 @@ CONFIG = {
 
 g.geometry_geometry_type = 'chease'
 g.R_major = 6.2
-g.geometry_a_minor = 2.0
-g.geometry_B_0 = 5.3
+g.a_minor = 2.0
+g.B_0 = 5.3
 
 g.tolerance = 1e-7
 g.n_corrector_steps = 1
