@@ -1551,8 +1551,6 @@ def calculate_conductivity(geometry, core_profiles):
 
 
 class SauterModelConfigCond(ConductivityModelConfig):
-    model_name: Annotated[Literal['sauter'], JAX_STATIC] = 'sauter'
-
     def build_model(self):
         return SauterModelCond()
 
@@ -6510,7 +6508,6 @@ g.pedestal_model = g.torax_config.pedestal.build_pedestal_model()
 g.source_models = g.torax_config.sources.build_models()
 g.transport_model = g.torax_config.transport.build_transport_model()
 neo = Neoclassical0()
-g.conductivity = None
 g.bootstrap_current = neo.bootstrap_current.build_model()
 
 g.runtime_params_provider = RuntimeParamsProvider.from_config()
