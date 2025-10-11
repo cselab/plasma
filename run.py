@@ -6563,15 +6563,6 @@ class StateHistory:
         return xr_dict
 
 
-@enum.unique
-class GeometryType(enum.IntEnum):
-    CIRCULAR = 0
-    CHEASE = 1
-    FBT = 2
-    EQDSK = 3
-    IMAS = 4
-
-
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class Geometry:
