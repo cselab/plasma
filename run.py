@@ -4347,11 +4347,6 @@ def _smooth_savgol(data, idx_limit, polyorder):
     ])
 
 
-T = TypeVar('T')
-LY_OBJECT_TYPE: TypeAlias = (str | Mapping[str, NumpyArray | float])
-TIME_INVARIANT = TIME_INVARIANT
-
-
 class CheaseConfig(BaseModelFrozen):
     geometry_type: Annotated[Literal['chease'], TIME_INVARIANT] = 'chease'
     n_rho: Annotated[pydantic.PositiveInt, TIME_INVARIANT] = 25
