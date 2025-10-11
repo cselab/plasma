@@ -797,13 +797,7 @@ class CoreTransport:
     V_neo_e: Any = None
     V_neo_ware_e: Any = None
 
-    def __post_init__(self):
-        template = self.chi_face_el
-
-    def chi_max(
-        self,
-        geo,
-    ):
+    def chi_max(self, geo):
         return jnp.maximum(
             jnp.max(self.chi_face_ion * geo.g1_over_vpr2_face),
             jnp.max(self.chi_face_el * geo.g1_over_vpr2_face),
@@ -1291,10 +1285,8 @@ def calc_nu_star(geo, core_profiles, collisionality_multiplier):
             collisionality_multiplier)
     epsilon = geo.rho_face / g.R_major
     epsilon = jnp.clip(epsilon, g.eps)
-    tau_bounce = (
-        core_profiles.q_face * g.R_major /
-        (epsilon**1.5 *
-         jnp.sqrt(core_profiles.T_e.face_value() * g.keV_to_J / g.m_e)))
+    tau_bounce = (core_profiles.q_face * g.R_major / (epsilon**1.5 * jnp.sqrt(
+        core_profiles.T_e.face_value() * g.keV_to_J / g.m_e)))
     tau_bounce = tau_bounce.at[0].set(tau_bounce[1])
     nustar = nu_e * tau_bounce
     return nustar
@@ -1541,6 +1533,7 @@ def calculate_conductivity(geometry, core_profiles):
 
 
 class SauterModelConfigCond(ConductivityModelConfig):
+
     def build_model(self):
         return SauterModelCond()
 
@@ -1759,8 +1752,6 @@ class Source:
 
     def get_value(self, runtime_params, geo, core_profiles,
                   calculated_source_profiles, conductivity):
-        source_params = runtime_params.sources[self.source_name]
-        mode = source_params.mode
         return self.model_func(runtime_params, geo, self.source_name,
                                core_profiles, calculated_source_profiles,
                                conductivity)
@@ -2251,7 +2242,6 @@ class SourceModels:
 
 
 def _model_based_qei(runtime_params, geo, core_profiles):
-    source_params = runtime_params.sources[QeiSource.SOURCE_NAME]
     zeros = jnp.zeros_like(geo.rho_norm)
     qei_coef = coll_exchange(
         core_profiles=core_profiles,
@@ -2631,14 +2621,6 @@ def _impurity_before_validator(value):
 
 
 def _impurity_after_validator(value):
-    first_key = next(iter(value))
-    first_tva = value[first_key]
-    reference_times = first_tva.value.keys()
-    for t in reference_times:
-        reference_rho_norm, _ = first_tva.value[t]
-        values_at_t = [tva.value[t][1] for tva in value.values()]
-        reference_shape = values_at_t[0].shape
-        sum_of_values = np.sum(np.stack(values_at_t, axis=0), axis=0)
     return value
 
 
@@ -4166,7 +4148,6 @@ class ImpuritySpeciesOutput:
 
 def calculate_impurity_species_output(sim_state, runtime_params):
     impurity_species_output = {}
-    mavrin_active = False
     impurity_fractions = sim_state.core_profiles.impurity_fractions
     impurity_names = runtime_params.plasma_composition.impurity_names
     charge_state_info = get_average_charge_state(
@@ -4352,8 +4333,6 @@ def make_post_processed_outputs(
     integrated['P_aux_e'] = jnp.array(0.0, dtype=jnp.float64)
     integrated['P_external_injected'] = jnp.array(0.0, dtype=jnp.float64)
     for key, value in ION_EL_HEAT_SOURCE_TRANSFORMATIONS.items():
-        is_in_T_i = key in core_sources.T_i
-        is_in_T_e = key in core_sources.T_e
         integrated[f'{value}_i'] = _get_integrated_source_value(
             core_sources.T_i, key, geo, volume_integration)
         integrated[f'{value}_e'] = _get_integrated_source_value(
@@ -5463,7 +5442,6 @@ def solver_x_new(dt, runtime_params_t, runtime_params_t_plus_dt, geo_t,
         tc_in_old = jnp.concatenate(coeffs_exp.transient_in_cell)
         tc_out_new = jnp.concatenate(coeffs_new.transient_out_cell)
         tc_in_new = jnp.concatenate(coeffs_new.transient_in_cell)
-        eps = 1e-7
         left_transient = jnp.identity(len(x_new_guess_vec))
         right_transient = jnp.diag(jnp.squeeze(tc_in_old / tc_in_new))
         x = x_new_guess
@@ -5762,8 +5740,6 @@ class StateHistory:
         flat_dict = {}
         for key, value in itertools.chain(*(d.items() for d in all_dicts)):
             flat_dict[key] = value
-        numerics_dict = {}
-        numerics = xr.Dataset(numerics_dict)
         profiles_dict = {
             k: v
             for k, v in flat_dict.items()
@@ -5842,8 +5818,6 @@ class StateHistory:
                                                 in core_profile_field_names):
                 continue
             if attr_name == "A_impurity":
-                is_constant = np.all(attr_value == attr_value[..., 0:1],
-                                     axis=-1)
                 data_to_save = attr_value[..., 0]
                 xr_dict[output_key] = self._pack_into_data_array(
                     output_key, data_to_save)
