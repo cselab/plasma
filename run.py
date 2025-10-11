@@ -3898,11 +3898,6 @@ class RuntimeParams0(RuntimeParams):
 _EPSILON_NN: Final[float] = (1 / 3)
 
 
-@functools.lru_cache(maxsize=1)
-def get_model(path: str, name: str):
-    return QLKNNModelWrapper(path, name)
-
-
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class QLKNNRuntimeConfigInputs:
@@ -4005,7 +4000,7 @@ class QLKNNTransportModel0(QualikizBasedTransportModel):
             geo=geo,
             core_profiles=core_profiles,
         )
-        model = get_model(self.path, self.name)
+        model = QLKNNModelWrapper(self.path, self.name)
         qualikiz_inputs = dataclasses.replace(
             qualikiz_inputs,
             x=qualikiz_inputs.x * qualikiz_inputs.epsilon_lcfs / _EPSILON_NN,
