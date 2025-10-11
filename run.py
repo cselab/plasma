@@ -3266,7 +3266,6 @@ class RuntimeParamsX:
     chi_e_outer: FloatScalar
     rho_outer: FloatScalar
     smoothing_width: float
-    smooth_everywhere: bool
 
 
 @jax.tree_util.register_dataclass
@@ -3498,7 +3497,7 @@ def _build_smoothing_matrix(transport_runtime_params, runtime_params, geo,
     )
     mask = jnp.where(
         jnp.logical_or(
-            transport_runtime_params.smooth_everywhere,
+            False,
             jnp.logical_and(
                 geo.rho_face_norm > mask_inner_edge,
                 geo.rho_face_norm < mask_outer_edge,
@@ -3830,7 +3829,6 @@ class TransportBase(BaseModelFrozen):
     chi_e_outer: PositiveTimeVaryingScalar = (ValidatedDefault(1.0))
     rho_outer: UnitIntervalTimeVaryingScalar = (ValidatedDefault(0.9))
     smoothing_width: pydantic.NonNegativeFloat = 0.0
-    smooth_everywhere: bool = False
 
     def build_runtime_params(self, t):
         return RuntimeParamsX(
@@ -3855,7 +3853,6 @@ class TransportBase(BaseModelFrozen):
             chi_e_outer=self.chi_e_outer.get_value(t),
             rho_outer=self.rho_outer.get_value(t),
             smoothing_width=self.smoothing_width,
-            smooth_everywhere=self.smooth_everywhere,
         )
 
 
