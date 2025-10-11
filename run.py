@@ -1548,26 +1548,12 @@ def calculate_L32(
     return F32ee + F32ei
 
 
-def calculate_nu_e_star(
-    q: FloatVectorFace,
-    geo: Geometry,
-    n_e: FloatVectorFace,
-    T_e: FloatVectorFace,
-    Z_eff: FloatVectorFace,
-    log_lambda_ei: FloatVectorFace,
-):
+def calculate_nu_e_star(q, geo, n_e, T_e, Z_eff, log_lambda_ei):
     return (6.921e-18 * q * geo.R_major * n_e * Z_eff * log_lambda_ei /
             (((T_e * 1e3)**2) * (geo.epsilon_face + g.eps)**1.5))
 
 
-def calculate_nu_i_star(
-    q: FloatVectorFace,
-    geo: Geometry,
-    n_i: FloatVectorFace,
-    T_i: FloatVectorFace,
-    Z_eff: FloatVectorFace,
-    log_lambda_ii: FloatVectorFace,
-):
+def calculate_nu_i_star(q, geo, n_i, T_i, Z_eff, log_lambda_ii):
     return (4.9e-18 * q * geo.R_major * n_i * Z_eff**4 * log_lambda_ii /
             (((T_i * 1e3)**2) * (geo.epsilon_face + g.eps)**1.5))
 
