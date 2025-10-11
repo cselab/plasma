@@ -2725,8 +2725,6 @@ class RuntimeParamsPC:
     n_e_right_bc: Any
     use_v_loop_lcfs_boundary_condition: Any = dataclasses.field(
         metadata={'static': True})
-    n_e_right_bc_is_absolute: Any = dataclasses.field(
-        metadata={'static': True})
 
 
 class ProfileConditions(BaseModelFrozen):
@@ -2751,9 +2749,7 @@ class ProfileConditions(BaseModelFrozen):
         runtime_params = {
             x.name: getattr(self, x.name)
             for x in dataclasses.fields(RuntimeParamsPC)
-            if x.name != 'n_e_right_bc_is_absolute'
         }
-        runtime_params['n_e_right_bc_is_absolute'] = True
 
         def _get_value(x):
             if isinstance(x, (TimeVaryingScalar, TimeVaryingArray)):
