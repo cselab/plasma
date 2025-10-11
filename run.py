@@ -4356,10 +4356,6 @@ class CheaseConfig(BaseModelFrozen):
     a_minor: Meter = 2.0
     B_0: Tesla = 5.3
 
-    @pydantic.model_validator(mode='after')
-    def _check_fields(self):
-        return self
-
     def build_geometry(self):
         intermediate = _apply_relevant_kwargs(
             StandardGeometryIntermediates.from_chease, self.__dict__)
