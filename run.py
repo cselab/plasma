@@ -3762,7 +3762,6 @@ def calculate_total_transport_coeffs(runtime_params, geo, core_profiles):
 class Neoclassical0(BaseModelFrozen):
     bootstrap_current: SauterModelConfig = pydantic.Field(
         discriminator="model_name")
-    conductivity: SauterModelConfigCond = SauterModelConfigCond()
 
     @pydantic.model_validator(mode="before")
     @classmethod
@@ -6520,7 +6519,7 @@ g.pedestal_model = g.torax_config.pedestal.build_pedestal_model()
 g.source_models = g.torax_config.sources.build_models()
 g.transport_model = g.torax_config.transport.build_transport_model()
 neo = Neoclassical0()
-g.conductivity = neo.conductivity.build_model()
+g.conductivity = SauterModelCond()
 g.bootstrap_current = neo.bootstrap_current.build_model()
 
 g.runtime_params_provider = RuntimeParamsProvider.from_config()
