@@ -1576,15 +1576,11 @@ class BootstrapCurrent:
         )
 
 
-class BootstrapCurrentModel:
-    pass
-
-
 class BootstrapCurrentModelConfig(BaseModelFrozen):
     pass
 
 
-class SauterModel(BootstrapCurrentModel):
+class SauterModel:
 
     def calculate_bootstrap_current(self, geometry, core_profiles):
         result = _calculate_bootstrap_current(
@@ -1680,16 +1676,6 @@ def _calculate_alpha(f_trap, nu_i_star):
              (1 + 0.5 * jnp.sqrt(nu_i_star)) + 0.315 * nu_i_star**2 *
              f_trap**6) / (1 + 0.15 * nu_i_star**2 * f_trap**6)
     return alpha
-
-
-@jax.tree_util.register_dataclass
-@dataclasses.dataclass
-class NeoclassicalModels:
-    conductivity: Any
-    bootstrap_current: Any
-
-    def __hash__(self):
-        return hash((self.bootstrap_current, self.conductivity))
 
 
 def exponential_profile(geo, *, decay_start, width, total):
@@ -2438,7 +2424,6 @@ def build_source_profiles0(runtime_params,
     jax.jit,
     static_argnames=[
         'source_models',
-        'neoclassical_models',
         'explicit',
     ],
 )
@@ -2446,7 +2431,6 @@ def build_source_profiles1(runtime_params,
                            geo,
                            core_profiles,
                            source_models,
-                           neoclassical_models,
                            explicit,
                            explicit_source_profiles=None,
                            conductivity=None):
@@ -2456,7 +2440,7 @@ def build_source_profiles1(runtime_params,
         core_profiles=core_profiles,
     )
     bootstrap_current = (
-        neoclassical_models.bootstrap_current.calculate_bootstrap_current(
+        g.bootstrap_current.calculate_bootstrap_current(
             geo, core_profiles))
     profiles = SourceProfiles(
         bootstrap_current=bootstrap_current,
@@ -2532,7 +2516,7 @@ def build_all_zero_profiles(geo):
 
 
 def get_all_source_profiles(runtime_params, geo, core_profiles, source_models,
-                            neoclassical_models, conductivity):
+                            conductivity):
     explicit_source_profiles = build_source_profiles0(
         runtime_params=runtime_params,
         geo=geo,
@@ -2544,7 +2528,6 @@ def get_all_source_profiles(runtime_params, geo, core_profiles, source_models,
         geo=geo,
         core_profiles=core_profiles,
         source_models=source_models,
-        neoclassical_models=neoclassical_models,
         explicit=False,
         explicit_source_profiles=explicit_source_profiles,
         conductivity=conductivity,
@@ -3792,10 +3775,7 @@ class Neoclassical0(BaseModelFrozen):
         return {'bootstrap_current': {"model_name": "sauter"}}
 
     def build_models(self):
-        return NeoclassicalModels(
-            conductivity=self.conductivity.build_model(),
-            bootstrap_current=self.bootstrap_current.build_model(),
-        )
+        return self.conductivity.build_model(), self.bootstrap_current.build_model()
 
 
 _RHO_SMOOTHING_LIMIT = 0.1
@@ -4977,7 +4957,7 @@ def initial_core_profiles0(runtime_params, geo, source_models):
         j_total_face=j_total_face,
         Ip_profile_face=Ip_profile_face,
     )
-    conductivity = g.neoclassical_models.conductivity.calculate_conductivity(
+    conductivity = g.conductivity.calculate_conductivity(
         geo,
         core_profiles,
     )
@@ -4991,7 +4971,7 @@ def initial_core_profiles0(runtime_params, geo, source_models):
             calculate_anyway=True,
             calculated_source_profiles=source_profiles,
         )
-        bootstrap_current = (g.neoclassical_models.bootstrap_current.
+        bootstrap_current = (g.bootstrap_current.
                              calculate_bootstrap_current(geo, core_profiles))
         source_profiles = dataclasses.replace(
             source_profiles, bootstrap_current=bootstrap_current)
@@ -5136,8 +5116,8 @@ def update_core_profiles_during_step(x_new, runtime_params, geo,
 
 def update_core_and_source_profiles_after_step(
         dt, x_new, runtime_params_t_plus_dt, geo, core_profiles_t,
-        core_profiles_t_plus_dt, explicit_source_profiles, source_models,
-        neoclassical_models):
+        core_profiles_t_plus_dt, explicit_source_profiles, source_models
+        ):
     updated_core_profiles_t_plus_dt = solver_x_tuple_to_core_profiles(
         x_new, core_profiles_t_plus_dt)
     ions = get_updated_ions(
@@ -5185,7 +5165,7 @@ def update_core_and_source_profiles_after_step(
         j_total_face=j_total_face,
         Ip_profile_face=Ip_profile_face,
     )
-    conductivity = neoclassical_models.conductivity.calculate_conductivity(
+    conductivity = g.conductivity.calculate_conductivity(
         geo, intermediate_core_profiles)
     intermediate_core_profiles = dataclasses.replace(
         intermediate_core_profiles,
@@ -5196,7 +5176,6 @@ def update_core_and_source_profiles_after_step(
         runtime_params=runtime_params_t_plus_dt,
         geo=geo,
         source_models=source_models,
-        neoclassical_models=neoclassical_models,
         core_profiles=intermediate_core_profiles,
         explicit=False,
         explicit_source_profiles=explicit_source_profiles,
@@ -5336,11 +5315,10 @@ def _calc_coeffs_full(runtime_params, geo, core_profiles,
     mask = (jnp.zeros_like(
         geo.rho,
         dtype=bool).at[pedestal_model_output.rho_norm_ped_top_idx].set(True))
-    conductivity = (g.neoclassical_models.conductivity.calculate_conductivity(
+    conductivity = (g.conductivity.calculate_conductivity(
         geo, core_profiles))
     merged_source_profiles = build_source_profiles1(
         source_models=g.source_models,
-        neoclassical_models=g.neoclassical_models,
         runtime_params=runtime_params,
         geo=geo,
         core_profiles=core_profiles,
@@ -6152,7 +6130,6 @@ def _get_initial_state(runtime_params, geo, step_fn):
         geo=geo,
         core_profiles=initial_core_profiles,
         source_models=g.source_models,
-        neoclassical_models=g.neoclassical_models,
         conductivity=Conductivity(
             sigma=initial_core_profiles.sigma,
             sigma_face=initial_core_profiles.sigma_face,
@@ -6188,7 +6165,6 @@ def _finalize_outputs(t, dt, x_new, solver_numeric_outputs, geometry_t_plus_dt,
             core_profiles_t_plus_dt=core_profiles_t_plus_dt,
             explicit_source_profiles=explicit_source_profiles,
             source_models=g.source_models,
-            neoclassical_models=g.neoclassical_models,
         ))
     final_total_transport = (calculate_total_transport_coeffs(
         runtime_params_t_plus_dt,
@@ -6552,7 +6528,9 @@ g.geo = CheaseConfig().build_geometry()
 g.pedestal_model = g.torax_config.pedestal.build_pedestal_model()
 g.source_models = g.torax_config.sources.build_models()
 g.transport_model = g.torax_config.transport.build_transport_model()
-g.neoclassical_models = Neoclassical0().build_models()
+neo = Neoclassical0()
+g.conductivity = neo.conductivity.build_model()
+g.bootstrap_current = neo.bootstrap_current.build_model()
 
 g.runtime_params_provider = RuntimeParamsProvider.from_config()
 runtime_params_for_init, geo_for_init = (
