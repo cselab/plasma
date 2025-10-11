@@ -46,9 +46,6 @@ FloatVectorCell: TypeAlias = Any
 FloatMatrixCell: TypeAlias = Any
 FloatVectorFace: TypeAlias = Any
 DataTypes: TypeAlias = Any
-DtypeName: TypeAlias = Any
-NestedList: TypeAlias = Any
-NumpySerialized: TypeAlias = Any
 NumpyArray = Any
 NumpyArray1D = Any
 
@@ -796,49 +793,49 @@ def make_diffusion_terms(d_face, var):
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True, eq=False)
 class CoreProfiles:
-    T_i: CellVariable
-    T_e: CellVariable
-    psi: CellVariable
-    psidot: CellVariable
-    n_e: CellVariable
-    n_i: CellVariable
-    n_impurity: CellVariable
-    impurity_fractions: Mapping[str, FloatVector]
-    q_face: FloatVectorFace
-    s_face: FloatVectorFace
-    v_loop_lcfs: FloatScalar
-    Z_i: FloatVectorCell
-    Z_i_face: FloatVectorFace
-    A_i: FloatScalar
-    Z_impurity: FloatVectorCell
-    Z_impurity_face: FloatVectorFace
-    A_impurity: FloatVectorCell
-    A_impurity_face: FloatVectorFace
-    Z_eff: FloatVectorCell
-    Z_eff_face: FloatVectorFace
-    sigma: FloatVectorCell
-    sigma_face: FloatVectorFace
-    j_total: FloatVectorCell
-    j_total_face: FloatVectorFace
-    Ip_profile_face: FloatVectorFace
+    T_i: Any
+    T_e: Any
+    psi: Any
+    psidot: Any
+    n_e: Any
+    n_i: Any
+    n_impurity: Any
+    impurity_fractions: Any
+    q_face: Any
+    s_face: Any
+    v_loop_lcfs: Any
+    Z_i: Any
+    Z_i_face: Any
+    A_i: Any
+    Z_impurity: Any
+    Z_impurity_face: Any
+    A_impurity: Any
+    A_impurity_face: Any
+    Z_eff: Any
+    Z_eff_face: Any
+    sigma: Any
+    sigma_face: Any
+    j_total: Any
+    j_total_face: Any
+    Ip_profile_face: Any
 
 
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass
 class CoreTransport:
-    chi_face_ion: jax.Array
-    chi_face_el: jax.Array
-    d_face_el: jax.Array
-    v_face_el: jax.Array
-    chi_face_el_bohm: jax.Array | None = None
-    chi_face_el_gyrobohm: jax.Array | None = None
-    chi_face_ion_bohm: jax.Array | None = None
-    chi_face_ion_gyrobohm: jax.Array | None = None
-    chi_neo_i: jax.Array | None = None
-    chi_neo_e: jax.Array | None = None
-    D_neo_e: jax.Array | None = None
-    V_neo_e: jax.Array | None = None
-    V_neo_ware_e: jax.Array | None = None
+    chi_face_ion: Any
+    chi_face_el: Any
+    d_face_el: Any
+    v_face_el: Any
+    chi_face_el_bohm: Any = None
+    chi_face_el_gyrobohm: Any = None
+    chi_face_ion_bohm: Any = None
+    chi_face_ion_gyrobohm: Any = None
+    chi_neo_i: Any = None
+    chi_neo_e: Any = None
+    D_neo_e: Any = None
+    V_neo_e: Any = None
+    V_neo_ware_e: Any = None
 
     def __post_init__(self):
         template = self.chi_face_el
