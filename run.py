@@ -504,7 +504,6 @@ ION_SYMBOLS = frozenset(ION_PROPERTIES_DICT.keys())
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class RuntimeParamsSlice:
-    pedestal: Any
     plasma_composition: Any
     profile_conditions: Any
     sources: Any
@@ -2500,12 +2499,6 @@ class PedestalModel:
         )
 
 
-@jax.tree_util.register_dataclass
-@dataclasses.dataclass(frozen=True)
-class RuntimeParamsPED:
-    pass
-
-
 class SetTemperatureDensityPedestalModel(PedestalModel):
 
     def __init__(self, ):
@@ -2514,7 +2507,6 @@ class SetTemperatureDensityPedestalModel(PedestalModel):
 
     @override
     def _call_implementation(self, runtime_params, geo, core_profiles):
-        pedestal_params = runtime_params.pedestal
         nGW = (runtime_params.profile_conditions.Ip / 1e6 /
                (jnp.pi * geo.a_minor**2) * 1e20)
         n_e_ped = jnp.where(
@@ -2532,9 +2524,6 @@ class PedestalConfig(BaseModelFrozen):
 
     def build_pedestal_model(self):
         return SetTemperatureDensityPedestalModel()
-
-    def build_runtime_params(self, t):
-        return RuntimeParamsPED()
 
 
 _IMPURITY_MODE_FRACTIONS: Final[str] = 'fractions'
@@ -5481,7 +5470,6 @@ class RuntimeParamsProvider:
             },
             plasma_composition=self.plasma_composition.build_runtime_params(t),
             profile_conditions=self.profile_conditions.build_runtime_params(t),
-            pedestal=self.pedestal.build_runtime_params(t),
         )
 
 
