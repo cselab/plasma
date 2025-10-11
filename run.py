@@ -518,9 +518,9 @@ def time_varying_array_defined_at_1(time_varying_array):
 
 
 def time_varying_array_bounded(
-    time_varying_array: TimeVaryingArray,
-    lower_bound: float = -np.inf,
-    upper_bound: float = np.inf,
+    time_varying_array,
+    lower_bound = -np.inf,
+    upper_bound = np.inf
 ):
     return time_varying_array
 
@@ -671,9 +671,7 @@ class CellVariable:
 
 def make_convection_terms(v_face,
                           d_face,
-                          var,
-                          dirichlet_mode='ghost',
-                          neumann_mode='ghost'):
+                          var):
     eps = 1e-20
     is_neg = d_face < 0.0
     nonzero_sign = jnp.ones_like(is_neg) - 2 * is_neg
