@@ -2496,9 +2496,7 @@ class PedestalModel:
             True,
             lambda: self._call_implementation(runtime_params, geo,
                                               core_profiles),
-            lambda: PedestalModelOutput(
-                rho_norm_ped_top_idx=g.n_rho,
-            ),
+            lambda: PedestalModelOutput(rho_norm_ped_top_idx=g.n_rho, ),
         )
 
 
@@ -2525,9 +2523,8 @@ class SetTemperatureDensityPedestalModel(PedestalModel):
             g.n_e_ped,
         )
         return PedestalModelOutput(
-            rho_norm_ped_top_idx=jnp.abs(
-                geo.rho_norm - g.rho_norm_ped_top).argmin(),
-        )
+            rho_norm_ped_top_idx=jnp.abs(geo.rho_norm -
+                                         g.rho_norm_ped_top).argmin(), )
 
 
 class PedestalConfig(BaseModelFrozen):
@@ -2539,9 +2536,7 @@ class PedestalConfig(BaseModelFrozen):
         return SetTemperatureDensityPedestalModel()
 
     def build_runtime_params(self, t):
-        return RuntimeParamsPED(
-            n_e_ped_is_fGW=self.n_e_ped_is_fGW,
-        )
+        return RuntimeParamsPED(n_e_ped_is_fGW=self.n_e_ped_is_fGW, )
 
 
 _IMPURITY_MODE_FRACTIONS: Final[str] = 'fractions'
@@ -2562,9 +2557,7 @@ class IonMixture(BaseModelFrozen):
         fractions = jnp.array([self.species[ion].get_value(t) for ion in ions])
         As = jnp.array([ION_PROPERTIES_DICT[ion].A for ion in ions])
         A_avg = jnp.sum(As * fractions)
-        return RuntimeParamsIM(fractions=fractions,
-                               A_avg=A_avg
-                               )
+        return RuntimeParamsIM(fractions=fractions, A_avg=A_avg)
 
 
 def _impurity_before_validator(value):
@@ -2726,9 +2719,7 @@ class PlasmaComposition(BaseModelFrozen):
 
     @functools.cached_property
     def _main_ion_mixture(self):
-        return IonMixture.model_construct(
-            species=self.main_ion,
-        )
+        return IonMixture.model_construct(species=self.main_ion, )
 
     def get_main_ion_names(self):
         return tuple(self._main_ion_mixture.species.keys())
@@ -2827,10 +2818,10 @@ class TransportModel:
 
     def _apply_domain_restriction(self, transport_runtime_params, geo,
                                   transport_coeffs, pedestal_model_output):
-        active_mask = (
-            (geo.rho_face_norm > transport_runtime_params.rho_min)
-            & (geo.rho_face_norm <= transport_runtime_params.rho_max)
-            & (geo.rho_face_norm <= g.rho_norm_ped_top))
+        active_mask = ((geo.rho_face_norm > transport_runtime_params.rho_min)
+                       &
+                       (geo.rho_face_norm <= transport_runtime_params.rho_max)
+                       & (geo.rho_face_norm <= g.rho_norm_ped_top))
         active_mask = (jnp.asarray(active_mask).at[0].set(
             transport_runtime_params.rho_min == 0))
         chi_face_ion = jnp.where(active_mask, transport_coeffs.chi_face_ion,
@@ -5184,8 +5175,7 @@ def _calc_coeffs_full(runtime_params, geo, core_profiles,
     full_v_face_el = geo.g0_face * v_face_el_total
     source_mat_nn = jnp.zeros_like(geo.rho)
     source_n_e = merged_source_profiles.total_sources('n_e', geo)
-    source_n_e += (mask * g.adaptive_n_source_prefactor *
-                   g.n_e_ped)
+    source_n_e += (mask * g.adaptive_n_source_prefactor * g.n_e_ped)
     source_mat_nn += -(mask * g.adaptive_n_source_prefactor)
     (
         chi_face_per_ion,
@@ -5224,8 +5214,7 @@ def _calc_coeffs_full(runtime_params, geo, core_profiles,
     source_e += qei.explicit_e * geo.vpr
     source_mat_ie = qei.implicit_ie * geo.vpr
     source_mat_ei = qei.implicit_ei * geo.vpr
-    source_i += (mask * g.adaptive_T_source_prefactor *
-                 g.T_i_ped)
+    source_i += (mask * g.adaptive_T_source_prefactor * g.T_i_ped)
     source_e += (mask * g.adaptive_T_source_prefactor * g.T_e_ped)
     source_mat_ii -= mask * g.adaptive_T_source_prefactor
     source_mat_ee -= mask * g.adaptive_T_source_prefactor
@@ -6273,9 +6262,7 @@ CONFIG = {
         'fusion': {},
         'ei_exchange': {},
     },
-    'pedestal': {
-
-    },
+    'pedestal': {},
     'transport': {
         'model_name': 'qlknn',
         'apply_inner_patch': True,
