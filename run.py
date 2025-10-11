@@ -2486,9 +2486,6 @@ class PedestalModelOutput:
 
 
 class SetTemperatureDensityPedestalModel:
-    def __setattr__(self, attr, value):
-        return super().__setattr__(attr, value)
-
     def __call__(self, runtime_params, geo, core_profiles):
         return jax.lax.cond(
             True,
@@ -5438,7 +5435,6 @@ class RuntimeParamsProvider:
     profile_conditions: Any
     plasma_composition: Any
     transport_model: Any
-    pedestal: Any
 
     @classmethod
     def from_config(cls):
@@ -5447,7 +5443,6 @@ class RuntimeParamsProvider:
             profile_conditions=g.torax_config.profile_conditions,
             plasma_composition=g.torax_config.plasma_composition,
             transport_model=g.torax_config.transport,
-            pedestal=g.torax_config.pedestal,
         )
 
     @jax.jit
@@ -5982,7 +5977,6 @@ class ToraxConfig(BaseModelFrozen):
     plasma_composition: PlasmaComposition
     sources: Sources
     transport: QLKNNTransportModel
-    pedestal: PedestalConfig
 
 
 def body_fun(inputs):
@@ -6239,7 +6233,6 @@ CONFIG = {
         'fusion': {},
         'ei_exchange': {},
     },
-    'pedestal': {},
     'transport': {
         'model_name': 'qlknn',
         'apply_inner_patch': True,
@@ -6302,7 +6295,7 @@ g.T_e_ped = 4.5
 g.rho_norm_ped_top = 0.91
 
 g.geo = CheaseConfig().build_geometry()
-g.pedestal_model = g.torax_config.pedestal.build_pedestal_model()
+g.pedestal_model = PedestalConfig().build_pedestal_model()
 g.source_models = g.torax_config.sources.build_models()
 g.transport_model = g.torax_config.transport.build_transport_model()
 g.bootstrap_current = SauterModelConfig().build_model()
