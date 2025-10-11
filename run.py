@@ -2594,8 +2594,6 @@ class BasePedestal(BaseModelFrozen):
 
 
 class PedestalConfig(BasePedestal):
-    model_name: Annotated[Literal['set_T_ped_n_ped'],
-                          JAX_STATIC] = 'set_T_ped_n_ped'
     n_e_ped: TimeVaryingScalar = ValidatedDefault(0.7e20)
     n_e_ped_is_fGW: bool = False
     T_i_ped: TimeVaryingScalar = ValidatedDefault(5.0)
@@ -6414,7 +6412,6 @@ CONFIG = {
         'ei_exchange': {},
     },
     'pedestal': {
-        'model_name': 'set_T_ped_n_ped',
         'set_pedestal': True,
         'T_i_ped': 4.5,
         'T_e_ped': 4.5,
