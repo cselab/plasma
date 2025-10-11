@@ -2588,11 +2588,7 @@ class SetTemperatureDensityPedestalModel(PedestalModel):
         )
 
 
-class BasePedestal(BaseModelFrozen):
-    pass
-
-
-class PedestalConfig(BasePedestal):
+class PedestalConfig(BaseModelFrozen):
     n_e_ped: TimeVaryingScalar = ValidatedDefault(0.7e20)
     n_e_ped_is_fGW: bool = False
     T_i_ped: TimeVaryingScalar = ValidatedDefault(5.0)
