@@ -2503,7 +2503,7 @@ class PedestalModel:
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class RuntimeParamsPED:
-    n_e_ped_is_fGW: Any
+    pass
 
 
 class SetTemperatureDensityPedestalModel(PedestalModel):
@@ -2518,7 +2518,7 @@ class SetTemperatureDensityPedestalModel(PedestalModel):
         nGW = (runtime_params.profile_conditions.Ip / 1e6 /
                (jnp.pi * geo.a_minor**2) * 1e20)
         n_e_ped = jnp.where(
-            pedestal_params.n_e_ped_is_fGW,
+            False,
             g.n_e_ped * nGW,
             g.n_e_ped,
         )
@@ -2528,14 +2528,13 @@ class SetTemperatureDensityPedestalModel(PedestalModel):
 
 
 class PedestalConfig(BaseModelFrozen):
-    n_e_ped_is_fGW: bool = False
     rho_norm_ped_top: TimeVaryingScalar = 0.91
 
     def build_pedestal_model(self):
         return SetTemperatureDensityPedestalModel()
 
     def build_runtime_params(self, t):
-        return RuntimeParamsPED(n_e_ped_is_fGW=self.n_e_ped_is_fGW, )
+        return RuntimeParamsPED()
 
 
 _IMPURITY_MODE_FRACTIONS: Final[str] = 'fractions'
