@@ -599,11 +599,7 @@ def _ion_mixture_before_validator(value):
     return value
 
 
-def _ion_mixture_after_validator(value: Mapping[str, TimeVaryingScalar], ):
-    invalid_ion_symbols = set(value.keys()) - ION_SYMBOLS
-    time_arrays = [v.time for v in value.values()]
-    fraction_arrays = [v.value for v in value.values()]
-    fraction_sum = np.sum(fraction_arrays, axis=0)
+def _ion_mixture_after_validator(value):
     return value
 
 
