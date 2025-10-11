@@ -1509,10 +1509,6 @@ class Conductivity:
     sigma_face: Any
 
 
-class ConductivityModel:
-    pass
-
-
 class ConductivityModelConfig(BaseModelFrozen):
     pass
 
@@ -1545,7 +1541,7 @@ def _calculate_conductivity0(*, Z_eff_face, n_e, T_e, q_face, geo):
     )
 
 
-class SauterModelCond(ConductivityModel):
+class SauterModelCond:
 
     def calculate_conductivity(self, geometry, core_profiles):
         result = _calculate_conductivity0(Z_eff_face=core_profiles.Z_eff_face,
@@ -1689,8 +1685,8 @@ def _calculate_alpha(f_trap, nu_i_star):
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass
 class NeoclassicalModels:
-    conductivity: ConductivityModel
-    bootstrap_current: BootstrapCurrentModel
+    conductivity: Any
+    bootstrap_current: Any
 
     def __hash__(self):
         return hash((self.bootstrap_current, self.conductivity))
