@@ -989,10 +989,7 @@ def stack_geometries(geometries):
     return first_geo.__class__(**stacked_data)
 
 
-def calculate_plh_scaling_factor(
-    geo: Geometry,
-    core_profiles: CoreProfiles,
-):
+def calculate_plh_scaling_factor(geo, core_profiles):
     line_avg_n_e = line_average(core_profiles.n_e.value, geo)
     P_LH_hi_dens_D = (2.15 * (line_avg_n_e / 1e20)**0.782 * geo.B_0**0.772 *
                       geo.a_minor**0.975 * g.R_major**0.999 * 1e6)
@@ -1008,12 +1005,8 @@ def calculate_plh_scaling_factor(
     return P_LH_hi_dens, P_LH_min, P_LH, n_e_min_P_LH
 
 
-def calculate_scaling_law_confinement_time(
-    geo: Geometry,
-    core_profiles: CoreProfiles,
-    Ploss: jax.Array,
-    scaling_law: str,
-):
+def calculate_scaling_law_confinement_time(geo, core_profiles, Ploss,
+                                           scaling_law):
     scaling_params = {
         'H89P': {
             'prefactor': 0.038128,
