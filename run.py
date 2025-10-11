@@ -4118,7 +4118,6 @@ class StandardGeometryIntermediates:
     delta_lower_face: Array
     elongation: Array
     vpr: Array
-    hires_factor: int
     z_magnetic_axis: FloatScalar | None
 
     def __post_init__(self):
@@ -4134,7 +4133,7 @@ class StandardGeometryIntermediates:
         self.vpr[:] = _smooth_savgol(self.vpr, idx_limit, 1)
 
     @classmethod
-    def from_chease(cls, R_major, a_minor, B_0, hires_factor):
+    def from_chease(cls, R_major, a_minor, B_0):
         file_path = os.path.join(
             "geo", "ITER_hybrid_citrin_equil_cheasedata.mat2cols")
         with open(file_path, 'r') as file:
@@ -4193,7 +4192,6 @@ class StandardGeometryIntermediates:
             delta_lower_face=chease_data['delta_bottom'],
             elongation=chease_data['elongation'],
             vpr=vpr,
-            hires_factor=hires_factor,
             z_magnetic_axis=None,
         )
 
@@ -4210,7 +4208,6 @@ def _smooth_savgol(data, idx_limit, polyorder):
 
 class CheaseConfig(BaseModelFrozen):
     geometry_type: Annotated[Literal['chease'], TIME_INVARIANT] = 'chease'
-    hires_factor: pydantic.PositiveInt = 4
     R_major: Meter = 6.2
     a_minor: Meter = 2.0
     B_0: Tesla = 5.3
@@ -4268,7 +4265,7 @@ class CheaseConfig(BaseModelFrozen):
         rho_b = rho_intermediate[-1]
         rho_face_norm = g.face_centers
         rho_norm = g.cell_centers
-        rho_hires_norm = np.linspace(0, 1, g.n_rho * intermediate.hires_factor)
+        rho_hires_norm = np.linspace(0, 1, g.n_rho * g.hires_factor)
         rho_hires = rho_hires_norm * rho_b
         rhon_interpolation_func = lambda x, y: np.interp(
             x, rho_norm_intermediate, y)
@@ -6875,6 +6872,8 @@ g.n_rho = 25
 g.dx = 1 / g.n_rho
 g.face_centers = np.linspace(0, g.n_rho * g.dx, g.n_rho + 1)
 g.cell_centers = np.linspace(g.dx * 0.5, (g.n_rho - 0.5) * g.dx, g.n_rho)
+g.hires_factor = 4
+
 g.geometry_provider = g.torax_config.geometry.build_provider
 g.pedestal_model = g.torax_config.pedestal.build_pedestal_model()
 g.source_models = g.torax_config.sources.build_models()
