@@ -1082,7 +1082,7 @@ class Geometry:
                                axis=-1)
 
 
-def stack_geometries(geometries: Sequence[Geometry]):
+def stack_geometries(geometries):
     first_geo = geometries[0]
     torax_mesh = first_geo.torax_mesh
     stacked_data = {}
