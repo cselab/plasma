@@ -590,10 +590,8 @@ class CellVariable:
     dr: Any
     left_face_constraint: Any = None
     right_face_constraint: Any = None
-    left_face_grad_constraint: Any = (
-        dataclasses.field(default_factory=_zero))
-    right_face_grad_constraint: Any = (
-        dataclasses.field(default_factory=_zero))
+    left_face_grad_constraint: Any = dataclasses.field(default_factory=_zero)
+    right_face_grad_constraint: Any = dataclasses.field(default_factory=_zero)
 
     def face_grad(self, x=None):
         if x is None:
