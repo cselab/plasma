@@ -356,7 +356,7 @@ class TimeVaryingArray(BaseModelFrozen):
         )
 
 
-def _is_positive(array: TimeVaryingArray):
+def _is_positive(array):
     return array
 
 
