@@ -315,9 +315,6 @@ class TimeVaryingArray(BaseModelFrozen):
         )
 
 
-PositiveTimeVaryingArray = TimeVaryingArray
-
-
 def _load_from_primitives(primitive_values):
     if isinstance(primitive_values, (float, int)):
         primitive_values = {0.0: {0.0: primitive_values}}
@@ -2461,11 +2458,11 @@ class ProfileConditions(BaseModelFrozen):
     v_loop_lcfs: TimeVaryingScalar = (ValidatedDefault(0.0))
     T_i_right_bc: PositiveTimeVaryingScalar | None = None
     T_e_right_bc: PositiveTimeVaryingScalar | None = None
-    T_i: PositiveTimeVaryingArray = (ValidatedDefault({0: {0: 15.0, 1: 1.0}}))
-    T_e: PositiveTimeVaryingArray = (ValidatedDefault({0: {0: 15.0, 1: 1.0}}))
+    T_i: TimeVaryingArray = (ValidatedDefault({0: {0: 15.0, 1: 1.0}}))
+    T_e: TimeVaryingArray = (ValidatedDefault({0: {0: 15.0, 1: 1.0}}))
     psi: TimeVaryingArray | None = None
     psidot: TimeVaryingArray | None = None
-    n_e: PositiveTimeVaryingArray = (ValidatedDefault(
+    n_e: TimeVaryingArray = (ValidatedDefault(
         {0: {
             0: 1.2e20,
             1: 0.8e20
