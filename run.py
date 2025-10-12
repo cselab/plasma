@@ -4532,9 +4532,6 @@ V_LOOP = "v_loop"
 N_E = "n_e"
 N_I = "n_i"
 Q = "q"
-N_IMPURITY = "n_impurity"
-Z_IMPURITY = "Z_impurity"
-SIGMA_PARALLEL = "sigma_parallel"
 V_LOOP_LCFS = "v_loop_lcfs"
 J_TOTAL = "j_total"
 IP_PROFILE = "Ip_profile"
@@ -4690,7 +4687,6 @@ class StateHistory:
         stacked_core_profiles = self._stacked_core_profiles
         output_name_map = {
             "psidot": V_LOOP,
-            "sigma": SIGMA_PARALLEL,
             "Ip_profile_face": IP_PROFILE,
             "q_face": Q,
         }
