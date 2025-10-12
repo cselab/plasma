@@ -533,17 +533,12 @@ TimeVaryingArrayDefinedAtRightBoundaryAndBounded: TypeAlias = Annotated[
 ]
 
 
-def _ion_mixture_before_validator(value):
-    return value
-
-
 def _ion_mixture_after_validator(value):
     return value
 
 
 IonMapping: TypeAlias = Annotated[
     Mapping[str, TimeVaryingScalar],
-    pydantic.BeforeValidator(_ion_mixture_before_validator),
     pydantic.AfterValidator(_ion_mixture_after_validator),
 ]
 
