@@ -39,7 +39,6 @@ Array: TypeAlias = jax.Array | np.ndarray
 FloatScalar: TypeAlias = jt.Float[Array | float, ""]
 NumpyArray = Any
 NumpyArray1D = Any
-TIME_INVARIANT: Final[str] = '_pydantic_time_invariant_field'
 JAX_STATIC: Final[str] = '_pydantic_jax_static_field'
 _interp_fn = jax.jit(jnp.interp)
 
