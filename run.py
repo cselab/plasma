@@ -71,21 +71,19 @@ class _PiecewiseLinearInterpolatedParam:
 
 
 def convert_input_to_xs_ys(interp_input):
-    interpolation_mode = InterpolationMode.PIECEWISE_LINEAR
-    is_bool_param = False
     if isinstance(interp_input, dict):
         return (
             np.array(list(interp_input.keys()), dtype=np.float64),
             np.array(list(interp_input.values()), dtype=np.float64),
-            interpolation_mode,
-            is_bool_param,
+            InterpolationMode.PIECEWISE_LINEAR,
+            False,
         )
     else:
         return (
             np.array([0.0], dtype=np.float64),
             np.array([interp_input], dtype=np.float64),
-            interpolation_mode,
-            is_bool_param,
+            InterpolationMode.PIECEWISE_LINEAR,
+            False,
         )
 
 
