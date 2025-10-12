@@ -2420,10 +2420,9 @@ def calculate_normalized_logarithmic_gradient(var, radial_coordinate,
     )
     return result
 
-
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
-class QuasilinearInputs:
+class QualikizInputs:
     chiGB: Any
     Rmin: Any
     Rmaj: Any
@@ -2432,11 +2431,6 @@ class QuasilinearInputs:
     lref_over_lne: Any
     lref_over_lni0: Any
     lref_over_lni1: Any
-
-
-@jax.tree_util.register_dataclass
-@dataclasses.dataclass(frozen=True)
-class QualikizInputs(QuasilinearInputs):
     Z_eff_face: Any
     q: Any
     smag: Any
