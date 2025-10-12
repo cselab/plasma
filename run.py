@@ -2899,7 +2899,6 @@ class QLKNNModelWrapper:
 class RuntimeParams0(RuntimeParams):
     include_ITG: bool
     include_TEM: bool
-    include_ETG: bool
     ETG_correction_factor: float
     clip_inputs: bool
     clip_margin: float
@@ -2927,8 +2926,7 @@ class QLKNNRuntimeConfigInputs:
 def _filter_model_output(
     model_output: None,
     include_ITG: bool,
-    include_TEM: bool,
-    include_ETG: bool,
+    include_TEM: bool
 ):
     filter_map = {
         'qi_itg': include_ITG,
@@ -2937,9 +2935,7 @@ def _filter_model_output(
         'qe_tem': include_TEM,
         'qi_tem': include_TEM,
         'pfe_tem': include_TEM,
-        'qe_etg': include_ETG,
     }
-
     def filter_flux(flux_name, value):
         return jax.lax.cond(
             filter_map.get(flux_name, True),
@@ -3347,7 +3343,6 @@ class QLKNNTransportModel0:
             model_output=model_output,
             include_ITG=runtime_config_inputs.transport.include_ITG,
             include_TEM=runtime_config_inputs.transport.include_TEM,
-            include_ETG=runtime_config_inputs.transport.include_ETG,
         )
         qi_itg_squeezed = model_output['qi_itg'].squeeze()
         qi = qi_itg_squeezed + model_output['qi_tem'].squeeze()
@@ -3376,7 +3371,6 @@ class QLKNNTransportModel(TransportBase):
     qlknn_model_name: Annotated[str, JAX_STATIC] = ''
     include_ITG: bool = True
     include_TEM: bool = True
-    include_ETG: bool = True
     ETG_correction_factor: float = 1.0 / 3.0
     clip_inputs: bool = False
     clip_margin: float = 0.95
@@ -3402,7 +3396,6 @@ class QLKNNTransportModel(TransportBase):
         return RuntimeParams0(
             include_ITG=self.include_ITG,
             include_TEM=self.include_TEM,
-            include_ETG=self.include_ETG,
             ETG_correction_factor=self.ETG_correction_factor,
             clip_inputs=self.clip_inputs,
             clip_margin=self.clip_margin,
@@ -5710,7 +5703,6 @@ CONFIG = {
     'transport': {
         'include_ITG': True,
         'include_TEM': True,
-        'include_ETG': True,
     },
 }
 
@@ -5766,7 +5758,6 @@ g.chi_max = 100
 g.D_e_min = 0.05
 g.include_ITG = True
 g.include_TEM = True
-g.include_ETG = True
 g.An_min = 0.05
 intermediate = StandardGeometryIntermediates.from_chease()
 intermediate.post_init()
