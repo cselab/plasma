@@ -4357,7 +4357,7 @@ class RuntimeParamsProvider:
             sources=g.torax_config.sources,
             profile_conditions=g.torax_config.profile_conditions,
             plasma_composition=g.torax_config.plasma_composition,
-            transport_model=g.torax_config.transport,
+            transport_model=g.transport_config,
         )
 
     @jax.jit
@@ -4505,7 +4505,6 @@ class ToraxConfig(BaseModelFrozen):
     profile_conditions: ProfileConditions
     plasma_composition: PlasmaComposition
     sources: Sources
-    transport: QLKNNTransportModel
 
 
 def body_fun(inputs):
@@ -4760,7 +4759,6 @@ CONFIG = {
         "fusion": {},
         "ei_exchange": {},
     },
-    "transport": {},
 }
 g.model = qlknn_model.QLKNNModel.load_default_model()
 g.R_major = 6.2
@@ -5037,6 +5035,7 @@ def geo_g1_over_vpr2_face():
     return jnp.concatenate([jnp.expand_dims(first_element, axis=-1), bulk], axis=-1)
 g.pedestal_model = PedestalConfig().build_pedestal_model()
 g.source_models = g.torax_config.sources.build_models()
+g.transport_config = QLKNNTransportModel()
 g.transport_model = QLKNNTransportModel0()
 g.bootstrap_current = SauterModelConfig().build_model()
 g.runtime_params_provider = RuntimeParamsProvider.from_config()
