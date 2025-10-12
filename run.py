@@ -30,7 +30,6 @@ class g:
 
 
 g.evolving_names = 'T_i', 'T_e', 'psi', 'n_e'
-
 os.environ['XLA_FLAGS'] = (
     os.environ.get('XLA_FLAGS', '') +
     ' --xla_backend_extra_options=xla_cpu_flatten_after_fusion')
@@ -40,7 +39,6 @@ Array: TypeAlias = jax.Array | np.ndarray
 FloatScalar: TypeAlias = jt.Float[Array | float, ""]
 NumpyArray = Any
 NumpyArray1D = Any
-
 TIME_INVARIANT: Final[str] = '_pydantic_time_invariant_field'
 JAX_STATIC: Final[str] = '_pydantic_jax_static_field'
 _interp_fn = jax.jit(jnp.interp)
@@ -412,7 +410,6 @@ UnitIntervalTimeVaryingScalar: TypeAlias = typing_extensions.Annotated[
     pydantic.AfterValidator(
         functools.partial(_interval, lower_bound=0.0, upper_bound=1.0)),
 ]
-
 Meter: TypeAlias = pydantic.PositiveFloat
 MeterPerSecond: TypeAlias = float
 MeterSquaredPerSecond: TypeAlias = pydantic.NonNegativeFloat
@@ -422,7 +419,6 @@ Second: TypeAlias = pydantic.NonNegativeFloat
 UnitInterval: TypeAlias = Annotated[float, pydantic.Field(ge=0.0, le=1.0)]
 OpenUnitInterval: TypeAlias = Annotated[float, pydantic.Field(gt=0.0, lt=1.0)]
 ValidatedDefault = functools.partial(pydantic.Field, validate_default=True)
-
 BooleanNumeric = Any
 thread_context = threading.local()
 
@@ -469,7 +465,6 @@ g.epsilon_0 = 8.85418782e-12
 g.mu_0 = 4 * jnp.pi * 1e-7
 g.k_B = 1.380649e-23
 g.eps = 1e-7
-
 ION_PROPERTIES: Final[tuple[IonProperties, ...]] = (
     IonProperties(symbol='H', name='Hydrogen', A=1.008, Z=1.0),
     IonProperties(symbol='D', name='Deuterium', A=2.0141, Z=1.0),
@@ -523,7 +518,6 @@ TimeVaryingArrayDefinedAtRightBoundaryAndBounded: TypeAlias = Annotated[
             lower_bound=1.0,
         )),
 ]
-
 IonMapping: TypeAlias = Mapping[str, TimeVaryingScalar]
 
 
@@ -4896,7 +4890,6 @@ def solver_x_new(dt, runtime_params_t, runtime_params_t_plus_dt, geo_t,
             c = [(c_i + source_i) for c_i, source_i in zip(c, source_cell)]
         c_mat_new = jnp.block(c_mat)
         c_new = jnp.block(c)
-
         broadcasted = jnp.expand_dims(1 / (tc_out_new * tc_in_new), 1)
         lhs_mat = left_transient - dt * g.theta_implicit * broadcasted * c_mat_new
         lhs_vec = -g.theta_implicit * dt * (1 /
@@ -4921,7 +4914,6 @@ def solver_x_new(dt, runtime_params_t, runtime_params_t_plus_dt, geo_t,
         loop_body,
         x_new_guess,
     )
-
     solver_numeric_outputs = SolverNumericOutputs(solver_error_state=0, )
     return (
         x_new,
@@ -5460,7 +5452,6 @@ def body_fun(inputs):
     n_i_bound_right = n_e_right_bc * dilution_factor_edge
     n_impurity_bound_right = (n_e_right_bc -
                               n_i_bound_right * Z_i_edge) / Z_impurity_edge
-
     updated_boundary_conditions = {
         'T_i':
         dict(
@@ -5683,18 +5674,15 @@ CONFIG = {
         'include_TEM': True,
     },
 }
-
 g.R_major = 6.2
 g.a_minor = 2.0
 g.B_0 = 5.3
-
 g.tolerance = 1e-7
 g.n_corrector_steps = 1
 g.torax_config = ToraxConfig.from_dict(CONFIG)
 g.chi_pereverzev = 30
 g.D_pereverzev = 15
 g.theta_implicit = 1.0
-
 g.t_final = 5
 g.resistivity_multiplier = 200
 g.max_dt = 0.5
@@ -5705,21 +5693,18 @@ g.adaptive_T_source_prefactor = 2.0e10
 g.adaptive_n_source_prefactor = 2.0e8
 g.t_initial = 0.0
 g.ITG_flux_ratio_correction = 1
-
 # {'n_rho': 25, 'a_minor': 2.0, 'B_0': 5.3}
 g.n_rho = 25
 g.dx = 1 / g.n_rho
 g.face_centers = np.linspace(0, g.n_rho * g.dx, g.n_rho + 1)
 g.cell_centers = np.linspace(g.dx * 0.5, (g.n_rho - 0.5) * g.dx, g.n_rho)
 g.hires_factor = 4
-
 g.Qei_multiplier = 1.0
 g.rho_norm_ped_top = 0.9
 g.n_e_ped = 0.62e20
 g.T_i_ped = 4.5
 g.T_e_ped = 4.5
 g.rho_norm_ped_top = 0.91
-
 # transport
 g.D_e_inner = 0.25
 g.V_e_inner = 0.0
@@ -6037,14 +6022,12 @@ current_state = ToraxSimState(
     solver_numeric_outputs=SolverNumericOutputs(solver_error_state=0, ),
     geometry=geo,
 )
-
 post_processed_outputs = make_post_processed_outputs(current_state,
                                                      runtime_params_for_init)
 initial_post_processed_outputs = post_processed_outputs
 state_history = [current_state]
 post_processing_history = [initial_post_processed_outputs]
 initial_runtime_params = g.runtime_params_provider(current_state.t)
-
 while not_done(current_state.t, g.t_final):
     previous_post_processed_outputs = post_processing_history[-1]
     runtime_params_t, geo_t = (get_consistent_runtime_params_and_geometry(
@@ -6056,7 +6039,6 @@ while not_done(current_state.t, g.t_final):
     )
     initial_dt = next_dt(current_state.t, runtime_params_t, geo_t,
                          current_state.core_transport)
-
     _, result = while_loop(
         cond_fun,
         body_fun,
@@ -6088,7 +6070,6 @@ state_history = StateHistory(
 data_tree = state_history.simulation_output_to_xr()
 data_tree.to_netcdf("run.nc")
 print(data_tree)
-
 t = data_tree.time.to_numpy()
 rho = data_tree.rho_norm.to_numpy()
 nt, = np.shape(t)
