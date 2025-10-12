@@ -5017,7 +5017,6 @@ class StateHistory:
             self._save_core_profiles(),
             self._save_core_transport(),
             self._save_post_processed_outputs(),
-            self._save_geometry(),
         ]
         flat_dict = {}
         for key, value in itertools.chain(*(d.items() for d in all_dicts)):
@@ -5165,52 +5164,6 @@ class StateHistory:
             ))
             for key, value in radiation_outputs.items():
                 xr_dict[key] = value
-        return xr_dict
-
-    def _save_geometry(self):
-        xr_dict = {}
-        geometry_attributes = dataclasses.asdict(self._stacked_geometry)
-        for field_name, data in geometry_attributes.items():
-            if ("hires" in field_name or
-                (field_name.endswith("_face")
-                 and field_name.removesuffix("_face") in geometry_attributes)
-                    or field_name == "geometry_type" or field_name == "j_total"
-                    or not isinstance(data, Array)):
-                continue
-            if f"{field_name}_face" in geometry_attributes:
-                data = _extend_cell_grid_to_boundaries(
-                    data, geometry_attributes[f"{field_name}_face"])
-            if field_name.endswith("_face"):
-                field_name = field_name.removesuffix("_face")
-            if field_name == "Ip_profile":
-                field_name = "Ip_profile_from_geo"
-            if field_name == "psi":
-                field_name = "psi_from_geo"
-            data_array = self._pack_into_data_array(
-                field_name,
-                data,
-            )
-            if data_array is not None:
-                xr_dict[field_name] = data_array
-        geometry_properties = inspect.getmembers(type(self._stacked_geometry))
-        property_names = set([name for name, _ in geometry_properties])
-        for name, value in geometry_properties:
-            if (name.endswith("_face")
-                    and name.removesuffix("_face") in property_names):
-                continue
-            if name in EXCLUDED_GEOMETRY_NAMES:
-                continue
-            if isinstance(value, property):
-                property_data = value.fget(self._stacked_geometry)
-                if f"{name}_face" in property_names:
-                    face_data = getattr(self._stacked_geometry, f"{name}_face")
-                    property_data = _extend_cell_grid_to_boundaries(
-                        property_data, face_data)
-                data_array = self._pack_into_data_array(name, property_data)
-                if data_array is not None:
-                    if name.endswith("_face"):
-                        name = name.removesuffix("_face")
-                    xr_dict[name] = data_array
         return xr_dict
 
 
