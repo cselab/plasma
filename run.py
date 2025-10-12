@@ -2859,8 +2859,7 @@ _FLUX_NAME_MAP: Final[Mapping[str, str]] = immutabledict.immutabledict({
 
 class QLKNNModelWrapper:
 
-    def __init__(self, path, flux_name_map=None):
-        self.path = path
+    def __init__(self, flux_name_map=None):
         self._flux_name_map = _FLUX_NAME_MAP
         self._model = qlknn_model.QLKNNModel.load_default_model()
 
@@ -2967,10 +2966,8 @@ class QLKNNTransportModel0:
 
     def __init__(
         self,
-        path: str
     ):
         super().__init__()
-        self._path = path
         self._frozen = True
 
     def __setattr__(self, attr, value):
@@ -3296,10 +3293,6 @@ class QLKNNTransportModel0:
             epsilon_lcfs=epsilon_lcfs,
         )
 
-    @property
-    def path(self):
-        return self._path
-
     def _call_implementation(self, transport_runtime_params, runtime_params,
                              geo, core_profiles, pedestal_model_output):
         runtime_config_inputs = QLKNNRuntimeConfigInputs.from_runtime_params_slice(
@@ -3315,7 +3308,7 @@ class QLKNNTransportModel0:
             geo=geo,
             core_profiles=core_profiles,
         )
-        model = QLKNNModelWrapper(self.path)
+        model = QLKNNModelWrapper()
         qualikiz_inputs = dataclasses.replace(
             qualikiz_inputs,
             x=qualikiz_inputs.x * qualikiz_inputs.epsilon_lcfs / _EPSILON_NN,
@@ -3379,7 +3372,7 @@ class QLKNNTransportModel(TransportBase):
         return data
 
     def build_transport_model(self):
-        return QLKNNTransportModel0(path=self.model_path)
+        return QLKNNTransportModel0()
 
     def build_runtime_params(self, t):
         base_kwargs = dataclasses.asdict(super().build_runtime_params(t))
