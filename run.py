@@ -871,7 +871,7 @@ class Geometry:
 
     @property
     def rho_b(self):
-        return jnp.sqrt(self.Phi_b / np.pi / self.B_0)
+        return jnp.sqrt(self.Phi_b / np.pi / g.B_0)
 
     @property
     def Phi_b(self):
