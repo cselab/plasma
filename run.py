@@ -745,9 +745,6 @@ def stack_geometries(geometries):
     return first_geo.__class__(**stacked_data)
 
 
-
-
-
 def calculate_scaling_law_confinement_time(geo, core_profiles, Ploss,
                                            scaling_law):
     scaling_params = {
@@ -857,21 +854,6 @@ def calc_s_face(geo, psi):
     return s_face
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 def calculate_psi_grad_constraint_from_Ip(Ip, geo):
     return (Ip * (16 * jnp.pi**3 * g.mu_0 * geo.Phi_b) /
             (geo.g2g3_over_rhon_face[-1] * geo.F_face[-1]))
@@ -956,15 +938,6 @@ def calc_pprime(core_profiles):
     return pprime_face
 
 
-
-
-
-
-
-
-
-
-
 def calculate_greenwald_fraction(n_e_avg, core_profiles, geo):
     gw_limit = (core_profiles.Ip_profile_face[-1] * 1e-6 /
                 (jnp.pi * geo.a_minor**2))
@@ -972,27 +945,9 @@ def calculate_greenwald_fraction(n_e_avg, core_profiles, geo):
     return fgw
 
 
-
-
-
-
-
-
-
-
-
-
-
-
 def calculate_log_lambda_ei(T_e, n_e):
     T_e_ev = T_e * 1e3
     return 31.3 - 0.5 * jnp.log(n_e) + jnp.log(T_e_ev)
-
-
-
-
-
-
 
 
 def _calculate_log_tau_e_Z1(T_e, n_e, log_lambda_ei):
@@ -1253,8 +1208,8 @@ def _calculate_bootstrap_current(*, Z_eff_face, Z_i_face, n_e, n_i, T_e, T_i,
     f_trap = calculate_f_trap(geo)
     log_lambda_ei = calculate_log_lambda_ei(T_e.face_value(), n_e.face_value())
     T_i_ev = T_i.face_value() * 1e3
-    log_lambda_ii = 30.0 - 0.5 * jnp.log(n_i.face_value()) + 1.5 * jnp.log(T_i_ev) - 3.0 * jnp.log(
-        Z_i_face)
+    log_lambda_ii = 30.0 - 0.5 * jnp.log(
+        n_i.face_value()) + 1.5 * jnp.log(T_i_ev) - 3.0 * jnp.log(Z_i_face)
     nu_e_star = calculate_nu_e_star(
         q=q_face,
         geo=geo,
@@ -1754,9 +1709,10 @@ def calc_fusion(geo, core_profiles, runtime_params):
             x_squared = energy_ratio
             x = jnp.sqrt(x_squared)
             frac_i = (2 * ((1 / 6) * jnp.log(
-                (1.0 - x + x_squared) / (1.0 + 2.0 * x + x_squared)) + (jnp.arctan(
-                    (2.0 * x - 1.0) / jnp.sqrt(3)) + jnp.pi / 6) / jnp.sqrt(3)) /
-                      x_squared)
+                (1.0 - x + x_squared) /
+                (1.0 + 2.0 * x + x_squared)) + (jnp.arctan(
+                    (2.0 * x - 1.0) / jnp.sqrt(3)) + jnp.pi / 6) / jnp.sqrt(3))
+                      / x_squared)
             frac_e = 1.0 - frac_i
             Pfus_i = Pfus_cell * frac_i * alpha_fraction
             Pfus_e = Pfus_cell * frac_e * alpha_fraction
@@ -1907,9 +1863,10 @@ def _model_based_qei(runtime_params, geo, core_profiles):
         core_profiles.n_e.value,
         log_lambda_ei,
     )
-    weighted_Z_eff = (core_profiles.n_i.value * core_profiles.Z_i**2 / core_profiles.A_i
-            + core_profiles.n_impurity.value * core_profiles.Z_impurity**2 /
-            core_profiles.A_impurity) / core_profiles.n_e.value
+    weighted_Z_eff = (
+        core_profiles.n_i.value * core_profiles.Z_i**2 / core_profiles.A_i +
+        core_profiles.n_impurity.value * core_profiles.Z_impurity**2 /
+        core_profiles.A_impurity) / core_profiles.n_e.value
     log_Qei_coef = (jnp.log(g.Qei_multiplier * 1.5 * core_profiles.n_e.value) +
                     jnp.log(g.keV_to_J / g.m_amu) + jnp.log(2 * g.m_e) +
                     jnp.log(weighted_Z_eff) - log_tau_e_Z1)
@@ -2911,8 +2868,10 @@ class QLKNNTransportModel0:
             reference_length=g.R_major,
         )
         q = core_profiles.q_face
-        iota_scaled = jnp.abs((core_profiles.psi.face_grad()[1:] / geo.rho_face_norm[1:]))
-        iota_scaled0 = jnp.expand_dims(jnp.abs(core_profiles.psi.face_grad()[1] / geo.drho_norm),
+        iota_scaled = jnp.abs(
+            (core_profiles.psi.face_grad()[1:] / geo.rho_face_norm[1:]))
+        iota_scaled0 = jnp.expand_dims(jnp.abs(
+            core_profiles.psi.face_grad()[1] / geo.drho_norm),
                                        axis=0)
         iota_scaled = jnp.concatenate([iota_scaled0, iota_scaled])
         rmid_face = (geo.R_out_face - geo.R_in_face) * 0.5
@@ -2934,8 +2893,10 @@ class QLKNNTransportModel0:
                 transport.collisionality_multiplier)
         epsilon = geo.rho_face / g.R_major
         epsilon = jnp.clip(epsilon, g.eps)
-        tau_bounce = (core_profiles.q_face * g.R_major / (epsilon**1.5 * jnp.sqrt(
-            core_profiles.T_e.face_value() * g.keV_to_J / g.m_e)))
+        tau_bounce = (
+            core_profiles.q_face * g.R_major /
+            (epsilon**1.5 *
+             jnp.sqrt(core_profiles.T_e.face_value() * g.keV_to_J / g.m_e)))
         tau_bounce = tau_bounce.at[0].set(tau_bounce[1])
         nu_star = nu_e * tau_bounce
         log_nu_star_face = jnp.log10(nu_star)
@@ -3539,9 +3500,12 @@ def make_post_processed_outputs(
         pressure_thermal_tot,
     ) = calculate_pressure(sim_state.core_profiles)
     pprime_face = calc_pprime(sim_state.core_profiles)
-    W_thermal_el = volume_integration(1.5 * pressure_thermal_el.value, sim_state.geometry)
-    W_thermal_ion = volume_integration(1.5 * pressure_thermal_ion.value, sim_state.geometry)
-    W_thermal_tot = volume_integration(1.5 * pressure_thermal_tot.value, sim_state.geometry)
+    W_thermal_el = volume_integration(1.5 * pressure_thermal_el.value,
+                                      sim_state.geometry)
+    W_thermal_ion = volume_integration(1.5 * pressure_thermal_ion.value,
+                                       sim_state.geometry)
+    W_thermal_tot = volume_integration(1.5 * pressure_thermal_tot.value,
+                                       sim_state.geometry)
     mu0 = g.mu_0
     pprime = calc_pprime(sim_state.core_profiles)
     g3 = sim_state.geometry.g3_face
@@ -3608,15 +3572,20 @@ def make_post_processed_outputs(
     Q_fusion = (integrated_sources['P_fusion'] /
                 (integrated_sources['P_external_total'] + g.eps))
     line_avg_n_e = line_average(sim_state.core_profiles.n_e.value)
-    P_LH_hi_dens_D = (2.15 * (line_avg_n_e / 1e20)**0.782 * sim_state.geometry.B_0**0.772 *
-                      sim_state.geometry.a_minor**0.975 * g.R_major**0.999 * 1e6)
+    P_LH_hi_dens_D = (2.15 * (line_avg_n_e / 1e20)**0.782 *
+                      sim_state.geometry.B_0**0.772 *
+                      sim_state.geometry.a_minor**0.975 * g.R_major**0.999 *
+                      1e6)
     A_deuterium = ION_PROPERTIES_DICT['D'].A
     P_LH_hi_dens = P_LH_hi_dens_D * A_deuterium / sim_state.core_profiles.A_i
     Ip_total = sim_state.core_profiles.Ip_profile_face[..., -1]
-    n_e_min_P_LH = (0.7 * (Ip_total / 1e6)**0.34 * sim_state.geometry.a_minor**-0.95 *
-                    sim_state.geometry.B_0**0.62 * (g.R_major / sim_state.geometry.a_minor)**0.4 * 1e19)
-    P_LH_min_D = (0.36 * (Ip_total / 1e6)**0.27 * sim_state.geometry.B_0**1.25 *
-                  g.R_major**1.23 * (g.R_major / sim_state.geometry.a_minor)**0.08 * 1e6)
+    n_e_min_P_LH = (0.7 * (Ip_total / 1e6)**0.34 *
+                    sim_state.geometry.a_minor**-0.95 *
+                    sim_state.geometry.B_0**0.62 *
+                    (g.R_major / sim_state.geometry.a_minor)**0.4 * 1e19)
+    P_LH_min_D = (0.36 * (Ip_total / 1e6)**0.27 *
+                  sim_state.geometry.B_0**1.25 * g.R_major**1.23 *
+                  (g.R_major / sim_state.geometry.a_minor)**0.08 * 1e6)
     P_LH_min = P_LH_min_D * A_deuterium / sim_state.core_profiles.A_i
     P_LH = jnp.maximum(P_LH_min, P_LH_hi_dens)
     Ploss = (integrated_sources['P_alpha_total'] +
@@ -3688,13 +3657,16 @@ def make_post_processed_outputs(
     fgw_n_e_line_avg = calculate_greenwald_fraction(n_e_line_avg,
                                                     sim_state.core_profiles,
                                                     sim_state.geometry)
-    bpol2_bulk = ((sim_state.core_profiles.psi.face_grad()[1:] / (2 * jnp.pi))**2 * sim_state.geometry.g2_face[1:] /
+    bpol2_bulk = ((sim_state.core_profiles.psi.face_grad()[1:] /
+                   (2 * jnp.pi))**2 * sim_state.geometry.g2_face[1:] /
                   sim_state.geometry.vpr_face[1:]**2)
     bpol2_axis = jnp.array([0.0], dtype=jnp.float64)
     bpol2 = jnp.concatenate([bpol2_axis, bpol2_bulk])
-    Wpol = jax.scipy.integrate.trapezoid(bpol2 * sim_state.geometry.vpr_face,
-                                         sim_state.geometry.rho_face_norm) / (2 * g.mu_0)
-    li3 = 4 * Wpol / (g.mu_0 * sim_state.core_profiles.Ip_profile_face[-1]**2 * sim_state.geometry.R_major)
+    Wpol = jax.scipy.integrate.trapezoid(
+        bpol2 * sim_state.geometry.vpr_face,
+        sim_state.geometry.rho_face_norm) / (2 * g.mu_0)
+    li3 = 4 * Wpol / (g.mu_0 * sim_state.core_profiles.Ip_profile_face[-1]**2 *
+                      sim_state.geometry.R_major)
     safety_factor_fit_outputs = (find_min_q_and_q_surface_intercepts(
         sim_state.geometry.rho_face_norm,
         sim_state.core_profiles.q_face,
@@ -3712,9 +3684,11 @@ def make_post_processed_outputs(
     beta_tor = p_total_volume_avg / (magnetic_pressure_on_axis + g.eps)
     beta_pol = (
         4.0 * sim_state.geometry.volume[-1] * p_total_volume_avg /
-        (g.mu_0 * sim_state.core_profiles.Ip_profile_face[-1]**2 * g.R_major + g.eps))
-    beta_N = (1e8 * beta_tor * (sim_state.geometry.a_minor * sim_state.geometry.B_0 /
-                                (sim_state.core_profiles.Ip_profile_face[-1] + g.eps)))
+        (g.mu_0 * sim_state.core_profiles.Ip_profile_face[-1]**2 * g.R_major +
+         g.eps))
+    beta_N = (1e8 * beta_tor *
+              (sim_state.geometry.a_minor * sim_state.geometry.B_0 /
+               (sim_state.core_profiles.Ip_profile_face[-1] + g.eps)))
     return PostProcessedOutputs(
         pressure_thermal_i=pressure_thermal_ion,
         pressure_thermal_e=pressure_thermal_el,
@@ -5312,7 +5286,7 @@ CONFIG = {
         'fusion': {},
         'ei_exchange': {},
     },
-    'transport': { },
+    'transport': {},
 }
 g.R_major = 6.2
 g.a_minor = 2.0
