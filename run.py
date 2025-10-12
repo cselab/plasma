@@ -46,11 +46,22 @@ class InterpolationMode(enum.Enum):
     PIECEWISE_LINEAR = 'piecewise_linear'
 
 
-class _PiecewiseLinearInterpolatedParam:
+@jax.tree_util.register_pytree_node_class
+class InterpolatedVarSingleAxis:
 
-    def __init__(self, xs, ys):
-        self.xs = xs
-        self.ys = ys
+    def __init__(self, value, interpolation_mode):
+        self._value = value
+        self.xs, self.ys = value
+
+    def tree_flatten(self):
+        static_params = {
+            'interpolation_mode': InterpolationMode.PIECEWISE_LINEAR,
+        }
+        return (self._value, static_params)
+
+    @classmethod
+    def tree_unflatten(cls, aux_data, children):
+        return cls(children, **aux_data)
 
     def get_value(self, x):
         x_shape = getattr(x, 'shape', ())
@@ -68,28 +79,6 @@ class _PiecewiseLinearInterpolatedParam:
                     return interp(x, self.xs, self.ys)
             case 2:
                 return self.ys[0]
-
-@jax.tree_util.register_pytree_node_class
-class InterpolatedVarSingleAxis:
-
-    def __init__(self, value, interpolation_mode):
-        self._value = value
-        xs, ys = value
-        self._param = _PiecewiseLinearInterpolatedParam(xs=xs, ys=ys)
-
-    def tree_flatten(self):
-        static_params = {
-            'interpolation_mode': InterpolationMode.PIECEWISE_LINEAR,
-        }
-        return (self._value, static_params)
-
-    @classmethod
-    def tree_unflatten(cls, aux_data, children):
-        return cls(children, **aux_data)
-
-    def get_value(self, x):
-        value = self._param.get_value(x)
-        return value
 
 
 @jax.tree_util.register_pytree_node_class
@@ -776,6 +765,7 @@ class Geometry:
         first_element = jnp.ones_like(self.rho_b) / self.rho_b**2
         return jnp.concatenate([jnp.expand_dims(first_element, axis=-1), bulk],
                                axis=-1)
+
 
 def stack_geometries(geometries):
     first_geo = geometries[0]
@@ -2037,6 +2027,7 @@ class SourceModels:
             for name, source in self.standard_sources.items()
             if AffectedCoreProfile.PSI in source.affected_core_profiles
         })
+
 
 def _model_based_qei(runtime_params, geo, core_profiles):
     zeros = jnp.zeros_like(geo.rho_norm)
