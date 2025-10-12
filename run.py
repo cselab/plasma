@@ -37,8 +37,6 @@ jax.config.update('jax_enable_x64', True)
 T = TypeVar('T')
 Array: TypeAlias = jax.Array | np.ndarray
 FloatScalar: TypeAlias = jt.Float[Array | float, ""]
-NumpyArray = Any
-NumpyArray1D = Any
 JAX_STATIC: Final[str] = '_pydantic_jax_static_field'
 _interp_fn = jax.jit(jnp.interp)
 
@@ -341,7 +339,7 @@ NonNegativeTimeVaryingArray: TypeAlias = typing_extensions.Annotated[
 
 class TimeVaryingScalar(BaseModelFrozen):
     time: Any
-    value: NumpyArray
+    value: Any
     is_bool_param: typing_extensions.Annotated[bool, JAX_STATIC] = (False)
     interpolation_mode: typing_extensions.Annotated[
         InterpolationMode, JAX_STATIC] = InterpolationMode.PIECEWISE_LINEAR
