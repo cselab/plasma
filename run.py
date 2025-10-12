@@ -109,7 +109,7 @@ class InterpolatedVarSingleAxis:
 
     def tree_flatten(self):
         static_params = {
-            'interpolation_mode': self.interpolation_mode,
+            'interpolation_mode': InterpolationMode.PIECEWISE_LINEAR,
             'is_bool_param': self.is_bool_param,
         }
         return (self._value, static_params)
