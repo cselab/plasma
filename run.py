@@ -1180,9 +1180,6 @@ class SauterModel:
             j_bootstrap_face=result.j_bootstrap_face,
         )
 
-    def __hash__(self):
-        return hash(self.__class__)
-
 
 class SauterModelConfig(BaseModelFrozen):
     model_name: Annotated[Literal['sauter'], JAX_STATIC] = 'sauter'
