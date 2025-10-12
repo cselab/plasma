@@ -4635,12 +4635,6 @@ class StateHistory:
 
     def simulation_output_to_xr(self):
         time = xr.DataArray(self.times, dims=[TIME], name=TIME)
-        rho_face_norm = xr.DataArray(self.rho_face_norm,
-                                     dims=[RHO_FACE_NORM],
-                                     name=RHO_FACE_NORM)
-        rho_cell_norm = xr.DataArray(self.rho_cell_norm,
-                                     dims=[RHO_CELL_NORM],
-                                     name=RHO_CELL_NORM)
         rho_norm = xr.DataArray(
             self.rho_norm,
             dims=["rho_norm"],
@@ -4678,16 +4672,11 @@ class StateHistory:
             len(self.times),
             len(self.rho_face_norm),
         )
-        is_cell_var = lambda x: x.ndim == 2 and x.shape == (
-            len(self.times),
-            len(self.rho_cell_norm),
-        )
         is_cell_plus_boundaries_var = lambda x: x.ndim == 2 and x.shape == (
             len(self.times),
             len(self.rho_norm),
         )
         is_scalar = lambda x: x.ndim == 1 and x.shape == (len(self.times), )
-        is_constant = lambda x: x.ndim == 0
         match data:
             case data if is_face_var(data):
                 dims = [TIME, RHO_FACE_NORM]
