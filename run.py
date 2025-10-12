@@ -87,10 +87,6 @@ class InterpolatedVarSingleAxis:
     def tree_unflatten(cls, aux_data, children):
         return cls(children, **aux_data)
 
-    @property
-    def is_bool_param(self):
-        return self._is_bool_param
-
     def get_value(self, x):
         value = self._param.get_value(x)
         return value
@@ -301,7 +297,6 @@ NonNegativeTimeVaryingArray: TypeAlias = typing_extensions.Annotated[
 class TimeVaryingScalar(BaseModelFrozen):
     time: Any
     value: Any
-    is_bool_param: typing_extensions.Annotated[bool, JAX_STATIC] = (False)
     interpolation_mode: typing_extensions.Annotated[
         InterpolationMode, JAX_STATIC] = InterpolationMode.PIECEWISE_LINEAR
 
@@ -320,7 +315,6 @@ class TimeVaryingScalar(BaseModelFrozen):
             time=time,
             value=value,
             interpolation_mode=InterpolationMode.PIECEWISE_LINEAR,
-            is_bool_param=False,
         )
 
     @functools.cached_property
