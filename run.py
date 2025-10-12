@@ -2725,8 +2725,6 @@ class RuntimeParamsX:
     V_e_max: Any
     rho_min: Any
     rho_max: Any
-    rho_inner: Any
-    apply_outer_patch: Any
     D_e_outer: Any
     V_e_outer: Any
     chi_i_outer: Any
@@ -2842,7 +2840,7 @@ class TransportModel:
         chi_face_ion = jnp.where(
             jnp.logical_and(
                 True,
-                geo.rho_face_norm < transport_runtime_params.rho_inner + g.eps,
+                geo.rho_face_norm < g.rho_inner + g.eps,
             ),
             g.chi_i_inner,
             transport_coeffs.chi_face_ion,
@@ -2850,7 +2848,7 @@ class TransportModel:
         chi_face_el = jnp.where(
             jnp.logical_and(
                 True,
-                geo.rho_face_norm < transport_runtime_params.rho_inner + g.eps,
+                geo.rho_face_norm < g.rho_inner + g.eps,
             ),
             g.chi_e_inner,
             transport_coeffs.chi_face_el,
@@ -2858,7 +2856,7 @@ class TransportModel:
         d_face_el = jnp.where(
             jnp.logical_and(
                 True,
-                geo.rho_face_norm < transport_runtime_params.rho_inner + g.eps,
+                geo.rho_face_norm < g.rho_inner + g.eps,
             ),
             g.D_e_inner,
             transport_coeffs.d_face_el,
@@ -2866,7 +2864,7 @@ class TransportModel:
         v_face_el = jnp.where(
             jnp.logical_and(
                 True,
-                geo.rho_face_norm < transport_runtime_params.rho_inner + g.eps,
+                geo.rho_face_norm < g.rho_inner + g.eps,
             ),
             g.V_e_inner,
             transport_coeffs.v_face_el,
@@ -2874,7 +2872,7 @@ class TransportModel:
         chi_face_ion = jnp.where(
             jnp.logical_and(
                 jnp.logical_and(
-                    transport_runtime_params.apply_outer_patch,
+                    True,
                     jnp.logical_not(True),
                 ),
                 geo.rho_face_norm > transport_runtime_params.rho_outer - g.eps,
@@ -2885,7 +2883,7 @@ class TransportModel:
         chi_face_el = jnp.where(
             jnp.logical_and(
                 jnp.logical_and(
-                    transport_runtime_params.apply_outer_patch,
+                    True,
                     jnp.logical_not(True),
                 ),
                 geo.rho_face_norm > transport_runtime_params.rho_outer - g.eps,
@@ -2896,7 +2894,7 @@ class TransportModel:
         d_face_el = jnp.where(
             jnp.logical_and(
                 jnp.logical_and(
-                    transport_runtime_params.apply_outer_patch,
+                    True,
                     jnp.logical_not(True),
                 ),
                 geo.rho_face_norm > transport_runtime_params.rho_outer - g.eps,
@@ -2907,7 +2905,7 @@ class TransportModel:
         v_face_el = jnp.where(
             jnp.logical_and(
                 jnp.logical_and(
-                    transport_runtime_params.apply_outer_patch,
+                    True,
                     jnp.logical_not(True),
                 ),
                 geo.rho_face_norm > transport_runtime_params.rho_outer - g.eps,
@@ -2952,14 +2950,14 @@ def _build_smoothing_matrix(transport_runtime_params, runtime_params, geo,
     mask_outer_edge = jax.lax.cond(
         jnp.logical_and(
             jnp.logical_not(True),
-            transport_runtime_params.apply_outer_patch,
+            True,
         ),
         lambda: transport_runtime_params.rho_outer - g.eps,
         lambda: g.rho_norm_ped_top - g.eps,
     )
     mask_inner_edge = jax.lax.cond(
         True,
-        lambda: transport_runtime_params.rho_inner + g.eps,
+        lambda: g.rho_inner + g.eps,
         lambda: 0.0,
     )
     mask = jnp.where(
@@ -3273,8 +3271,6 @@ class TransportBase(BaseModelFrozen):
     V_e_max: MeterPerSecond = 50.0
     rho_min: UnitIntervalTimeVaryingScalar = (ValidatedDefault(0.0))
     rho_max: UnitIntervalTimeVaryingScalar = (ValidatedDefault(1.0))
-    rho_inner: UnitIntervalTimeVaryingScalar = (ValidatedDefault(0.3))
-    apply_outer_patch: TimeVaryingScalar = (ValidatedDefault(False))
     D_e_outer: PositiveTimeVaryingScalar = (ValidatedDefault(0.2))
     V_e_outer: TimeVaryingScalar = (ValidatedDefault(0.0))
     chi_i_outer: PositiveTimeVaryingScalar = (ValidatedDefault(1.0))
@@ -3292,8 +3288,6 @@ class TransportBase(BaseModelFrozen):
             V_e_max=self.V_e_max,
             rho_min=self.rho_min.get_value(t),
             rho_max=self.rho_max.get_value(t),
-            rho_inner=self.rho_inner.get_value(t),
-            apply_outer_patch=self.apply_outer_patch.get_value(t),
             D_e_outer=self.D_e_outer.get_value(t),
             V_e_outer=self.V_e_outer.get_value(t),
             chi_i_outer=self.chi_i_outer.get_value(t),
@@ -6220,8 +6214,6 @@ CONFIG = {
         'ei_exchange': {},
     },
     'transport': {
-        'rho_inner': 0.2,
-        'apply_outer_patch': True,
         'D_e_outer': 0.1,
         'V_e_outer': 0.0,
         'chi_i_outer': 2.0,
@@ -6280,7 +6272,6 @@ g.V_e_inner = 0.0
 g.chi_i_inner = 1.0
 g.chi_e_inner = 1.0
 g.rho_inner = 0.2
-g.apply_outer_patch = True
 g.D_e_outer = 0.1
 g.V_e_outer = 0.0
 g.chi_i_outer = 2.0
