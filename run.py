@@ -72,19 +72,11 @@ class _PiecewiseLinearInterpolatedParam:
 
 def convert_input_to_xs_ys(interp_input):
     if isinstance(interp_input, dict):
-        return (
-            np.array(list(interp_input.keys()), dtype=np.float64),
-            np.array(list(interp_input.values()), dtype=np.float64),
-            InterpolationMode.PIECEWISE_LINEAR,
-            False,
-        )
+        return (np.array(list(interp_input.keys()), dtype=np.float64),
+                np.array(list(interp_input.values()), dtype=np.float64))
     else:
-        return (
-            np.array([0.0], dtype=np.float64),
-            np.array([interp_input], dtype=np.float64),
-            InterpolationMode.PIECEWISE_LINEAR,
-            False,
-        )
+        return (np.array([0.0], dtype=np.float64),
+                np.array([interp_input], dtype=np.float64))
 
 
 @jax.tree_util.register_pytree_node_class
@@ -305,7 +297,7 @@ def _load_from_primitives(primitive_values):
         primitive_values = {0.0: {0.0: primitive_values}}
     loaded_values = {}
     for t, v in primitive_values.items():
-        x, y, _, _ = convert_input_to_xs_ys(v)
+        x, y = convert_input_to_xs_ys(v)
         loaded_values[t] = (x, y)
     return loaded_values
 
@@ -332,16 +324,15 @@ class TimeVaryingScalar(BaseModelFrozen):
     @pydantic.model_validator(mode='before')
     @classmethod
     def _conform_data(cls, data):
-        time, value, interpolation_mode, is_bool_param = (
-            convert_input_to_xs_ys(data))
+        time, value = convert_input_to_xs_ys(data)
         sort_order = np.argsort(time)
         time = time[sort_order]
         value = value[sort_order]
         return dict(
             time=time,
             value=value,
-            interpolation_mode=interpolation_mode,
-            is_bool_param=is_bool_param,
+            interpolation_mode=InterpolationMode.PIECEWISE_LINEAR,
+            is_bool_param=False,
         )
 
     @functools.cached_property
@@ -2447,11 +2438,7 @@ class ProfileConditions(BaseModelFrozen):
     T_e: TimeVaryingArray = (ValidatedDefault({0: {0: 15.0, 1: 1.0}}))
     psi: TimeVaryingArray | None = None
     psidot: TimeVaryingArray | None = None
-    n_e: TimeVaryingArray = (ValidatedDefault(
-        {0: {
-            0: 1.2e20,
-            1: 0.8e20
-        }}))
+    n_e: TimeVaryingArray = (ValidatedDefault({0: {0: 1.2e20, 1: 0.8e20}}))
     nbar: TimeVaryingScalar = ValidatedDefault(0.85e20)
     n_e_right_bc: TimeVaryingScalar | None = None
 
