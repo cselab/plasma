@@ -4781,7 +4781,6 @@ class StateHistory:
             "sigma": SIGMA_PARALLEL,
             "Ip_profile_face": IP_PROFILE,
             "q_face": Q,
-            "s_face": MAGNETIC_SHEAR,
         }
         core_profile_field_names = {
             f.name
