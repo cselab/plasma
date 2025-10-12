@@ -2563,7 +2563,7 @@ def clip_inputs(feature_scan, clip_margin, inputs_and_ranges):
     return feature_scan
 
 
-class QLKNNTransportModel0:
+class QLKNNTransportModel:
 
     def __init__(self, ):
         super().__init__()
@@ -5418,7 +5418,7 @@ g.geo = StandardGeometry(
 )
 g.pedestal_model = PedestalConfig().build_pedestal_model()
 g.source_models = g.torax_config.sources.build_models()
-g.transport_model = QLKNNTransportModel0()
+g.transport_model = QLKNNTransportModel()
 g.bootstrap_current = SauterModelConfig().build_model()
 g.runtime_params_provider = RuntimeParamsProvider.from_config()
 runtime_params_for_init, geo_for_init = (
