@@ -2704,200 +2704,6 @@ class TurbulentTransport:
     chi_face_ion_gyrobohm: jax.Array | None = None
 
 
-class TransportModel:
-
-    def __setattr__(self, attr, value):
-        return super().__setattr__(attr, value)
-
-    def __call__(self, runtime_params, geo, core_profiles,
-                 pedestal_model_output):
-        transport_runtime_params = runtime_params.transport
-        transport_coeffs = self._call_implementation(
-            transport_runtime_params,
-            runtime_params,
-            geo,
-            core_profiles,
-            pedestal_model_output,
-        )
-        transport_coeffs = self._apply_domain_restriction(
-            transport_runtime_params,
-            geo,
-            transport_coeffs,
-            pedestal_model_output,
-        )
-        transport_coeffs = self._apply_clipping(
-            transport_runtime_params,
-            transport_coeffs,
-        )
-        transport_coeffs = self._apply_transport_patches(
-            transport_runtime_params,
-            runtime_params,
-            geo,
-            transport_coeffs,
-        )
-        return self._smooth_coeffs(
-            transport_runtime_params,
-            runtime_params,
-            geo,
-            transport_coeffs,
-            pedestal_model_output,
-        )
-
-    def _apply_domain_restriction(self, transport_runtime_params, geo,
-                                  transport_coeffs, pedestal_model_output):
-        active_mask = ((geo.rho_face_norm > transport_runtime_params.rho_min)
-                       &
-                       (geo.rho_face_norm <= transport_runtime_params.rho_max)
-                       & (geo.rho_face_norm <= g.rho_norm_ped_top))
-        active_mask = (jnp.asarray(active_mask).at[0].set(
-            transport_runtime_params.rho_min == 0))
-        chi_face_ion = jnp.where(active_mask, transport_coeffs.chi_face_ion,
-                                 0.0)
-        chi_face_el = jnp.where(active_mask, transport_coeffs.chi_face_el, 0.0)
-        d_face_el = jnp.where(active_mask, transport_coeffs.d_face_el, 0.0)
-        v_face_el = jnp.where(active_mask, transport_coeffs.v_face_el, 0.0)
-        return dataclasses.replace(
-            transport_coeffs,
-            chi_face_ion=chi_face_ion,
-            chi_face_el=chi_face_el,
-            d_face_el=d_face_el,
-            v_face_el=v_face_el,
-        )
-
-    def _apply_clipping(self, transport_runtime_params, transport_coeffs):
-        chi_face_ion = jnp.clip(
-            transport_coeffs.chi_face_ion,
-            g.chi_min,
-            g.chi_max,
-        )
-        chi_face_el = jnp.clip(
-            transport_coeffs.chi_face_el,
-            g.chi_min,
-            g.chi_max,
-        )
-        d_face_el = jnp.clip(
-            transport_coeffs.d_face_el,
-            g.D_e_min,
-            transport_runtime_params.D_e_max,
-        )
-        v_face_el = jnp.clip(
-            transport_coeffs.v_face_el,
-            transport_runtime_params.V_e_min,
-            transport_runtime_params.V_e_max,
-        )
-        return dataclasses.replace(
-            transport_coeffs,
-            chi_face_ion=chi_face_ion,
-            chi_face_el=chi_face_el,
-            d_face_el=d_face_el,
-            v_face_el=v_face_el,
-        )
-
-    def _apply_transport_patches(self, transport_runtime_params,
-                                 runtime_params, geo, transport_coeffs):
-        chi_face_ion = jnp.where(
-            jnp.logical_and(
-                True,
-                geo.rho_face_norm < g.rho_inner + g.eps,
-            ),
-            g.chi_i_inner,
-            transport_coeffs.chi_face_ion,
-        )
-        chi_face_el = jnp.where(
-            jnp.logical_and(
-                True,
-                geo.rho_face_norm < g.rho_inner + g.eps,
-            ),
-            g.chi_e_inner,
-            transport_coeffs.chi_face_el,
-        )
-        d_face_el = jnp.where(
-            jnp.logical_and(
-                True,
-                geo.rho_face_norm < g.rho_inner + g.eps,
-            ),
-            g.D_e_inner,
-            transport_coeffs.d_face_el,
-        )
-        v_face_el = jnp.where(
-            jnp.logical_and(
-                True,
-                geo.rho_face_norm < g.rho_inner + g.eps,
-            ),
-            g.V_e_inner,
-            transport_coeffs.v_face_el,
-        )
-        chi_face_ion = jnp.where(
-            jnp.logical_and(
-                jnp.logical_and(
-                    True,
-                    jnp.logical_not(True),
-                ),
-                geo.rho_face_norm > g.rho_outer - g.eps,
-            ),
-            g.chi_i_outer,
-            chi_face_ion,
-        )
-        chi_face_el = jnp.where(
-            jnp.logical_and(
-                jnp.logical_and(
-                    True,
-                    jnp.logical_not(True),
-                ),
-                geo.rho_face_norm > g.rho_outer - g.eps,
-            ),
-            g.chi_e_outer,
-            chi_face_el,
-        )
-        d_face_el = jnp.where(
-            jnp.logical_and(
-                jnp.logical_and(
-                    True,
-                    jnp.logical_not(True),
-                ),
-                geo.rho_face_norm > g.rho_outer - g.eps,
-            ),
-            g.D_e_outer,
-            d_face_el,
-        )
-        v_face_el = jnp.where(
-            jnp.logical_and(
-                jnp.logical_and(
-                    True,
-                    jnp.logical_not(True),
-                ),
-                geo.rho_face_norm > g.rho_outer - g.eps,
-            ),
-            g.V_e_outer,
-            v_face_el,
-        )
-        return dataclasses.replace(
-            transport_coeffs,
-            chi_face_ion=chi_face_ion,
-            chi_face_el=chi_face_el,
-            d_face_el=d_face_el,
-            v_face_el=v_face_el,
-        )
-
-    def _smooth_coeffs(self, transport_runtime_params, runtime_params, geo,
-                       transport_coeffs, pedestal_model_output):
-        smoothing_matrix = _build_smoothing_matrix(
-            transport_runtime_params,
-            runtime_params,
-            geo,
-            pedestal_model_output,
-        )
-
-        def smooth_single_coeff(coeff):
-            return jax.lax.cond(
-                jnp.all(coeff == 0.0),
-                lambda: coeff,
-                lambda: jnp.dot(smoothing_matrix, coeff),
-            )
-
-        return jax.tree_util.tree_map(smooth_single_coeff, transport_coeffs)
-
-
 def _build_smoothing_matrix(transport_runtime_params, runtime_params, geo,
                             pedestal_model_output):
     lower_cutoff = 0.01
@@ -3217,7 +3023,7 @@ def clip_inputs(feature_scan, clip_margin, inputs_and_ranges):
     return feature_scan
 
 
-class QLKNNTransportModel0(TransportModel):
+class QLKNNTransportModel0:
 
     def __init__(
         self,
@@ -3228,6 +3034,197 @@ class QLKNNTransportModel0(TransportModel):
         self._path = path
         self._name = name
         self._frozen = True
+
+    def __setattr__(self, attr, value):
+        return super().__setattr__(attr, value)
+
+    def __call__(self, runtime_params, geo, core_profiles,
+                 pedestal_model_output):
+        transport_runtime_params = runtime_params.transport
+        transport_coeffs = self._call_implementation(
+            transport_runtime_params,
+            runtime_params,
+            geo,
+            core_profiles,
+            pedestal_model_output,
+        )
+        transport_coeffs = self._apply_domain_restriction(
+            transport_runtime_params,
+            geo,
+            transport_coeffs,
+            pedestal_model_output,
+        )
+        transport_coeffs = self._apply_clipping(
+            transport_runtime_params,
+            transport_coeffs,
+        )
+        transport_coeffs = self._apply_transport_patches(
+            transport_runtime_params,
+            runtime_params,
+            geo,
+            transport_coeffs,
+        )
+        return self._smooth_coeffs(
+            transport_runtime_params,
+            runtime_params,
+            geo,
+            transport_coeffs,
+            pedestal_model_output,
+        )
+
+    def _apply_domain_restriction(self, transport_runtime_params, geo,
+                                  transport_coeffs, pedestal_model_output):
+        active_mask = ((geo.rho_face_norm > transport_runtime_params.rho_min)
+                       &
+                       (geo.rho_face_norm <= transport_runtime_params.rho_max)
+                       & (geo.rho_face_norm <= g.rho_norm_ped_top))
+        active_mask = (jnp.asarray(active_mask).at[0].set(
+            transport_runtime_params.rho_min == 0))
+        chi_face_ion = jnp.where(active_mask, transport_coeffs.chi_face_ion,
+                                 0.0)
+        chi_face_el = jnp.where(active_mask, transport_coeffs.chi_face_el, 0.0)
+        d_face_el = jnp.where(active_mask, transport_coeffs.d_face_el, 0.0)
+        v_face_el = jnp.where(active_mask, transport_coeffs.v_face_el, 0.0)
+        return dataclasses.replace(
+            transport_coeffs,
+            chi_face_ion=chi_face_ion,
+            chi_face_el=chi_face_el,
+            d_face_el=d_face_el,
+            v_face_el=v_face_el,
+        )
+
+    def _apply_clipping(self, transport_runtime_params, transport_coeffs):
+        chi_face_ion = jnp.clip(
+            transport_coeffs.chi_face_ion,
+            g.chi_min,
+            g.chi_max,
+        )
+        chi_face_el = jnp.clip(
+            transport_coeffs.chi_face_el,
+            g.chi_min,
+            g.chi_max,
+        )
+        d_face_el = jnp.clip(
+            transport_coeffs.d_face_el,
+            g.D_e_min,
+            transport_runtime_params.D_e_max,
+        )
+        v_face_el = jnp.clip(
+            transport_coeffs.v_face_el,
+            transport_runtime_params.V_e_min,
+            transport_runtime_params.V_e_max,
+        )
+        return dataclasses.replace(
+            transport_coeffs,
+            chi_face_ion=chi_face_ion,
+            chi_face_el=chi_face_el,
+            d_face_el=d_face_el,
+            v_face_el=v_face_el,
+        )
+
+    def _apply_transport_patches(self, transport_runtime_params,
+                                 runtime_params, geo, transport_coeffs):
+        chi_face_ion = jnp.where(
+            jnp.logical_and(
+                True,
+                geo.rho_face_norm < g.rho_inner + g.eps,
+            ),
+            g.chi_i_inner,
+            transport_coeffs.chi_face_ion,
+        )
+        chi_face_el = jnp.where(
+            jnp.logical_and(
+                True,
+                geo.rho_face_norm < g.rho_inner + g.eps,
+            ),
+            g.chi_e_inner,
+            transport_coeffs.chi_face_el,
+        )
+        d_face_el = jnp.where(
+            jnp.logical_and(
+                True,
+                geo.rho_face_norm < g.rho_inner + g.eps,
+            ),
+            g.D_e_inner,
+            transport_coeffs.d_face_el,
+        )
+        v_face_el = jnp.where(
+            jnp.logical_and(
+                True,
+                geo.rho_face_norm < g.rho_inner + g.eps,
+            ),
+            g.V_e_inner,
+            transport_coeffs.v_face_el,
+        )
+        chi_face_ion = jnp.where(
+            jnp.logical_and(
+                jnp.logical_and(
+                    True,
+                    jnp.logical_not(True),
+                ),
+                geo.rho_face_norm > g.rho_outer - g.eps,
+            ),
+            g.chi_i_outer,
+            chi_face_ion,
+        )
+        chi_face_el = jnp.where(
+            jnp.logical_and(
+                jnp.logical_and(
+                    True,
+                    jnp.logical_not(True),
+                ),
+                geo.rho_face_norm > g.rho_outer - g.eps,
+            ),
+            g.chi_e_outer,
+            chi_face_el,
+        )
+        d_face_el = jnp.where(
+            jnp.logical_and(
+                jnp.logical_and(
+                    True,
+                    jnp.logical_not(True),
+                ),
+                geo.rho_face_norm > g.rho_outer - g.eps,
+            ),
+            g.D_e_outer,
+            d_face_el,
+        )
+        v_face_el = jnp.where(
+            jnp.logical_and(
+                jnp.logical_and(
+                    True,
+                    jnp.logical_not(True),
+                ),
+                geo.rho_face_norm > g.rho_outer - g.eps,
+            ),
+            g.V_e_outer,
+            v_face_el,
+        )
+        return dataclasses.replace(
+            transport_coeffs,
+            chi_face_ion=chi_face_ion,
+            chi_face_el=chi_face_el,
+            d_face_el=d_face_el,
+            v_face_el=v_face_el,
+        )
+
+    def _smooth_coeffs(self, transport_runtime_params, runtime_params, geo,
+                       transport_coeffs, pedestal_model_output):
+        smoothing_matrix = _build_smoothing_matrix(
+            transport_runtime_params,
+            runtime_params,
+            geo,
+            pedestal_model_output,
+        )
+
+        def smooth_single_coeff(coeff):
+            return jax.lax.cond(
+                jnp.all(coeff == 0.0),
+                lambda: coeff,
+                lambda: jnp.dot(smoothing_matrix, coeff),
+            )
+
+        return jax.tree_util.tree_map(smooth_single_coeff, transport_coeffs)
 
     def _make_core_transport(self, qi, qe, pfe, quasilinear_inputs, transport,
                              geo, core_profiles, gradient_reference_length,
