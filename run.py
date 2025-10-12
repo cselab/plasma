@@ -2550,7 +2550,6 @@ class QLKNNRuntimeConfigInputs:
     @staticmethod
     def from_runtime_params_slice(transport_runtime_params, runtime_params,
                                   pedestal_model_output):
-        assert isinstance(transport_runtime_params, RuntimeParams0)
         return QLKNNRuntimeConfigInputs(
             transport=transport_runtime_params,
             Ped_top=g.rho_norm_ped_top,
