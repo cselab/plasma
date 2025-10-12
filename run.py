@@ -69,16 +69,6 @@ class _PiecewiseLinearInterpolatedParam:
             case 2:
                 return self.ys[0]
 
-
-def convert_input_to_xs_ys(interp_input):
-    if isinstance(interp_input, dict):
-        return (np.array(list(interp_input.keys()), dtype=np.float64),
-                np.array(list(interp_input.values()), dtype=np.float64))
-    else:
-        return (np.array([0.0], dtype=np.float64),
-                np.array([interp_input], dtype=np.float64))
-
-
 @jax.tree_util.register_pytree_node_class
 class InterpolatedVarSingleAxis:
 
@@ -297,7 +287,8 @@ def _load_from_primitives(primitive_values):
         primitive_values = {0.0: {0.0: primitive_values}}
     loaded_values = {}
     for t, v in primitive_values.items():
-        x, y = convert_input_to_xs_ys(v)
+        x = np.array(list(v.keys()), dtype=np.float64)
+        y = np.array(list(v.values()), dtype=np.float64)
         loaded_values[t] = (x, y)
     return loaded_values
 
@@ -324,7 +315,8 @@ class TimeVaryingScalar(BaseModelFrozen):
     @pydantic.model_validator(mode='before')
     @classmethod
     def _conform_data(cls, data):
-        time, value = convert_input_to_xs_ys(data)
+        time = np.array([0.0], dtype=np.float64)
+        value = np.array([data], dtype=np.float64)
         sort_order = np.argsort(time)
         time = time[sort_order]
         value = value[sort_order]
