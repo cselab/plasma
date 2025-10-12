@@ -3053,108 +3053,9 @@ def calculate_total_transport_coeffs(runtime_params, geo, core_profiles):
     return CoreTransport(**dataclasses.asdict(turbulent_transport))
 
 
-_RHO_SMOOTHING_LIMIT = 0.1
+g.rho_smoothing_limit = 0.1
 
 
-@dataclasses.dataclass
-class StandardGeometryIntermediates:
-    R_major: Any
-    a_minor: Any
-    B_0: Any
-    psi: Any
-    Ip_profile: Any
-    Phi: Any
-    R_in: Any
-    R_out: Any
-    F: Any
-    int_dl_over_Bp: Any
-    flux_surf_avg_1_over_R: Any
-    flux_surf_avg_1_over_R2: Any
-    flux_surf_avg_Bp2: Any
-    flux_surf_avg_RBp: Any
-    flux_surf_avg_R2Bp2: Any
-    flux_surf_avg_B2: Any
-    flux_surf_avg_1_over_B2: Any
-    delta_upper_face: Any
-    delta_lower_face: Any
-    elongation: Any
-    vpr: Any
-    z_magnetic_axis: Any
-
-    def post_init(self):
-        assert not self.flux_surf_avg_Bp2[-1] < 1e-10
-        rhon = np.sqrt(self.Phi / self.Phi[-1])
-        idx_limit = np.argmin(np.abs(rhon - _RHO_SMOOTHING_LIMIT))
-        self.flux_surf_avg_Bp2[:] = _smooth_savgol(self.flux_surf_avg_Bp2,
-                                                   idx_limit, 2)
-        self.flux_surf_avg_R2Bp2[:] = _smooth_savgol(self.flux_surf_avg_R2Bp2,
-                                                     idx_limit, 2)
-        self.flux_surf_avg_RBp[:] = _smooth_savgol(self.flux_surf_avg_RBp,
-                                                   idx_limit, 1)
-        self.vpr[:] = _smooth_savgol(self.vpr, idx_limit, 1)
-
-    @classmethod
-    def from_chease(cls):
-        file_path = os.path.join(
-            "geo", "ITER_hybrid_citrin_equil_cheasedata.mat2cols")
-        with open(file_path, "r") as file:
-            chease_data = {}
-            var_labels = file.readline().strip().split()[1:]
-            for var_label in var_labels:
-                chease_data[var_label] = []
-            for line in file:
-                values = line.strip().split()
-                for var_label, value in zip(var_labels, values):
-                    chease_data[var_label].append(float(value))
-        chease_data = {
-            var_label: np.asarray(chease_data[var_label])
-            for var_label in chease_data
-        }
-        psiunnormfactor = g.R_major**2 * g.B_0
-        psi = chease_data["PSIchease=psi/2pi"] * psiunnormfactor * 2 * np.pi
-        Ip_chease = chease_data["Ipprofile"] / g.mu_0 * g.R_major * g.B_0
-        Phi = (chease_data["RHO_TOR=sqrt(Phi/pi/B0)"] *
-               g.R_major)**2 * g.B_0 * np.pi
-        R_in_chease = chease_data["R_INBOARD"] * g.R_major
-        R_out_chease = chease_data["R_OUTBOARD"] * g.R_major
-        F = chease_data["T=RBphi"] * g.R_major * g.B_0
-        int_dl_over_Bp = (chease_data["Int(Rdlp/|grad(psi)|)=Int(Jdchi)"] *
-                          g.R_major / g.B_0)
-        flux_surf_avg_1_over_R = chease_data["<1/R>profile"] / g.R_major
-        flux_surf_avg_1_over_R2 = chease_data["<1/R**2>"] / g.R_major**2
-        flux_surf_avg_Bp2 = chease_data["<Bp**2>"] * g.B_0**2
-        flux_surf_avg_RBp = chease_data[
-            "<|grad(psi)|>"] * psiunnormfactor / g.R_major
-        flux_surf_avg_R2Bp2 = (chease_data["<|grad(psi)|**2>"] *
-                               psiunnormfactor**2 / g.R_major**2)
-        flux_surf_avg_B2 = chease_data["<B**2>"] * g.B_0**2
-        flux_surf_avg_1_over_B2 = chease_data["<1/B**2>"] / g.B_0**2
-        rhon = np.sqrt(Phi / Phi[-1])
-        vpr = 4 * np.pi * Phi[-1] * rhon / (F * flux_surf_avg_1_over_R2)
-        return cls(
-            R_major=np.array(g.R_major),
-            a_minor=np.array(g.a_minor),
-            B_0=np.array(g.B_0),
-            psi=psi,
-            Ip_profile=Ip_chease,
-            Phi=Phi,
-            R_in=R_in_chease,
-            R_out=R_out_chease,
-            F=F,
-            int_dl_over_Bp=int_dl_over_Bp,
-            flux_surf_avg_1_over_R=flux_surf_avg_1_over_R,
-            flux_surf_avg_1_over_R2=flux_surf_avg_1_over_R2,
-            flux_surf_avg_Bp2=flux_surf_avg_Bp2,
-            flux_surf_avg_RBp=flux_surf_avg_RBp,
-            flux_surf_avg_R2Bp2=flux_surf_avg_R2Bp2,
-            flux_surf_avg_B2=flux_surf_avg_B2,
-            flux_surf_avg_1_over_B2=flux_surf_avg_1_over_B2,
-            delta_upper_face=chease_data["delta_upper"],
-            delta_lower_face=chease_data["delta_bottom"],
-            elongation=chease_data["elongation"],
-            vpr=vpr,
-            z_magnetic_axis=None,
-        )
 
 
 def _smooth_savgol(data, idx_limit, polyorder):
@@ -5024,43 +4925,71 @@ g.chi_min = 0.05
 g.chi_max = 100
 g.D_e_min = 0.05
 g.An_min = 0.05
-intermediate = StandardGeometryIntermediates.from_chease()
-intermediate.post_init()
-rho_intermediate = np.sqrt(intermediate.Phi / (np.pi * intermediate.B_0))
+# Inline StandardGeometryIntermediates functionality
+file_path = os.path.join("geo", "ITER_hybrid_citrin_equil_cheasedata.mat2cols")
+with open(file_path, "r") as file:
+    chease_data = {}
+    var_labels = file.readline().strip().split()[1:]
+    for var_label in var_labels:
+        chease_data[var_label] = []
+    for line in file:
+        values = line.strip().split()
+        for var_label, value in zip(var_labels, values):
+            chease_data[var_label].append(float(value))
+chease_data = {
+    var_label: np.asarray(chease_data[var_label])
+    for var_label in chease_data
+}
+psiunnormfactor = g.R_major**2 * g.B_0
+psi = chease_data["PSIchease=psi/2pi"] * psiunnormfactor * 2 * np.pi
+Ip_chease = chease_data["Ipprofile"] / g.mu_0 * g.R_major * g.B_0
+Phi = (chease_data["RHO_TOR=sqrt(Phi/pi/B0)"] * g.R_major)**2 * g.B_0 * np.pi
+R_in_chease = chease_data["R_INBOARD"] * g.R_major
+R_out_chease = chease_data["R_OUTBOARD"] * g.R_major
+F_chease = chease_data["T=RBphi"] * g.R_major * g.B_0
+int_dl_over_Bp = (chease_data["Int(Rdlp/|grad(psi)|)=Int(Jdchi)"] * g.R_major / g.B_0)
+flux_surf_avg_1_over_R = chease_data["<1/R>profile"] / g.R_major
+flux_surf_avg_1_over_R2 = chease_data["<1/R**2>"] / g.R_major**2
+flux_surf_avg_Bp2 = chease_data["<Bp**2>"] * g.B_0**2
+flux_surf_avg_RBp = chease_data["<|grad(psi)|>"] * psiunnormfactor / g.R_major
+flux_surf_avg_R2Bp2 = (chease_data["<|grad(psi)|**2>"] * psiunnormfactor**2 / g.R_major**2)
+flux_surf_avg_B2 = chease_data["<B**2>"] * g.B_0**2
+flux_surf_avg_1_over_B2 = chease_data["<1/B**2>"] / g.B_0**2
+rhon = np.sqrt(Phi / Phi[-1])
+vpr = 4 * np.pi * Phi[-1] * rhon / (F_chease * flux_surf_avg_1_over_R2)
+
+# Apply smoothing (post_init functionality)
+assert not flux_surf_avg_Bp2[-1] < 1e-10
+idx_limit = np.argmin(np.abs(rhon - g.rho_smoothing_limit))
+flux_surf_avg_Bp2[:] = _smooth_savgol(flux_surf_avg_Bp2, idx_limit, 2)
+flux_surf_avg_R2Bp2[:] = _smooth_savgol(flux_surf_avg_R2Bp2, idx_limit, 2)
+flux_surf_avg_RBp[:] = _smooth_savgol(flux_surf_avg_RBp, idx_limit, 1)
+vpr[:] = _smooth_savgol(vpr, idx_limit, 1)
+
+# Continue with geometry calculations
+rho_intermediate = np.sqrt(Phi / (np.pi * g.B_0))
 rho_norm_intermediate = rho_intermediate / rho_intermediate[-1]
-C1 = intermediate.int_dl_over_Bp
-C0 = intermediate.flux_surf_avg_RBp * C1
-C2 = intermediate.flux_surf_avg_1_over_R2 * C1
-C3 = intermediate.flux_surf_avg_Bp2 * C1
-C4 = intermediate.flux_surf_avg_R2Bp2 * C1
+C1 = int_dl_over_Bp
+C0 = flux_surf_avg_RBp * C1
+C2 = flux_surf_avg_1_over_R2 * C1
+C3 = flux_surf_avg_Bp2 * C1
+C4 = flux_surf_avg_R2Bp2 * C1
 g0 = C0 * 2 * np.pi
 g1 = C1 * C4 * 4 * np.pi**2
 g2 = C1 * C3 * 4 * np.pi**2
 g3 = C2[1:] / C1[1:]
-g3 = np.concatenate((np.array([1 / intermediate.R_in[0]**2]), g3))
+g3 = np.concatenate((np.array([1 / R_in_chease[0]**2]), g3))
 g2g3_over_rhon = g2[1:] * g3[1:] / rho_norm_intermediate[1:]
 g2g3_over_rhon = np.concatenate((np.zeros(1), g2g3_over_rhon))
-dpsidrhon = (intermediate.Ip_profile[1:] *
-             (16 * g.mu_0 * np.pi**3 * intermediate.Phi[-1]) /
-             (g2g3_over_rhon[1:] * intermediate.F[1:]))
+dpsidrhon = (Ip_chease[1:] * (16 * g.mu_0 * np.pi**3 * Phi[-1]) / (g2g3_over_rhon[1:] * F_chease[1:]))
 dpsidrhon = np.concatenate((np.zeros(1), dpsidrhon))
-psi_from_Ip = scipy.integrate.cumulative_trapezoid(
-    y=dpsidrhon,
-    x=rho_norm_intermediate,
-    initial=0.0,
-)
-psi_from_Ip += intermediate.psi[0]
-psi_from_Ip[-1] = psi_from_Ip[-2] + (
-    16 * g.mu_0 * np.pi**3 * intermediate.Phi[-1]
-) * intermediate.Ip_profile[-1] / (g2g3_over_rhon[-1] * intermediate.F[-1]) * (
-    rho_norm_intermediate[-1] - rho_norm_intermediate[-2])
-vpr = intermediate.vpr
-spr = vpr * intermediate.flux_surf_avg_1_over_R / (2 * np.pi)
-volume_intermediate = scipy.integrate.cumulative_trapezoid(
-    y=vpr, x=rho_norm_intermediate, initial=0.0)
-area_intermediate = scipy.integrate.cumulative_trapezoid(
-    y=spr, x=rho_norm_intermediate, initial=0.0)
-dI_tot_drhon = np.gradient(intermediate.Ip_profile, rho_norm_intermediate)
+psi_from_Ip = scipy.integrate.cumulative_trapezoid(y=dpsidrhon, x=rho_norm_intermediate, initial=0.0)
+psi_from_Ip += psi[0]
+psi_from_Ip[-1] = psi_from_Ip[-2] + (16 * g.mu_0 * np.pi**3 * Phi[-1]) * Ip_chease[-1] / (g2g3_over_rhon[-1] * F_chease[-1]) * (rho_norm_intermediate[-1] - rho_norm_intermediate[-2])
+spr = vpr * flux_surf_avg_1_over_R / (2 * np.pi)
+volume_intermediate = scipy.integrate.cumulative_trapezoid(y=vpr, x=rho_norm_intermediate, initial=0.0)
+area_intermediate = scipy.integrate.cumulative_trapezoid(y=spr, x=rho_norm_intermediate, initial=0.0)
+dI_tot_drhon = np.gradient(Ip_chease, rho_norm_intermediate)
 j_total_face_bulk = dI_tot_drhon[1:] / spr[1:]
 j_total_face_axis = j_total_face_bulk[0]
 j_total = np.concatenate([np.array([j_total_face_axis]), j_total_face_bulk])
@@ -5075,30 +5004,26 @@ vpr = rhon_interpolation_func(rho_norm, vpr)
 spr_face = rhon_interpolation_func(rho_face_norm, spr)
 spr_cell = rhon_interpolation_func(rho_norm, spr)
 spr_hires = rhon_interpolation_func(rho_hires_norm, spr)
-delta_upper_face = rhon_interpolation_func(rho_face_norm,
-                                           intermediate.delta_upper_face)
-delta_lower_face = rhon_interpolation_func(rho_face_norm,
-                                           intermediate.delta_lower_face)
+delta_upper_face = rhon_interpolation_func(rho_face_norm, chease_data["delta_upper"])
+delta_lower_face = rhon_interpolation_func(rho_face_norm, chease_data["delta_bottom"])
 delta_face = 0.5 * (delta_upper_face + delta_lower_face)
-elongation = rhon_interpolation_func(rho_norm, intermediate.elongation)
-elongation_face = rhon_interpolation_func(rho_face_norm,
-                                          intermediate.elongation)
-Phi_face = rhon_interpolation_func(rho_face_norm, intermediate.Phi)
-Phi = rhon_interpolation_func(rho_norm, intermediate.Phi)
-F_face = rhon_interpolation_func(rho_face_norm, intermediate.F)
-F = rhon_interpolation_func(rho_norm, intermediate.F)
-F_hires = rhon_interpolation_func(rho_hires_norm, intermediate.F)
-psi = rhon_interpolation_func(rho_norm, intermediate.psi)
+elongation = rhon_interpolation_func(rho_norm, chease_data["elongation"])
+elongation_face = rhon_interpolation_func(rho_face_norm, chease_data["elongation"])
+Phi_face = rhon_interpolation_func(rho_face_norm, Phi)
+Phi = rhon_interpolation_func(rho_norm, Phi)
+F_face = rhon_interpolation_func(rho_face_norm, F_chease)
+F = rhon_interpolation_func(rho_norm, F_chease)
+F_hires = rhon_interpolation_func(rho_hires_norm, F_chease)
+psi = rhon_interpolation_func(rho_norm, psi)
 psi_from_Ip_face = rhon_interpolation_func(rho_face_norm, psi_from_Ip)
 psi_from_Ip = rhon_interpolation_func(rho_norm, psi_from_Ip)
 j_total_face = rhon_interpolation_func(rho_face_norm, j_total)
 j_total = rhon_interpolation_func(rho_norm, j_total)
-Ip_profile_face = rhon_interpolation_func(rho_face_norm,
-                                          intermediate.Ip_profile)
-Rin_face = rhon_interpolation_func(rho_face_norm, intermediate.R_in)
-Rin = rhon_interpolation_func(rho_norm, intermediate.R_in)
-Rout_face = rhon_interpolation_func(rho_face_norm, intermediate.R_out)
-Rout = rhon_interpolation_func(rho_norm, intermediate.R_out)
+Ip_profile_face = rhon_interpolation_func(rho_face_norm, Ip_chease)
+Rin_face = rhon_interpolation_func(rho_face_norm, R_in_chease)
+Rin = rhon_interpolation_func(rho_norm, R_in_chease)
+Rout_face = rhon_interpolation_func(rho_face_norm, R_out_chease)
+Rout = rhon_interpolation_func(rho_norm, R_out_chease)
 g0_face = rhon_interpolation_func(rho_face_norm, g0)
 g0 = rhon_interpolation_func(rho_norm, g0)
 g1_face = rhon_interpolation_func(rho_face_norm, g1)
@@ -5110,12 +5035,10 @@ g3 = rhon_interpolation_func(rho_norm, g3)
 g2g3_over_rhon_face = rhon_interpolation_func(rho_face_norm, g2g3_over_rhon)
 g2g3_over_rhon_hires = rhon_interpolation_func(rho_hires_norm, g2g3_over_rhon)
 g2g3_over_rhon = rhon_interpolation_func(rho_norm, g2g3_over_rhon)
-gm4 = rhon_interpolation_func(rho_norm, intermediate.flux_surf_avg_1_over_B2)
-gm4_face = rhon_interpolation_func(rho_face_norm,
-                                   intermediate.flux_surf_avg_1_over_B2)
-gm5 = rhon_interpolation_func(rho_norm, intermediate.flux_surf_avg_B2)
-gm5_face = rhon_interpolation_func(rho_face_norm,
-                                   intermediate.flux_surf_avg_B2)
+gm4 = rhon_interpolation_func(rho_norm, flux_surf_avg_1_over_B2)
+gm4_face = rhon_interpolation_func(rho_face_norm, flux_surf_avg_1_over_B2)
+gm5 = rhon_interpolation_func(rho_norm, flux_surf_avg_B2)
+gm5_face = rhon_interpolation_func(rho_face_norm, flux_surf_avg_B2)
 volume_face = rhon_interpolation_func(rho_face_norm, volume_intermediate)
 volume = rhon_interpolation_func(rho_norm, volume_intermediate)
 area_face = rhon_interpolation_func(rho_face_norm, area_intermediate)
@@ -5123,9 +5046,9 @@ area = rhon_interpolation_func(rho_norm, area_intermediate)
 g.geo = StandardGeometry(
     Phi=Phi,
     Phi_face=Phi_face,
-    R_major=intermediate.R_major,
-    a_minor=intermediate.a_minor,
-    B_0=intermediate.B_0,
+    R_major=g.R_major,
+    a_minor=g.a_minor,
+    B_0=g.B_0,
     volume=volume,
     volume_face=volume_face,
     area=area,
@@ -5171,7 +5094,7 @@ g.geo = StandardGeometry(
     rho_hires_norm=rho_hires_norm,
     rho_hires=rho_hires,
     Phi_b_dot=np.asarray(0.0),
-    _z_magnetic_axis=intermediate.z_magnetic_axis,
+    _z_magnetic_axis=None,
 )
 g.pedestal_model = PedestalConfig().build_pedestal_model()
 g.source_models = g.torax_config.sources.build_models()
