@@ -122,10 +122,6 @@ class InterpolatedVarSingleAxis:
     def is_bool_param(self):
         return self._is_bool_param
 
-    @property
-    def interpolation_mode(self):
-        return self._interpolation_mode
-
     def get_value(self, x):
         value = self._param.get_value(x)
         if self._is_bool_param:
