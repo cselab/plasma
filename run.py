@@ -88,8 +88,7 @@ class InterpolatedVarTimeRho:
         sorted_indices = np.array(sorted(values.keys()))
         rho_norm_interpolated_values = np.stack(
             [
-                InterpolatedVarSingleAxis(
-                    values[t], None).get_value(rho_norm)
+                InterpolatedVarSingleAxis(values[t], None).get_value(rho_norm)
                 for t in sorted_indices
             ],
             axis=0,
