@@ -48,11 +48,6 @@ class InterpolationMode(enum.Enum):
     PIECEWISE_LINEAR = 'piecewise_linear'
 
 
-InterpolatedVarTimeRhoInput: TypeAlias = Any
-TimeInterpolatedInput: TypeAlias = Any
-TimeRhoInterpolatedInput: TypeAlias = Any
-
-
 class _PiecewiseLinearInterpolatedParam:
 
     def __init__(self, xs, ys):
