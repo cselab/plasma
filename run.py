@@ -869,9 +869,7 @@ def calc_s_face(geo, psi):
 
 
 
-def calc_q95(psi_norm_face, q_face):
-    q95 = jnp.interp(0.95, psi_norm_face, q_face)
-    return q95
+
 
 
 def calculate_psi_grad_constraint_from_Ip(Ip, geo):
@@ -958,20 +956,13 @@ def calc_pprime(core_profiles):
     return pprime_face
 
 
-def calc_FFprime(core_profiles, geo):
-    mu0 = g.mu_0
-    pprime = calc_pprime(core_profiles)
-    g3 = geo.g3_face
-    jtor_over_R = core_profiles.j_total_face / g.R_major
-    FFprime_face = -(jtor_over_R / (2 * jnp.pi) + pprime) * mu0 / g3
-    return FFprime_face
 
 
-def calculate_stored_thermal_energy(p_el, p_ion, p_tot, geo):
-    wth_el = volume_integration(1.5 * p_el.value, geo)
-    wth_ion = volume_integration(1.5 * p_ion.value, geo)
-    wth_tot = volume_integration(1.5 * p_tot.value, geo)
-    return wth_el, wth_ion, wth_tot
+
+
+
+
+
 
 
 def calculate_greenwald_fraction(n_e_avg, core_profiles, geo):
@@ -981,66 +972,16 @@ def calculate_greenwald_fraction(n_e_avg, core_profiles, geo):
     return fgw
 
 
-def calculate_betas(core_profiles, geo):
-    _, _, p_total = calculate_pressure(core_profiles)
-    p_total_volume_avg = volume_average(p_total.value, geo)
-    magnetic_pressure_on_axis = geo.B_0**2 / (2 * g.mu_0)
-    beta_tor = p_total_volume_avg / (magnetic_pressure_on_axis + g.eps)
-    beta_pol = (
-        4.0 * geo.volume[-1] * p_total_volume_avg /
-        (g.mu_0 * core_profiles.Ip_profile_face[-1]**2 * g.R_major + g.eps))
-    beta_N = (1e8 * beta_tor * (geo.a_minor * geo.B_0 /
-                                (core_profiles.Ip_profile_face[-1] + g.eps)))
-    return beta_tor, beta_pol, beta_N
 
 
-def coll_exchange(core_profiles, Qei_multiplier):
-    log_lambda_ei = calculate_log_lambda_ei(core_profiles.T_e.value,
-                                            core_profiles.n_e.value)
-    log_tau_e_Z1 = _calculate_log_tau_e_Z1(
-        core_profiles.T_e.value,
-        core_profiles.n_e.value,
-        log_lambda_ei,
-    )
-    weighted_Z_eff = _calculate_weighted_Z_eff(core_profiles)
-    log_Qei_coef = (jnp.log(Qei_multiplier * 1.5 * core_profiles.n_e.value) +
-                    jnp.log(g.keV_to_J / g.m_amu) + jnp.log(2 * g.m_e) +
-                    jnp.log(weighted_Z_eff) - log_tau_e_Z1)
-    Qei_coef = jnp.exp(log_Qei_coef)
-    return Qei_coef
 
 
-def calc_nu_star(geo, core_profiles, collisionality_multiplier):
-    log_lambda_ei_face = calculate_log_lambda_ei(
-        core_profiles.T_e.face_value(),
-        core_profiles.n_e.face_value(),
-    )
-    log_tau_e_Z1 = _calculate_log_tau_e_Z1(
-        core_profiles.T_e.face_value(),
-        core_profiles.n_e.face_value(),
-        log_lambda_ei_face,
-    )
-    nu_e = (1 / jnp.exp(log_tau_e_Z1) * core_profiles.Z_eff_face *
-            collisionality_multiplier)
-    epsilon = geo.rho_face / g.R_major
-    epsilon = jnp.clip(epsilon, g.eps)
-    tau_bounce = (core_profiles.q_face * g.R_major / (epsilon**1.5 * jnp.sqrt(
-        core_profiles.T_e.face_value() * g.keV_to_J / g.m_e)))
-    tau_bounce = tau_bounce.at[0].set(tau_bounce[1])
-    nustar = nu_e * tau_bounce
-    return nustar
 
 
-def fast_ion_fractional_heating_formula(birth_energy, T_e, fast_ion_mass):
-    critical_energy = 10 * fast_ion_mass * T_e
-    energy_ratio = birth_energy / critical_energy
-    x_squared = energy_ratio
-    x = jnp.sqrt(x_squared)
-    frac_i = (2 * ((1 / 6) * jnp.log(
-        (1.0 - x + x_squared) / (1.0 + 2.0 * x + x_squared)) + (jnp.arctan(
-            (2.0 * x - 1.0) / jnp.sqrt(3)) + jnp.pi / 6) / jnp.sqrt(3)) /
-              x_squared)
-    return frac_i
+
+
+
+
 
 
 def calculate_log_lambda_ei(T_e, n_e):
@@ -1048,16 +989,10 @@ def calculate_log_lambda_ei(T_e, n_e):
     return 31.3 - 0.5 * jnp.log(n_e) + jnp.log(T_e_ev)
 
 
-def calculate_log_lambda_ii(T_i, n_i, Z_i):
-    T_i_ev = T_i * 1e3
-    return 30.0 - 0.5 * jnp.log(n_i) + 1.5 * jnp.log(T_i_ev) - 3.0 * jnp.log(
-        Z_i)
 
 
-def _calculate_weighted_Z_eff(core_profiles):
-    return (core_profiles.n_i.value * core_profiles.Z_i**2 / core_profiles.A_i
-            + core_profiles.n_impurity.value * core_profiles.Z_impurity**2 /
-            core_profiles.A_impurity) / core_profiles.n_e.value
+
+
 
 
 def _calculate_log_tau_e_Z1(T_e, n_e, log_lambda_ei):
@@ -1317,8 +1252,9 @@ def _calculate_bootstrap_current(*, Z_eff_face, Z_i_face, n_e, n_i, T_e, T_i,
                                  psi, q_face, geo):
     f_trap = calculate_f_trap(geo)
     log_lambda_ei = calculate_log_lambda_ei(T_e.face_value(), n_e.face_value())
-    log_lambda_ii = calculate_log_lambda_ii(T_i.face_value(), n_i.face_value(),
-                                            Z_i_face)
+    T_i_ev = T_i.face_value() * 1e3
+    log_lambda_ii = 30.0 - 0.5 * jnp.log(n_i.face_value()) + 1.5 * jnp.log(T_i_ev) - 3.0 * jnp.log(
+        Z_i_face)
     nu_e_star = calculate_nu_e_star(
         q=q_face,
         geo=geo,
@@ -1813,11 +1749,14 @@ def calc_fusion(geo, core_profiles, runtime_params):
             alpha_fraction = 3.5 / 17.6
             birth_energy = 3520
             alpha_mass = 4.002602
-            frac_i = fast_ion_fractional_heating_formula(
-                birth_energy,
-                core_profiles.T_e.value,
-                alpha_mass,
-            )
+            critical_energy = 10 * alpha_mass * core_profiles.T_e.value
+            energy_ratio = birth_energy / critical_energy
+            x_squared = energy_ratio
+            x = jnp.sqrt(x_squared)
+            frac_i = (2 * ((1 / 6) * jnp.log(
+                (1.0 - x + x_squared) / (1.0 + 2.0 * x + x_squared)) + (jnp.arctan(
+                    (2.0 * x - 1.0) / jnp.sqrt(3)) + jnp.pi / 6) / jnp.sqrt(3)) /
+                      x_squared)
             frac_e = 1.0 - frac_i
             Pfus_i = Pfus_cell * frac_i * alpha_fraction
             Pfus_e = Pfus_cell * frac_e * alpha_fraction
@@ -1961,10 +1900,20 @@ class SourceModels:
 
 def _model_based_qei(runtime_params, geo, core_profiles):
     zeros = jnp.zeros_like(geo.rho_norm)
-    qei_coef = coll_exchange(
-        core_profiles=core_profiles,
-        Qei_multiplier=g.Qei_multiplier,
+    log_lambda_ei = calculate_log_lambda_ei(core_profiles.T_e.value,
+                                            core_profiles.n_e.value)
+    log_tau_e_Z1 = _calculate_log_tau_e_Z1(
+        core_profiles.T_e.value,
+        core_profiles.n_e.value,
+        log_lambda_ei,
     )
+    weighted_Z_eff = (core_profiles.n_i.value * core_profiles.Z_i**2 / core_profiles.A_i
+            + core_profiles.n_impurity.value * core_profiles.Z_impurity**2 /
+            core_profiles.A_impurity) / core_profiles.n_e.value
+    log_Qei_coef = (jnp.log(g.Qei_multiplier * 1.5 * core_profiles.n_e.value) +
+                    jnp.log(g.keV_to_J / g.m_amu) + jnp.log(2 * g.m_e) +
+                    jnp.log(weighted_Z_eff) - log_tau_e_Z1)
+    qei_coef = jnp.exp(log_Qei_coef)
     implicit_ii = -qei_coef
     implicit_ee = -qei_coef
     explicit_i = zeros
@@ -2995,11 +2944,23 @@ class QLKNNTransportModel0:
         x = rmid_face / rmid_face[-1]
         x = jnp.where(jnp.abs(x) < g.eps, g.eps, x)
         Ti_Te = core_profiles.T_i.face_value() / core_profiles.T_e.face_value()
-        nu_star = calc_nu_star(
-            geo=geo,
-            core_profiles=core_profiles,
-            collisionality_multiplier=transport.collisionality_multiplier,
+        log_lambda_ei_face = calculate_log_lambda_ei(
+            core_profiles.T_e.face_value(),
+            core_profiles.n_e.face_value(),
         )
+        log_tau_e_Z1 = _calculate_log_tau_e_Z1(
+            core_profiles.T_e.face_value(),
+            core_profiles.n_e.face_value(),
+            log_lambda_ei_face,
+        )
+        nu_e = (1 / jnp.exp(log_tau_e_Z1) * core_profiles.Z_eff_face *
+                transport.collisionality_multiplier)
+        epsilon = geo.rho_face / g.R_major
+        epsilon = jnp.clip(epsilon, g.eps)
+        tau_bounce = (core_profiles.q_face * g.R_major / (epsilon**1.5 * jnp.sqrt(
+            core_profiles.T_e.face_value() * g.keV_to_J / g.m_e)))
+        tau_bounce = tau_bounce.at[0].set(tau_bounce[1])
+        nu_star = nu_e * tau_bounce
         log_nu_star_face = jnp.log10(nu_star)
         alpha = calculate_alpha(
             core_profiles=core_profiles,
@@ -3610,14 +3571,14 @@ def make_post_processed_outputs(
         pressure_thermal_tot,
     ) = calculate_pressure(sim_state.core_profiles)
     pprime_face = calc_pprime(sim_state.core_profiles)
-    W_thermal_el, W_thermal_ion, W_thermal_tot = (
-        calculate_stored_thermal_energy(
-            pressure_thermal_el,
-            pressure_thermal_ion,
-            pressure_thermal_tot,
-            sim_state.geometry,
-        ))
-    FFprime_face = calc_FFprime(sim_state.core_profiles, sim_state.geometry)
+    W_thermal_el = volume_integration(1.5 * pressure_thermal_el.value, sim_state.geometry)
+    W_thermal_ion = volume_integration(1.5 * pressure_thermal_ion.value, sim_state.geometry)
+    W_thermal_tot = volume_integration(1.5 * pressure_thermal_tot.value, sim_state.geometry)
+    mu0 = g.mu_0
+    pprime = calc_pprime(sim_state.core_profiles)
+    g3 = sim_state.geometry.g3_face
+    jtor_over_R = sim_state.core_profiles.j_total_face / g.R_major
+    FFprime_face = -(jtor_over_R / (2 * jnp.pi) + pprime) * mu0 / g3
     psi_face = sim_state.core_profiles.psi.face_value()
     psi_norm_face = (psi_face - psi_face[0]) / (psi_face[-1] - psi_face[0])
     geo = sim_state.geometry
@@ -3742,7 +3703,7 @@ def make_post_processed_outputs(
         E_ohmic_e = 0.0
         E_external_injected = 0.0
         E_external_total = 0.0
-    q95 = calc_q95(psi_norm_face, sim_state.core_profiles.q_face)
+    q95 = jnp.interp(0.95, psi_norm_face, sim_state.core_profiles.q_face)
     te_volume_avg = volume_average(sim_state.core_profiles.T_e.value,
                                    sim_state.geometry)
     ti_volume_avg = volume_average(sim_state.core_profiles.T_i.value,
@@ -3777,8 +3738,15 @@ def make_post_processed_outputs(
     psi_current = (j_external +
                    sim_state.core_sources.bootstrap_current.j_bootstrap)
     j_ohmic = sim_state.core_profiles.j_total - psi_current
-    beta_tor, beta_pol, beta_N = calculate_betas(sim_state.core_profiles,
-                                                 sim_state.geometry)
+    _, _, p_total = calculate_pressure(sim_state.core_profiles)
+    p_total_volume_avg = volume_average(p_total.value, sim_state.geometry)
+    magnetic_pressure_on_axis = sim_state.geometry.B_0**2 / (2 * g.mu_0)
+    beta_tor = p_total_volume_avg / (magnetic_pressure_on_axis + g.eps)
+    beta_pol = (
+        4.0 * sim_state.geometry.volume[-1] * p_total_volume_avg /
+        (g.mu_0 * sim_state.core_profiles.Ip_profile_face[-1]**2 * g.R_major + g.eps))
+    beta_N = (1e8 * beta_tor * (sim_state.geometry.a_minor * sim_state.geometry.B_0 /
+                                (sim_state.core_profiles.Ip_profile_face[-1] + g.eps)))
     return PostProcessedOutputs(
         pressure_thermal_i=pressure_thermal_ion,
         pressure_thermal_e=pressure_thermal_el,
