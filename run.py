@@ -4683,8 +4683,6 @@ class StateHistory:
         return data_tree
 
     def _pack_into_data_array(self, name, data):
-        if data is None:
-            return None
         is_face_var = lambda x: x.ndim == 2 and x.shape == (
             len(self.times),
             len(self.rho_face_norm),
@@ -4702,12 +4700,8 @@ class StateHistory:
         match data:
             case data if is_face_var(data):
                 dims = [TIME, RHO_FACE_NORM]
-            case data if is_cell_var(data):
-                dims = [TIME, RHO_CELL_NORM]
             case data if is_scalar(data):
                 dims = [TIME]
-            case data if is_constant(data):
-                dims = []
             case data if is_cell_plus_boundaries_var(data):
                 dims = [TIME, "rho_norm"]
         return xr.DataArray(data, dims=dims, name=name)
