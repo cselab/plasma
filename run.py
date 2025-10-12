@@ -3483,7 +3483,7 @@ class StandardGeometryIntermediates:
         self.vpr[:] = _smooth_savgol(self.vpr, idx_limit, 1)
 
     @classmethod
-    def from_chease(cls, R_major, a_minor, B_0):
+    def from_chease(cls):
         file_path = os.path.join(
             "geo", "ITER_hybrid_citrin_equil_cheasedata.mat2cols")
         with open(file_path, 'r') as file:
@@ -3499,31 +3499,31 @@ class StandardGeometryIntermediates:
             var_label: np.asarray(chease_data[var_label])
             for var_label in chease_data
         }
-        psiunnormfactor = R_major**2 * B_0
+        psiunnormfactor = g.R_major**2 * g.B_0
         psi = chease_data['PSIchease=psi/2pi'] * psiunnormfactor * 2 * np.pi
-        Ip_chease = (chease_data['Ipprofile'] / g.mu_0 * R_major * B_0)
+        Ip_chease = (chease_data['Ipprofile'] / g.mu_0 * g.R_major * g.B_0)
         Phi = (chease_data['RHO_TOR=sqrt(Phi/pi/B0)'] *
-               R_major)**2 * B_0 * np.pi
-        R_in_chease = chease_data['R_INBOARD'] * R_major
-        R_out_chease = chease_data['R_OUTBOARD'] * R_major
-        F = chease_data['T=RBphi'] * R_major * B_0
+               g.R_major)**2 * g.B_0 * np.pi
+        R_in_chease = chease_data['R_INBOARD'] * g.R_major
+        R_out_chease = chease_data['R_OUTBOARD'] * g.R_major
+        F = chease_data['T=RBphi'] * g.R_major * g.B_0
         int_dl_over_Bp = (chease_data['Int(Rdlp/|grad(psi)|)=Int(Jdchi)'] *
-                          R_major / B_0)
-        flux_surf_avg_1_over_R = chease_data['<1/R>profile'] / R_major
-        flux_surf_avg_1_over_R2 = chease_data['<1/R**2>'] / R_major**2
-        flux_surf_avg_Bp2 = chease_data['<Bp**2>'] * B_0**2
+                          g.R_major / g.B_0)
+        flux_surf_avg_1_over_R = chease_data['<1/R>profile'] / g.R_major
+        flux_surf_avg_1_over_R2 = chease_data['<1/R**2>'] / g.R_major**2
+        flux_surf_avg_Bp2 = chease_data['<Bp**2>'] * g.B_0**2
         flux_surf_avg_RBp = chease_data[
-            '<|grad(psi)|>'] * psiunnormfactor / R_major
+            '<|grad(psi)|>'] * psiunnormfactor / g.R_major
         flux_surf_avg_R2Bp2 = (chease_data['<|grad(psi)|**2>'] *
-                               psiunnormfactor**2 / R_major**2)
-        flux_surf_avg_B2 = chease_data['<B**2>'] * B_0**2
-        flux_surf_avg_1_over_B2 = chease_data['<1/B**2>'] / B_0**2
+                               psiunnormfactor**2 / g.R_major**2)
+        flux_surf_avg_B2 = chease_data['<B**2>'] * g.B_0**2
+        flux_surf_avg_1_over_B2 = chease_data['<1/B**2>'] / g.B_0**2
         rhon = np.sqrt(Phi / Phi[-1])
         vpr = 4 * np.pi * Phi[-1] * rhon / (F * flux_surf_avg_1_over_R2)
         return cls(
-            R_major=np.array(R_major),
-            a_minor=np.array(a_minor),
-            B_0=np.array(B_0),
+            R_major=np.array(g.R_major),
+            a_minor=np.array(g.a_minor),
+            B_0=np.array(g.B_0),
             psi=psi,
             Ip_profile=Ip_chease,
             Phi=Phi,
@@ -5772,8 +5772,7 @@ g.include_ITG = True
 g.include_TEM = True
 g.include_ETG = True
 g.An_min = 0.05
-intermediate = StandardGeometryIntermediates.from_chease(
-    g.R_major, g.a_minor, g.B_0)
+intermediate = StandardGeometryIntermediates.from_chease()
 intermediate.post_init()
 rho_intermediate = np.sqrt(intermediate.Phi / (np.pi * intermediate.B_0))
 rho_norm_intermediate = rho_intermediate / rho_intermediate[-1]
