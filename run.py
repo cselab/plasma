@@ -2379,10 +2379,18 @@ def build_standard_source_profiles(*,
         if (explicit == source_params.is_explicit) | calculate_anyway:
             value = source.get_value(runtime_params, geo, core_profiles,
                                      calculated_source_profiles, conductivity)
-            _update_standard_source_profiles(calculated_source_profiles,
-                                             source_name,
-                                             source.affected_core_profiles,
-                                             value)
+            for profile, affected_core_profile in zip(value,
+                                                      source.affected_core_profiles,
+                                                      strict=True):
+                match affected_core_profile:
+                    case AffectedCoreProfile.PSI:
+                        calculated_source_profiles.psi[source_name] = profile
+                    case AffectedCoreProfile.NE:
+                        calculated_source_profiles.n_e[source_name] = profile
+                    case AffectedCoreProfile.TEMP_ION:
+                        calculated_source_profiles.T_i[source_name] = profile
+                    case AffectedCoreProfile.TEMP_EL:
+                        calculated_source_profiles.T_e[source_name] = profile
 
     for source_name, source in g.source_models.psi_sources.items():
         calculate_source(source_name, source)
@@ -2391,22 +2399,6 @@ def build_standard_source_profiles(*,
     for source_name, source in g.source_models.standard_sources.items():
         if source_name not in g.source_models.psi_sources:
             calculate_source(source_name, source)
-
-
-def _update_standard_source_profiles(calculated_source_profiles, source_name,
-                                     affected_core_profiles, value):
-    for profile, affected_core_profile in zip(value,
-                                              affected_core_profiles,
-                                              strict=True):
-        match affected_core_profile:
-            case AffectedCoreProfile.PSI:
-                calculated_source_profiles.psi[source_name] = profile
-            case AffectedCoreProfile.NE:
-                calculated_source_profiles.n_e[source_name] = profile
-            case AffectedCoreProfile.TEMP_ION:
-                calculated_source_profiles.T_i[source_name] = profile
-            case AffectedCoreProfile.TEMP_EL:
-                calculated_source_profiles.T_e[source_name] = profile
 
 
 def build_all_zero_profiles(geo):
