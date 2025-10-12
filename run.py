@@ -2859,9 +2859,8 @@ _FLUX_NAME_MAP: Final[Mapping[str, str]] = immutabledict.immutabledict({
 
 class QLKNNModelWrapper:
 
-    def __init__(self, path, name, flux_name_map=None):
+    def __init__(self, path, flux_name_map=None):
         self.path = path
-        self.name = name
         self._flux_name_map = _FLUX_NAME_MAP
         self._model = qlknn_model.QLKNNModel.load_default_model()
 
@@ -2968,12 +2967,10 @@ class QLKNNTransportModel0:
 
     def __init__(
         self,
-        path: str,
-        name: str,
+        path: str
     ):
         super().__init__()
         self._path = path
-        self._name = name
         self._frozen = True
 
     def __setattr__(self, attr, value):
@@ -3303,10 +3300,6 @@ class QLKNNTransportModel0:
     def path(self):
         return self._path
 
-    @property
-    def name(self):
-        return self._name
-
     def _call_implementation(self, transport_runtime_params, runtime_params,
                              geo, core_profiles, pedestal_model_output):
         runtime_config_inputs = QLKNNRuntimeConfigInputs.from_runtime_params_slice(
@@ -3322,7 +3315,7 @@ class QLKNNTransportModel0:
             geo=geo,
             core_profiles=core_profiles,
         )
-        model = QLKNNModelWrapper(self.path, self.name)
+        model = QLKNNModelWrapper(self.path)
         qualikiz_inputs = dataclasses.replace(
             qualikiz_inputs,
             x=qualikiz_inputs.x * qualikiz_inputs.epsilon_lcfs / _EPSILON_NN,
@@ -3368,7 +3361,6 @@ class QLKNNTransportModel0:
 class QLKNNTransportModel(TransportBase):
     model_name: Annotated[Literal['qlknn'], JAX_STATIC] = 'qlknn'
     model_path: Annotated[str, JAX_STATIC] = ''
-    qlknn_model_name: Annotated[str, JAX_STATIC] = ''
     include_ITG: bool = True
     include_TEM: bool = True
     ETG_correction_factor: float = 1.0 / 3.0
@@ -3382,14 +3374,12 @@ class QLKNNTransportModel(TransportBase):
     @classmethod
     def _conform_data(cls, data):
         data = copy.deepcopy(data)
-        data['qlknn_model_name'] = data.get('qlknn_model_name', '')
         if 'smoothing_width' not in data:
             data['smoothing_width'] = 0.1
         return data
 
     def build_transport_model(self):
-        return QLKNNTransportModel0(path=self.model_path,
-                                    name=self.qlknn_model_name)
+        return QLKNNTransportModel0(path=self.model_path)
 
     def build_runtime_params(self, t):
         base_kwargs = dataclasses.asdict(super().build_runtime_params(t))
