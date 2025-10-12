@@ -2302,12 +2302,7 @@ class PlasmaComposition(BaseModelFrozen):
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class RuntimeParamsX:
-    D_e_max: Any
-    V_e_min: Any
-    V_e_max: Any
-    rho_min: Any
-    rho_max: Any
-    smoothing_width: Any
+    pass
 
 
 @jax.tree_util.register_dataclass
@@ -2453,6 +2448,12 @@ class QuasilinearInputs:
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class RuntimeParams(RuntimeParamsX):
+    D_e_max: Any
+    V_e_min: Any
+    V_e_max: Any
+    rho_min: Any
+    rho_max: Any
+    smoothing_width: Any
     collisionality_multiplier: float
     smag_alpha_correction: bool
     q_sawtooth_proxy: bool
@@ -2489,22 +2490,9 @@ class QualikizInputs(QuasilinearInputs):
 
 
 class TransportBase(BaseModelFrozen):
-    D_e_max: Any = 100.0
-    V_e_min: Any = -50.0
-    V_e_max: Any = 50.0
-    rho_min: UnitIntervalTimeVaryingScalar = (ValidatedDefault(0.0))
-    rho_max: UnitIntervalTimeVaryingScalar = (ValidatedDefault(1.0))
-    smoothing_width: pydantic.NonNegativeFloat = 0.0
 
     def build_runtime_params(self, t):
-        return RuntimeParamsX(
-            D_e_max=self.D_e_max,
-            V_e_min=self.V_e_min,
-            V_e_max=self.V_e_max,
-            rho_min=self.rho_min.get_value(t),
-            rho_max=self.rho_max.get_value(t),
-            smoothing_width=self.smoothing_width,
-        )
+        return RuntimeParamsX()
 
 
 _FLUX_NAME_MAP: Final[Mapping[str, str]] = immutabledict.immutabledict({
@@ -3013,14 +3001,12 @@ class QLKNNTransportModel(TransportBase):
     collisionality_multiplier: float = 1.0
     smag_alpha_correction: bool = True
     q_sawtooth_proxy: bool = True
-
-    @pydantic.model_validator(mode='before')
-    @classmethod
-    def _conform_data(cls, data):
-        data = copy.deepcopy(data)
-        if 'smoothing_width' not in data:
-            data['smoothing_width'] = 0.1
-        return data
+    D_e_max: Any = 100.0
+    V_e_min: Any = -50.0
+    V_e_max: Any = 50.0
+    smoothing_width: pydantic.NonNegativeFloat = 0.1
+    rho_min: UnitIntervalTimeVaryingScalar = (ValidatedDefault(0.0))
+    rho_max: UnitIntervalTimeVaryingScalar = (ValidatedDefault(1.0))
 
     def build_transport_model(self):
         return QLKNNTransportModel0()
@@ -3028,6 +3014,12 @@ class QLKNNTransportModel(TransportBase):
     def build_runtime_params(self, t):
         base_kwargs = dataclasses.asdict(super().build_runtime_params(t))
         return RuntimeParams0(
+            D_e_max=self.D_e_max,
+            V_e_min=self.V_e_min,
+            V_e_max=self.V_e_max,
+            rho_min=self.rho_min.get_value(t),
+            rho_max=self.rho_max.get_value(t),
+            smoothing_width=self.smoothing_width,
             ETG_correction_factor=self.ETG_correction_factor,
             clip_inputs=self.clip_inputs,
             clip_margin=self.clip_margin,
