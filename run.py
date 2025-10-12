@@ -175,16 +175,14 @@ class TimeVaryingArray(BaseModelFrozen):
             self._get_cached_interpolated_param_face,
             self._get_cached_interpolated_param_face_right,
         )
-        aux_data = (
-            self.grid,
-        )
+        aux_data = (self.grid, )
         return children, aux_data
 
     @classmethod
     def tree_unflatten(cls, aux_data, children):
         obj = cls.model_construct(
             value=children[0],
-            grid=aux_data[1],
+            grid=aux_data[0],
         )
         obj._get_cached_interpolated_param_cell = children[1]
         obj._get_cached_interpolated_param_face = children[2]
@@ -216,9 +214,7 @@ class TimeVaryingArray(BaseModelFrozen):
             data.pop('_get_cached_interpolated_param_face_centers', None)
             data.pop('_get_cached_interpolated_param_face_right_centers', None)
         value = _load_from_primitives(data)
-        return dict(
-            value=value,
-        )
+        return dict(value=value, )
 
     @functools.cached_property
     def _get_cached_interpolated_param_cell(self, ):
