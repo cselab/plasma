@@ -5016,7 +5016,6 @@ class StateHistory:
         all_dicts = [
             self._save_core_profiles(),
             self._save_core_transport(),
-            self._save_core_sources(),
             self._save_post_processed_outputs(),
             self._save_geometry(),
         ]
@@ -5138,38 +5137,6 @@ class StateHistory:
                 name,
                 data,
             )
-            for name, data in xr_dict.items()
-        }
-        return xr_dict
-
-    def _save_core_sources(self):
-        xr_dict = {}
-        xr_dict[QeiSource.SOURCE_NAME] = (
-            self._stacked_core_sources.qei.qei_coef *
-            (self._stacked_core_profiles.T_e.value -
-             self._stacked_core_profiles.T_i.value))
-        xr_dict[J_BOOTSTRAP] = _extend_cell_grid_to_boundaries(
-            self._stacked_core_sources.bootstrap_current.j_bootstrap,
-            self._stacked_core_sources.bootstrap_current.j_bootstrap_face,
-        )
-        for profile in self._stacked_core_sources.T_i:
-            if profile == "fusion":
-                xr_dict["p_alpha_i"] = self._stacked_core_sources.T_i[profile]
-            else:
-                xr_dict[f"p_{profile}_i"] = self._stacked_core_sources.T_i[
-                    profile]
-        for profile in self._stacked_core_sources.T_e:
-            if profile == "fusion":
-                xr_dict["p_alpha_e"] = self._stacked_core_sources.T_e[profile]
-            else:
-                xr_dict[f"p_{profile}_e"] = self._stacked_core_sources.T_e[
-                    profile]
-        for profile in self._stacked_core_sources.psi:
-            xr_dict[f"j_{profile}"] = self._stacked_core_sources.psi[profile]
-        for profile in self._stacked_core_sources.n_e:
-            xr_dict[f"s_{profile}"] = self._stacked_core_sources.n_e[profile]
-        xr_dict = {
-            name: self._pack_into_data_array(name, data)
             for name, data in xr_dict.items()
         }
         return xr_dict
