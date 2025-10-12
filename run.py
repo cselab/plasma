@@ -3589,8 +3589,6 @@ def _smooth_savgol(data, idx_limit, polyorder):
 
 
 class CheaseConfig(BaseModelFrozen):
-    geometry_type: Annotated[Literal['chease'], TIME_INVARIANT] = 'chease'
-
     def build_geometry(self):
         intermediate = StandardGeometryIntermediates.from_chease(
             g.R_major, g.a_minor, g.B_0)
