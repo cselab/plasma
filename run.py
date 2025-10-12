@@ -548,13 +548,6 @@ IonMapping: TypeAlias = Annotated[
 ]
 
 
-@enum.unique
-class IntegralPreservationQuantity(enum.Enum):
-    VOLUME = 'volume'
-    SURFACE = 'surface'
-    VALUE = 'value'
-
-
 @jax.jit
 def cell_integration(x, geo):
     return jnp.sum(x * geo.drho_norm)
