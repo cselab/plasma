@@ -2486,6 +2486,7 @@ class PedestalModelOutput:
 
 
 class SetTemperatureDensityPedestalModel:
+
     def __call__(self, runtime_params, geo, core_profiles):
         return jax.lax.cond(
             True,
@@ -2724,10 +2725,6 @@ class RuntimeParamsX:
     V_e_max: Any
     rho_min: Any
     rho_max: Any
-    D_e_inner: Any
-    V_e_inner: Any
-    chi_i_inner: Any
-    chi_e_inner: Any
     rho_inner: Any
     apply_outer_patch: Any
     D_e_outer: Any
@@ -2847,7 +2844,7 @@ class TransportModel:
                 True,
                 geo.rho_face_norm < transport_runtime_params.rho_inner + g.eps,
             ),
-            transport_runtime_params.chi_i_inner,
+            g.chi_i_inner,
             transport_coeffs.chi_face_ion,
         )
         chi_face_el = jnp.where(
@@ -2855,7 +2852,7 @@ class TransportModel:
                 True,
                 geo.rho_face_norm < transport_runtime_params.rho_inner + g.eps,
             ),
-            transport_runtime_params.chi_e_inner,
+            g.chi_e_inner,
             transport_coeffs.chi_face_el,
         )
         d_face_el = jnp.where(
@@ -2863,7 +2860,7 @@ class TransportModel:
                 True,
                 geo.rho_face_norm < transport_runtime_params.rho_inner + g.eps,
             ),
-            transport_runtime_params.D_e_inner,
+            g.D_e_inner,
             transport_coeffs.d_face_el,
         )
         v_face_el = jnp.where(
@@ -2871,7 +2868,7 @@ class TransportModel:
                 True,
                 geo.rho_face_norm < transport_runtime_params.rho_inner + g.eps,
             ),
-            transport_runtime_params.V_e_inner,
+            g.V_e_inner,
             transport_coeffs.v_face_el,
         )
         chi_face_ion = jnp.where(
@@ -3276,10 +3273,6 @@ class TransportBase(BaseModelFrozen):
     V_e_max: MeterPerSecond = 50.0
     rho_min: UnitIntervalTimeVaryingScalar = (ValidatedDefault(0.0))
     rho_max: UnitIntervalTimeVaryingScalar = (ValidatedDefault(1.0))
-    D_e_inner: PositiveTimeVaryingScalar = (ValidatedDefault(0.2))
-    V_e_inner: TimeVaryingScalar = (ValidatedDefault(0.0))
-    chi_i_inner: PositiveTimeVaryingScalar = (ValidatedDefault(1.0))
-    chi_e_inner: PositiveTimeVaryingScalar = (ValidatedDefault(1.0))
     rho_inner: UnitIntervalTimeVaryingScalar = (ValidatedDefault(0.3))
     apply_outer_patch: TimeVaryingScalar = (ValidatedDefault(False))
     D_e_outer: PositiveTimeVaryingScalar = (ValidatedDefault(0.2))
@@ -3299,10 +3292,6 @@ class TransportBase(BaseModelFrozen):
             V_e_max=self.V_e_max,
             rho_min=self.rho_min.get_value(t),
             rho_max=self.rho_max.get_value(t),
-            D_e_inner=self.D_e_inner.get_value(t),
-            V_e_inner=self.V_e_inner.get_value(t),
-            chi_i_inner=self.chi_i_inner.get_value(t),
-            chi_e_inner=self.chi_e_inner.get_value(t),
             rho_inner=self.rho_inner.get_value(t),
             apply_outer_patch=self.apply_outer_patch.get_value(t),
             D_e_outer=self.D_e_outer.get_value(t),
@@ -6231,10 +6220,6 @@ CONFIG = {
         'ei_exchange': {},
     },
     'transport': {
-        'D_e_inner': 0.25,
-        'V_e_inner': 0.0,
-        'chi_i_inner': 1.0,
-        'chi_e_inner': 1.0,
         'rho_inner': 0.2,
         'apply_outer_patch': True,
         'D_e_outer': 0.1,
@@ -6288,6 +6273,27 @@ g.n_e_ped = 0.62e20
 g.T_i_ped = 4.5
 g.T_e_ped = 4.5
 g.rho_norm_ped_top = 0.91
+
+# transport
+g.D_e_inner = 0.25
+g.V_e_inner = 0.0
+g.chi_i_inner = 1.0
+g.chi_e_inner = 1.0
+g.rho_inner = 0.2
+g.apply_outer_patch = True
+g.D_e_outer = 0.1
+g.V_e_outer = 0.0
+g.chi_i_outer = 2.0
+g.chi_e_outer = 2.0
+g.rho_outer = 0.9
+g.chi_min = 0.05
+g.chi_max = 100
+g.D_e_min = 0.05
+g.DV_effective = True
+g.include_ITG = True
+g.include_TEM = True
+g.include_ETG = True
+g.An_min = 0.05
 
 g.geo = CheaseConfig().build_geometry()
 g.pedestal_model = PedestalConfig().build_pedestal_model()
