@@ -40,6 +40,7 @@ FloatScalar: TypeAlias = jt.Float[Array | float, ""]
 JAX_STATIC: Final[str] = '_pydantic_jax_static_field'
 _interp_fn = jax.jit(jnp.interp)
 
+
 @jax.tree_util.register_pytree_node_class
 class InterpolatedVarSingleAxis:
 
@@ -744,20 +745,7 @@ def stack_geometries(geometries):
     return first_geo.__class__(**stacked_data)
 
 
-def calculate_plh_scaling_factor(geo, core_profiles):
-    line_avg_n_e = line_average(core_profiles.n_e.value)
-    P_LH_hi_dens_D = (2.15 * (line_avg_n_e / 1e20)**0.782 * geo.B_0**0.772 *
-                      geo.a_minor**0.975 * g.R_major**0.999 * 1e6)
-    A_deuterium = ION_PROPERTIES_DICT['D'].A
-    P_LH_hi_dens = P_LH_hi_dens_D * A_deuterium / core_profiles.A_i
-    Ip_total = core_profiles.Ip_profile_face[..., -1]
-    n_e_min_P_LH = (0.7 * (Ip_total / 1e6)**0.34 * geo.a_minor**-0.95 *
-                    geo.B_0**0.62 * (g.R_major / geo.a_minor)**0.4 * 1e19)
-    P_LH_min_D = (0.36 * (Ip_total / 1e6)**0.27 * geo.B_0**1.25 *
-                  g.R_major**1.23 * (g.R_major / geo.a_minor)**0.08 * 1e6)
-    P_LH_min = P_LH_min_D * A_deuterium / core_profiles.A_i
-    P_LH = jnp.maximum(P_LH_min, P_LH_hi_dens)
-    return P_LH_hi_dens, P_LH_min, P_LH, n_e_min_P_LH
+
 
 
 def calculate_scaling_law_confinement_time(geo, core_profiles, Ploss,
@@ -869,37 +857,16 @@ def calc_s_face(geo, psi):
     return s_face
 
 
-def calc_s_rmid(geo, psi):
-    iota_scaled = jnp.abs((psi.face_grad()[1:] / geo.rho_face_norm[1:]))
-    iota_scaled0 = jnp.expand_dims(jnp.abs(psi.face_grad()[1] / geo.drho_norm),
-                                   axis=0)
-    iota_scaled = jnp.concatenate([iota_scaled0, iota_scaled])
-    rmid_face = (geo.R_out_face - geo.R_in_face) * 0.5
-    s_face = -rmid_face * jnp.gradient(iota_scaled, rmid_face) / iota_scaled
-    return s_face
 
 
-def _calc_bpol2(geo, psi):
-    bpol2_bulk = ((psi.face_grad()[1:] / (2 * jnp.pi))**2 * geo.g2_face[1:] /
-                  geo.vpr_face[1:]**2)
-    bpol2_axis = jnp.array([0.0], dtype=jnp.float64)
-    bpol2_face = jnp.concatenate([bpol2_axis, bpol2_bulk])
-    return bpol2_face
 
 
-def calc_Wpol(geo, psi):
-    bpol2 = _calc_bpol2(geo, psi)
-    Wpol = jax.scipy.integrate.trapezoid(bpol2 * geo.vpr_face,
-                                         geo.rho_face_norm) / (2 * g.mu_0)
-    return Wpol
 
 
-def calc_li3(
-    R_major: jax.Array,
-    Wpol: jax.Array,
-    Ip_total: jax.Array,
-):
-    return 4 * Wpol / (g.mu_0 * Ip_total**2 * R_major)
+
+
+
+
 
 
 def calc_q95(psi_norm_face, q_face):
@@ -3018,10 +2985,12 @@ class QLKNNTransportModel0:
             reference_length=g.R_major,
         )
         q = core_profiles.q_face
-        smag = calc_s_rmid(
-            geo,
-            core_profiles.psi,
-        )
+        iota_scaled = jnp.abs((core_profiles.psi.face_grad()[1:] / geo.rho_face_norm[1:]))
+        iota_scaled0 = jnp.expand_dims(jnp.abs(core_profiles.psi.face_grad()[1] / geo.drho_norm),
+                                       axis=0)
+        iota_scaled = jnp.concatenate([iota_scaled0, iota_scaled])
+        rmid_face = (geo.R_out_face - geo.R_in_face) * 0.5
+        smag = -rmid_face * jnp.gradient(iota_scaled, rmid_face) / iota_scaled
         epsilon_lcfs = rmid_face[-1] / g.R_major
         x = rmid_face / rmid_face[-1]
         x = jnp.where(jnp.abs(x) < g.eps, g.eps, x)
@@ -3709,8 +3678,18 @@ def make_post_processed_outputs(
     integrated_sources = integrated
     Q_fusion = (integrated_sources['P_fusion'] /
                 (integrated_sources['P_external_total'] + g.eps))
-    P_LH_hi_dens, P_LH_min, P_LH, n_e_min_P_LH = (calculate_plh_scaling_factor(
-        sim_state.geometry, sim_state.core_profiles))
+    line_avg_n_e = line_average(sim_state.core_profiles.n_e.value)
+    P_LH_hi_dens_D = (2.15 * (line_avg_n_e / 1e20)**0.782 * sim_state.geometry.B_0**0.772 *
+                      sim_state.geometry.a_minor**0.975 * g.R_major**0.999 * 1e6)
+    A_deuterium = ION_PROPERTIES_DICT['D'].A
+    P_LH_hi_dens = P_LH_hi_dens_D * A_deuterium / sim_state.core_profiles.A_i
+    Ip_total = sim_state.core_profiles.Ip_profile_face[..., -1]
+    n_e_min_P_LH = (0.7 * (Ip_total / 1e6)**0.34 * sim_state.geometry.a_minor**-0.95 *
+                    sim_state.geometry.B_0**0.62 * (g.R_major / sim_state.geometry.a_minor)**0.4 * 1e19)
+    P_LH_min_D = (0.36 * (Ip_total / 1e6)**0.27 * sim_state.geometry.B_0**1.25 *
+                  g.R_major**1.23 * (g.R_major / sim_state.geometry.a_minor)**0.08 * 1e6)
+    P_LH_min = P_LH_min_D * A_deuterium / sim_state.core_profiles.A_i
+    P_LH = jnp.maximum(P_LH_min, P_LH_hi_dens)
     Ploss = (integrated_sources['P_alpha_total'] +
              integrated_sources['P_aux_total'] +
              integrated_sources['P_ohmic_e'] + g.eps)
@@ -3780,12 +3759,13 @@ def make_post_processed_outputs(
     fgw_n_e_line_avg = calculate_greenwald_fraction(n_e_line_avg,
                                                     sim_state.core_profiles,
                                                     sim_state.geometry)
-    Wpol = calc_Wpol(sim_state.geometry, sim_state.core_profiles.psi)
-    li3 = calc_li3(
-        sim_state.geometry.R_major,
-        Wpol,
-        sim_state.core_profiles.Ip_profile_face[-1],
-    )
+    bpol2_bulk = ((sim_state.core_profiles.psi.face_grad()[1:] / (2 * jnp.pi))**2 * sim_state.geometry.g2_face[1:] /
+                  sim_state.geometry.vpr_face[1:]**2)
+    bpol2_axis = jnp.array([0.0], dtype=jnp.float64)
+    bpol2 = jnp.concatenate([bpol2_axis, bpol2_bulk])
+    Wpol = jax.scipy.integrate.trapezoid(bpol2 * sim_state.geometry.vpr_face,
+                                         sim_state.geometry.rho_face_norm) / (2 * g.mu_0)
+    li3 = 4 * Wpol / (g.mu_0 * sim_state.core_profiles.Ip_profile_face[-1]**2 * sim_state.geometry.R_major)
     safety_factor_fit_outputs = (find_min_q_and_q_surface_intercepts(
         sim_state.geometry.rho_face_norm,
         sim_state.core_profiles.q_face,
