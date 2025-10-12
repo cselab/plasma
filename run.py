@@ -2298,13 +2298,6 @@ class PlasmaComposition(BaseModelFrozen):
             Z_eff_face=self.Z_eff.get_value(t, grid_type='face'),
         )
 
-
-@jax.tree_util.register_dataclass
-@dataclasses.dataclass(frozen=True)
-class RuntimeParamsX:
-    pass
-
-
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass
 class TurbulentTransport:
@@ -2447,7 +2440,7 @@ class QuasilinearInputs:
 
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
-class RuntimeParams(RuntimeParamsX):
+class RuntimeParams:
     D_e_max: Any
     V_e_min: Any
     V_e_max: Any
@@ -2488,11 +2481,6 @@ class QualikizInputs(QuasilinearInputs):
     def Ani0(self):
         return self.lref_over_lni0
 
-
-class TransportBase(BaseModelFrozen):
-
-    def build_runtime_params(self, t):
-        return RuntimeParamsX()
 
 
 _FLUX_NAME_MAP: Final[Mapping[str, str]] = immutabledict.immutabledict({
@@ -2992,7 +2980,7 @@ class QLKNNTransportModel0:
         )
 
 
-class QLKNNTransportModel(TransportBase):
+class QLKNNTransportModel(BaseModelFrozen):
     model_name: Annotated[Literal['qlknn'], JAX_STATIC] = 'qlknn'
     model_path: Annotated[str, JAX_STATIC] = ''
     ETG_correction_factor: float = 1.0 / 3.0
@@ -3012,7 +3000,6 @@ class QLKNNTransportModel(TransportBase):
         return QLKNNTransportModel0()
 
     def build_runtime_params(self, t):
-        base_kwargs = dataclasses.asdict(super().build_runtime_params(t))
         return RuntimeParams0(
             D_e_max=self.D_e_max,
             V_e_min=self.V_e_min,
@@ -3025,8 +3012,7 @@ class QLKNNTransportModel(TransportBase):
             clip_margin=self.clip_margin,
             collisionality_multiplier=self.collisionality_multiplier,
             smag_alpha_correction=self.smag_alpha_correction,
-            q_sawtooth_proxy=self.q_sawtooth_proxy,
-            **base_kwargs,
+            q_sawtooth_proxy=self.q_sawtooth_proxy
         )
 
 
