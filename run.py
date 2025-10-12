@@ -3666,58 +3666,6 @@ def make_post_processed_outputs(
     )
 
 
-def construct_xarray_for_radiation_output(impurity_radiation_outputs, times,
-                                          rho_cell_norm, time_coord,
-                                          rho_cell_norm_coord):
-    radiation_data = []
-    n_impurity_data = []
-    Z_impurity_data = []
-    impurity_symbols = []
-    xr_dict = {}
-    for impurity_symbol in impurity_radiation_outputs:
-        radiation_data.append(
-            impurity_radiation_outputs[impurity_symbol].radiation)
-        n_impurity_data.append(
-            impurity_radiation_outputs[impurity_symbol].n_impurity)
-        Z_impurity_data.append(
-            impurity_radiation_outputs[impurity_symbol].Z_impurity)
-        impurity_symbols.append(impurity_symbol)
-    radiation_data = np.stack(radiation_data, axis=0)
-    n_impurity_data = np.stack(n_impurity_data, axis=0)
-    Z_impurity_data = np.stack(Z_impurity_data, axis=0)
-    xr_dict[RADIATION_OUTPUT_NAME] = xr.DataArray(
-        radiation_data,
-        dims=[IMPURITY_DIM, time_coord, rho_cell_norm_coord],
-        coords={
-            IMPURITY_DIM: impurity_symbols,
-            time_coord: times,
-            rho_cell_norm_coord: rho_cell_norm,
-        },
-        name=RADIATION_OUTPUT_NAME,
-    )
-    xr_dict[DENSITY_OUTPUT_NAME] = xr.DataArray(
-        n_impurity_data,
-        dims=[IMPURITY_DIM, time_coord, rho_cell_norm_coord],
-        coords={
-            IMPURITY_DIM: impurity_symbols,
-            time_coord: times,
-            rho_cell_norm_coord: rho_cell_norm,
-        },
-        name=DENSITY_OUTPUT_NAME,
-    )
-    xr_dict[Z_OUTPUT_NAME] = xr.DataArray(
-        Z_impurity_data,
-        dims=[IMPURITY_DIM, time_coord, rho_cell_norm_coord],
-        coords={
-            IMPURITY_DIM: impurity_symbols,
-            time_coord: times,
-            rho_cell_norm_coord: rho_cell_norm,
-        },
-        name=Z_OUTPUT_NAME,
-    )
-    return xr_dict
-
-
 SCALING_FACTORS: Final[Mapping[str, float]] = immutabledict.immutabledict({
     'T_i':
     1.0,
