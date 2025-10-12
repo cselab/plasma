@@ -2991,9 +2991,6 @@ class QLKNNTransportModel(BaseModelFrozen):
     rho_min: UnitIntervalTimeVaryingScalar = (ValidatedDefault(0.0))
     rho_max: UnitIntervalTimeVaryingScalar = (ValidatedDefault(1.0))
 
-    def build_transport_model(self):
-        return QLKNNTransportModel0()
-
     def build_runtime_params(self, t):
         return RuntimeParams0(
             D_e_max=self.D_e_max,
@@ -5433,7 +5430,7 @@ g.geo = StandardGeometry(
 )
 g.pedestal_model = PedestalConfig().build_pedestal_model()
 g.source_models = g.torax_config.sources.build_models()
-g.transport_model = g.torax_config.transport.build_transport_model()
+g.transport_model = QLKNNTransportModel0()
 g.bootstrap_current = SauterModelConfig().build_model()
 g.runtime_params_provider = RuntimeParamsProvider.from_config()
 runtime_params_for_init, geo_for_init = (
