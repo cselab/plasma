@@ -4579,55 +4579,30 @@ def _extend_cell_grid_to_boundaries(cell_var, face_var):
 class StateHistory:
 
     def __init__(self, state_history, post_processed_outputs_history):
-        state_history[0].core_profiles = dataclasses.replace(
-            state_history[0].core_profiles,
-            v_loop_lcfs=state_history[1].core_profiles.v_loop_lcfs,
-        )
-        self._post_processed_outputs = post_processed_outputs_history
-        self._solver_numeric_outputs = [
-            state.solver_numeric_outputs for state in state_history
-        ]
-        self._core_profiles = [state.core_profiles for state in state_history]
-        self._core_sources = [state.core_sources for state in state_history]
-        self._transport = [state.core_transport for state in state_history]
-        self._geometries = [state.geometry for state in state_history]
-        self._stacked_geometry = stack_geometries(self.geometries)
-        stack = lambda *ys: np.stack(ys)
-        self._stacked_core_profiles: CoreProfiles = jax.tree_util.tree_map(
-            stack, *self._core_profiles)
-        self._stacked_core_sources: SourceProfiles = (jax.tree_util.tree_map(
-            stack, *self._core_sources))
-        self._stacked_core_transport: CoreTransport = jax.tree_util.tree_map(
-            stack, *self._transport)
-        self._stacked_post_processed_outputs: (
-            PostProcessedOutputs) = jax.tree_util.tree_map(
-                stack, *post_processed_outputs_history)
-        self._stacked_solver_numeric_outputs: SolverNumericOutputs = (
-            jax.tree_util.tree_map(stack, *self._solver_numeric_outputs))
         self._times = np.array([state.t for state in state_history])
-        self._rho_cell_norm = state_history[0].geometry.rho_norm
-        self._rho_face_norm = state_history[0].geometry.rho_face_norm
-        self._rho_norm = np.concatenate([[0.0], self.rho_cell_norm, [1.0]])
+        self._rho_norm = np.concatenate([[0.0],
+                                         state_history[0].geometry.rho_norm,
+                                         [1.0]])
+
+        self._evolving_data = {}
+        for var_name in g.evolving_names:
+            var_data = []
+            for state in state_history:
+                var_cell = getattr(state.core_profiles, var_name)
+                if hasattr(var_cell, "cell_plus_boundaries"):
+                    data = var_cell.cell_plus_boundaries()
+                else:
+                    data = var_cell.value
+                var_data.append(data)
+            self._evolving_data[var_name] = np.stack(var_data)
 
     @property
     def times(self):
         return self._times
 
     @property
-    def rho_cell_norm(self):
-        return self._rho_cell_norm
-
-    @property
-    def rho_face_norm(self):
-        return self._rho_face_norm
-
-    @property
     def rho_norm(self):
         return self._rho_norm
-
-    @property
-    def geometries(self):
-        return self._geometries
 
     def simulation_output_to_xr(self):
         time = xr.DataArray(self.times, dims=[TIME], name=TIME)
@@ -4640,17 +4615,13 @@ class StateHistory:
             TIME: time,
             "rho_norm": rho_norm,
         }
-        all_dicts = [
-            self._save_core_profiles(),
-        ]
-        flat_dict = {}
-        for key, value in itertools.chain(*(d.items() for d in all_dicts)):
-            flat_dict[key] = value
-        profiles_dict = {
-            k: v
-            for k, v in flat_dict.items()
-            if v is not None and v.values.ndim > 1
-        }
+
+        profiles_dict = {}
+        for var_name, data in self._evolving_data.items():
+            profiles_dict[var_name] = xr.DataArray(data,
+                                                   dims=[TIME, "rho_norm"],
+                                                   name=var_name)
+
         profiles = xr.Dataset(profiles_dict)
         data_tree = xr.DataTree(
             children={
@@ -4663,61 +4634,6 @@ class StateHistory:
         )
         return data_tree
 
-    def _pack_into_data_array(self, name, data):
-        is_face_var = lambda x: x.ndim == 2 and x.shape == (
-            len(self.times),
-            len(self.rho_face_norm),
-        )
-        is_cell_plus_boundaries_var = lambda x: x.ndim == 2 and x.shape == (
-            len(self.times),
-            len(self.rho_norm),
-        )
-        is_scalar = lambda x: x.ndim == 1 and x.shape == (len(self.times), )
-        match data:
-            case data if is_face_var(data):
-                dims = [TIME, RHO_FACE_NORM]
-            case data if is_scalar(data):
-                dims = [TIME]
-            case data if is_cell_plus_boundaries_var(data):
-                dims = [TIME, "rho_norm"]
-        return xr.DataArray(data, dims=dims, name=name)
-
-    def _save_core_profiles(self):
-        xr_dict = {}
-        stacked_core_profiles = self._stacked_core_profiles
-        core_profile_field_names = {
-            f.name
-            for f in dataclasses.fields(stacked_core_profiles)
-        }
-        for field in dataclasses.fields(stacked_core_profiles):
-            attr_name = field.name
-            if attr_name == "impurity_fractions":
-                continue
-            attr_value = getattr(stacked_core_profiles, attr_name)
-            output_key = attr_name
-            if attr_name.endswith("_face") and (attr_name.removesuffix("_face")
-                                                in core_profile_field_names):
-                continue
-            if attr_name == "A_impurity":
-                data_to_save = attr_value[..., 0]
-                xr_dict[output_key] = self._pack_into_data_array(
-                    output_key, data_to_save)
-                continue
-            if hasattr(attr_value, "cell_plus_boundaries"):
-                data_to_save = attr_value.cell_plus_boundaries()
-            else:
-                face_attr_name = f"{attr_name}_face"
-                if face_attr_name in core_profile_field_names:
-                    face_value = getattr(stacked_core_profiles, face_attr_name)
-                    data_to_save = _extend_cell_grid_to_boundaries(
-                        attr_value, face_value)
-                else:
-                    data_to_save = attr_value
-            xr_dict[output_key] = self._pack_into_data_array(
-                output_key, data_to_save)
-        Ip_data = stacked_core_profiles.Ip_profile_face[..., -1]
-        xr_dict[IP] = self._pack_into_data_array(IP, Ip_data)
-        return xr_dict
 
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass
