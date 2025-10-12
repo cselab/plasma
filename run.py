@@ -4555,12 +4555,6 @@ EXCLUDED_GEOMETRY_NAMES = frozenset({
 })
 
 
-def _extend_cell_grid_to_boundaries(cell_var, face_var):
-    left_value = np.expand_dims(face_var[:, 0], axis=-1)
-    right_value = np.expand_dims(face_var[:, -1], axis=-1)
-    return np.concatenate([left_value, cell_var, right_value], axis=-1)
-
-
 class StateHistory:
 
     def __init__(self, state_history, post_processed_outputs_history):
