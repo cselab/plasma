@@ -2611,8 +2611,6 @@ class QLKNNModelWrapper:
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class RuntimeParams0(RuntimeParams):
-    include_ITG: bool
-    include_TEM: bool
     ETG_correction_factor: float
     clip_inputs: bool
     clip_margin: float
@@ -3054,8 +3052,6 @@ class QLKNNTransportModel0:
 class QLKNNTransportModel(TransportBase):
     model_name: Annotated[Literal['qlknn'], JAX_STATIC] = 'qlknn'
     model_path: Annotated[str, JAX_STATIC] = ''
-    include_ITG: bool = True
-    include_TEM: bool = True
     ETG_correction_factor: float = 1.0 / 3.0
     clip_inputs: bool = False
     clip_margin: float = 0.95
@@ -3077,8 +3073,6 @@ class QLKNNTransportModel(TransportBase):
     def build_runtime_params(self, t):
         base_kwargs = dataclasses.asdict(super().build_runtime_params(t))
         return RuntimeParams0(
-            include_ITG=self.include_ITG,
-            include_TEM=self.include_TEM,
             ETG_correction_factor=self.ETG_correction_factor,
             clip_inputs=self.clip_inputs,
             clip_margin=self.clip_margin,
@@ -5318,10 +5312,7 @@ CONFIG = {
         'fusion': {},
         'ei_exchange': {},
     },
-    'transport': {
-        'include_ITG': True,
-        'include_TEM': True,
-    },
+    'transport': { },
 }
 g.R_major = 6.2
 g.a_minor = 2.0
