@@ -2644,13 +2644,13 @@ def _filter_model_output(model_output: None, include_ITG: bool,
         'qe_itg': include_ITG,
         'pfe_itg': include_ITG,
         'qe_tem': True,
-        'qi_tem': True,
+        'qi_tem': include_TEM,
         'pfe_tem': include_TEM,
     }
 
     def filter_flux(flux_name, value):
         return jax.lax.cond(
-            filter_map.get(flux_name, True),
+            True,
             lambda: value,
             lambda: jnp.zeros_like(value),
         )
