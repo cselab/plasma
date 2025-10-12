@@ -757,10 +757,6 @@ class Geometry:
         return self.Phi_face[..., -1]
 
     @property
-    def g1_over_vpr(self):
-        return self.g1 / self.vpr
-
-    @property
     def g0_over_vpr_face(self):
         bulk = self.g0_face[..., 1:] / self.vpr_face[..., 1:]
         first_element = jnp.ones_like(self.rho_b) / self.rho_b
@@ -2041,12 +2037,6 @@ class SourceModels:
             for name, source in self.standard_sources.items()
             if AffectedCoreProfile.PSI in source.affected_core_profiles
         })
-
-    def __hash__(self):
-        hashes = [hash(self.standard_sources)]
-        hashes.append(hash(self.qei_source))
-        return hash(tuple(hashes))
-
 
 def _model_based_qei(runtime_params, geo, core_profiles):
     zeros = jnp.zeros_like(geo.rho_norm)
