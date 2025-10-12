@@ -4356,7 +4356,7 @@ class RuntimeParamsProvider:
         return cls(
             sources=g.torax_config.sources,
             profile_conditions=g.torax_config.profile_conditions,
-            plasma_composition=g.torax_config.plasma_composition,
+            plasma_composition=g.plasma_composition,
             transport_model=g.transport_config,
         )
 
@@ -4503,7 +4503,6 @@ def _get_geo_and_runtime_params_at_t_plus_dt_and_phibdot(t, dt, geo_t):
 
 class ToraxConfig(BaseModelFrozen):
     profile_conditions: ProfileConditions
-    plasma_composition: PlasmaComposition
     sources: Sources
 
 
@@ -4697,14 +4696,6 @@ def cond_fun(inputs):
 
 
 CONFIG = {
-    "plasma_composition": {
-        "main_ion": {
-            "D": 0.5,
-            "T": 0.5
-        },
-        "impurity": "Ne",
-        "Z_eff": 1.6,
-    },
     "profile_conditions": {
         "Ip": 10.5e6,
         "T_i": {
@@ -4766,6 +4757,15 @@ g.a_minor = 2.0
 g.B_0 = 5.3
 g.tolerance = 1e-7
 g.n_corrector_steps = 1
+g.main_ion_D = 0.5
+g.main_ion_T = 0.5
+g.impurity = "Ne"
+g.Z_eff = 1.6
+g.plasma_composition = PlasmaComposition(
+    main_ion={"D": g.main_ion_D, "T": g.main_ion_T},
+    impurity=g.impurity,
+    Z_eff=g.Z_eff,
+)
 g.torax_config = ToraxConfig.from_dict(CONFIG)
 g.chi_pereverzev = 30
 g.D_pereverzev = 15
