@@ -2859,8 +2859,7 @@ _FLUX_NAME_MAP: Final[Mapping[str, str]] = immutabledict.immutabledict({
 
 class QLKNNModelWrapper:
 
-    def __init__(self, flux_name_map=None):
-        self._flux_name_map = _FLUX_NAME_MAP
+    def __init__(self):
         self._model = qlknn_model.QLKNNModel.load_default_model()
 
     @property
@@ -2887,7 +2886,7 @@ class QLKNNModelWrapper:
     def predict(self, inputs):
         model_predictions = self._model.predict(inputs)
         return {
-            self._flux_name_map.get(flux_name, flux_name): flux_value
+            _FLUX_NAME_MAP.get(flux_name, flux_name): flux_value
             for flux_name, flux_value in model_predictions.items()
         }
 
@@ -2921,11 +2920,8 @@ class QLKNNRuntimeConfigInputs:
         )
 
 
-def _filter_model_output(
-    model_output: None,
-    include_ITG: bool,
-    include_TEM: bool
-):
+def _filter_model_output(model_output: None, include_ITG: bool,
+                         include_TEM: bool):
     filter_map = {
         'qi_itg': include_ITG,
         'qe_itg': include_ITG,
@@ -2934,6 +2930,7 @@ def _filter_model_output(
         'qi_tem': include_TEM,
         'pfe_tem': include_TEM,
     }
+
     def filter_flux(flux_name, value):
         return jax.lax.cond(
             filter_map.get(flux_name, True),
@@ -2964,9 +2961,7 @@ def clip_inputs(feature_scan, clip_margin, inputs_and_ranges):
 
 class QLKNNTransportModel0:
 
-    def __init__(
-        self,
-    ):
+    def __init__(self, ):
         super().__init__()
         self._frozen = True
 
