@@ -481,10 +481,7 @@ class RuntimeParamsSlice:
     sources: Any
     transport: Any
 
-TimeVaryingArrayDefinedAtRightBoundaryAndBounded: TypeAlias = TimeVaryingArray
 IonMapping: TypeAlias = Mapping[str, TimeVaryingScalar]
-
-
 @jax.jit
 def cell_integration(x):
     return jnp.sum(x * g.geo.drho_norm)
@@ -2527,8 +2524,7 @@ class PlasmaComposition(BaseModelFrozen):
         pydantic.Field(discriminator='impurity_mode'),
     ]
     main_ion: IonMapping = (ValidatedDefault({'D': 0.5, 'T': 0.5}))
-    Z_eff: (TimeVaryingArrayDefinedAtRightBoundaryAndBounded
-            ) = ValidatedDefault(1.0)
+    Z_eff: TimeVaryingArray = ValidatedDefault(1.0)
 
     @pydantic.model_validator(mode='before')
     @classmethod
