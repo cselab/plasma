@@ -5734,55 +5734,6 @@ class StateHistory:
                     xr_dict[name] = data_array
         return xr_dict
 
-
-@jax.tree_util.register_dataclass
-@dataclasses.dataclass(frozen=True)
-class Geometry:
-    Phi: Any
-    Phi_face: Any
-    R_major: Any
-    a_minor: Any
-    B_0: Any
-    volume: Any
-    volume_face: Any
-    area: Any
-    area_face: Any
-    vpr: Any
-    vpr_face: Any
-    spr: Any
-    spr_face: Any
-    delta_face: Any
-    elongation: Any
-    elongation_face: Any
-    g0: Any
-    g0_face: Any
-    g1: Any
-    g1_face: Any
-    g2: Any
-    g2_face: Any
-    g3: Any
-    g3_face: Any
-    gm4: Any
-    gm4_face: Any
-    gm5: Any
-    gm5_face: Any
-    g2g3_over_rhon: Any
-    g2g3_over_rhon_face: Any
-    g2g3_over_rhon_hires: Any
-    F: Any
-    F_face: Any
-    F_hires: Any
-    R_in: Any
-    R_in_face: Any
-    R_out: Any
-    R_out_face: Any
-    spr_hires: Any
-    rho_hires_norm: Any
-    rho_hires: Any
-    Phi_b_dot: Any
-    _z_magnetic_axis: Any
-
-
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass
 class ToraxSimState:
