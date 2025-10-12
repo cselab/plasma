@@ -86,13 +86,6 @@ class _PiecewiseLinearInterpolatedParam:
                 return self.ys[0]
 
 
-def _is_bool(interp_input):
-    if isinstance(interp_input, dict):
-        value = list(interp_input.values())[0]
-        return isinstance(value, bool)
-    return isinstance(interp_input, bool)
-
-
 def convert_input_to_xs_ys(interp_input):
     interpolation_mode = InterpolationMode.PIECEWISE_LINEAR
     is_bool_param = False
@@ -488,28 +481,7 @@ class RuntimeParamsSlice:
     sources: Any
     transport: Any
 
-
-def time_varying_array_defined_at_1(time_varying_array):
-    if not time_varying_array.right_boundary_conditions_defined:
-        logging.debug("""Not defined at rho=1.0.""")
-    return time_varying_array
-
-
-def time_varying_array_bounded(time_varying_array,
-                               lower_bound=-np.inf,
-                               upper_bound=np.inf):
-    return time_varying_array
-
-
-TimeVaryingArrayDefinedAtRightBoundaryAndBounded: TypeAlias = Annotated[
-    TimeVaryingArray,
-    pydantic.AfterValidator(time_varying_array_defined_at_1),
-    pydantic.AfterValidator(
-        functools.partial(
-            time_varying_array_bounded,
-            lower_bound=1.0,
-        )),
-]
+TimeVaryingArrayDefinedAtRightBoundaryAndBounded: TypeAlias = TimeVaryingArray
 IonMapping: TypeAlias = Mapping[str, TimeVaryingScalar]
 
 
