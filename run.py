@@ -3445,7 +3445,7 @@ class StandardGeometry(Geometry):
     delta_lower_face: Any
 
 
-@dataclasses.dataclass(frozen=True)
+@dataclasses.dataclass
 class StandardGeometryIntermediates:
     R_major: Any
     a_minor: Any
@@ -3470,7 +3470,7 @@ class StandardGeometryIntermediates:
     vpr: Any
     z_magnetic_axis: Any
 
-    def __post_init__(self):
+    def post_init(self):
         assert (not self.flux_surf_avg_Bp2[-1] < 1e-10)
         rhon = np.sqrt(self.Phi / self.Phi[-1])
         idx_limit = np.argmin(np.abs(rhon - _RHO_SMOOTHING_LIMIT))
@@ -5774,6 +5774,7 @@ g.include_ETG = True
 g.An_min = 0.05
 intermediate = StandardGeometryIntermediates.from_chease(
     g.R_major, g.a_minor, g.B_0)
+intermediate.post_init()
 rho_intermediate = np.sqrt(intermediate.Phi / (np.pi * intermediate.B_0))
 rho_norm_intermediate = rho_intermediate / rho_intermediate[-1]
 C1 = intermediate.int_dl_over_Bp
