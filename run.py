@@ -2717,19 +2717,11 @@ class PlasmaComposition(BaseModelFrozen):
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class RuntimeParamsX:
-    chi_min: Any
-    chi_max: Any
-    D_e_min: Any
     D_e_max: Any
     V_e_min: Any
     V_e_max: Any
     rho_min: Any
     rho_max: Any
-    D_e_outer: Any
-    V_e_outer: Any
-    chi_i_outer: Any
-    chi_e_outer: Any
-    rho_outer: Any
     smoothing_width: Any
 
 
@@ -2809,17 +2801,17 @@ class TransportModel:
     def _apply_clipping(self, transport_runtime_params, transport_coeffs):
         chi_face_ion = jnp.clip(
             transport_coeffs.chi_face_ion,
-            transport_runtime_params.chi_min,
-            transport_runtime_params.chi_max,
+            g.chi_min,
+            g.chi_max,
         )
         chi_face_el = jnp.clip(
             transport_coeffs.chi_face_el,
-            transport_runtime_params.chi_min,
-            transport_runtime_params.chi_max,
+            g.chi_min,
+            g.chi_max,
         )
         d_face_el = jnp.clip(
             transport_coeffs.d_face_el,
-            transport_runtime_params.D_e_min,
+            g.D_e_min,
             transport_runtime_params.D_e_max,
         )
         v_face_el = jnp.clip(
@@ -2875,9 +2867,9 @@ class TransportModel:
                     True,
                     jnp.logical_not(True),
                 ),
-                geo.rho_face_norm > transport_runtime_params.rho_outer - g.eps,
+                geo.rho_face_norm > g.rho_outer - g.eps,
             ),
-            transport_runtime_params.chi_i_outer,
+            g.chi_i_outer,
             chi_face_ion,
         )
         chi_face_el = jnp.where(
@@ -2886,9 +2878,9 @@ class TransportModel:
                     True,
                     jnp.logical_not(True),
                 ),
-                geo.rho_face_norm > transport_runtime_params.rho_outer - g.eps,
+                geo.rho_face_norm > g.rho_outer - g.eps,
             ),
-            transport_runtime_params.chi_e_outer,
+            g.chi_e_outer,
             chi_face_el,
         )
         d_face_el = jnp.where(
@@ -2897,9 +2889,9 @@ class TransportModel:
                     True,
                     jnp.logical_not(True),
                 ),
-                geo.rho_face_norm > transport_runtime_params.rho_outer - g.eps,
+                geo.rho_face_norm > g.rho_outer - g.eps,
             ),
-            transport_runtime_params.D_e_outer,
+            g.D_e_outer,
             d_face_el,
         )
         v_face_el = jnp.where(
@@ -2908,9 +2900,9 @@ class TransportModel:
                     True,
                     jnp.logical_not(True),
                 ),
-                geo.rho_face_norm > transport_runtime_params.rho_outer - g.eps,
+                geo.rho_face_norm > g.rho_outer - g.eps,
             ),
-            transport_runtime_params.V_e_outer,
+            g.V_e_outer,
             v_face_el,
         )
         return dataclasses.replace(
@@ -2952,7 +2944,7 @@ def _build_smoothing_matrix(transport_runtime_params, runtime_params, geo,
             jnp.logical_not(True),
             True,
         ),
-        lambda: transport_runtime_params.rho_outer - g.eps,
+        lambda: g.rho_outer - g.eps,
         lambda: g.rho_norm_ped_top - g.eps,
     )
     mask_inner_edge = jax.lax.cond(
@@ -3042,7 +3034,6 @@ def calculate_alpha(core_profiles, q, reference_magnetic_field,
 @dataclasses.dataclass(frozen=True)
 class RuntimeParams00(RuntimeParamsX):
     DV_effective: bool
-    An_min: float
 
 
 def calculate_normalized_logarithmic_gradient(
@@ -3108,7 +3099,7 @@ class QuasilinearTransportModel(TransportModel):
             Deff_mask = (
                 ((pfe >= 0) & (quasilinear_inputs.lref_over_lne >= 0))
                 | ((pfe < 0) & (quasilinear_inputs.lref_over_lne < 0))) & (abs(
-                    quasilinear_inputs.lref_over_lne) >= transport.An_min)
+                    quasilinear_inputs.lref_over_lne) >= g.An_min)
             Veff_mask = jnp.invert(Deff_mask)
             d_face_el = jnp.where(Veff_mask, 0.0, Deff)
             v_face_el = jnp.where(Deff_mask, 0.0, Veff)
@@ -3263,36 +3254,20 @@ class QualikizBasedTransportModel(QuasilinearTransportModel):
 
 
 class TransportBase(BaseModelFrozen):
-    chi_min: MeterSquaredPerSecond = 0.05
-    chi_max: MeterSquaredPerSecond = 100.0
-    D_e_min: MeterSquaredPerSecond = 0.05
     D_e_max: MeterSquaredPerSecond = 100.0
     V_e_min: MeterPerSecond = -50.0
     V_e_max: MeterPerSecond = 50.0
     rho_min: UnitIntervalTimeVaryingScalar = (ValidatedDefault(0.0))
     rho_max: UnitIntervalTimeVaryingScalar = (ValidatedDefault(1.0))
-    D_e_outer: PositiveTimeVaryingScalar = (ValidatedDefault(0.2))
-    V_e_outer: TimeVaryingScalar = (ValidatedDefault(0.0))
-    chi_i_outer: PositiveTimeVaryingScalar = (ValidatedDefault(1.0))
-    chi_e_outer: PositiveTimeVaryingScalar = (ValidatedDefault(1.0))
-    rho_outer: UnitIntervalTimeVaryingScalar = (ValidatedDefault(0.9))
     smoothing_width: pydantic.NonNegativeFloat = 0.0
 
     def build_runtime_params(self, t):
         return RuntimeParamsX(
-            chi_min=self.chi_min,
-            chi_max=self.chi_max,
-            D_e_min=self.D_e_min,
             D_e_max=self.D_e_max,
             V_e_min=self.V_e_min,
             V_e_max=self.V_e_max,
             rho_min=self.rho_min.get_value(t),
             rho_max=self.rho_max.get_value(t),
-            D_e_outer=self.D_e_outer.get_value(t),
-            V_e_outer=self.V_e_outer.get_value(t),
-            chi_i_outer=self.chi_i_outer.get_value(t),
-            chi_e_outer=self.chi_e_outer.get_value(t),
-            rho_outer=self.rho_outer.get_value(t),
             smoothing_width=self.smoothing_width,
         )
 
@@ -3519,7 +3494,6 @@ class QLKNNTransportModel(TransportBase):
     smag_alpha_correction: bool = True
     q_sawtooth_proxy: bool = True
     DV_effective: bool = False
-    An_min: pydantic.PositiveFloat = 0.05
 
     @pydantic.model_validator(mode='before')
     @classmethod
@@ -3547,7 +3521,6 @@ class QLKNNTransportModel(TransportBase):
             smag_alpha_correction=self.smag_alpha_correction,
             q_sawtooth_proxy=self.q_sawtooth_proxy,
             DV_effective=self.DV_effective,
-            An_min=self.An_min,
             **base_kwargs,
         )
 
@@ -6214,19 +6187,10 @@ CONFIG = {
         'ei_exchange': {},
     },
     'transport': {
-        'D_e_outer': 0.1,
-        'V_e_outer': 0.0,
-        'chi_i_outer': 2.0,
-        'chi_e_outer': 2.0,
-        'rho_outer': 0.9,
-        'chi_min': 0.05,
-        'chi_max': 100,
-        'D_e_min': 0.05,
         'DV_effective': True,
         'include_ITG': True,
         'include_TEM': True,
         'include_ETG': True,
-        'An_min': 0.05,
     },
 }
 
