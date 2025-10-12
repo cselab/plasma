@@ -4713,8 +4713,6 @@ class StateHistory:
         }
         all_dicts = [
             self._save_core_profiles(),
-            self._save_core_transport(),
-            self._save_post_processed_outputs(),
         ]
         flat_dict = {}
         for key, value in itertools.chain(*(d.items() for d in all_dicts)):
@@ -4814,27 +4812,6 @@ class StateHistory:
                 output_key, data_to_save)
         Ip_data = stacked_core_profiles.Ip_profile_face[..., -1]
         xr_dict[IP] = self._pack_into_data_array(IP, Ip_data)
-        return xr_dict
-
-    def _save_core_transport(self):
-        xr_dict = {}
-        core_transport = self._stacked_core_transport
-        xr_dict[CHI_TURB_I] = core_transport.chi_face_ion
-        xr_dict[CHI_TURB_E] = core_transport.chi_face_el
-        xr_dict[D_TURB_E] = core_transport.d_face_el
-        xr_dict[V_TURB_E] = core_transport.v_face_el
-        xr_dict[CHI_NEO_I] = core_transport.chi_neo_i
-        xr_dict[CHI_NEO_E] = core_transport.chi_neo_e
-        xr_dict[D_NEO_E] = core_transport.D_neo_e
-        xr_dict[V_NEO_E] = core_transport.V_neo_e
-        xr_dict[V_NEO_WARE_E] = core_transport.V_neo_ware_e
-        xr_dict = {
-            name: self._pack_into_data_array(
-                name,
-                data,
-            )
-            for name, data in xr_dict.items()
-        }
         return xr_dict
 
     def _save_post_processed_outputs(self):
