@@ -2299,16 +2299,10 @@ class Sources(BaseModelFrozen):
         )
 
 
-@functools.partial(
-    jax.jit,
-    static_argnames=[
-        'source_models',
-    ],
-)
+@jax.jit
 def build_source_profiles0(runtime_params,
                            geo,
                            core_profiles,
-                           source_models,
                            explicit_source_profiles=None,
                            conductivity=None):
     qei = QeiInfo.zeros(geo)
@@ -2326,7 +2320,7 @@ def build_source_profiles0(runtime_params,
         runtime_params=runtime_params,
         geo=geo,
         core_profiles=core_profiles,
-        source_models=source_models,
+        source_models=g.source_models,
         explicit=True,
         conductivity=conductivity,
     )
@@ -2433,7 +2427,6 @@ def get_all_source_profiles(runtime_params, geo, core_profiles, source_models,
         runtime_params=runtime_params,
         geo=geo,
         core_profiles=core_profiles,
-        source_models=source_models,
     )
     return build_source_profiles1(
         runtime_params=runtime_params,
@@ -6166,7 +6159,6 @@ while not_done(current_state.t, g.t_final):
         runtime_params=runtime_params_t,
         geo=geo_t,
         core_profiles=current_state.core_profiles,
-        source_models=g.source_models,
     )
     initial_dt = next_dt(current_state.t, runtime_params_t, geo_t,
                          current_state.core_transport)
