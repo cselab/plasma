@@ -4648,8 +4648,6 @@ class StateHistory:
         )
         coords = {
             TIME: time,
-            RHO_FACE_NORM: rho_face_norm,
-            RHO_CELL_NORM: rho_cell_norm,
             "rho_norm": rho_norm,
         }
         all_dicts = [
@@ -4664,16 +4662,9 @@ class StateHistory:
             if v is not None and v.values.ndim > 1
         }
         profiles = xr.Dataset(profiles_dict)
-        scalars_dict = {
-            k: v
-            for k, v in flat_dict.items()
-            if v is not None and v.values.ndim in [0, 1]
-        }
-        scalars = xr.Dataset(scalars_dict)
         data_tree = xr.DataTree(
             children={
                 'profiles': xr.DataTree(dataset=profiles),
-                'scalars': xr.DataTree(dataset=scalars),
             },
             dataset=xr.Dataset(
                 data_vars=None,
