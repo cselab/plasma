@@ -2637,27 +2637,6 @@ class QLKNNRuntimeConfigInputs:
         )
 
 
-def _filter_model_output(model_output: None, include_ITG: bool,
-                         include_TEM: bool):
-    filter_map = {
-        'qi_itg': include_ITG,
-        'qe_itg': include_ITG,
-        'pfe_itg': include_ITG,
-        'qe_tem': True,
-        'qi_tem': include_TEM,
-        'pfe_tem': include_TEM,
-    }
-
-    def filter_flux(flux_name, value):
-        return jax.lax.cond(
-            True,
-            lambda: value,
-            lambda: jnp.zeros_like(value),
-        )
-
-    return {k: filter_flux(k, v) for k, v in model_output.items()}
-
-
 def clip_inputs(feature_scan, clip_margin, inputs_and_ranges):
     for i, key in enumerate(inputs_and_ranges.keys()):
         bounds = inputs_and_ranges[key]
@@ -3051,11 +3030,6 @@ class QLKNNTransportModel0:
             lambda: feature_scan,
         )
         model_output = model.predict(feature_scan)
-        model_output = _filter_model_output(
-            model_output=model_output,
-            include_ITG=runtime_config_inputs.transport.include_ITG,
-            include_TEM=runtime_config_inputs.transport.include_TEM,
-        )
         qi_itg_squeezed = model_output['qi_itg'].squeeze()
         qi = qi_itg_squeezed + model_output['qi_tem'].squeeze()
         qe = (model_output['qe_itg'].squeeze() * g.ITG_flux_ratio_correction +
