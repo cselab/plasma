@@ -4555,8 +4555,6 @@ EXCLUDED_GEOMETRY_NAMES = frozenset({
 })
 
 
-
-
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass
 class ToraxSimState:
