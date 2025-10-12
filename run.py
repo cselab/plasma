@@ -623,7 +623,7 @@ def face_to_cell(face):
 
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
-class Geometry:
+class StandardGeometry:
     Phi: Any
     Phi_face: Any
     R_major: Any
@@ -667,6 +667,14 @@ class Geometry:
     rho_hires: Any
     Phi_b_dot: Any
     _z_magnetic_axis: Any
+    Ip_profile_face: Any
+    psi: Any
+    psi_from_Ip: Any
+    psi_from_Ip_face: Any
+    j_total: Any
+    j_total_face: Any
+    delta_upper_face: Any
+    delta_lower_face: Any
 
     @property
     def q_correction_factor(self):
@@ -1481,7 +1489,7 @@ def calc_generic_heat_source(geo, gaussian_location, gaussian_width, P_total,
 
 def default_formula(
     runtime_params: RuntimeParamsSlice,
-    geo: Geometry,
+    geo: Any,
     source_name: str,
     unused_core_profiles: CoreProfiles,
     unused_calculated_source_profiles: SourceProfiles | None,
@@ -2298,6 +2306,7 @@ class PlasmaComposition(BaseModelFrozen):
             Z_eff_face=self.Z_eff.get_value(t, grid_type='face'),
         )
 
+
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass
 class TurbulentTransport:
@@ -2480,7 +2489,6 @@ class QualikizInputs(QuasilinearInputs):
     @property
     def Ani0(self):
         return self.lref_over_lni0
-
 
 
 _FLUX_NAME_MAP: Final[Mapping[str, str]] = immutabledict.immutabledict({
@@ -3012,8 +3020,7 @@ class QLKNNTransportModel(BaseModelFrozen):
             clip_margin=self.clip_margin,
             collisionality_multiplier=self.collisionality_multiplier,
             smag_alpha_correction=self.smag_alpha_correction,
-            q_sawtooth_proxy=self.q_sawtooth_proxy
-        )
+            q_sawtooth_proxy=self.q_sawtooth_proxy)
 
 
 @jax.jit
@@ -3030,19 +3037,6 @@ def calculate_total_transport_coeffs(runtime_params, geo, core_profiles):
 
 
 _RHO_SMOOTHING_LIMIT = 0.1
-
-
-@jax.tree_util.register_dataclass
-@dataclasses.dataclass(frozen=True)
-class StandardGeometry(Geometry):
-    Ip_profile_face: Any
-    psi: Any
-    psi_from_Ip: Any
-    psi_from_Ip_face: Any
-    j_total: Any
-    j_total_face: Any
-    delta_upper_face: Any
-    delta_lower_face: Any
 
 
 @dataclasses.dataclass
@@ -3902,7 +3896,7 @@ def _get_ion_properties_from_fractions(impurity_symbols, impurity_params, T_e,
 @jax.jit
 def get_updated_ions(
     runtime_params: RuntimeParamsSlice,
-    geo: Geometry,
+    geo: Any,
     n_e: CellVariable,
     T_e: CellVariable,
 ):
