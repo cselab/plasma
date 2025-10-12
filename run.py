@@ -243,11 +243,6 @@ def _is_non_negative(time_varying_array):
     return time_varying_array
 
 
-NonNegativeTimeVaryingArray: TypeAlias = typing_extensions.Annotated[
-    TimeVaryingArray,
-    pydantic.AfterValidator(_is_non_negative)]
-
-
 class TimeVaryingScalar(BaseModelFrozen):
     time: Any
     value: Any
@@ -2143,7 +2138,7 @@ def _impurity_before_validator(value):
 
 
 ImpurityMapping: TypeAlias = Annotated[
-    Mapping[str, NonNegativeTimeVaryingArray],
+    Mapping[str, TimeVaryingArray],
     pydantic.BeforeValidator(_impurity_before_validator),
 ]
 
@@ -3894,12 +3889,7 @@ def _get_ion_properties_from_fractions(impurity_symbols, impurity_params, T_e,
 
 
 @jax.jit
-def get_updated_ions(
-    runtime_params: RuntimeParamsSlice,
-    geo: Any,
-    n_e: CellVariable,
-    T_e: CellVariable,
-):
+def get_updated_ions(runtime_params, geo, n_e, T_e):
     Z_i = get_average_charge_state(
         ion_symbols=runtime_params.plasma_composition.main_ion_names,
         T_e=T_e.value,
