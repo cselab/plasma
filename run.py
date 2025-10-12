@@ -4814,33 +4814,6 @@ class StateHistory:
         xr_dict[IP] = self._pack_into_data_array(IP, Ip_data)
         return xr_dict
 
-    def _save_post_processed_outputs(self):
-        xr_dict = {}
-        for field in dataclasses.fields(self._stacked_post_processed_outputs):
-            attr_name = field.name
-            if attr_name == "impurity_species":
-                continue
-            attr_value = getattr(self._stacked_post_processed_outputs,
-                                 attr_name)
-            if hasattr(attr_value, "cell_plus_boundaries"):
-                data_to_save = attr_value.cell_plus_boundaries()
-            else:
-                data_to_save = attr_value
-            xr_dict[attr_name] = self._pack_into_data_array(
-                attr_name, data_to_save)
-        if self._stacked_post_processed_outputs.impurity_species:
-            radiation_outputs = (construct_xarray_for_radiation_output(
-                self._stacked_post_processed_outputs.impurity_species,
-                self.times,
-                self.rho_cell_norm,
-                TIME,
-                RHO_CELL_NORM,
-            ))
-            for key, value in radiation_outputs.items():
-                xr_dict[key] = value
-        return xr_dict
-
-
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass
 class ToraxSimState:
