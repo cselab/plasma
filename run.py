@@ -2416,8 +2416,7 @@ def build_all_zero_profiles(geo):
     )
 
 
-def get_all_source_profiles(runtime_params, geo, core_profiles,
-                            conductivity):
+def get_all_source_profiles(runtime_params, geo, core_profiles, conductivity):
     explicit_source_profiles = build_source_profiles0(
         runtime_params=runtime_params,
         geo=geo,
@@ -2786,7 +2785,7 @@ def calculate_alpha(core_profiles, q, reference_magnetic_field,
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class RuntimeParams00(RuntimeParamsX):
-    DV_effective: bool
+    pass
 
 
 def calculate_normalized_logarithmic_gradient(var, radial_coordinate,
@@ -3242,7 +3241,7 @@ class QLKNNTransportModel0:
             return d_face_el, v_face_el
 
         d_face_el, v_face_el = jax.lax.cond(
-            transport.DV_effective,
+            True,
             DV_effective_approach,
             Dscaled_approach,
         )
@@ -3419,7 +3418,6 @@ class QLKNNTransportModel(TransportBase):
     collisionality_multiplier: float = 1.0
     smag_alpha_correction: bool = True
     q_sawtooth_proxy: bool = True
-    DV_effective: bool = False
 
     @pydantic.model_validator(mode='before')
     @classmethod
@@ -3446,7 +3444,6 @@ class QLKNNTransportModel(TransportBase):
             collisionality_multiplier=self.collisionality_multiplier,
             smag_alpha_correction=self.smag_alpha_correction,
             q_sawtooth_proxy=self.q_sawtooth_proxy,
-            DV_effective=self.DV_effective,
             **base_kwargs,
         )
 
@@ -4790,9 +4787,11 @@ def update_core_profiles_during_step(x_new, runtime_params, geo,
     )
 
 
-def update_core_and_source_profiles_after_step(
-        dt, x_new, runtime_params_t_plus_dt, geo, core_profiles_t,
-        core_profiles_t_plus_dt, explicit_source_profiles):
+def update_core_and_source_profiles_after_step(dt, x_new,
+                                               runtime_params_t_plus_dt, geo,
+                                               core_profiles_t,
+                                               core_profiles_t_plus_dt,
+                                               explicit_source_profiles):
     updated_core_profiles_t_plus_dt = solver_x_tuple_to_core_profiles(
         x_new, core_profiles_t_plus_dt)
     ions = get_updated_ions(
@@ -5725,34 +5724,6 @@ class ToraxSimState:
     solver_numeric_outputs: Any
 
 
-def _get_initial_state(runtime_params, geo):
-    initial_core_profiles = initial_core_profiles0(
-        runtime_params, geo)
-    initial_core_sources = get_all_source_profiles(
-        runtime_params=runtime_params,
-        geo=geo,
-        core_profiles=initial_core_profiles,
-        conductivity=Conductivity(
-            sigma=initial_core_profiles.sigma,
-            sigma_face=initial_core_profiles.sigma_face,
-        ),
-    )
-    transport_coeffs = (calculate_total_transport_coeffs(
-        runtime_params,
-        geo,
-        initial_core_profiles,
-    ))
-    return ToraxSimState(
-        t=np.array(g.t_initial),
-        dt=np.zeros(()),
-        core_profiles=initial_core_profiles,
-        core_sources=initial_core_sources,
-        core_transport=transport_coeffs,
-        solver_numeric_outputs=SolverNumericOutputs(solver_error_state=0, ),
-        geometry=geo,
-    )
-
-
 def _finalize_outputs(t, dt, x_new, solver_numeric_outputs, geometry_t_plus_dt,
                       runtime_params_t_plus_dt, core_profiles_t,
                       core_profiles_t_plus_dt, explicit_source_profiles,
@@ -6060,7 +6031,6 @@ CONFIG = {
         'ei_exchange': {},
     },
     'transport': {
-        'DV_effective': True,
         'include_ITG': True,
         'include_TEM': True,
         'include_ETG': True,
@@ -6117,7 +6087,6 @@ g.rho_outer = 0.9
 g.chi_min = 0.05
 g.chi_max = 100
 g.D_e_min = 0.05
-g.DV_effective = True
 g.include_ITG = True
 g.include_TEM = True
 g.include_ETG = True
@@ -6131,8 +6100,33 @@ g.bootstrap_current = SauterModelConfig().build_model()
 g.runtime_params_provider = RuntimeParamsProvider.from_config()
 runtime_params_for_init, geo_for_init = (
     get_consistent_runtime_params_and_geometry(t=g.t_initial, ))
-current_state = _get_initial_state(runtime_params=runtime_params_for_init,
-                                   geo=geo_for_init)
+runtime_params = runtime_params_for_init
+geo = geo_for_init
+initial_core_profiles = initial_core_profiles0(runtime_params, geo)
+initial_core_sources = get_all_source_profiles(
+    runtime_params=runtime_params,
+    geo=geo,
+    core_profiles=initial_core_profiles,
+    conductivity=Conductivity(
+        sigma=initial_core_profiles.sigma,
+        sigma_face=initial_core_profiles.sigma_face,
+    ),
+)
+transport_coeffs = (calculate_total_transport_coeffs(
+    runtime_params,
+    geo,
+    initial_core_profiles,
+))
+current_state = ToraxSimState(
+    t=np.array(g.t_initial),
+    dt=np.zeros(()),
+    core_profiles=initial_core_profiles,
+    core_sources=initial_core_sources,
+    core_transport=transport_coeffs,
+    solver_numeric_outputs=SolverNumericOutputs(solver_error_state=0, ),
+    geometry=geo,
+)
+
 post_processed_outputs = make_post_processed_outputs(current_state,
                                                      runtime_params_for_init)
 initial_post_processed_outputs = post_processed_outputs
