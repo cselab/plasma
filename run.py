@@ -4685,11 +4685,6 @@ class StateHistory:
     def _save_core_profiles(self):
         xr_dict = {}
         stacked_core_profiles = self._stacked_core_profiles
-        output_name_map = {
-            "psidot": V_LOOP,
-            "Ip_profile_face": IP_PROFILE,
-            "q_face": Q,
-        }
         core_profile_field_names = {
             f.name
             for f in dataclasses.fields(stacked_core_profiles)
@@ -4698,8 +4693,7 @@ class StateHistory:
             attr_name = field.name
             if attr_name == "impurity_fractions":
                 continue
-            attr_value = getattr(stacked_core_profiles, attr_name)
-            output_key = output_name_map.get(attr_name, attr_name)
+            output_key = getattr(stacked_core_profiles, attr_name)
             if attr_name.endswith("_face") and (attr_name.removesuffix("_face")
                                                 in core_profile_field_names):
                 continue
