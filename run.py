@@ -239,10 +239,6 @@ class TimeVaryingArray(BaseModelFrozen):
         )
 
 
-def _is_non_negative(time_varying_array):
-    return time_varying_array
-
-
 class TimeVaryingScalar(BaseModelFrozen):
     time: Any
     value: Any
@@ -280,10 +276,6 @@ def _is_positive(time_varying_scalar):
 def _interval(time_varying_scalar, lower_bound, upper_bound):
     return time_varying_scalar
 
-
-PositiveTimeVaryingScalar: TypeAlias = typing_extensions.Annotated[
-    TimeVaryingScalar,
-    pydantic.AfterValidator(_is_positive)]
 UnitIntervalTimeVaryingScalar: TypeAlias = typing_extensions.Annotated[
     TimeVaryingScalar,
     pydantic.AfterValidator(
@@ -1433,7 +1425,7 @@ class GenericCurrentSourceConfig(SourceModelBase):
     I_generic: TimeVaryingScalar = ValidatedDefault(3.0e6)
     fraction_of_total_current: UnitIntervalTimeVaryingScalar = (
         ValidatedDefault(0.2))
-    gaussian_width: PositiveTimeVaryingScalar = (ValidatedDefault(0.05))
+    gaussian_width: TimeVaryingScalar = (ValidatedDefault(0.05))
     gaussian_location: UnitIntervalTimeVaryingScalar = (ValidatedDefault(0.4))
     use_absolute_current: bool = False
     mode: Annotated[Mode, JAX_STATIC] = (Mode.MODEL_BASED)
@@ -1525,7 +1517,7 @@ class GenericIonElHeatSourceConfig(SourceModelBase):
     gaussian_location: TimeVaryingScalar = (ValidatedDefault(0.0))
     P_total: TimeVaryingScalar = ValidatedDefault(120e6)
     electron_heat_fraction: TimeVaryingScalar = (ValidatedDefault(0.66666))
-    absorption_fraction: PositiveTimeVaryingScalar = (ValidatedDefault(1.0))
+    absorption_fraction: TimeVaryingScalar = (ValidatedDefault(1.0))
     mode: Annotated[Mode, JAX_STATIC] = (Mode.MODEL_BASED)
 
     @property
@@ -2201,8 +2193,8 @@ class ProfileConditions(BaseModelFrozen):
     Ip: TimeVaryingScalar = ValidatedDefault(15e6)
     use_v_loop_lcfs_boundary_condition: Annotated[bool, JAX_STATIC] = False
     v_loop_lcfs: TimeVaryingScalar = (ValidatedDefault(0.0))
-    T_i_right_bc: PositiveTimeVaryingScalar | None = None
-    T_e_right_bc: PositiveTimeVaryingScalar | None = None
+    T_i_right_bc: TimeVaryingScalar | None = None
+    T_e_right_bc: TimeVaryingScalar | None = None
     T_i: TimeVaryingArray = (ValidatedDefault({0: {0: 15.0, 1: 1.0}}))
     T_e: TimeVaryingArray = (ValidatedDefault({0: {0: 15.0, 1: 1.0}}))
     psi: TimeVaryingArray | None = None
