@@ -4365,17 +4365,6 @@ class Ions:
     Z_eff_face: Any
 
 
-def get_updated_ion_temperature(profile_conditions_params, geo):
-    T_i = CellVariable(
-        value=profile_conditions_params.T_i,
-        left_face_grad_constraint=jnp.zeros(()),
-        right_face_grad_constraint=None,
-        right_face_constraint=profile_conditions_params.T_i_right_bc,
-        dr=geo.drho_norm,
-    )
-    return T_i
-
-
 def get_updated_electron_temperature(profile_conditions_params, geo):
     T_e = CellVariable(
         value=profile_conditions_params.T_e,
@@ -4560,116 +4549,6 @@ def get_updated_ions(
 
 def _calculate_Z_eff(Z_i, Z_impurity, n_i, n_impurity, n_e):
     return (Z_i**2 * n_i + Z_impurity**2 * n_impurity) / n_e
-
-
-def initial_core_profiles0(runtime_params, geo):
-    T_i = get_updated_ion_temperature(runtime_params.profile_conditions, geo)
-    T_e = get_updated_electron_temperature(runtime_params.profile_conditions,
-                                           geo)
-    n_e = get_updated_electron_density(runtime_params.profile_conditions, geo)
-    ions = get_updated_ions(runtime_params, geo, n_e, T_e)
-    v_loop_lcfs = (
-        np.array(runtime_params.profile_conditions.v_loop_lcfs)
-        if runtime_params.profile_conditions.use_v_loop_lcfs_boundary_condition
-        else np.array(0.0, dtype=jnp.float64))
-    psidot = CellVariable(
-        value=np.zeros_like(geo.rho),
-        dr=geo.drho_norm,
-    )
-    psi = CellVariable(value=np.zeros_like(geo.rho), dr=geo.drho_norm)
-    core_profiles = CoreProfiles(
-        T_i=T_i,
-        T_e=T_e,
-        n_e=n_e,
-        n_i=ions.n_i,
-        Z_i=ions.Z_i,
-        Z_i_face=ions.Z_i_face,
-        A_i=ions.A_i,
-        n_impurity=ions.n_impurity,
-        impurity_fractions=ions.impurity_fractions,
-        Z_impurity=ions.Z_impurity,
-        Z_impurity_face=ions.Z_impurity_face,
-        A_impurity=ions.A_impurity,
-        A_impurity_face=ions.A_impurity_face,
-        Z_eff=ions.Z_eff,
-        Z_eff_face=ions.Z_eff_face,
-        psi=psi,
-        psidot=psidot,
-        q_face=np.zeros_like(geo.rho_face),
-        s_face=np.zeros_like(geo.rho_face),
-        v_loop_lcfs=v_loop_lcfs,
-        sigma=np.zeros_like(geo.rho),
-        sigma_face=np.zeros_like(geo.rho_face),
-        j_total=np.zeros_like(geo.rho),
-        j_total_face=np.zeros_like(geo.rho_face),
-        Ip_profile_face=np.zeros_like(geo.rho_face),
-    )
-    sources_are_calculated = False
-    source_profiles = build_all_zero_profiles(geo)
-    dpsi_drhonorm_edge = (calculate_psi_grad_constraint_from_Ip(
-        runtime_params.profile_conditions.Ip,
-        geo,
-    ))
-    assert not runtime_params.profile_conditions.use_v_loop_lcfs_boundary_condition
-    psi = CellVariable(
-        value=geo.psi_from_Ip,
-        right_face_grad_constraint=None
-        if runtime_params.profile_conditions.use_v_loop_lcfs_boundary_condition
-        else dpsi_drhonorm_edge,
-        right_face_constraint=geo.psi_from_Ip_face[-1]
-        if runtime_params.profile_conditions.use_v_loop_lcfs_boundary_condition
-        else None,
-        dr=geo.drho_norm,
-    )
-    j_total, j_total_face, Ip_profile_face = calc_j_total(geo, psi)
-    core_profiles = dataclasses.replace(
-        core_profiles,
-        psi=psi,
-        q_face=calc_q_face(geo, psi),
-        s_face=calc_s_face(geo, psi),
-        j_total=j_total,
-        j_total_face=j_total_face,
-        Ip_profile_face=Ip_profile_face,
-    )
-    conductivity = calculate_conductivity(
-        geo,
-        core_profiles,
-    )
-    if not sources_are_calculated:
-        build_standard_source_profiles(
-            runtime_params=runtime_params,
-            geo=geo,
-            core_profiles=core_profiles,
-            psi_only=True,
-            calculate_anyway=True,
-            calculated_source_profiles=source_profiles,
-        )
-        bootstrap_current = (g.bootstrap_current.calculate_bootstrap_current(
-            geo, core_profiles))
-        source_profiles = dataclasses.replace(
-            source_profiles, bootstrap_current=bootstrap_current)
-    psi_sources = source_profiles.total_psi_sources(geo)
-    psidot_value = calculate_psidot_from_psi_sources(psi_sources=psi_sources,
-                                                     sigma=conductivity.sigma,
-                                                     psi=psi,
-                                                     geo=geo)
-    v_loop_lcfs = (
-        runtime_params.profile_conditions.v_loop_lcfs
-        if runtime_params.profile_conditions.use_v_loop_lcfs_boundary_condition
-        else psidot_value[-1])
-    psidot = dataclasses.replace(
-        core_profiles.psidot,
-        value=psidot_value,
-        right_face_constraint=v_loop_lcfs,
-        right_face_grad_constraint=None,
-    )
-    core_profiles = dataclasses.replace(
-        core_profiles,
-        psidot=psidot,
-        sigma=conductivity.sigma,
-        sigma_face=conductivity.sigma_face,
-    )
-    return core_profiles
 
 
 def core_profiles_to_solver_x_tuple(core_profiles, ):
@@ -6102,7 +5981,118 @@ runtime_params_for_init, geo_for_init = (
     get_consistent_runtime_params_and_geometry(t=g.t_initial, ))
 runtime_params = runtime_params_for_init
 geo = geo_for_init
-initial_core_profiles = initial_core_profiles0(runtime_params, geo)
+T_i = CellVariable(
+    value=runtime_params.profile_conditions.T_i,
+    left_face_grad_constraint=jnp.zeros(()),
+    right_face_grad_constraint=None,
+    right_face_constraint=runtime_params.profile_conditions.T_i_right_bc,
+    dr=geo.drho_norm,
+)
+T_e = get_updated_electron_temperature(runtime_params.profile_conditions, geo)
+n_e = get_updated_electron_density(runtime_params.profile_conditions, geo)
+ions = get_updated_ions(runtime_params, geo, n_e, T_e)
+v_loop_lcfs = (
+    np.array(runtime_params.profile_conditions.v_loop_lcfs)
+    if runtime_params.profile_conditions.use_v_loop_lcfs_boundary_condition
+    else np.array(0.0, dtype=jnp.float64))
+psidot = CellVariable(
+    value=np.zeros_like(geo.rho),
+    dr=geo.drho_norm,
+)
+psi = CellVariable(value=np.zeros_like(geo.rho), dr=geo.drho_norm)
+core_profiles = CoreProfiles(
+    T_i=T_i,
+    T_e=T_e,
+    n_e=n_e,
+    n_i=ions.n_i,
+    Z_i=ions.Z_i,
+    Z_i_face=ions.Z_i_face,
+    A_i=ions.A_i,
+    n_impurity=ions.n_impurity,
+    impurity_fractions=ions.impurity_fractions,
+    Z_impurity=ions.Z_impurity,
+    Z_impurity_face=ions.Z_impurity_face,
+    A_impurity=ions.A_impurity,
+    A_impurity_face=ions.A_impurity_face,
+    Z_eff=ions.Z_eff,
+    Z_eff_face=ions.Z_eff_face,
+    psi=psi,
+    psidot=psidot,
+    q_face=np.zeros_like(geo.rho_face),
+    s_face=np.zeros_like(geo.rho_face),
+    v_loop_lcfs=v_loop_lcfs,
+    sigma=np.zeros_like(geo.rho),
+    sigma_face=np.zeros_like(geo.rho_face),
+    j_total=np.zeros_like(geo.rho),
+    j_total_face=np.zeros_like(geo.rho_face),
+    Ip_profile_face=np.zeros_like(geo.rho_face),
+)
+sources_are_calculated = False
+source_profiles = build_all_zero_profiles(geo)
+dpsi_drhonorm_edge = (calculate_psi_grad_constraint_from_Ip(
+    runtime_params.profile_conditions.Ip,
+    geo,
+))
+assert not runtime_params.profile_conditions.use_v_loop_lcfs_boundary_condition
+psi = CellVariable(
+    value=geo.psi_from_Ip,
+    right_face_grad_constraint=None
+    if runtime_params.profile_conditions.use_v_loop_lcfs_boundary_condition
+    else dpsi_drhonorm_edge,
+    right_face_constraint=geo.psi_from_Ip_face[-1]
+    if runtime_params.profile_conditions.use_v_loop_lcfs_boundary_condition
+    else None,
+    dr=geo.drho_norm,
+)
+j_total, j_total_face, Ip_profile_face = calc_j_total(geo, psi)
+core_profiles = dataclasses.replace(
+    core_profiles,
+    psi=psi,
+    q_face=calc_q_face(geo, psi),
+    s_face=calc_s_face(geo, psi),
+    j_total=j_total,
+    j_total_face=j_total_face,
+    Ip_profile_face=Ip_profile_face,
+)
+conductivity = calculate_conductivity(
+    geo,
+    core_profiles,
+)
+if not sources_are_calculated:
+    build_standard_source_profiles(
+        runtime_params=runtime_params,
+        geo=geo,
+        core_profiles=core_profiles,
+        psi_only=True,
+        calculate_anyway=True,
+        calculated_source_profiles=source_profiles,
+    )
+    bootstrap_current = (g.bootstrap_current.calculate_bootstrap_current(
+        geo, core_profiles))
+    source_profiles = dataclasses.replace(source_profiles,
+                                          bootstrap_current=bootstrap_current)
+psi_sources = source_profiles.total_psi_sources(geo)
+psidot_value = calculate_psidot_from_psi_sources(psi_sources=psi_sources,
+                                                 sigma=conductivity.sigma,
+                                                 psi=psi,
+                                                 geo=geo)
+v_loop_lcfs = (
+    runtime_params.profile_conditions.v_loop_lcfs
+    if runtime_params.profile_conditions.use_v_loop_lcfs_boundary_condition
+    else psidot_value[-1])
+psidot = dataclasses.replace(
+    core_profiles.psidot,
+    value=psidot_value,
+    right_face_constraint=v_loop_lcfs,
+    right_face_grad_constraint=None,
+)
+initial_core_profiles = dataclasses.replace(
+    core_profiles,
+    psidot=psidot,
+    sigma=conductivity.sigma,
+    sigma_face=conductivity.sigma_face,
+)
+
 initial_core_sources = get_all_source_profiles(
     runtime_params=runtime_params,
     geo=geo,
