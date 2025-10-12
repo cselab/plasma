@@ -781,18 +781,6 @@ class Geometry:
         return jnp.concatenate([jnp.expand_dims(first_element, axis=-1), bulk],
                                axis=-1)
 
-    @property
-    def gm9(self):
-        return 2 * jnp.pi * self.spr / self.vpr
-
-    @property
-    def gm9_face(self):
-        bulk = 2 * jnp.pi * self.spr_face[..., 1:] / self.vpr_face[..., 1:]
-        first_element = 1 / self.R_major
-        return jnp.concatenate([jnp.expand_dims(first_element, axis=-1), bulk],
-                               axis=-1)
-
-
 def stack_geometries(geometries):
     first_geo = geometries[0]
     stacked_data = {}
