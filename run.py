@@ -6234,7 +6234,6 @@ CONFIG = {
         'ei_exchange': {},
     },
     'transport': {
-        'model_name': 'qlknn',
         'apply_inner_patch': True,
         'D_e_inner': 0.25,
         'V_e_inner': 0.0,
