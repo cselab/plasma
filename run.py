@@ -342,15 +342,7 @@ class TimeVaryingArray(BaseModelFrozen):
             rho_interpolation_mode=self.rho_interpolation_mode,
         )
 
-
-def _is_positive(array):
-    return array
-
-
-PositiveTimeVaryingArray = typing_extensions.Annotated[
-    TimeVaryingArray, pydantic.AfterValidator(_is_positive)]
-
-
+PositiveTimeVaryingArray = TimeVaryingArray
 def _load_from_primitives(primitive_values):
     if isinstance(primitive_values, (float, int)):
         primitive_values = {0.0: {0.0: primitive_values}}
