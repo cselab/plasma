@@ -531,24 +531,24 @@ IonMapping: TypeAlias = Mapping[str, TimeVaryingScalar]
 
 
 @jax.jit
-def cell_integration(x, geo):
-    return jnp.sum(x * geo.drho_norm)
+def cell_integration(x):
+    return jnp.sum(x * g.geo.drho_norm)
 
 
 def area_integration(value, geo):
-    return cell_integration(value * geo.spr, geo)
+    return cell_integration(value * geo.spr)
 
 
 def volume_integration(value, geo):
-    return cell_integration(value * geo.vpr, geo)
+    return cell_integration(value * geo.vpr)
 
 
-def line_average(value, geo):
-    return cell_integration(value, geo)
+def line_average(value):
+    return cell_integration(value)
 
 
 def volume_average(value, geo):
-    return cell_integration(value * geo.vpr, geo) / geo.volume_face[-1]
+    return cell_integration(value * geo.vpr) / geo.volume_face[-1]
 
 
 def _zero():
@@ -933,7 +933,7 @@ def stack_geometries(geometries):
 
 
 def calculate_plh_scaling_factor(geo, core_profiles):
-    line_avg_n_e = line_average(core_profiles.n_e.value, geo)
+    line_avg_n_e = line_average(core_profiles.n_e.value)
     P_LH_hi_dens_D = (2.15 * (line_avg_n_e / 1e20)**0.782 * geo.B_0**0.772 *
                       geo.a_minor**0.975 * g.R_major**0.999 * 1e6)
     A_deuterium = ION_PROPERTIES_DICT['D'].A
@@ -1004,7 +1004,7 @@ def calculate_scaling_law_confinement_time(geo, core_profiles, Ploss,
     scaled_Ip = core_profiles.Ip_profile_face[-1] / 1e6
     scaled_Ploss = Ploss / 1e6
     B = geo.B_0
-    line_avg_n_e = (line_average(core_profiles.n_e.value, geo) / 1e19)
+    line_avg_n_e = (line_average(core_profiles.n_e.value) / 1e19)
     R = g.R_major
     inverse_aspect_ratio = geo.a_minor / g.R_major
     elongation = geo.area_face[-1] / (jnp.pi * geo.a_minor**2)
@@ -3588,168 +3588,6 @@ def _smooth_savgol(data, idx_limit, polyorder):
         [np.array([data[0]]), smoothed_data[1:idx_limit], data[idx_limit:]])
 
 
-class CheaseConfig(BaseModelFrozen):
-    def build_geometry(self):
-        intermediate = StandardGeometryIntermediates.from_chease(
-            g.R_major, g.a_minor, g.B_0)
-        rho_intermediate = np.sqrt(intermediate.Phi /
-                                   (np.pi * intermediate.B_0))
-        rho_norm_intermediate = rho_intermediate / rho_intermediate[-1]
-        C1 = intermediate.int_dl_over_Bp
-        C0 = intermediate.flux_surf_avg_RBp * C1
-        C2 = intermediate.flux_surf_avg_1_over_R2 * C1
-        C3 = intermediate.flux_surf_avg_Bp2 * C1
-        C4 = intermediate.flux_surf_avg_R2Bp2 * C1
-        g0 = C0 * 2 * np.pi
-        g1 = C1 * C4 * 4 * np.pi**2
-        g2 = C1 * C3 * 4 * np.pi**2
-        g3 = C2[1:] / C1[1:]
-        g3 = np.concatenate((np.array([1 / intermediate.R_in[0]**2]), g3))
-        g2g3_over_rhon = g2[1:] * g3[1:] / rho_norm_intermediate[1:]
-        g2g3_over_rhon = np.concatenate((np.zeros(1), g2g3_over_rhon))
-        dpsidrhon = (intermediate.Ip_profile[1:] *
-                     (16 * g.mu_0 * np.pi**3 * intermediate.Phi[-1]) /
-                     (g2g3_over_rhon[1:] * intermediate.F[1:]))
-        dpsidrhon = np.concatenate((np.zeros(1), dpsidrhon))
-        psi_from_Ip = scipy.integrate.cumulative_trapezoid(
-            y=dpsidrhon,
-            x=rho_norm_intermediate,
-            initial=0.0,
-        )
-        psi_from_Ip += intermediate.psi[0]
-        psi_from_Ip[-1] = psi_from_Ip[-2] + (
-            16 * g.mu_0 * np.pi**3 *
-            intermediate.Phi[-1]) * intermediate.Ip_profile[-1] / (
-                g2g3_over_rhon[-1] * intermediate.F[-1]) * (
-                    rho_norm_intermediate[-1] - rho_norm_intermediate[-2])
-        vpr = intermediate.vpr
-        spr = vpr * intermediate.flux_surf_avg_1_over_R / (2 * np.pi)
-        volume_intermediate = scipy.integrate.cumulative_trapezoid(
-            y=vpr, x=rho_norm_intermediate, initial=0.0)
-        area_intermediate = scipy.integrate.cumulative_trapezoid(
-            y=spr, x=rho_norm_intermediate, initial=0.0)
-        dI_tot_drhon = np.gradient(intermediate.Ip_profile,
-                                   rho_norm_intermediate)
-        j_total_face_bulk = dI_tot_drhon[1:] / spr[1:]
-        j_total_face_axis = j_total_face_bulk[0]
-        j_total = np.concatenate(
-            [np.array([j_total_face_axis]), j_total_face_bulk])
-        rho_b = rho_intermediate[-1]
-        rho_face_norm = g.face_centers
-        rho_norm = g.cell_centers
-        rho_hires_norm = np.linspace(0, 1, g.n_rho * g.hires_factor)
-        rho_hires = rho_hires_norm * rho_b
-        rhon_interpolation_func = lambda x, y: np.interp(
-            x, rho_norm_intermediate, y)
-        vpr_face = rhon_interpolation_func(rho_face_norm, vpr)
-        vpr = rhon_interpolation_func(rho_norm, vpr)
-        spr_face = rhon_interpolation_func(rho_face_norm, spr)
-        spr_cell = rhon_interpolation_func(rho_norm, spr)
-        spr_hires = rhon_interpolation_func(rho_hires_norm, spr)
-        delta_upper_face = rhon_interpolation_func(
-            rho_face_norm, intermediate.delta_upper_face)
-        delta_lower_face = rhon_interpolation_func(
-            rho_face_norm, intermediate.delta_lower_face)
-        delta_face = 0.5 * (delta_upper_face + delta_lower_face)
-        elongation = rhon_interpolation_func(rho_norm, intermediate.elongation)
-        elongation_face = rhon_interpolation_func(rho_face_norm,
-                                                  intermediate.elongation)
-        Phi_face = rhon_interpolation_func(rho_face_norm, intermediate.Phi)
-        Phi = rhon_interpolation_func(rho_norm, intermediate.Phi)
-        F_face = rhon_interpolation_func(rho_face_norm, intermediate.F)
-        F = rhon_interpolation_func(rho_norm, intermediate.F)
-        F_hires = rhon_interpolation_func(rho_hires_norm, intermediate.F)
-        psi = rhon_interpolation_func(rho_norm, intermediate.psi)
-        psi_from_Ip_face = rhon_interpolation_func(rho_face_norm, psi_from_Ip)
-        psi_from_Ip = rhon_interpolation_func(rho_norm, psi_from_Ip)
-        j_total_face = rhon_interpolation_func(rho_face_norm, j_total)
-        j_total = rhon_interpolation_func(rho_norm, j_total)
-        Ip_profile_face = rhon_interpolation_func(rho_face_norm,
-                                                  intermediate.Ip_profile)
-        Rin_face = rhon_interpolation_func(rho_face_norm, intermediate.R_in)
-        Rin = rhon_interpolation_func(rho_norm, intermediate.R_in)
-        Rout_face = rhon_interpolation_func(rho_face_norm, intermediate.R_out)
-        Rout = rhon_interpolation_func(rho_norm, intermediate.R_out)
-        g0_face = rhon_interpolation_func(rho_face_norm, g0)
-        g0 = rhon_interpolation_func(rho_norm, g0)
-        g1_face = rhon_interpolation_func(rho_face_norm, g1)
-        g1 = rhon_interpolation_func(rho_norm, g1)
-        g2_face = rhon_interpolation_func(rho_face_norm, g2)
-        g2 = rhon_interpolation_func(rho_norm, g2)
-        g3_face = rhon_interpolation_func(rho_face_norm, g3)
-        g3 = rhon_interpolation_func(rho_norm, g3)
-        g2g3_over_rhon_face = rhon_interpolation_func(rho_face_norm,
-                                                      g2g3_over_rhon)
-        g2g3_over_rhon_hires = rhon_interpolation_func(rho_hires_norm,
-                                                       g2g3_over_rhon)
-        g2g3_over_rhon = rhon_interpolation_func(rho_norm, g2g3_over_rhon)
-        gm4 = rhon_interpolation_func(rho_norm,
-                                      intermediate.flux_surf_avg_1_over_B2)
-        gm4_face = rhon_interpolation_func(
-            rho_face_norm, intermediate.flux_surf_avg_1_over_B2)
-        gm5 = rhon_interpolation_func(rho_norm, intermediate.flux_surf_avg_B2)
-        gm5_face = rhon_interpolation_func(rho_face_norm,
-                                           intermediate.flux_surf_avg_B2)
-        volume_face = rhon_interpolation_func(rho_face_norm,
-                                              volume_intermediate)
-        volume = rhon_interpolation_func(rho_norm, volume_intermediate)
-        area_face = rhon_interpolation_func(rho_face_norm, area_intermediate)
-        area = rhon_interpolation_func(rho_norm, area_intermediate)
-        return StandardGeometry(
-            Phi=Phi,
-            Phi_face=Phi_face,
-            R_major=intermediate.R_major,
-            a_minor=intermediate.a_minor,
-            B_0=intermediate.B_0,
-            volume=volume,
-            volume_face=volume_face,
-            area=area,
-            area_face=area_face,
-            vpr=vpr,
-            vpr_face=vpr_face,
-            spr=spr_cell,
-            spr_face=spr_face,
-            delta_face=delta_face,
-            g0=g0,
-            g0_face=g0_face,
-            g1=g1,
-            g1_face=g1_face,
-            g2=g2,
-            g2_face=g2_face,
-            g3=g3,
-            g3_face=g3_face,
-            g2g3_over_rhon=g2g3_over_rhon,
-            g2g3_over_rhon_face=g2g3_over_rhon_face,
-            g2g3_over_rhon_hires=g2g3_over_rhon_hires,
-            gm4=gm4,
-            gm4_face=gm4_face,
-            gm5=gm5,
-            gm5_face=gm5_face,
-            F=F,
-            F_face=F_face,
-            F_hires=F_hires,
-            R_in=Rin,
-            R_in_face=Rin_face,
-            R_out=Rout,
-            R_out_face=Rout_face,
-            Ip_profile_face=Ip_profile_face,
-            psi=psi,
-            psi_from_Ip=psi_from_Ip,
-            psi_from_Ip_face=psi_from_Ip_face,
-            j_total=j_total,
-            j_total_face=j_total_face,
-            delta_upper_face=delta_upper_face,
-            delta_lower_face=delta_lower_face,
-            elongation=elongation,
-            elongation_face=elongation_face,
-            spr_hires=spr_hires,
-            rho_hires_norm=rho_hires_norm,
-            rho_hires=rho_hires,
-            Phi_b_dot=np.asarray(0.0),
-            _z_magnetic_axis=intermediate.z_magnetic_axis,
-        )
-
-
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class SafetyFactorFit:
@@ -4197,10 +4035,8 @@ def make_post_processed_outputs(
                                     sim_state.geometry)
     n_i_volume_avg = volume_average(sim_state.core_profiles.n_i.value,
                                     sim_state.geometry)
-    n_e_line_avg = line_average(sim_state.core_profiles.n_e.value,
-                                sim_state.geometry)
-    n_i_line_avg = line_average(sim_state.core_profiles.n_i.value,
-                                sim_state.geometry)
+    n_e_line_avg = line_average(sim_state.core_profiles.n_e.value)
+    n_i_line_avg = line_average(sim_state.core_profiles.n_i.value)
     fgw_n_e_volume_avg = calculate_greenwald_fraction(n_e_volume_avg,
                                                       sim_state.core_profiles,
                                                       sim_state.geometry)
@@ -5968,8 +5804,155 @@ g.include_ITG = True
 g.include_TEM = True
 g.include_ETG = True
 g.An_min = 0.05
-
-g.geo = CheaseConfig().build_geometry()
+intermediate = StandardGeometryIntermediates.from_chease(
+    g.R_major, g.a_minor, g.B_0)
+rho_intermediate = np.sqrt(intermediate.Phi / (np.pi * intermediate.B_0))
+rho_norm_intermediate = rho_intermediate / rho_intermediate[-1]
+C1 = intermediate.int_dl_over_Bp
+C0 = intermediate.flux_surf_avg_RBp * C1
+C2 = intermediate.flux_surf_avg_1_over_R2 * C1
+C3 = intermediate.flux_surf_avg_Bp2 * C1
+C4 = intermediate.flux_surf_avg_R2Bp2 * C1
+g0 = C0 * 2 * np.pi
+g1 = C1 * C4 * 4 * np.pi**2
+g2 = C1 * C3 * 4 * np.pi**2
+g3 = C2[1:] / C1[1:]
+g3 = np.concatenate((np.array([1 / intermediate.R_in[0]**2]), g3))
+g2g3_over_rhon = g2[1:] * g3[1:] / rho_norm_intermediate[1:]
+g2g3_over_rhon = np.concatenate((np.zeros(1), g2g3_over_rhon))
+dpsidrhon = (intermediate.Ip_profile[1:] *
+             (16 * g.mu_0 * np.pi**3 * intermediate.Phi[-1]) /
+             (g2g3_over_rhon[1:] * intermediate.F[1:]))
+dpsidrhon = np.concatenate((np.zeros(1), dpsidrhon))
+psi_from_Ip = scipy.integrate.cumulative_trapezoid(
+    y=dpsidrhon,
+    x=rho_norm_intermediate,
+    initial=0.0,
+)
+psi_from_Ip += intermediate.psi[0]
+psi_from_Ip[-1] = psi_from_Ip[-2] + (
+    16 * g.mu_0 * np.pi**3 * intermediate.Phi[-1]
+) * intermediate.Ip_profile[-1] / (g2g3_over_rhon[-1] * intermediate.F[-1]) * (
+    rho_norm_intermediate[-1] - rho_norm_intermediate[-2])
+vpr = intermediate.vpr
+spr = vpr * intermediate.flux_surf_avg_1_over_R / (2 * np.pi)
+volume_intermediate = scipy.integrate.cumulative_trapezoid(
+    y=vpr, x=rho_norm_intermediate, initial=0.0)
+area_intermediate = scipy.integrate.cumulative_trapezoid(
+    y=spr, x=rho_norm_intermediate, initial=0.0)
+dI_tot_drhon = np.gradient(intermediate.Ip_profile, rho_norm_intermediate)
+j_total_face_bulk = dI_tot_drhon[1:] / spr[1:]
+j_total_face_axis = j_total_face_bulk[0]
+j_total = np.concatenate([np.array([j_total_face_axis]), j_total_face_bulk])
+rho_b = rho_intermediate[-1]
+rho_face_norm = g.face_centers
+rho_norm = g.cell_centers
+rho_hires_norm = np.linspace(0, 1, g.n_rho * g.hires_factor)
+rho_hires = rho_hires_norm * rho_b
+rhon_interpolation_func = lambda x, y: np.interp(x, rho_norm_intermediate, y)
+vpr_face = rhon_interpolation_func(rho_face_norm, vpr)
+vpr = rhon_interpolation_func(rho_norm, vpr)
+spr_face = rhon_interpolation_func(rho_face_norm, spr)
+spr_cell = rhon_interpolation_func(rho_norm, spr)
+spr_hires = rhon_interpolation_func(rho_hires_norm, spr)
+delta_upper_face = rhon_interpolation_func(rho_face_norm,
+                                           intermediate.delta_upper_face)
+delta_lower_face = rhon_interpolation_func(rho_face_norm,
+                                           intermediate.delta_lower_face)
+delta_face = 0.5 * (delta_upper_face + delta_lower_face)
+elongation = rhon_interpolation_func(rho_norm, intermediate.elongation)
+elongation_face = rhon_interpolation_func(rho_face_norm,
+                                          intermediate.elongation)
+Phi_face = rhon_interpolation_func(rho_face_norm, intermediate.Phi)
+Phi = rhon_interpolation_func(rho_norm, intermediate.Phi)
+F_face = rhon_interpolation_func(rho_face_norm, intermediate.F)
+F = rhon_interpolation_func(rho_norm, intermediate.F)
+F_hires = rhon_interpolation_func(rho_hires_norm, intermediate.F)
+psi = rhon_interpolation_func(rho_norm, intermediate.psi)
+psi_from_Ip_face = rhon_interpolation_func(rho_face_norm, psi_from_Ip)
+psi_from_Ip = rhon_interpolation_func(rho_norm, psi_from_Ip)
+j_total_face = rhon_interpolation_func(rho_face_norm, j_total)
+j_total = rhon_interpolation_func(rho_norm, j_total)
+Ip_profile_face = rhon_interpolation_func(rho_face_norm,
+                                          intermediate.Ip_profile)
+Rin_face = rhon_interpolation_func(rho_face_norm, intermediate.R_in)
+Rin = rhon_interpolation_func(rho_norm, intermediate.R_in)
+Rout_face = rhon_interpolation_func(rho_face_norm, intermediate.R_out)
+Rout = rhon_interpolation_func(rho_norm, intermediate.R_out)
+g0_face = rhon_interpolation_func(rho_face_norm, g0)
+g0 = rhon_interpolation_func(rho_norm, g0)
+g1_face = rhon_interpolation_func(rho_face_norm, g1)
+g1 = rhon_interpolation_func(rho_norm, g1)
+g2_face = rhon_interpolation_func(rho_face_norm, g2)
+g2 = rhon_interpolation_func(rho_norm, g2)
+g3_face = rhon_interpolation_func(rho_face_norm, g3)
+g3 = rhon_interpolation_func(rho_norm, g3)
+g2g3_over_rhon_face = rhon_interpolation_func(rho_face_norm, g2g3_over_rhon)
+g2g3_over_rhon_hires = rhon_interpolation_func(rho_hires_norm, g2g3_over_rhon)
+g2g3_over_rhon = rhon_interpolation_func(rho_norm, g2g3_over_rhon)
+gm4 = rhon_interpolation_func(rho_norm, intermediate.flux_surf_avg_1_over_B2)
+gm4_face = rhon_interpolation_func(rho_face_norm,
+                                   intermediate.flux_surf_avg_1_over_B2)
+gm5 = rhon_interpolation_func(rho_norm, intermediate.flux_surf_avg_B2)
+gm5_face = rhon_interpolation_func(rho_face_norm,
+                                   intermediate.flux_surf_avg_B2)
+volume_face = rhon_interpolation_func(rho_face_norm, volume_intermediate)
+volume = rhon_interpolation_func(rho_norm, volume_intermediate)
+area_face = rhon_interpolation_func(rho_face_norm, area_intermediate)
+area = rhon_interpolation_func(rho_norm, area_intermediate)
+g.geo = StandardGeometry(
+    Phi=Phi,
+    Phi_face=Phi_face,
+    R_major=intermediate.R_major,
+    a_minor=intermediate.a_minor,
+    B_0=intermediate.B_0,
+    volume=volume,
+    volume_face=volume_face,
+    area=area,
+    area_face=area_face,
+    vpr=vpr,
+    vpr_face=vpr_face,
+    spr=spr_cell,
+    spr_face=spr_face,
+    delta_face=delta_face,
+    g0=g0,
+    g0_face=g0_face,
+    g1=g1,
+    g1_face=g1_face,
+    g2=g2,
+    g2_face=g2_face,
+    g3=g3,
+    g3_face=g3_face,
+    g2g3_over_rhon=g2g3_over_rhon,
+    g2g3_over_rhon_face=g2g3_over_rhon_face,
+    g2g3_over_rhon_hires=g2g3_over_rhon_hires,
+    gm4=gm4,
+    gm4_face=gm4_face,
+    gm5=gm5,
+    gm5_face=gm5_face,
+    F=F,
+    F_face=F_face,
+    F_hires=F_hires,
+    R_in=Rin,
+    R_in_face=Rin_face,
+    R_out=Rout,
+    R_out_face=Rout_face,
+    Ip_profile_face=Ip_profile_face,
+    psi=psi,
+    psi_from_Ip=psi_from_Ip,
+    psi_from_Ip_face=psi_from_Ip_face,
+    j_total=j_total,
+    j_total_face=j_total_face,
+    delta_upper_face=delta_upper_face,
+    delta_lower_face=delta_lower_face,
+    elongation=elongation,
+    elongation_face=elongation_face,
+    spr_hires=spr_hires,
+    rho_hires_norm=rho_hires_norm,
+    rho_hires=rho_hires,
+    Phi_b_dot=np.asarray(0.0),
+    _z_magnetic_axis=intermediate.z_magnetic_axis,
+)
 g.pedestal_model = PedestalConfig().build_pedestal_model()
 g.source_models = g.torax_config.sources.build_models()
 g.transport_model = g.torax_config.transport.build_transport_model()
