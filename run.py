@@ -4555,41 +4555,6 @@ EXCLUDED_GEOMETRY_NAMES = frozenset({
 })
 
 
-class StateHistory:
-
-    def __init__(self, state_history, post_processed_outputs_history):
-        self._times = np.array([state.t for state in state_history])
-        self._rho_norm = np.concatenate([[0.0],
-                                         state_history[0].geometry.rho_norm,
-                                         [1.0]])
-
-        self._evolving_data = {}
-        for var_name in g.evolving_names:
-            var_data = []
-            for state in state_history:
-                var_cell = getattr(state.core_profiles, var_name)
-                if hasattr(var_cell, "cell_plus_boundaries"):
-                    data = var_cell.cell_plus_boundaries()
-                else:
-                    data = var_cell.value
-                var_data.append(data)
-            self._evolving_data[var_name] = np.stack(var_data)
-
-    @property
-    def times(self):
-        return self._times
-
-    @property
-    def rho_norm(self):
-        return self._rho_norm
-
-    @property
-    def time(self):
-        return self._times
-
-    @property
-    def profiles(self):
-        return type('Profiles', (), self._evolving_data)()
 
 
 @jax.tree_util.register_dataclass
@@ -5300,22 +5265,34 @@ while not_done(current_state.t, g.t_final):
     current_state = output_state
     state_history.append(current_state)
     post_processing_history.append(post_processed_outputs)
-state_history = StateHistory(
-    state_history=state_history,
-    post_processed_outputs_history=post_processing_history)
-t = state_history.time
-rho = state_history.rho_norm
+# Extract data directly as numpy arrays
+t = np.array([state.t for state in state_history])
+rho = np.concatenate([[0.0], state_history[0].geometry.rho_norm, [1.0]])
 nt, = np.shape(t)
 
+# Extract evolving variables
+evolving_data = {}
+for var_name in g.evolving_names:
+    var_data = []
+    for state in state_history:
+        var_cell = getattr(state.core_profiles, var_name)
+        if hasattr(var_cell, "cell_plus_boundaries"):
+            data = var_cell.cell_plus_boundaries()
+        else:
+            data = var_cell.value
+        var_data.append(data)
+    evolving_data[var_name] = np.stack(var_data)
+
+# Write binary dump
 with open("run.raw", "wb") as f:
     t.tofile(f)
     rho.tofile(f)
     for key in g.evolving_names:
-        var = getattr(state_history.profiles, key)
-        var.tofile(f)
+        evolving_data[key].tofile(f)
 
+# Generate plots
 for key in g.evolving_names:
-    var = getattr(state_history.profiles, key)
+    var = evolving_data[key]
     lo = np.min(var).item()
     hi = np.max(var).item()
     for i, idx in enumerate([0, nt // 4, nt // 2, 3 * nt // 4, nt - 1]):
