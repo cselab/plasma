@@ -104,7 +104,6 @@ class InterpolatedVarSingleAxis:
         self._value = value
         xs, ys = value
         self._is_bool_param = is_bool_param
-        self._interpolation_mode = interpolation_mode
         self._param = _PiecewiseLinearInterpolatedParam(xs=xs, ys=ys)
 
     def tree_flatten(self):
