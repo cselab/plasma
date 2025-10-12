@@ -706,7 +706,7 @@ def calc_s_face(geo, psi):
     return s_face
 
 
-def calculate_psi_grad_constraint_from_Ip(Ip, geo):
+def calculate_psi_grad_constraint_from_Ip(Ip):
     return (Ip * (16 * jnp.pi**3 * g.mu_0 * geo_Phi_b()) /
             (g.geo_g2g3_over_rhon_face[-1] * g.geo_F_face[-1]))
 
@@ -3145,7 +3145,7 @@ class Ions:
     Z_eff_face: Any
 
 
-def get_updated_electron_temperature(profile_conditions_params, geo):
+def get_updated_electron_temperature(profile_conditions_params):
     T_e = CellVariable(
         value=profile_conditions_params.T_e,
         left_face_grad_constraint=jnp.zeros(()),
@@ -3156,7 +3156,7 @@ def get_updated_electron_temperature(profile_conditions_params, geo):
     return T_e
 
 
-def get_updated_electron_density(profile_conditions_params, geo):
+def get_updated_electron_density(profile_conditions_params):
     nGW = profile_conditions_params.Ip / 1e6 / (jnp.pi * g.geo_a_minor**2) * 1e20
     n_e_value = jnp.where(
         True,
@@ -3252,7 +3252,7 @@ def _get_ion_properties_from_fractions(
 
 
 @jax.jit
-def get_updated_ions(runtime_params, geo, n_e, T_e):
+def get_updated_ions(runtime_params, n_e, T_e):
     Z_i = get_average_charge_state(
         ion_symbols=runtime_params.plasma_composition.main_ion_names,
         T_e=T_e.value,
@@ -3374,14 +3374,13 @@ AuxiliaryOutput: TypeAlias = Any
 
 
 @jax.jit
-def get_prescribed_core_profile_values(runtime_params, geo, core_profiles):
+def get_prescribed_core_profile_values(runtime_params, core_profiles):
     T_i = core_profiles.T_i.value
     T_e_cell_variable = core_profiles.T_e
     T_e = T_e_cell_variable.value
     n_e_cell_variable = core_profiles.n_e
     ions = get_updated_ions(
         runtime_params,
-        geo,
         n_e_cell_variable,
         T_e_cell_variable,
     )
@@ -3415,7 +3414,6 @@ def update_core_profiles_during_step(x_new, runtime_params, geo,
         x_new, core_profiles)
     ions = get_updated_ions(
         runtime_params,
-        geo,
         updated_core_profiles.n_e,
         updated_core_profiles.T_e,
     )
@@ -3451,7 +3449,6 @@ def update_core_and_source_profiles_after_step(
         x_new, core_profiles_t_plus_dt)
     ions = get_updated_ions(
         runtime_params_t_plus_dt,
-        geo,
         updated_core_profiles_t_plus_dt.n_e,
         updated_core_profiles_t_plus_dt.T_e,
     )
@@ -4111,12 +4108,10 @@ def body_fun(inputs):
         ))
     core_profiles_t = current_state.core_profiles
     profile_conditions_t_plus_dt = runtime_params_t_plus_dt.profile_conditions
-    n_e = get_updated_electron_density(profile_conditions_t_plus_dt,
-                                       None)
+    n_e = get_updated_electron_density(profile_conditions_t_plus_dt)
     n_e_right_bc = n_e.right_face_constraint
     ions_edge = get_updated_ions(
         runtime_params_t_plus_dt,
-        None,
         dataclasses.replace(
             core_profiles_t.n_e,
             right_face_constraint=profile_conditions_t_plus_dt.n_e_right_bc,
@@ -4171,7 +4166,6 @@ def body_fun(inputs):
         dict(
             right_face_grad_constraint=(calculate_psi_grad_constraint_from_Ip(
                 Ip=profile_conditions_t_plus_dt.Ip,
-                geo=None,
             ) if not runtime_params_t.profile_conditions.
                                         use_v_loop_lcfs_boundary_condition else
                                         None),
@@ -4191,7 +4185,6 @@ def body_fun(inputs):
     }
     updated_values = get_prescribed_core_profile_values(
         runtime_params=runtime_params_t_plus_dt,
-        geo=None,
         core_profiles=core_profiles_t,
     )
     T_i = dataclasses.replace(
@@ -4645,9 +4638,9 @@ T_i = CellVariable(
     right_face_constraint=runtime_params.profile_conditions.T_i_right_bc,
     dr=geo_drho_norm(),
 )
-T_e = get_updated_electron_temperature(runtime_params.profile_conditions, geo)
-n_e = get_updated_electron_density(runtime_params.profile_conditions, geo)
-ions = get_updated_ions(runtime_params, geo, n_e, T_e)
+T_e = get_updated_electron_temperature(runtime_params.profile_conditions)
+n_e = get_updated_electron_density(runtime_params.profile_conditions)
+ions = get_updated_ions(runtime_params, n_e, T_e)
 v_loop_lcfs = (
     np.array(runtime_params.profile_conditions.v_loop_lcfs)
     if runtime_params.profile_conditions.use_v_loop_lcfs_boundary_condition
@@ -4689,7 +4682,6 @@ source_profiles = SourceProfiles(bootstrap_current=BootstrapCurrent.zeros(None),
                                  qei=QeiInfo.zeros(None))
 dpsi_drhonorm_edge = calculate_psi_grad_constraint_from_Ip(
     runtime_params.profile_conditions.Ip,
-    geo,
 )
 assert not runtime_params.profile_conditions.use_v_loop_lcfs_boundary_condition
 psi = CellVariable(
