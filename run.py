@@ -84,8 +84,7 @@ class InterpolatedVarSingleAxis:
 @jax.tree_util.register_pytree_node_class
 class InterpolatedVarTimeRho:
 
-    def __init__(self, values, rho_norm, time_interpolation_mode,
-                 rho_interpolation_mode):
+    def __init__(self, values, rho_norm):
         sorted_indices = np.array(sorted(values.keys()))
         rho_norm_interpolated_values = np.stack(
             [
@@ -109,8 +108,6 @@ class InterpolatedVarTimeRho:
     def tree_unflatten(cls, aux_data, children):
         obj = object.__new__(InterpolatedVarTimeRho)
         obj._time_interpolated_var = children[0]
-        obj._rho_interpolation_mode = aux_data[0]
-        obj._time_interpolation_mode = aux_data[1]
         return obj
 
     def get_value(self, x):
@@ -237,8 +234,6 @@ class TimeVaryingArray(BaseModelFrozen):
         return InterpolatedVarTimeRho(
             self.value,
             rho_norm=g.cell_centers,
-            time_interpolation_mode=self.time_interpolation_mode,
-            rho_interpolation_mode=self.rho_interpolation_mode,
         )
 
     @functools.cached_property
@@ -246,8 +241,6 @@ class TimeVaryingArray(BaseModelFrozen):
         return InterpolatedVarTimeRho(
             self.value,
             rho_norm=g.face_centers,
-            time_interpolation_mode=self.time_interpolation_mode,
-            rho_interpolation_mode=self.rho_interpolation_mode,
         )
 
     @functools.cached_property
@@ -255,8 +248,6 @@ class TimeVaryingArray(BaseModelFrozen):
         return InterpolatedVarTimeRho(
             self.value,
             rho_norm=g.face_centers[-1],
-            time_interpolation_mode=self.time_interpolation_mode,
-            rho_interpolation_mode=self.rho_interpolation_mode,
         )
 
 
