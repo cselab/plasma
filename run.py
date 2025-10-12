@@ -744,25 +744,9 @@ class Geometry:
         return self.rho_norm * jnp.expand_dims(self.rho_b, axis=-1)
 
     @property
-    def r_mid(self):
-        return (self.R_out - self.R_in) / 2
-
-    @property
-    def r_mid_face(self):
-        return (self.R_out_face - self.R_in_face) / 2
-
-    @property
-    def epsilon(self):
-        return (self.R_out - self.R_in) / (self.R_out + self.R_in)
-
-    @property
     def epsilon_face(self):
         return (self.R_out_face - self.R_in_face) / (self.R_out_face +
                                                      self.R_in_face)
-
-    @property
-    def drho(self):
-        return self.drho_norm * self.rho_b
 
     @property
     def rho_b(self):
@@ -775,10 +759,6 @@ class Geometry:
     @property
     def g1_over_vpr(self):
         return self.g1 / self.vpr
-
-    @property
-    def g1_over_vpr2(self):
-        return self.g1 / self.vpr**2
 
     @property
     def g0_over_vpr_face(self):
