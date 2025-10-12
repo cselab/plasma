@@ -2643,8 +2643,8 @@ def _filter_model_output(model_output: None, include_ITG: bool,
         'qi_itg': include_ITG,
         'qe_itg': include_ITG,
         'pfe_itg': include_ITG,
-        'qe_tem': include_TEM,
-        'qi_tem': include_TEM,
+        'qe_tem': True,
+        'qi_tem': True,
         'pfe_tem': include_TEM,
     }
 
