@@ -2320,7 +2320,6 @@ def build_source_profiles0(runtime_params,
         runtime_params=runtime_params,
         geo=geo,
         core_profiles=core_profiles,
-        source_models=g.source_models,
         explicit=True,
         conductivity=conductivity,
     )
@@ -2330,18 +2329,16 @@ def build_source_profiles0(runtime_params,
 @functools.partial(
     jax.jit,
     static_argnames=[
-        'source_models',
         'explicit',
     ],
 )
 def build_source_profiles1(runtime_params,
                            geo,
                            core_profiles,
-                           source_models,
                            explicit,
                            explicit_source_profiles=None,
                            conductivity=None):
-    qei = source_models.qei_source.get_qei(
+    qei = g.source_models.qei_source.get_qei(
         runtime_params=runtime_params,
         geo=geo,
         core_profiles=core_profiles,
@@ -2361,7 +2358,6 @@ def build_source_profiles1(runtime_params,
         runtime_params=runtime_params,
         geo=geo,
         core_profiles=core_profiles,
-        source_models=source_models,
         explicit=explicit,
         conductivity=conductivity,
     )
@@ -2373,7 +2369,6 @@ def build_standard_source_profiles(*,
                                    runtime_params,
                                    geo,
                                    core_profiles,
-                                   source_models,
                                    explicit=True,
                                    conductivity=None,
                                    calculate_anyway=False,
@@ -2389,12 +2384,12 @@ def build_standard_source_profiles(*,
                                              source.affected_core_profiles,
                                              value)
 
-    for source_name, source in source_models.psi_sources.items():
+    for source_name, source in g.source_models.psi_sources.items():
         calculate_source(source_name, source)
     if psi_only:
         return
-    for source_name, source in source_models.standard_sources.items():
-        if source_name not in source_models.psi_sources:
+    for source_name, source in g.source_models.standard_sources.items():
+        if source_name not in g.source_models.psi_sources:
             calculate_source(source_name, source)
 
 
@@ -2421,7 +2416,7 @@ def build_all_zero_profiles(geo):
     )
 
 
-def get_all_source_profiles(runtime_params, geo, core_profiles, source_models,
+def get_all_source_profiles(runtime_params, geo, core_profiles,
                             conductivity):
     explicit_source_profiles = build_source_profiles0(
         runtime_params=runtime_params,
@@ -2432,7 +2427,6 @@ def get_all_source_profiles(runtime_params, geo, core_profiles, source_models,
         runtime_params=runtime_params,
         geo=geo,
         core_profiles=core_profiles,
-        source_models=source_models,
         explicit=False,
         explicit_source_profiles=explicit_source_profiles,
         conductivity=conductivity,
@@ -4571,7 +4565,7 @@ def _calculate_Z_eff(Z_i, Z_impurity, n_i, n_impurity, n_e):
     return (Z_i**2 * n_i + Z_impurity**2 * n_impurity) / n_e
 
 
-def initial_core_profiles0(runtime_params, geo, source_models):
+def initial_core_profiles0(runtime_params, geo):
     T_i = get_updated_ion_temperature(runtime_params.profile_conditions, geo)
     T_e = get_updated_electron_temperature(runtime_params.profile_conditions,
                                            geo)
@@ -4649,7 +4643,6 @@ def initial_core_profiles0(runtime_params, geo, source_models):
             runtime_params=runtime_params,
             geo=geo,
             core_profiles=core_profiles,
-            source_models=source_models,
             psi_only=True,
             calculate_anyway=True,
             calculated_source_profiles=source_profiles,
@@ -4799,7 +4792,7 @@ def update_core_profiles_during_step(x_new, runtime_params, geo,
 
 def update_core_and_source_profiles_after_step(
         dt, x_new, runtime_params_t_plus_dt, geo, core_profiles_t,
-        core_profiles_t_plus_dt, explicit_source_profiles, source_models):
+        core_profiles_t_plus_dt, explicit_source_profiles):
     updated_core_profiles_t_plus_dt = solver_x_tuple_to_core_profiles(
         x_new, core_profiles_t_plus_dt)
     ions = get_updated_ions(
@@ -4856,7 +4849,6 @@ def update_core_and_source_profiles_after_step(
     total_source_profiles = build_source_profiles1(
         runtime_params=runtime_params_t_plus_dt,
         geo=geo,
-        source_models=source_models,
         core_profiles=intermediate_core_profiles,
         explicit=False,
         explicit_source_profiles=explicit_source_profiles,
@@ -4998,7 +4990,6 @@ def _calc_coeffs_full(runtime_params, geo, core_profiles,
         dtype=bool).at[pedestal_model_output.rho_norm_ped_top_idx].set(True))
     conductivity = calculate_conductivity(geo, core_profiles)
     merged_source_profiles = build_source_profiles1(
-        source_models=g.source_models,
         runtime_params=runtime_params,
         geo=geo,
         core_profiles=core_profiles,
@@ -5736,12 +5727,11 @@ class ToraxSimState:
 
 def _get_initial_state(runtime_params, geo):
     initial_core_profiles = initial_core_profiles0(
-        runtime_params, geo, source_models=g.source_models)
+        runtime_params, geo)
     initial_core_sources = get_all_source_profiles(
         runtime_params=runtime_params,
         geo=geo,
         core_profiles=initial_core_profiles,
-        source_models=g.source_models,
         conductivity=Conductivity(
             sigma=initial_core_profiles.sigma,
             sigma_face=initial_core_profiles.sigma_face,
@@ -5776,7 +5766,6 @@ def _finalize_outputs(t, dt, x_new, solver_numeric_outputs, geometry_t_plus_dt,
             core_profiles_t=core_profiles_t,
             core_profiles_t_plus_dt=core_profiles_t_plus_dt,
             explicit_source_profiles=explicit_source_profiles,
-            source_models=g.source_models,
         ))
     final_total_transport = (calculate_total_transport_coeffs(
         runtime_params_t_plus_dt,
