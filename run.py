@@ -2452,7 +2452,7 @@ class QuasilinearInputs:
 
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
-class RuntimeParams(RuntimeParams00):
+class RuntimeParams(RuntimeParamsX):
     collisionality_multiplier: float
     smag_alpha_correction: bool
     q_sawtooth_proxy: bool
