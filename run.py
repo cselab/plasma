@@ -21,7 +21,6 @@ import scipy
 import threading
 import typing
 import typing_extensions
-import xarray as xr
 import matplotlib.pyplot as plt
 
 
@@ -719,20 +718,6 @@ class StandardGeometry:
         first_element = jnp.ones_like(self.rho_b) / self.rho_b**2
         return jnp.concatenate([jnp.expand_dims(first_element, axis=-1), bulk],
                                axis=-1)
-
-
-def stack_geometries(geometries):
-    first_geo = geometries[0]
-    stacked_data = {}
-    for field in dataclasses.fields(first_geo):
-        field_name = field.name
-        field_value = getattr(first_geo, field_name)
-        if isinstance(field_value, (Array, FloatScalar)):
-            field_values = [getattr(geo, field_name) for geo in geometries]
-            stacked_data[field_name] = np.stack(field_values)
-        else:
-            stacked_data[field_name] = field_value
-    return first_geo.__class__(**stacked_data)
 
 
 def calculate_scaling_law_confinement_time(geo, core_profiles, Ploss,
@@ -4604,35 +4589,13 @@ class StateHistory:
     def rho_norm(self):
         return self._rho_norm
 
-    def simulation_output_to_xr(self):
-        time = xr.DataArray(self.times, dims=[TIME], name=TIME)
-        rho_norm = xr.DataArray(
-            self.rho_norm,
-            dims=["rho_norm"],
-            name="rho_norm",
-        )
-        coords = {
-            TIME: time,
-            "rho_norm": rho_norm,
-        }
+    @property
+    def time(self):
+        return self._times
 
-        profiles_dict = {}
-        for var_name, data in self._evolving_data.items():
-            profiles_dict[var_name] = xr.DataArray(data,
-                                                   dims=[TIME, "rho_norm"],
-                                                   name=var_name)
-
-        profiles = xr.Dataset(profiles_dict)
-        data_tree = xr.DataTree(
-            children={
-                'profiles': xr.DataTree(dataset=profiles),
-            },
-            dataset=xr.Dataset(
-                data_vars=None,
-                coords=coords,
-            ),
-        )
-        return data_tree
+    @property
+    def profiles(self):
+        return type('Profiles', (), self._evolving_data)()
 
 
 @jax.tree_util.register_dataclass
@@ -5346,22 +5309,19 @@ while not_done(current_state.t, g.t_final):
 state_history = StateHistory(
     state_history=state_history,
     post_processed_outputs_history=post_processing_history)
-data_tree = state_history.simulation_output_to_xr()
-data_tree.to_netcdf("run.nc")
-print(data_tree)
-t = data_tree.time.to_numpy()
-rho = data_tree.rho_norm.to_numpy()
+t = state_history.time
+rho = state_history.rho_norm
 nt, = np.shape(t)
 
 with open("run.raw", "wb") as f:
     t.tofile(f)
     rho.tofile(f)
     for key in g.evolving_names:
-        var = data_tree.profiles[key].to_numpy()
+        var = getattr(state_history.profiles, key)
         var.tofile(f)
 
 for key in g.evolving_names:
-    var = data_tree.profiles[key].to_numpy()
+    var = getattr(state_history.profiles, key)
     lo = np.min(var).item()
     hi = np.max(var).item()
     for i, idx in enumerate([0, nt // 4, nt // 2, 3 * nt // 4, nt - 1]):
