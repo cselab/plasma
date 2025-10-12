@@ -86,13 +86,12 @@ class InterpolatedVarTimeRho:
 
     def __init__(self, values, rho_norm, time_interpolation_mode,
                  rho_interpolation_mode):
-        self._rho_interpolation_mode = rho_interpolation_mode
         self._time_interpolation_mode = time_interpolation_mode
         sorted_indices = np.array(sorted(values.keys()))
         rho_norm_interpolated_values = np.stack(
             [
                 InterpolatedVarSingleAxis(
-                    values[t], rho_interpolation_mode).get_value(rho_norm)
+                    values[t], None).get_value(rho_norm)
                 for t in sorted_indices
             ],
             axis=0,
@@ -104,7 +103,7 @@ class InterpolatedVarTimeRho:
 
     def tree_flatten(self):
         children = (self._time_interpolated_var, )
-        aux_data = (self._rho_interpolation_mode,
+        aux_data = (None,
                     self._time_interpolation_mode)
         return children, aux_data
 
