@@ -3056,8 +3056,6 @@ def calculate_total_transport_coeffs(runtime_params, geo, core_profiles):
 g.rho_smoothing_limit = 0.1
 
 
-
-
 def _smooth_savgol(data, idx_limit, polyorder):
     window_length = 5
     smoothed_data = scipy.signal.savgol_filter(data,
@@ -4947,12 +4945,14 @@ Phi = (chease_data["RHO_TOR=sqrt(Phi/pi/B0)"] * g.R_major)**2 * g.B_0 * np.pi
 R_in_chease = chease_data["R_INBOARD"] * g.R_major
 R_out_chease = chease_data["R_OUTBOARD"] * g.R_major
 F_chease = chease_data["T=RBphi"] * g.R_major * g.B_0
-int_dl_over_Bp = (chease_data["Int(Rdlp/|grad(psi)|)=Int(Jdchi)"] * g.R_major / g.B_0)
+int_dl_over_Bp = (chease_data["Int(Rdlp/|grad(psi)|)=Int(Jdchi)"] * g.R_major /
+                  g.B_0)
 flux_surf_avg_1_over_R = chease_data["<1/R>profile"] / g.R_major
 flux_surf_avg_1_over_R2 = chease_data["<1/R**2>"] / g.R_major**2
 flux_surf_avg_Bp2 = chease_data["<Bp**2>"] * g.B_0**2
 flux_surf_avg_RBp = chease_data["<|grad(psi)|>"] * psiunnormfactor / g.R_major
-flux_surf_avg_R2Bp2 = (chease_data["<|grad(psi)|**2>"] * psiunnormfactor**2 / g.R_major**2)
+flux_surf_avg_R2Bp2 = (chease_data["<|grad(psi)|**2>"] * psiunnormfactor**2 /
+                       g.R_major**2)
 flux_surf_avg_B2 = chease_data["<B**2>"] * g.B_0**2
 flux_surf_avg_1_over_B2 = chease_data["<1/B**2>"] / g.B_0**2
 rhon = np.sqrt(Phi / Phi[-1])
@@ -4981,14 +4981,22 @@ g3 = C2[1:] / C1[1:]
 g3 = np.concatenate((np.array([1 / R_in_chease[0]**2]), g3))
 g2g3_over_rhon = g2[1:] * g3[1:] / rho_norm_intermediate[1:]
 g2g3_over_rhon = np.concatenate((np.zeros(1), g2g3_over_rhon))
-dpsidrhon = (Ip_chease[1:] * (16 * g.mu_0 * np.pi**3 * Phi[-1]) / (g2g3_over_rhon[1:] * F_chease[1:]))
+dpsidrhon = (Ip_chease[1:] * (16 * g.mu_0 * np.pi**3 * Phi[-1]) /
+             (g2g3_over_rhon[1:] * F_chease[1:]))
 dpsidrhon = np.concatenate((np.zeros(1), dpsidrhon))
-psi_from_Ip = scipy.integrate.cumulative_trapezoid(y=dpsidrhon, x=rho_norm_intermediate, initial=0.0)
+psi_from_Ip = scipy.integrate.cumulative_trapezoid(y=dpsidrhon,
+                                                   x=rho_norm_intermediate,
+                                                   initial=0.0)
 psi_from_Ip += psi[0]
-psi_from_Ip[-1] = psi_from_Ip[-2] + (16 * g.mu_0 * np.pi**3 * Phi[-1]) * Ip_chease[-1] / (g2g3_over_rhon[-1] * F_chease[-1]) * (rho_norm_intermediate[-1] - rho_norm_intermediate[-2])
+psi_from_Ip[-1] = psi_from_Ip[-2] + (
+    16 * g.mu_0 * np.pi**3 * Phi[-1]) * Ip_chease[-1] / (
+        g2g3_over_rhon[-1] * F_chease[-1]) * (rho_norm_intermediate[-1] -
+                                              rho_norm_intermediate[-2])
 spr = vpr * flux_surf_avg_1_over_R / (2 * np.pi)
-volume_intermediate = scipy.integrate.cumulative_trapezoid(y=vpr, x=rho_norm_intermediate, initial=0.0)
-area_intermediate = scipy.integrate.cumulative_trapezoid(y=spr, x=rho_norm_intermediate, initial=0.0)
+volume_intermediate = scipy.integrate.cumulative_trapezoid(
+    y=vpr, x=rho_norm_intermediate, initial=0.0)
+area_intermediate = scipy.integrate.cumulative_trapezoid(
+    y=spr, x=rho_norm_intermediate, initial=0.0)
 dI_tot_drhon = np.gradient(Ip_chease, rho_norm_intermediate)
 j_total_face_bulk = dI_tot_drhon[1:] / spr[1:]
 j_total_face_axis = j_total_face_bulk[0]
@@ -5004,11 +5012,14 @@ vpr = rhon_interpolation_func(rho_norm, vpr)
 spr_face = rhon_interpolation_func(rho_face_norm, spr)
 spr_cell = rhon_interpolation_func(rho_norm, spr)
 spr_hires = rhon_interpolation_func(rho_hires_norm, spr)
-delta_upper_face = rhon_interpolation_func(rho_face_norm, chease_data["delta_upper"])
-delta_lower_face = rhon_interpolation_func(rho_face_norm, chease_data["delta_bottom"])
+delta_upper_face = rhon_interpolation_func(rho_face_norm,
+                                           chease_data["delta_upper"])
+delta_lower_face = rhon_interpolation_func(rho_face_norm,
+                                           chease_data["delta_bottom"])
 delta_face = 0.5 * (delta_upper_face + delta_lower_face)
 elongation = rhon_interpolation_func(rho_norm, chease_data["elongation"])
-elongation_face = rhon_interpolation_func(rho_face_norm, chease_data["elongation"])
+elongation_face = rhon_interpolation_func(rho_face_norm,
+                                          chease_data["elongation"])
 Phi_face = rhon_interpolation_func(rho_face_norm, Phi)
 Phi = rhon_interpolation_func(rho_norm, Phi)
 F_face = rhon_interpolation_func(rho_face_norm, F_chease)
