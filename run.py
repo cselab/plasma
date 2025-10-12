@@ -2436,20 +2436,6 @@ class QuasilinearInputs:
 
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
-class RuntimeParams:
-    D_e_max: Any
-    V_e_min: Any
-    V_e_max: Any
-    rho_min: Any
-    rho_max: Any
-    smoothing_width: Any
-    collisionality_multiplier: float
-    smag_alpha_correction: bool
-    q_sawtooth_proxy: bool
-
-
-@jax.tree_util.register_dataclass
-@dataclasses.dataclass(frozen=True)
 class QualikizInputs(QuasilinearInputs):
     Z_eff_face: Any
     q: Any
@@ -2532,7 +2518,16 @@ class QLKNNModelWrapper:
 
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
-class RuntimeParams0(RuntimeParams):
+class RuntimeParams0:
+    D_e_max: Any
+    V_e_min: Any
+    V_e_max: Any
+    rho_min: Any
+    rho_max: Any
+    smoothing_width: Any
+    collisionality_multiplier: float
+    smag_alpha_correction: bool
+    q_sawtooth_proxy: bool
     ETG_correction_factor: float
     clip_inputs: bool
     clip_margin: float
