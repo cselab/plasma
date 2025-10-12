@@ -2394,8 +2394,8 @@ def build_standard_source_profiles(*,
 
 
 def _update_standard_source_profiles(calculated_source_profiles, source_name,
-                                     affected_core_profiles, profile):
-    for profile, affected_core_profile in zip(profile,
+                                     affected_core_profiles, value):
+    for profile, affected_core_profile in zip(value,
                                               affected_core_profiles,
                                               strict=True):
         match affected_core_profile:
