@@ -4693,7 +4693,8 @@ class StateHistory:
             attr_name = field.name
             if attr_name == "impurity_fractions":
                 continue
-            output_key = getattr(stacked_core_profiles, attr_name)
+            attr_value = getattr(stacked_core_profiles, attr_name)
+            output_key = attr_name
             if attr_name.endswith("_face") and (attr_name.removesuffix("_face")
                                                 in core_profile_field_names):
                 continue
