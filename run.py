@@ -3120,397 +3120,11 @@ def calculate_impurity_species_output(sim_state, runtime_params):
     return impurity_species_output
 
 
-@jax.tree_util.register_dataclass
-@dataclasses.dataclass(frozen=True, eq=False)
-class PostProcessedOutputs:
-    pressure_thermal_i: Any
-    pressure_thermal_e: Any
-    pressure_thermal_total: Any
-    pprime: Any
-    W_thermal_i: Any
-    W_thermal_e: Any
-    W_thermal_total: Any
-    tau_E: Any
-    H89P: Any
-    H98: Any
-    H97L: Any
-    H20: Any
-    FFprime: Any
-    psi_norm: Any
-    P_SOL_i: Any
-    P_SOL_e: Any
-    P_SOL_total: Any
-    P_aux_i: Any
-    P_aux_e: Any
-    P_aux_total: Any
-    P_external_injected: Any
-    P_external_total: Any
-    P_ei_exchange_i: Any
-    P_ei_exchange_e: Any
-    P_aux_generic_i: Any
-    P_aux_generic_e: Any
-    P_aux_generic_total: Any
-    P_alpha_i: Any
-    P_alpha_e: Any
-    P_alpha_total: Any
-    P_ohmic_e: Any
-    P_bremsstrahlung_e: Any
-    P_cyclotron_e: Any
-    P_ecrh_e: Any
-    P_radiation_e: Any
-    I_ecrh: Any
-    I_aux_generic: Any
-    P_fusion: Any
-    Q_fusion: Any
-    P_icrh_e: Any
-    P_icrh_i: Any
-    P_icrh_total: Any
-    P_LH_high_density: Any
-    P_LH_min: Any
-    P_LH: Any
-    n_e_min_P_LH: Any
-    E_fusion: Any
-    E_aux_total: Any
-    E_ohmic_e: Any
-    E_external_injected: Any
-    E_external_total: Any
-    T_e_volume_avg: Any
-    T_i_volume_avg: Any
-    n_e_volume_avg: Any
-    n_i_volume_avg: Any
-    n_e_line_avg: Any
-    n_i_line_avg: Any
-    fgw_n_e_volume_avg: Any
-    fgw_n_e_line_avg: Any
-    q95: Any
-    W_pol: Any
-    li3: Any
-    dW_thermal_dt: Any
-    rho_q_min: Any
-    q_min: Any
-    rho_q_3_2_first: Any
-    rho_q_3_2_second: Any
-    rho_q_2_1_first: Any
-    rho_q_2_1_second: Any
-    rho_q_3_1_first: Any
-    rho_q_3_1_second: Any
-    I_bootstrap: Any
-    j_external: Any
-    j_ohmic: Any
-    S_gas_puff: Any
-    S_pellet: Any
-    S_generic_particle: Any
-    beta_tor: Any
-    beta_pol: Any
-    beta_N: Any
-    S_total: Any
-    impurity_species: Any
-
-
-ION_EL_HEAT_SOURCE_TRANSFORMATIONS = {
-    "generic_heat": "P_aux_generic",
-    "fusion": "P_alpha",
-    "icrh": "P_icrh",
-}
-EL_HEAT_SOURCE_TRANSFORMATIONS = {
-    "ohmic": "P_ohmic_e",
-    "bremsstrahlung": "P_bremsstrahlung_e",
-    "cyclotron_radiation": "P_cyclotron_e",
-    "ecrh": "P_ecrh_e",
-    "impurity_radiation": "P_radiation_e",
-}
-EXTERNAL_HEATING_SOURCES = [
-    "generic_heat",
-    "ecrh",
-    "icrh",
-]
-CURRENT_SOURCE_TRANSFORMATIONS = {
-    "generic_current": "I_aux_generic",
-    "ecrh": "I_ecrh",
-}
-PARTICLE_SOURCE_TRANSFORMATIONS = {
-    "gas_puff": "S_gas_puff",
-    "pellet": "S_pellet",
-    "generic_particle": "S_generic_particle",
-}
-
-
-def _get_integrated_source_value(source_profiles_dict, internal_source_name,
-                                 geo, integration_fn):
-    if internal_source_name in source_profiles_dict:
-        return integration_fn(source_profiles_dict[internal_source_name], geo)
-    else:
-        return jnp.array(0.0, dtype=jnp.float64)
-
-
-@jax.jit
-def make_post_processed_outputs(
-    sim_state,
-    runtime_params: RuntimeParamsSlice,
-    previous_post_processed_outputs: PostProcessedOutputs | None = None,
-):
-    impurity_radiation_outputs = calculate_impurity_species_output(
-        sim_state, runtime_params)
-    (
-        pressure_thermal_el,
-        pressure_thermal_ion,
-        pressure_thermal_tot,
-    ) = calculate_pressure(sim_state.core_profiles)
-    pprime_face = calc_pprime(sim_state.core_profiles)
-    W_thermal_el = volume_integration(1.5 * pressure_thermal_el.value,
-                                      None)
-    W_thermal_ion = volume_integration(1.5 * pressure_thermal_ion.value,
-                                       None)
-    W_thermal_tot = volume_integration(1.5 * pressure_thermal_tot.value,
-                                       None)
-    mu0 = g.mu_0
-    pprime = calc_pprime(sim_state.core_profiles)
-    g3 = g.geo_g3_face
-    jtor_over_R = sim_state.core_profiles.j_total_face / g.R_major
-    FFprime_face = -(jtor_over_R / (2 * jnp.pi) + pprime) * mu0 / g3
-    psi_face = sim_state.core_profiles.psi.face_value()
-    psi_norm_face = (psi_face - psi_face[0]) / (psi_face[-1] - psi_face[0])
-    geo = None  # No longer using geometry object
-    core_profiles = sim_state.core_profiles
-    core_sources = sim_state.core_sources
-    integrated = {}
-    integrated["P_alpha_total"] = jnp.array(0.0, dtype=jnp.float64)
-    integrated["S_total"] = jnp.array(0.0, dtype=jnp.float64)
-    qei = core_sources.qei.qei_coef * (core_profiles.T_e.value -
-                                       core_profiles.T_i.value)
-    integrated["P_ei_exchange_i"] = volume_integration(qei, geo)
-    integrated["P_ei_exchange_e"] = -integrated["P_ei_exchange_i"]
-    integrated["P_SOL_i"] = integrated["P_ei_exchange_i"]
-    integrated["P_SOL_e"] = integrated["P_ei_exchange_e"]
-    integrated["P_aux_i"] = jnp.array(0.0, dtype=jnp.float64)
-    integrated["P_aux_e"] = jnp.array(0.0, dtype=jnp.float64)
-    integrated["P_external_injected"] = jnp.array(0.0, dtype=jnp.float64)
-    for key, value in ION_EL_HEAT_SOURCE_TRANSFORMATIONS.items():
-        integrated[f"{value}_i"] = _get_integrated_source_value(
-            core_sources.T_i, key, geo, volume_integration)
-        integrated[f"{value}_e"] = _get_integrated_source_value(
-            core_sources.T_e, key, geo, volume_integration)
-        integrated[f"{value}_total"] = (integrated[f"{value}_i"] +
-                                        integrated[f"{value}_e"])
-        integrated["P_SOL_i"] += integrated[f"{value}_i"]
-        integrated["P_SOL_e"] += integrated[f"{value}_e"]
-        if key in EXTERNAL_HEATING_SOURCES:
-            integrated["P_aux_i"] += integrated[f"{value}_i"]
-            integrated["P_aux_e"] += integrated[f"{value}_e"]
-            source_params = runtime_params.sources.get(key)
-            if source_params is not None and hasattr(source_params,
-                                                     "absorption_fraction"):
-                total_absorbed = integrated[f"{value}_total"]
-                injected_power = total_absorbed / source_params.absorption_fraction
-                integrated["P_external_injected"] += injected_power
-            else:
-                integrated["P_external_injected"] += integrated[
-                    f"{value}_total"]
-    for key, value in EL_HEAT_SOURCE_TRANSFORMATIONS.items():
-        integrated[f"{value}"] = _get_integrated_source_value(
-            core_sources.T_e, key, geo, volume_integration)
-        integrated["P_SOL_e"] += integrated[f"{value}"]
-        if key in EXTERNAL_HEATING_SOURCES:
-            integrated["P_aux_e"] += integrated[f"{value}"]
-            integrated["P_external_injected"] += integrated[f"{value}"]
-    for key, value in CURRENT_SOURCE_TRANSFORMATIONS.items():
-        integrated[f"{value}"] = _get_integrated_source_value(
-            core_sources.psi, key, geo, area_integration)
-    for key, value in PARTICLE_SOURCE_TRANSFORMATIONS.items():
-        integrated[f"{value}"] = _get_integrated_source_value(
-            core_sources.n_e, key, geo, volume_integration)
-        integrated["S_total"] += integrated[f"{value}"]
-    integrated["P_SOL_total"] = integrated["P_SOL_i"] + integrated["P_SOL_e"]
-    integrated["P_aux_total"] = integrated["P_aux_i"] + integrated["P_aux_e"]
-    integrated["P_fusion"] = 5 * integrated["P_alpha_total"]
-    integrated["P_external_total"] = (integrated["P_external_injected"] +
-                                      integrated["P_ohmic_e"])
-    integrated_sources = integrated
-    Q_fusion = integrated_sources["P_fusion"] / (
-        integrated_sources["P_external_total"] + g.eps)
-    line_avg_n_e = line_average(sim_state.core_profiles.n_e.value)
-    P_LH_hi_dens_D = (2.15 * (line_avg_n_e / 1e20)**0.782 *
-                      g.geo_B_0**0.772 *
-                      g.geo_a_minor**0.975 * g.R_major**0.999 *
-                      1e6)
-    A_deuterium = ION_PROPERTIES_DICT["D"].A
-    P_LH_hi_dens = P_LH_hi_dens_D * A_deuterium / sim_state.core_profiles.A_i
-    Ip_total = sim_state.core_profiles.Ip_profile_face[..., -1]
-    n_e_min_P_LH = (0.7 * (Ip_total / 1e6)**0.34 *
-                    g.geo_a_minor**-0.95 *
-                    g.geo_B_0**0.62 *
-                    (g.R_major / g.geo_a_minor)**0.4 * 1e19)
-    P_LH_min_D = (0.36 * (Ip_total / 1e6)**0.27 *
-                  g.geo_B_0**1.25 * g.R_major**1.23 *
-                  (g.R_major / g.geo_a_minor)**0.08 * 1e6)
-    P_LH_min = P_LH_min_D * A_deuterium / sim_state.core_profiles.A_i
-    P_LH = jnp.maximum(P_LH_min, P_LH_hi_dens)
-    Ploss = (integrated_sources["P_alpha_total"] +
-             integrated_sources["P_aux_total"] +
-             integrated_sources["P_ohmic_e"] + g.eps)
-    if previous_post_processed_outputs is not None:
-        dW_th_dt = (
-            W_thermal_tot -
-            previous_post_processed_outputs.W_thermal_total) / sim_state.dt
-    else:
-        dW_th_dt = 0.0
-    tauE = W_thermal_tot / Ploss
-    tauH89P = calculate_scaling_law_confinement_time(sim_state.geometry,
-                                                     sim_state.core_profiles,
-                                                     Ploss, "H89P")
-    tauH98 = calculate_scaling_law_confinement_time(sim_state.geometry,
-                                                    sim_state.core_profiles,
-                                                    Ploss, "H98")
-    tauH97L = calculate_scaling_law_confinement_time(sim_state.geometry,
-                                                     sim_state.core_profiles,
-                                                     Ploss, "H97L")
-    tauH20 = calculate_scaling_law_confinement_time(sim_state.geometry,
-                                                    sim_state.core_profiles,
-                                                    Ploss, "H20")
-    H89P = tauE / tauH89P
-    H98 = tauE / tauH98
-    H97L = tauE / tauH97L
-    H20 = tauE / tauH20
-    if previous_post_processed_outputs is not None:
-        E_fusion = (previous_post_processed_outputs.E_fusion + sim_state.dt *
-                    (integrated_sources["P_fusion"] +
-                     previous_post_processed_outputs.P_fusion) / 2.0)
-        E_aux_total = (previous_post_processed_outputs.E_aux_total +
-                       sim_state.dt *
-                       (integrated_sources["P_aux_total"] +
-                        previous_post_processed_outputs.P_aux_total) / 2.0)
-        E_ohmic_e = (previous_post_processed_outputs.E_ohmic_e + sim_state.dt *
-                     (integrated_sources["P_ohmic_e"] +
-                      previous_post_processed_outputs.P_ohmic_e) / 2.0)
-        E_external_injected = (
-            previous_post_processed_outputs.E_external_injected +
-            sim_state.dt *
-            (integrated_sources["P_external_injected"] +
-             previous_post_processed_outputs.P_external_injected) / 2.0)
-        E_external_total = (
-            previous_post_processed_outputs.E_external_total + sim_state.dt *
-            (integrated_sources["P_external_total"] +
-             previous_post_processed_outputs.P_external_total) / 2.0)
-    else:
-        E_fusion = 0.0
-        E_aux_total = 0.0
-        E_ohmic_e = 0.0
-        E_external_injected = 0.0
-        E_external_total = 0.0
-    q95 = jnp.interp(0.95, psi_norm_face, sim_state.core_profiles.q_face)
-    te_volume_avg = volume_average(sim_state.core_profiles.T_e.value,
-                                   None)
-    ti_volume_avg = volume_average(sim_state.core_profiles.T_i.value,
-                                   None)
-    n_e_volume_avg = volume_average(sim_state.core_profiles.n_e.value,
-                                    None)
-    n_i_volume_avg = volume_average(sim_state.core_profiles.n_i.value,
-                                    None)
-    n_e_line_avg = line_average(sim_state.core_profiles.n_e.value)
-    n_i_line_avg = line_average(sim_state.core_profiles.n_i.value)
-    fgw_n_e_volume_avg = calculate_greenwald_fraction(n_e_volume_avg,
-                                                      sim_state.core_profiles,
-                                                      None)
-    fgw_n_e_line_avg = calculate_greenwald_fraction(n_e_line_avg,
-                                                    sim_state.core_profiles,
-                                                    None)
-    bpol2_bulk = ((sim_state.core_profiles.psi.face_grad()[1:] /
-                   (2 * jnp.pi))**2 * g.geo_g2_face[1:] /
-                  g.geo_vpr_face[1:]**2)
-    bpol2_axis = jnp.array([0.0], dtype=jnp.float64)
-    bpol2 = jnp.concatenate([bpol2_axis, bpol2_bulk])
-    Wpol = jax.scipy.integrate.trapezoid(
-        bpol2 * g.geo_vpr_face,
-        geo_rho_face_norm()) / (2 * g.mu_0)
-    li3 = (4 * Wpol /
-           (g.mu_0 * sim_state.core_profiles.Ip_profile_face[-1]**2 *
-            g.R_major))
-    safety_factor_fit_outputs = find_min_q_and_q_surface_intercepts(
-        geo_rho_face_norm(),
-        sim_state.core_profiles.q_face,
-    )
-    I_bootstrap = area_integration(
-        sim_state.core_sources.bootstrap_current.j_bootstrap,
-        None)
-    j_external = sum(sim_state.core_sources.psi.values())
-    psi_current = j_external + sim_state.core_sources.bootstrap_current.j_bootstrap
-    j_ohmic = sim_state.core_profiles.j_total - psi_current
-    _, _, p_total = calculate_pressure(sim_state.core_profiles)
-    p_total_volume_avg = volume_average(p_total.value, None)
-    magnetic_pressure_on_axis = g.geo_B_0**2 / (2 * g.mu_0)
-    beta_tor = p_total_volume_avg / (magnetic_pressure_on_axis + g.eps)
-    beta_pol = (
-        4.0 * g.geo_volume[-1] * p_total_volume_avg /
-        (g.mu_0 * sim_state.core_profiles.Ip_profile_face[-1]**2 * g.R_major +
-         g.eps))
-    beta_N = (1e8 * beta_tor *
-              (g.geo_a_minor * g.geo_B_0 /
-               (sim_state.core_profiles.Ip_profile_face[-1] + g.eps)))
-    return PostProcessedOutputs(
-        pressure_thermal_i=pressure_thermal_ion,
-        pressure_thermal_e=pressure_thermal_el,
-        pressure_thermal_total=pressure_thermal_tot,
-        pprime=pprime_face,
-        W_thermal_i=W_thermal_ion,
-        W_thermal_e=W_thermal_el,
-        W_thermal_total=W_thermal_tot,
-        tau_E=tauE,
-        H89P=H89P,
-        H98=H98,
-        H97L=H97L,
-        H20=H20,
-        FFprime=FFprime_face,
-        psi_norm=psi_norm_face,
-        **integrated_sources,
-        Q_fusion=Q_fusion,
-        P_LH=P_LH,
-        P_LH_min=P_LH_min,
-        P_LH_high_density=P_LH_hi_dens,
-        n_e_min_P_LH=n_e_min_P_LH,
-        E_fusion=E_fusion,
-        E_aux_total=E_aux_total,
-        E_ohmic_e=E_ohmic_e,
-        E_external_injected=E_external_injected,
-        E_external_total=E_external_total,
-        T_e_volume_avg=te_volume_avg,
-        T_i_volume_avg=ti_volume_avg,
-        n_e_volume_avg=n_e_volume_avg,
-        n_i_volume_avg=n_i_volume_avg,
-        n_e_line_avg=n_e_line_avg,
-        n_i_line_avg=n_i_line_avg,
-        fgw_n_e_volume_avg=fgw_n_e_volume_avg,
-        fgw_n_e_line_avg=fgw_n_e_line_avg,
-        q95=q95,
-        W_pol=Wpol,
-        li3=li3,
-        dW_thermal_dt=dW_th_dt,
-        rho_q_min=safety_factor_fit_outputs.rho_q_min,
-        q_min=safety_factor_fit_outputs.q_min,
-        rho_q_3_2_first=safety_factor_fit_outputs.rho_q_3_2_first,
-        rho_q_2_1_first=safety_factor_fit_outputs.rho_q_2_1_first,
-        rho_q_3_1_first=safety_factor_fit_outputs.rho_q_3_1_first,
-        rho_q_3_2_second=safety_factor_fit_outputs.rho_q_3_2_second,
-        rho_q_2_1_second=safety_factor_fit_outputs.rho_q_2_1_second,
-        rho_q_3_1_second=safety_factor_fit_outputs.rho_q_3_1_second,
-        I_bootstrap=I_bootstrap,
-        j_external=j_external,
-        j_ohmic=j_ohmic,
-        beta_tor=beta_tor,
-        beta_pol=beta_pol,
-        beta_N=beta_N,
-        impurity_species=impurity_radiation_outputs,
-    )
-
-
 SCALING_FACTORS: Final[Mapping[str, float]] = immutabledict.immutabledict({
-    "T_i":
-    1.0,
-    "T_e":
-    1.0,
-    "n_e":
-    1e20,
-    "psi":
-    1.0,
+    "T_i": 1.0,
+    "T_e": 1.0,
+    "n_e": 1e20,
+    "psi": 1.0,
 })
 
 
@@ -4446,7 +4060,6 @@ def _finalize_outputs(
     core_profiles_t,
     core_profiles_t_plus_dt,
     explicit_source_profiles,
-    input_post_processed_outputs,
 ):
     final_core_profiles, final_source_profiles = (
         update_core_and_source_profiles_after_step(
@@ -4472,12 +4085,7 @@ def _finalize_outputs(
         geometry=geometry_t_plus_dt,
         solver_numeric_outputs=solver_numeric_outputs,
     )
-    post_processed_outputs = make_post_processed_outputs(
-        sim_state=output_state,
-        runtime_params=runtime_params_t_plus_dt,
-        previous_post_processed_outputs=input_post_processed_outputs,
-    )
-    return output_state, post_processed_outputs
+    return output_state
 
 
 def _get_geo_and_runtime_params_at_t_plus_dt_and_phibdot(t, dt, geo_t):
@@ -5174,14 +4782,9 @@ current_state = ToraxSimState(
     solver_numeric_outputs=SolverNumericOutputs(solver_error_state=0, ),
     geometry=geo,
 )
-post_processed_outputs = make_post_processed_outputs(current_state,
-                                                     runtime_params_for_init)
-initial_post_processed_outputs = post_processed_outputs
 state_history = [current_state]
-post_processing_history = [initial_post_processed_outputs]
 initial_runtime_params = g.runtime_params_provider(current_state.t)
 while not_done(current_state.t, g.t_final):
-    previous_post_processed_outputs = post_processing_history[-1]
     runtime_params_t, geo_t = get_consistent_runtime_params_and_geometry(
         t=current_state.t)
     explicit_source_profiles = build_source_profiles0(
@@ -5206,7 +4809,7 @@ while not_done(current_state.t, g.t_final):
             ),
         ),
     )
-    output_state, post_processed_outputs = _finalize_outputs(
+    output_state = _finalize_outputs(
         t=current_state.t,
         dt=result[1],
         x_new=result[0],
@@ -5216,11 +4819,9 @@ while not_done(current_state.t, g.t_final):
         core_profiles_t=current_state.core_profiles,
         core_profiles_t_plus_dt=result[5],
         explicit_source_profiles=explicit_source_profiles,
-        input_post_processed_outputs=previous_post_processed_outputs,
     )
     current_state = output_state
     state_history.append(current_state)
-    post_processing_history.append(post_processed_outputs)
 t = np.array([state.t for state in state_history])
 rho = np.concatenate([[0.0], np.asarray(geo_rho_norm()), [1.0]])
 (nt, ) = np.shape(t)
