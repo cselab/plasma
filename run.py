@@ -2379,9 +2379,8 @@ def build_standard_source_profiles(*,
         if (explicit == source_params.is_explicit) | calculate_anyway:
             value = source.get_value(runtime_params, geo, core_profiles,
                                      calculated_source_profiles, conductivity)
-            for profile, affected_core_profile in zip(value,
-                                                      source.affected_core_profiles,
-                                                      strict=True):
+            for profile, affected_core_profile in zip(
+                    value, source.affected_core_profiles, strict=True):
                 match affected_core_profile:
                     case AffectedCoreProfile.PSI:
                         calculated_source_profiles.psi[source_name] = profile
@@ -2399,22 +2398,6 @@ def build_standard_source_profiles(*,
     for source_name, source in g.source_models.standard_sources.items():
         if source_name not in g.source_models.psi_sources:
             calculate_source(source_name, source)
-
-
-def get_all_source_profiles(runtime_params, geo, core_profiles, conductivity):
-    explicit_source_profiles = build_source_profiles0(
-        runtime_params=runtime_params,
-        geo=geo,
-        core_profiles=core_profiles,
-    )
-    return build_source_profiles1(
-        runtime_params=runtime_params,
-        geo=geo,
-        core_profiles=core_profiles,
-        explicit=False,
-        explicit_source_profiles=explicit_source_profiles,
-        conductivity=conductivity,
-    )
 
 
 @jax.tree_util.register_dataclass
@@ -5994,10 +5977,8 @@ core_profiles = CoreProfiles(
     Ip_profile_face=np.zeros_like(geo.rho_face),
 )
 sources_are_calculated = False
-source_profiles = SourceProfiles(
-    bootstrap_current=BootstrapCurrent.zeros(geo),
-    qei=QeiInfo.zeros(geo)
-)
+source_profiles = SourceProfiles(bootstrap_current=BootstrapCurrent.zeros(geo),
+                                 qei=QeiInfo.zeros(geo))
 dpsi_drhonorm_edge = (calculate_psi_grad_constraint_from_Ip(
     runtime_params.profile_conditions.Ip,
     geo,
@@ -6061,15 +6042,21 @@ initial_core_profiles = dataclasses.replace(
     sigma=conductivity.sigma,
     sigma_face=conductivity.sigma_face,
 )
-
-initial_core_sources = get_all_source_profiles(
+conductivity = Conductivity(sigma=initial_core_profiles.sigma,
+                            sigma_face=initial_core_profiles.sigma_face)
+core_profiles = initial_core_profiles
+explicit_source_profiles = build_source_profiles0(
     runtime_params=runtime_params,
     geo=geo,
-    core_profiles=initial_core_profiles,
-    conductivity=Conductivity(
-        sigma=initial_core_profiles.sigma,
-        sigma_face=initial_core_profiles.sigma_face,
-    ),
+    core_profiles=core_profiles,
+)
+initial_core_sources = build_source_profiles1(
+    runtime_params=runtime_params,
+    geo=geo,
+    core_profiles=core_profiles,
+    explicit=False,
+    explicit_source_profiles=explicit_source_profiles,
+    conductivity=conductivity,
 )
 transport_coeffs = (calculate_total_transport_coeffs(
     runtime_params,
