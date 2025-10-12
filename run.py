@@ -2476,11 +2476,6 @@ class SetTemperatureDensityPedestalModel:
     def _call_implementation(self, runtime_params, geo, core_profiles):
         nGW = (runtime_params.profile_conditions.Ip / 1e6 /
                (jnp.pi * geo.a_minor**2) * 1e20)
-        n_e_ped = jnp.where(
-            False,
-            g.n_e_ped * nGW,
-            g.n_e_ped,
-        )
         return PedestalModelOutput(
             rho_norm_ped_top_idx=jnp.abs(geo.rho_norm -
                                          g.rho_norm_ped_top).argmin(), )
