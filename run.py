@@ -207,7 +207,13 @@ class TimeVaryingArray(BaseModelFrozen):
             data.pop('_get_cached_interpolated_param_cell_centers', None)
             data.pop('_get_cached_interpolated_param_face_centers', None)
             data.pop('_get_cached_interpolated_param_face_right_centers', None)
-        value = _load_from_primitives(data)
+        if isinstance(data, (float, int)):
+            data = {0.0: {0.0: data}}
+        value = {}
+        for t, v in data.items():
+            x = np.array(list(v.keys()), dtype=np.float64)
+            y = np.array(list(v.values()), dtype=np.float64)
+            value[t] = (x, y)
         return dict(value=value, )
 
     @functools.cached_property
@@ -231,16 +237,6 @@ class TimeVaryingArray(BaseModelFrozen):
             rho_norm=g.face_centers[-1],
         )
 
-
-def _load_from_primitives(primitive_values):
-    if isinstance(primitive_values, (float, int)):
-        primitive_values = {0.0: {0.0: primitive_values}}
-    values = {}
-    for t, v in primitive_values.items():
-        x = np.array(list(v.keys()), dtype=np.float64)
-        y = np.array(list(v.values()), dtype=np.float64)
-        values[t] = (x, y)
-    return values
 
 def _is_non_negative(time_varying_array):
     return time_varying_array
