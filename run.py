@@ -1665,7 +1665,6 @@ class SourceProfiles:
 class Mode(enum.Enum):
     ZERO = "ZERO"
     MODEL_BASED = "MODEL_BASED"
-    PRESCRIBED = "PRESCRIBED"
 
 
 @jax.tree_util.register_dataclass
@@ -2154,12 +2153,7 @@ class QeiSource(Source):
     def source_name(self):
         return self.SOURCE_NAME
 
-    def get_qei(
-        self,
-        runtime_params: RuntimeParamsSlice,
-        geo: Geometry,
-        core_profiles: CoreProfiles,
-    ):
+    def get_qei(self, runtime_params, geo, core_profiles):
         return jax.lax.cond(
             runtime_params.sources[self.source_name].mode == Mode.MODEL_BASED,
             lambda: _model_based_qei(
@@ -5733,6 +5727,7 @@ class StateHistory:
                         name = name.removesuffix("_face")
                     xr_dict[name] = data_array
         return xr_dict
+
 
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass
