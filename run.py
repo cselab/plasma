@@ -4354,7 +4354,7 @@ class RuntimeParamsProvider:
     @classmethod
     def from_config(cls):
         return cls(
-            sources=g.torax_config.sources,
+            sources=g.sources,
             profile_conditions=g.profile_conditions,
             plasma_composition=g.plasma_composition,
             transport_model=g.transport_config,
@@ -4499,10 +4499,6 @@ def _get_geo_and_runtime_params_at_t_plus_dt_and_phibdot(t, dt, geo_t):
     Phibdot = (Phi_b_t_plus_dt - Phi_b_t) / dt
     g.geo_Phi_b_dot = Phibdot
     return (runtime_params_t_plus_dt, None, None)  # No geo objects to return
-
-
-class ToraxConfig(BaseModelFrozen):
-    sources: Sources
 
 
 def body_fun(inputs):
@@ -4694,37 +4690,22 @@ def cond_fun(inputs):
     return take_another_step & ~is_nan_next_dt
 
 
-CONFIG = {
-    "sources": {
-        "generic_current": {
-            "fraction_of_total_current": 0.46,
-            "gaussian_width": 0.075,
-            "gaussian_location": 0.36,
-        },
-        "generic_particle": {
-            "S_total": 2.05e20,
-            "deposition_location": 0.3,
-            "particle_width": 0.25,
-        },
-        "gas_puff": {
-            "puff_decay_length": 0.3,
-            "S_total": 6.0e21,
-        },
-        "pellet": {
-            "S_total": 0.0e22,
-            "pellet_width": 0.1,
-            "pellet_deposition_location": 0.85,
-        },
-        "generic_heat": {
-            "gaussian_location": 0.12741589640723575,
-            "gaussian_width": 0.07280908366127758,
-            "P_total": 51.0e6,
-            "electron_heat_fraction": 0.68,
-        },
-        "fusion": {},
-        "ei_exchange": {},
-    },
-}
+# Source configuration parameters
+g.generic_current_fraction = 0.46
+g.generic_current_width = 0.075
+g.generic_current_location = 0.36
+g.generic_particle_S_total = 2.05e20
+g.generic_particle_location = 0.3
+g.generic_particle_width = 0.25
+g.gas_puff_decay_length = 0.3
+g.gas_puff_S_total = 6.0e21
+g.pellet_S_total = 0.0e22
+g.pellet_width = 0.1
+g.pellet_location = 0.85
+g.generic_heat_location = 0.12741589640723575
+g.generic_heat_width = 0.07280908366127758
+g.generic_heat_P_total = 51.0e6
+g.generic_heat_electron_fraction = 0.68
 g.model = qlknn_model.QLKNNModel.load_default_model()
 g.R_major = 6.2
 g.a_minor = 2.0
@@ -4758,7 +4739,35 @@ g.profile_conditions = ProfileConditions(
     nbar=g.nbar,
     n_e=g.n_e_initial,
 )
-g.torax_config = ToraxConfig.from_dict(CONFIG)
+g.sources = Sources(
+    generic_current={
+        "fraction_of_total_current": g.generic_current_fraction,
+        "gaussian_width": g.generic_current_width,
+        "gaussian_location": g.generic_current_location,
+    },
+    generic_particle={
+        "S_total": g.generic_particle_S_total,
+        "deposition_location": g.generic_particle_location,
+        "particle_width": g.generic_particle_width,
+    },
+    gas_puff={
+        "puff_decay_length": g.gas_puff_decay_length,
+        "S_total": g.gas_puff_S_total,
+    },
+    pellet={
+        "S_total": g.pellet_S_total,
+        "pellet_width": g.pellet_width,
+        "pellet_deposition_location": g.pellet_location,
+    },
+    generic_heat={
+        "gaussian_location": g.generic_heat_location,
+        "gaussian_width": g.generic_heat_width,
+        "P_total": g.generic_heat_P_total,
+        "electron_heat_fraction": g.generic_heat_electron_fraction,
+    },
+    fusion={},
+    ei_exchange={},
+)
 g.chi_pereverzev = 30
 g.D_pereverzev = 15
 g.theta_implicit = 1.0
@@ -5020,7 +5029,7 @@ def geo_g1_over_vpr2_face():
     first_element = jnp.ones_like(geo_rho_b()) / geo_rho_b()**2
     return jnp.concatenate([jnp.expand_dims(first_element, axis=-1), bulk], axis=-1)
 g.pedestal_model = PedestalConfig().build_pedestal_model()
-g.source_models = g.torax_config.sources.build_models()
+g.source_models = g.sources.build_models()
 g.transport_config = QLKNNTransportModel()
 g.transport_model = QLKNNTransportModel0()
 g.bootstrap_current = SauterModelConfig().build_model()
