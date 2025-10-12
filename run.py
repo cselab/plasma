@@ -40,12 +40,6 @@ FloatScalar: TypeAlias = jt.Float[Array | float, ""]
 JAX_STATIC: Final[str] = '_pydantic_jax_static_field'
 _interp_fn = jax.jit(jnp.interp)
 
-
-@enum.unique
-class InterpolationMode(enum.Enum):
-    PIECEWISE_LINEAR = 'piecewise_linear'
-
-
 @jax.tree_util.register_pytree_node_class
 class InterpolatedVarSingleAxis:
 
@@ -55,7 +49,7 @@ class InterpolatedVarSingleAxis:
 
     def tree_flatten(self):
         static_params = {
-            'interpolation_mode': InterpolationMode.PIECEWISE_LINEAR,
+            'interpolation_mode': None,
         }
         return (self._value, static_params)
 
@@ -261,8 +255,7 @@ NonNegativeTimeVaryingArray: TypeAlias = typing_extensions.Annotated[
 class TimeVaryingScalar(BaseModelFrozen):
     time: Any
     value: Any
-    interpolation_mode: typing_extensions.Annotated[
-        InterpolationMode, JAX_STATIC] = InterpolationMode.PIECEWISE_LINEAR
+    interpolation_mode: Any
 
     def get_value(self, t):
         return self._get_cached_interpolated_param.get_value(t)
@@ -278,7 +271,7 @@ class TimeVaryingScalar(BaseModelFrozen):
         return dict(
             time=time,
             value=value,
-            interpolation_mode=InterpolationMode.PIECEWISE_LINEAR,
+            interpolation_mode=None,
         )
 
     @functools.cached_property
