@@ -72,16 +72,14 @@ class _PiecewiseLinearInterpolatedParam:
 @jax.tree_util.register_pytree_node_class
 class InterpolatedVarSingleAxis:
 
-    def __init__(self, value, interpolation_mode, is_bool_param=False):
+    def __init__(self, value, interpolation_mode):
         self._value = value
         xs, ys = value
-        self._is_bool_param = is_bool_param
         self._param = _PiecewiseLinearInterpolatedParam(xs=xs, ys=ys)
 
     def tree_flatten(self):
         static_params = {
             'interpolation_mode': InterpolationMode.PIECEWISE_LINEAR,
-            'is_bool_param': self.is_bool_param,
         }
         return (self._value, static_params)
 
@@ -95,8 +93,6 @@ class InterpolatedVarSingleAxis:
 
     def get_value(self, x):
         value = self._param.get_value(x)
-        if self._is_bool_param:
-            return jnp.bool_(value > 0.5)
         return value
 
 
@@ -332,7 +328,6 @@ class TimeVaryingScalar(BaseModelFrozen):
         return InterpolatedVarSingleAxis(
             value=(self.time, self.value),
             interpolation_mode=self.interpolation_mode,
-            is_bool_param=self.is_bool_param,
         )
 
 
