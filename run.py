@@ -150,10 +150,6 @@ class BaseModelFrozen(pydantic.BaseModel):
         }
         return cls.model_construct(**(dynamic_kwargs | aux_data))
 
-    @classmethod
-    def from_dict(cls, cfg):
-        return cls.model_validate(cfg)
-
 
 ValueType: TypeAlias = Any
 
@@ -182,10 +178,6 @@ class TimeVaryingArray(BaseModelFrozen):
         obj._get_cached_interpolated_param_face = children[2]
         obj._get_cached_interpolated_param_face_right = children[3]
         return obj
-
-    @functools.cached_property
-    def right_boundary_conditions_defined(self):
-        return False
 
     def get_value(self, t, grid_type="cell"):
         match grid_type:
@@ -1011,9 +1003,9 @@ def _calculate_conductivity0(*, Z_eff_face, n_e, T_e, q_face, geo):
 def calculate_conductivity(geometry, core_profiles):
     result = _calculate_conductivity0(
         Z_eff_face=core_profiles.Z_eff_face,
-                                          n_e=core_profiles.n_e,
-                                          T_e=core_profiles.T_e,
-                                          q_face=core_profiles.q_face,
+        n_e=core_profiles.n_e,
+        T_e=core_profiles.T_e,
+        q_face=core_profiles.q_face,
         geo=geometry,
     )
     return Conductivity(sigma=result.sigma, sigma_face=result.sigma_face)
