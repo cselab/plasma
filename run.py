@@ -342,7 +342,10 @@ class TimeVaryingArray(BaseModelFrozen):
             rho_interpolation_mode=self.rho_interpolation_mode,
         )
 
+
 PositiveTimeVaryingArray = TimeVaryingArray
+
+
 def _load_from_primitives(primitive_values):
     if isinstance(primitive_values, (float, int)):
         primitive_values = {0.0: {0.0: primitive_values}}
@@ -2999,11 +3002,8 @@ class RuntimeParams00(RuntimeParamsX):
     DV_effective: bool
 
 
-def calculate_normalized_logarithmic_gradient(
-    var,
-    radial_coordinate,
-    reference_length,
-):
+def calculate_normalized_logarithmic_gradient(var, radial_coordinate,
+                                              reference_length):
     result = jnp.where(
         jnp.abs(var.face_value()) < g.eps,
         g.eps,
@@ -3033,18 +3033,9 @@ class QuasilinearInputs:
 
 class QuasilinearTransportModel(TransportModel):
 
-    def _make_core_transport(
-        self,
-        qi: jax.Array,
-        qe: jax.Array,
-        pfe: jax.Array,
-        quasilinear_inputs: QuasilinearInputs,
-        transport,
-        geo: Geometry,
-        core_profiles: CoreProfiles,
-        gradient_reference_length: Any,
-        gyrobohm_flux_reference_length: Any,
-    ):
+    def _make_core_transport(self, qi, qe, pfe, quasilinear_inputs, transport,
+                             geo, core_profiles, gradient_reference_length,
+                             gyrobohm_flux_reference_length):
         pfe_SI = (pfe * core_profiles.n_e.face_value() *
                   quasilinear_inputs.chiGB / gyrobohm_flux_reference_length)
         chi_face_ion = (
