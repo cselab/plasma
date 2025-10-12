@@ -532,16 +532,7 @@ TimeVaryingArrayDefinedAtRightBoundaryAndBounded: TypeAlias = Annotated[
         )),
 ]
 
-
-def _ion_mixture_after_validator(value):
-    return value
-
-
-IonMapping: TypeAlias = Annotated[
-    Mapping[str, TimeVaryingScalar],
-    pydantic.AfterValidator(_ion_mixture_after_validator),
-]
-
+IonMapping: TypeAlias = Mapping[str, TimeVaryingScalar]
 
 @jax.jit
 def cell_integration(x, geo):
