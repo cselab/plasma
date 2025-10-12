@@ -5373,12 +5373,9 @@ while not_done(current_state.t, g.t_final):
     current_state = output_state
     state_history.append(current_state)
     post_processing_history.append(post_processed_outputs)
-# Extract data directly as numpy arrays
 t = np.array([state.t for state in state_history])
 rho = np.concatenate([[0.0], state_history[0].geometry.rho_norm, [1.0]])
 (nt, ) = np.shape(t)
-
-# Extract evolving variables
 evolving_data = {}
 for var_name in g.evolving_names:
     var_data = []
