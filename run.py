@@ -534,6 +534,7 @@ TimeVaryingArrayDefinedAtRightBoundaryAndBounded: TypeAlias = Annotated[
 
 IonMapping: TypeAlias = Mapping[str, TimeVaryingScalar]
 
+
 @jax.jit
 def cell_integration(x, geo):
     return jnp.sum(x * geo.drho_norm)
@@ -553,9 +554,6 @@ def line_average(value, geo):
 
 def volume_average(value, geo):
     return cell_integration(value * geo.vpr, geo) / geo.volume_face[-1]
-
-
-_trapz = jax.scipy.integrate.trapezoid
 
 
 def _zero():
@@ -1084,7 +1082,8 @@ def _calc_bpol2(geo, psi):
 
 def calc_Wpol(geo, psi):
     bpol2 = _calc_bpol2(geo, psi)
-    Wpol = _trapz(bpol2 * geo.vpr_face, geo.rho_face_norm) / (2 * g.mu_0)
+    Wpol = jax.scipy.integrate.trapezoid(bpol2 * geo.vpr_face,
+                                         geo.rho_face_norm) / (2 * g.mu_0)
     return Wpol
 
 
@@ -3075,10 +3074,10 @@ class QuasilinearTransportModel(TransportModel):
                               geo.g1_over_vpr2_face * geo.rho_b + g.eps)
             Veff = pfe_SI / (core_profiles.n_e.face_value() *
                              geo.g0_over_vpr_face * geo.rho_b)
-            Deff_mask = (
-                ((pfe >= 0) & (quasilinear_inputs.lref_over_lne >= 0))
-                | ((pfe < 0) & (quasilinear_inputs.lref_over_lne < 0))) & (abs(
-                    quasilinear_inputs.lref_over_lne) >= g.An_min)
+            Deff_mask = (((pfe >= 0) & (quasilinear_inputs.lref_over_lne >= 0))
+                         | ((pfe < 0) &
+                            (quasilinear_inputs.lref_over_lne < 0))) & (abs(
+                                quasilinear_inputs.lref_over_lne) >= g.An_min)
             Veff_mask = jnp.invert(Deff_mask)
             d_face_el = jnp.where(Veff_mask, 0.0, Deff)
             v_face_el = jnp.where(Deff_mask, 0.0, Veff)
@@ -4402,7 +4401,6 @@ SCALING_FACTORS: Final[Mapping[str, float]] = immutabledict.immutabledict({
     'psi':
     1.0,
 })
-_trapz = jax.scipy.integrate.trapezoid
 
 
 @jax.tree_util.register_dataclass
@@ -4468,8 +4466,9 @@ def get_updated_electron_density(profile_conditions_params, geo):
         profile_conditions_params.nbar * nGW,
         profile_conditions_params.nbar,
     )
-    nbar_from_n_e_face_inner = (_trapz(n_e_face[:-1], geo.R_out_face[:-1]) /
-                                a_minor_out)
+    nbar_from_n_e_face_inner = (
+        jax.scipy.integrate.trapezoid(n_e_face[:-1], geo.R_out_face[:-1]) /
+        a_minor_out)
     dr_edge = geo.R_out_face[-1] - geo.R_out_face[-2]
     C = (target_nbar - 0.5 * n_e_face[-1] * dr_edge / a_minor_out) / (
         nbar_from_n_e_face_inner + 0.5 * n_e_face[-2] * dr_edge / a_minor_out)
