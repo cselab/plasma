@@ -481,7 +481,10 @@ class RuntimeParamsSlice:
     sources: Any
     transport: Any
 
+
 IonMapping: TypeAlias = Mapping[str, TimeVaryingScalar]
+
+
 @jax.jit
 def cell_integration(x):
     return jnp.sum(x * g.geo.drho_norm)
@@ -2498,10 +2501,6 @@ class ProfileConditions(BaseModelFrozen):
 
         runtime_params = {k: _get_value(v) for k, v in runtime_params.items()}
         return RuntimeParamsPC(**runtime_params)
-
-
-_IMPURITY_MODE_NE_RATIOS: Final[str] = 'n_e_ratios'
-_IMPURITY_MODE_NE_RATIOS_ZEFF: Final[str] = 'n_e_ratios_Z_eff'
 
 
 @jax.tree_util.register_dataclass
