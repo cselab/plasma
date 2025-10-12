@@ -2421,12 +2421,6 @@ def calculate_alpha(core_profiles, q, reference_magnetic_field,
     return alpha
 
 
-@jax.tree_util.register_dataclass
-@dataclasses.dataclass(frozen=True)
-class RuntimeParams00(RuntimeParamsX):
-    pass
-
-
 def calculate_normalized_logarithmic_gradient(var, radial_coordinate,
                                               reference_length):
     result = jnp.where(
