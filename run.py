@@ -49,16 +49,8 @@ class InterpolationMode(enum.Enum):
 class _PiecewiseLinearInterpolatedParam:
 
     def __init__(self, xs, ys):
-        self._xs = xs
-        self._ys = ys
-
-    @property
-    def xs(self):
-        return self._xs
-
-    @property
-    def ys(self):
-        return self._ys
+        self.xs = xs
+        self.ys = ys
 
     def get_value(self, x):
         x_shape = getattr(x, 'shape', ())
