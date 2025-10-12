@@ -5394,8 +5394,6 @@ g.rho_outer = 0.9
 g.chi_min = 0.05
 g.chi_max = 100
 g.D_e_min = 0.05
-g.include_ITG = True
-g.include_TEM = True
 g.An_min = 0.05
 intermediate = StandardGeometryIntermediates.from_chease()
 intermediate.post_init()
