@@ -2401,13 +2401,6 @@ def build_standard_source_profiles(*,
             calculate_source(source_name, source)
 
 
-def build_all_zero_profiles(geo):
-    return SourceProfiles(
-        bootstrap_current=BootstrapCurrent.zeros(geo),
-        qei=QeiInfo.zeros(geo),
-    )
-
-
 def get_all_source_profiles(runtime_params, geo, core_profiles, conductivity):
     explicit_source_profiles = build_source_profiles0(
         runtime_params=runtime_params,
@@ -6001,7 +5994,10 @@ core_profiles = CoreProfiles(
     Ip_profile_face=np.zeros_like(geo.rho_face),
 )
 sources_are_calculated = False
-source_profiles = build_all_zero_profiles(geo)
+source_profiles = SourceProfiles(
+    bootstrap_current=BootstrapCurrent.zeros(geo),
+    qei=QeiInfo.zeros(geo)
+)
 dpsi_drhonorm_edge = (calculate_psi_grad_constraint_from_Ip(
     runtime_params.profile_conditions.Ip,
     geo,
