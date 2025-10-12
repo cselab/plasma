@@ -43,10 +43,7 @@ NumpyArray1D = Any
 
 TIME_INVARIANT: Final[str] = '_pydantic_time_invariant_field'
 JAX_STATIC: Final[str] = '_pydantic_jax_static_field'
-
-RHO_NORM: Final[str] = 'rho_norm'
 _interp_fn = jax.jit(jnp.interp)
-_interp_fn_vmap = jax.jit(jax.vmap(jnp.interp, in_axes=(None, None, 1)))
 
 
 @enum.unique
@@ -5065,7 +5062,6 @@ CHI_BOHM_I = "chi_bohm_i"
 CHI_GYROBOHM_I = "chi_gyrobohm_i"
 RHO_FACE_NORM = "rho_face_norm"
 RHO_CELL_NORM = "rho_cell_norm"
-RHO_NORM = "rho_norm"
 RHO_FACE = "rho_face"
 RHO_CELL = "rho_cell"
 TIME = "time"
@@ -5150,14 +5146,14 @@ class StateHistory:
                                      name=RHO_CELL_NORM)
         rho_norm = xr.DataArray(
             self.rho_norm,
-            dims=[RHO_NORM],
-            name=RHO_NORM,
+            dims=["rho_norm"],
+            name="rho_norm",
         )
         coords = {
             TIME: time,
             RHO_FACE_NORM: rho_face_norm,
             RHO_CELL_NORM: rho_cell_norm,
-            RHO_NORM: rho_norm,
+            "rho_norm": rho_norm,
         }
         all_dicts = [
             self._save_core_profiles(),
@@ -5220,7 +5216,7 @@ class StateHistory:
             case data if is_constant(data):
                 dims = []
             case data if is_cell_plus_boundaries_var(data):
-                dims = [TIME, RHO_NORM]
+                dims = [TIME, "rho_norm"]
         return xr.DataArray(data, dims=dims, name=name)
 
     def _save_core_profiles(self):
