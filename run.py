@@ -93,17 +93,9 @@ def _is_bool(interp_input):
     return isinstance(interp_input, bool)
 
 
-def _convert_value_to_floats(interp_input):
-    return float(interp_input)
-
-
 def convert_input_to_xs_ys(interp_input):
     interpolation_mode = InterpolationMode.PIECEWISE_LINEAR
-    if _is_bool(interp_input):
-        interp_input = _convert_value_to_floats(interp_input)
-        is_bool_param = True
-    else:
-        is_bool_param = False
+    is_bool_param = False
     if isinstance(interp_input, dict):
         return (
             np.array(list(interp_input.keys()), dtype=np.float64),
