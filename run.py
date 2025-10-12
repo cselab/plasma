@@ -276,6 +276,7 @@ def _is_positive(time_varying_scalar):
 def _interval(time_varying_scalar, lower_bound, upper_bound):
     return time_varying_scalar
 
+
 UnitIntervalTimeVaryingScalar: TypeAlias = typing_extensions.Annotated[
     TimeVaryingScalar,
     pydantic.AfterValidator(
@@ -386,18 +387,16 @@ def volume_average(value, geo):
     return cell_integration(value * geo.vpr) / geo.volume_face[-1]
 
 
-def _zero():
-    return jnp.zeros(())
-
-
 @chex.dataclass(frozen=True)
 class CellVariable:
     value: Any
     dr: Any
     left_face_constraint: Any = None
     right_face_constraint: Any = None
-    left_face_grad_constraint: Any = dataclasses.field(default_factory=_zero)
-    right_face_grad_constraint: Any = dataclasses.field(default_factory=_zero)
+    left_face_grad_constraint: Any = dataclasses.field(
+        default_factory=lambda: jnp.zeros(()))
+    right_face_grad_constraint: Any = dataclasses.field(
+        default_factory=lambda: jnp.zeros(()))
 
     def face_grad(self, x=None):
         if x is None:
@@ -2420,6 +2419,7 @@ def calculate_normalized_logarithmic_gradient(var, radial_coordinate,
     )
     return result
 
+
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class QualikizInputs:
@@ -2476,38 +2476,30 @@ _FLUX_NAME_MAP: Final[Mapping[str, str]] = immutabledict.immutabledict({
 })
 
 
-class QLKNNModelWrapper:
+def get_model_inputs_from_qualikiz_inputs(qualikiz_inputs):
+    input_map = {
+        'Ani': lambda x: x.Ani0,
+        'LogNuStar': lambda x: x.log_nu_star_face,
+    }
 
-    def __init__(self):
-        self._model = qlknn_model.QLKNNModel.load_default_model()
-
-    @property
-    def inputs_and_ranges(self):
-        return self._model.inputs_and_ranges
-
-    def get_model_inputs_from_qualikiz_inputs(self, qualikiz_inputs):
-        input_map = {
-            'Ani': lambda x: x.Ani0,
-            'LogNuStar': lambda x: x.log_nu_star_face,
-        }
-
-        def _get_input(key):
-            return jnp.array(
-                input_map.get(key, lambda x: getattr(x, key))(qualikiz_inputs),
-                dtype=jnp.float64,
-            )
-
+    def _get_input(key):
         return jnp.array(
-            [_get_input(key) for key in self.inputs_and_ranges.keys()],
+            input_map.get(key, lambda x: getattr(x, key))(qualikiz_inputs),
             dtype=jnp.float64,
-        ).T
+        )
 
-    def predict(self, inputs):
-        model_predictions = self._model.predict(inputs)
-        return {
-            _FLUX_NAME_MAP.get(flux_name, flux_name): flux_value
-            for flux_name, flux_value in model_predictions.items()
-        }
+    return jnp.array(
+        [_get_input(key) for key in g.model.inputs_and_ranges.keys()],
+        dtype=jnp.float64,
+    ).T
+
+
+def predict(inputs):
+    model_predictions = g.model.predict(inputs)
+    return {
+        _FLUX_NAME_MAP.get(flux_name, flux_name): flux_value
+        for flux_name, flux_value in model_predictions.items()
+    }
 
 
 @jax.tree_util.register_dataclass
@@ -2563,7 +2555,7 @@ def clip_inputs(feature_scan, clip_margin, inputs_and_ranges):
     return feature_scan
 
 
-class QLKNNTransportModel:
+class QLKNNTransportModel0:
 
     def __init__(self, ):
         super().__init__()
@@ -2925,23 +2917,21 @@ class QLKNNTransportModel:
             geo=geo,
             core_profiles=core_profiles,
         )
-        model = QLKNNModelWrapper()
         qualikiz_inputs = dataclasses.replace(
             qualikiz_inputs,
             x=qualikiz_inputs.x * qualikiz_inputs.epsilon_lcfs / _EPSILON_NN,
         )
-        feature_scan = model.get_model_inputs_from_qualikiz_inputs(
-            qualikiz_inputs)
+        feature_scan = get_model_inputs_from_qualikiz_inputs(qualikiz_inputs)
         feature_scan = jax.lax.cond(
             runtime_config_inputs.transport.clip_inputs,
             lambda: clip_inputs(
                 feature_scan,
                 runtime_config_inputs.transport.clip_margin,
-                model.inputs_and_ranges,
+                g.model.inputs_and_ranges,
             ),
             lambda: feature_scan,
         )
-        model_output = model.predict(feature_scan)
+        model_output = predict(feature_scan)
         qi_itg_squeezed = model_output['qi_itg'].squeeze()
         qi = qi_itg_squeezed + model_output['qi_tem'].squeeze()
         qe = (model_output['qe_itg'].squeeze() * g.ITG_flux_ratio_correction +
@@ -3913,13 +3903,9 @@ def get_updated_ions(runtime_params, geo, n_e, T_e):
         right_face_grad_constraint=None,
         right_face_constraint=n_impurity_right_face_constraint,
     )
-    Z_eff_face = _calculate_Z_eff(
-        Z_i_face,
-        ion_properties.Z_impurity_face,
-        n_i.face_value(),
-        n_impurity.face_value(),
-        n_e.face_value(),
-    )
+    Z_eff_face = (Z_i_face**2 * n_i.face_value() +
+                  ion_properties.Z_impurity_face**2 *
+                  n_impurity.face_value()) / n_e.face_value()
     impurity_fractions_dict = {}
     for i, symbol in enumerate(
             runtime_params.plasma_composition.impurity_names):
@@ -3939,10 +3925,6 @@ def get_updated_ions(runtime_params, geo, n_e, T_e):
         Z_eff=ion_properties.Z_eff,
         Z_eff_face=Z_eff_face,
     )
-
-
-def _calculate_Z_eff(Z_i, Z_impurity, n_i, n_impurity, n_e):
-    return (Z_i**2 * n_i + Z_impurity**2 * n_impurity) / n_e
 
 
 def core_profiles_to_solver_x_tuple(core_profiles, ):
@@ -4076,11 +4058,8 @@ def update_core_and_source_profiles_after_step(dt, x_new,
     v_loop_lcfs = (runtime_params_t_plus_dt.profile_conditions.v_loop_lcfs
                    if runtime_params_t_plus_dt.profile_conditions.
                    use_v_loop_lcfs_boundary_condition else
-                   _update_v_loop_lcfs_from_psi(
-                       core_profiles_t.psi,
-                       updated_core_profiles_t_plus_dt.psi,
-                       dt,
-                   ))
+                   (updated_core_profiles_t_plus_dt.psi.face_value()[-1] -
+                    core_profiles_t.psi.face_value()[-1]) / dt)
     j_total, j_total_face, Ip_profile_face = calc_j_total(
         geo,
         updated_core_profiles_t_plus_dt.psi,
@@ -4144,13 +4123,6 @@ def update_core_and_source_profiles_after_step(dt, x_new,
         psidot=psidot,
     )
     return core_profiles_t_plus_dt, total_source_profiles
-
-
-def _update_v_loop_lcfs_from_psi(psi_t, psi_t_plus_dt, dt):
-    psi_lcfs_t = psi_t.face_value()[-1]
-    psi_lcfs_t_plus_dt = psi_t_plus_dt.face_value()[-1]
-    v_loop_lcfs_t_plus_dt = (psi_lcfs_t_plus_dt - psi_lcfs_t) / dt
-    return v_loop_lcfs_t_plus_dt
 
 
 @jax.tree_util.register_dataclass
@@ -4239,10 +4211,19 @@ def calc_coeffs(runtime_params,
                 explicit_source_profiles,
                 explicit_call=False):
     if explicit_call and g.theta_implicit == 1.0:
-        return _calc_coeffs_reduced(
-            geo,
-            core_profiles,
-        )
+        tic_T_i = core_profiles.n_i.value * geo.vpr**(5.0 / 3.0)
+        tic_T_e = core_profiles.n_e.value * geo.vpr**(5.0 / 3.0)
+        tic_psi = jnp.ones_like(geo.vpr)
+        tic_dens_el = geo.vpr
+        var_to_tic = {
+            'T_i': tic_T_i,
+            'T_e': tic_T_e,
+            'psi': tic_psi,
+            'n_e': tic_dens_el,
+        }
+        transient_in_cell = tuple(var_to_tic[var] for var in g.evolving_names)
+        coeffs = Block1DCoeffs(transient_in_cell=transient_in_cell, )
+        return coeffs
     else:
         return _calc_coeffs_full(
             runtime_params=runtime_params,
@@ -4418,23 +4399,6 @@ def _calc_coeffs_full(runtime_params, geo, core_profiles,
                            CoreTransport(
                                **dataclasses.asdict(turbulent_transport))),
     )
-    return coeffs
-
-
-@jax.jit
-def _calc_coeffs_reduced(geo, core_profiles):
-    tic_T_i = core_profiles.n_i.value * geo.vpr**(5.0 / 3.0)
-    tic_T_e = core_profiles.n_e.value * geo.vpr**(5.0 / 3.0)
-    tic_psi = jnp.ones_like(geo.vpr)
-    tic_dens_el = geo.vpr
-    var_to_tic = {
-        'T_i': tic_T_i,
-        'T_e': tic_T_e,
-        'psi': tic_psi,
-        'n_e': tic_dens_el,
-    }
-    transient_in_cell = tuple(var_to_tic[var] for var in g.evolving_names)
-    coeffs = Block1DCoeffs(transient_in_cell=transient_in_cell, )
     return coeffs
 
 
@@ -5221,6 +5185,7 @@ CONFIG = {
     },
     'transport': {},
 }
+g.model = qlknn_model.QLKNNModel.load_default_model()
 g.R_major = 6.2
 g.a_minor = 2.0
 g.B_0 = 5.3
@@ -5418,7 +5383,7 @@ g.geo = StandardGeometry(
 )
 g.pedestal_model = PedestalConfig().build_pedestal_model()
 g.source_models = g.torax_config.sources.build_models()
-g.transport_model = QLKNNTransportModel()
+g.transport_model = QLKNNTransportModel0()
 g.bootstrap_current = SauterModelConfig().build_model()
 g.runtime_params_provider = RuntimeParamsProvider.from_config()
 runtime_params_for_init, geo_for_init = (
@@ -5618,6 +5583,14 @@ print(data_tree)
 t = data_tree.time.to_numpy()
 rho = data_tree.rho_norm.to_numpy()
 nt, = np.shape(t)
+
+with open("run.raw", "wb") as f:
+    t.tofile(f)
+    rho.tofile(f)
+    for key in g.evolving_names:
+        var = data_tree.profiles[key].to_numpy()
+        var.tofile(f)
+
 for key in g.evolving_names:
     var = data_tree.profiles[key].to_numpy()
     lo = np.min(var).item()
