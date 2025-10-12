@@ -4807,7 +4807,6 @@ g.chi_min = 0.05
 g.chi_max = 100
 g.D_e_min = 0.05
 g.An_min = 0.05
-# Inline StandardGeometryIntermediates functionality
 file_path = os.path.join("geo", "ITER_hybrid_citrin_equil_cheasedata.mat2cols")
 with open(file_path, "r") as file:
     chease_data = {}
@@ -4842,15 +4841,12 @@ flux_surf_avg_1_over_B2 = chease_data["<1/B**2>"] / g.B_0**2
 rhon = np.sqrt(Phi / Phi[-1])
 vpr = 4 * np.pi * Phi[-1] * rhon / (F_chease * flux_surf_avg_1_over_R2)
 
-# Apply smoothing (post_init functionality)
 assert not flux_surf_avg_Bp2[-1] < 1e-10
 idx_limit = np.argmin(np.abs(rhon - g.rho_smoothing_limit))
 flux_surf_avg_Bp2[:] = _smooth_savgol(flux_surf_avg_Bp2, idx_limit, 2)
 flux_surf_avg_R2Bp2[:] = _smooth_savgol(flux_surf_avg_R2Bp2, idx_limit, 2)
 flux_surf_avg_RBp[:] = _smooth_savgol(flux_surf_avg_RBp, idx_limit, 1)
 vpr[:] = _smooth_savgol(vpr, idx_limit, 1)
-
-# Continue with geometry calculations
 rho_intermediate = np.sqrt(Phi / (np.pi * g.B_0))
 rho_norm_intermediate = rho_intermediate / rho_intermediate[-1]
 C1 = int_dl_over_Bp
@@ -4938,7 +4934,6 @@ volume_face = rhon_interpolation_func(rho_face_norm, volume_intermediate)
 volume = rhon_interpolation_func(rho_norm, volume_intermediate)
 area_face = rhon_interpolation_func(rho_face_norm, area_intermediate)
 area = rhon_interpolation_func(rho_norm, area_intermediate)
-# Inline StandardGeometry - assign all variables to g.*
 g.geo_Phi = Phi
 g.geo_Phi_face = Phi_face
 g.geo_R_major = g.R_major
@@ -4991,7 +4986,6 @@ g.geo_rho_hires = rho_hires
 g.geo_Phi_b_dot = np.asarray(0.0)
 g.geo_z_magnetic_axis = None
 
-# Define geometry functions that compute dynamically (like the original @property methods)
 def geo_q_correction_factor():
     return jnp.where(False, 1.25, 1)
 
