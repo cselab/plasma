@@ -4355,7 +4355,7 @@ class RuntimeParamsProvider:
     def from_config(cls):
         return cls(
             sources=g.torax_config.sources,
-            profile_conditions=g.torax_config.profile_conditions,
+            profile_conditions=g.profile_conditions,
             plasma_composition=g.plasma_composition,
             transport_model=g.transport_config,
         )
@@ -4502,7 +4502,6 @@ def _get_geo_and_runtime_params_at_t_plus_dt_and_phibdot(t, dt, geo_t):
 
 
 class ToraxConfig(BaseModelFrozen):
-    profile_conditions: ProfileConditions
     sources: Sources
 
 
@@ -4696,31 +4695,6 @@ def cond_fun(inputs):
 
 
 CONFIG = {
-    "profile_conditions": {
-        "Ip": 10.5e6,
-        "T_i": {
-            0.0: {
-                0.0: 15.0,
-                1.0: 0.2
-            }
-        },
-        "T_i_right_bc": 0.2,
-        "T_e": {
-            0.0: {
-                0.0: 15.0,
-                1.0: 0.2
-            }
-        },
-        "T_e_right_bc": 0.2,
-        "n_e_right_bc": 0.25e20,
-        "nbar": 0.8,
-        "n_e": {
-            0: {
-                0.0: 1.5,
-                1.0: 1.0
-            }
-        },
-    },
     "sources": {
         "generic_current": {
             "fraction_of_total_current": 0.46,
@@ -4765,6 +4739,24 @@ g.plasma_composition = PlasmaComposition(
     main_ion={"D": g.main_ion_D, "T": g.main_ion_T},
     impurity=g.impurity,
     Z_eff=g.Z_eff,
+)
+g.Ip = 10.5e6
+g.T_i_initial = {0.0: {0.0: 15.0, 1.0: 0.2}}
+g.T_i_right_bc = 0.2
+g.T_e_initial = {0.0: {0.0: 15.0, 1.0: 0.2}}
+g.T_e_right_bc = 0.2
+g.n_e_right_bc = 0.25e20
+g.nbar = 0.8
+g.n_e_initial = {0: {0.0: 1.5, 1.0: 1.0}}
+g.profile_conditions = ProfileConditions(
+    Ip=g.Ip,
+    T_i=g.T_i_initial,
+    T_i_right_bc=g.T_i_right_bc,
+    T_e=g.T_e_initial,
+    T_e_right_bc=g.T_e_right_bc,
+    n_e_right_bc=g.n_e_right_bc,
+    nbar=g.nbar,
+    n_e=g.n_e_initial,
 )
 g.torax_config = ToraxConfig.from_dict(CONFIG)
 g.chi_pereverzev = 30
