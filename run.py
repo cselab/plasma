@@ -395,12 +395,6 @@ UnitIntervalTimeVaryingScalar: TypeAlias = typing_extensions.Annotated[
     pydantic.AfterValidator(
         functools.partial(_interval, lower_bound=0.0, upper_bound=1.0)),
 ]
-Meter: TypeAlias = pydantic.PositiveFloat
-MeterPerSecond: TypeAlias = float
-MeterSquaredPerSecond: TypeAlias = pydantic.NonNegativeFloat
-Pascal: TypeAlias = pydantic.PositiveFloat
-PositiveMeterSquaredPerSecond: TypeAlias = pydantic.PositiveFloat
-Second: TypeAlias = pydantic.NonNegativeFloat
 UnitInterval: TypeAlias = Annotated[float, pydantic.Field(ge=0.0, le=1.0)]
 OpenUnitInterval: TypeAlias = Annotated[float, pydantic.Field(gt=0.0, lt=1.0)]
 ValidatedDefault = functools.partial(pydantic.Field, validate_default=True)
@@ -2774,9 +2768,9 @@ class QualikizInputs(QuasilinearInputs):
 
 
 class TransportBase(BaseModelFrozen):
-    D_e_max: MeterSquaredPerSecond = 100.0
-    V_e_min: MeterPerSecond = -50.0
-    V_e_max: MeterPerSecond = 50.0
+    D_e_max: Any = 100.0
+    V_e_min: Any = -50.0
+    V_e_max: Any = 50.0
     rho_min: UnitIntervalTimeVaryingScalar = (ValidatedDefault(0.0))
     rho_max: UnitIntervalTimeVaryingScalar = (ValidatedDefault(1.0))
     smoothing_width: pydantic.NonNegativeFloat = 0.0
