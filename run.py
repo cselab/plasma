@@ -232,16 +232,15 @@ class TimeVaryingArray(BaseModelFrozen):
         )
 
 
-def _load_from_primitives(data):
-    if isinstance(data, (float, int)):
-        primitive_values = {0.0: {0.0: data}}
-    value = {}
-    for t, v in data.items():
+def _load_from_primitives(primitive_values):
+    if isinstance(primitive_values, (float, int)):
+        primitive_values = {0.0: {0.0: primitive_values}}
+    values = {}
+    for t, v in primitive_values.items():
         x = np.array(list(v.keys()), dtype=np.float64)
         y = np.array(list(v.values()), dtype=np.float64)
-        value[t] = (x, y)
-    return value
-
+        values[t] = (x, y)
+    return values
 
 def _is_non_negative(time_varying_array):
     return time_varying_array
