@@ -166,8 +166,6 @@ ValueType: TypeAlias = Any
 
 class TimeVaryingArray(BaseModelFrozen):
     value: ValueType
-    rho_interpolation_mode: Any = InterpolationMode.PIECEWISE_LINEAR
-    time_interpolation_mode: Any = InterpolationMode.PIECEWISE_LINEAR
     grid: Any = None
 
     def tree_flatten(self):
@@ -178,8 +176,6 @@ class TimeVaryingArray(BaseModelFrozen):
             self._get_cached_interpolated_param_face_right,
         )
         aux_data = (
-            self.rho_interpolation_mode,
-            self.time_interpolation_mode,
             self.grid,
         )
         return children, aux_data
@@ -188,9 +184,7 @@ class TimeVaryingArray(BaseModelFrozen):
     def tree_unflatten(cls, aux_data, children):
         obj = cls.model_construct(
             value=children[0],
-            rho_interpolation_mode=aux_data[0],
-            time_interpolation_mode=aux_data[1],
-            grid=aux_data[2],
+            grid=aux_data[1],
         )
         obj._get_cached_interpolated_param_cell = children[1]
         obj._get_cached_interpolated_param_face = children[2]
@@ -224,8 +218,6 @@ class TimeVaryingArray(BaseModelFrozen):
         value = _load_from_primitives(data)
         return dict(
             value=value,
-            time_interpolation_mode=InterpolationMode.PIECEWISE_LINEAR,
-            rho_interpolation_mode=InterpolationMode.PIECEWISE_LINEAR,
         )
 
     @functools.cached_property
