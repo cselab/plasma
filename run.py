@@ -269,10 +269,6 @@ class TimeVaryingScalar(BaseModelFrozen):
         )
 
 
-def _is_positive(time_varying_scalar):
-    return time_varying_scalar
-
-
 def _interval(time_varying_scalar, lower_bound, upper_bound):
     return time_varying_scalar
 
