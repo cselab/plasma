@@ -2885,17 +2885,15 @@ def get_updated_ions(runtime_params, n_e, T_e):
         fractions=runtime_params.plasma_composition.main_ion.fractions,
     ).Z_mixture
     impurity_params = runtime_params.plasma_composition.impurity
-    match impurity_params:
-        case RuntimeParamsIF():
-            ion_properties = _get_ion_properties_from_fractions(
-                runtime_params.plasma_composition.impurity_names,
-                impurity_params,
-                T_e,
-                Z_i,
-                Z_i_face,
-                runtime_params.plasma_composition.Z_eff,
-                runtime_params.plasma_composition.Z_eff_face,
-            )
+    ion_properties = _get_ion_properties_from_fractions(
+        runtime_params.plasma_composition.impurity_names,
+        impurity_params,
+        T_e,
+        Z_i,
+        Z_i_face,
+        runtime_params.plasma_composition.Z_eff,
+        runtime_params.plasma_composition.Z_eff_face,
+    )
     n_i = CellVariable(
         value=n_e.value * ion_properties.dilution_factor,
         dr=geo_drho_norm(),
