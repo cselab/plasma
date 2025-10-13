@@ -45,6 +45,7 @@ class InterpolatedVarSingleAxis:
     def __init__(self, value, interpolation_mode):
         self.xs, self.ys = value
 
+
     def get_value(self, x):
         x_shape = getattr(x, "shape", ())
         is_jax = isinstance(x, jax.Array)
