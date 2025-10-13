@@ -657,44 +657,33 @@ class Conductivity:
     sigma_face: Any
 
 
-@jax.jit
-def _calculate_conductivity0(*, Z_eff_face, n_e, T_e, q_face, geo):
-    f_trap = calculate_f_trap(geo)
-    NZ = 0.58 + 0.74 / (0.76 + Z_eff_face)
-    log_lambda_ei = 31.3 - 0.5 * jnp.log(n_e.face_value()) + jnp.log(
-        T_e.face_value() * 1e3)
-    sigsptz = (1.9012e04 * (T_e.face_value() * 1e3)**1.5 / Z_eff_face / NZ /
+def calculate_conductivity(geometry, core_profiles):
+    # Inlined _calculate_conductivity0
+    f_trap = calculate_f_trap(geometry)
+    NZ = 0.58 + 0.74 / (0.76 + core_profiles.Z_eff_face)
+    log_lambda_ei = 31.3 - 0.5 * jnp.log(core_profiles.n_e.face_value()) + jnp.log(
+        core_profiles.T_e.face_value() * 1e3)
+    sigsptz = (1.9012e04 * (core_profiles.T_e.face_value() * 1e3)**1.5 / core_profiles.Z_eff_face / NZ /
                log_lambda_ei)
     nu_e_star_face = calculate_nu_e_star(
-        q=q_face,
-        geo=geo,
-        n_e=n_e.face_value(),
-        T_e=T_e.face_value(),
-        Z_eff=Z_eff_face,
+        q=core_profiles.q_face,
+        geo=geometry,
+        n_e=core_profiles.n_e.face_value(),
+        T_e=core_profiles.T_e.face_value(),
+        Z_eff=core_profiles.Z_eff_face,
         log_lambda_ei=log_lambda_ei,
     )
     ft33 = f_trap / (1.0 +
                      (0.55 - 0.1 * f_trap) * jnp.sqrt(nu_e_star_face) + 0.45 *
-                     (1.0 - f_trap) * nu_e_star_face / (Z_eff_face**1.5))
-    signeo_face = 1.0 - ft33 * (1.0 + 0.36 / Z_eff_face - ft33 *
-                                (0.59 / Z_eff_face - 0.23 / Z_eff_face * ft33))
+                     (1.0 - f_trap) * nu_e_star_face / (core_profiles.Z_eff_face**1.5))
+    signeo_face = 1.0 - ft33 * (1.0 + 0.36 / core_profiles.Z_eff_face - ft33 *
+                                (0.59 / core_profiles.Z_eff_face - 0.23 / core_profiles.Z_eff_face * ft33))
     sigma_face = sigsptz * signeo_face
     sigmaneo_cell = 0.5 * (sigma_face[:-1] + sigma_face[1:])
     return Conductivity(
         sigma=sigmaneo_cell,
         sigma_face=sigma_face,
     )
-
-
-def calculate_conductivity(geometry, core_profiles):
-    result = _calculate_conductivity0(
-        Z_eff_face=core_profiles.Z_eff_face,
-        n_e=core_profiles.n_e,
-        T_e=core_profiles.T_e,
-        q_face=core_profiles.q_face,
-        geo=geometry,
-    )
-    return Conductivity(sigma=result.sigma, sigma_face=result.sigma_face)
 
 
 @jax.tree_util.register_dataclass
