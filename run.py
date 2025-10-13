@@ -276,20 +276,6 @@ BooleanNumeric = Any
 thread_context = threading.local()
 
 
-def cond(cond_val, true_fun, false_fun, *operands):
-    if cond_val:
-        return true_fun(*operands)
-    else:
-        return false_fun(*operands)
-
-
-def fori_loop(lower, upper, body_fun, init_val):
-    val = init_val
-    for i in range(lower, upper):
-        val = body_fun(i, val)
-    return val
-
-
 _TOLERANCE: Final[float] = 1e-6
 
 
@@ -3509,12 +3495,9 @@ def solver_x_new(
         out = tuple(out)
         return out
 
-    x_new = fori_loop(
-        0,
-        g.n_corrector_steps + 1,
-        loop_body,
-        x_new_guess,
-    )
+    x_new = x_new_guess
+    for i in range(0, g.n_corrector_steps + 1):
+        x_new = loop_body(i, x_new)
     solver_numeric_outputs = SolverNumericOutputs(solver_error_state=0, )
     return (
         x_new,
@@ -3836,12 +3819,13 @@ def cond_fun(inputs):
         g.t_final,
     )
     next_dt_too_small = next_dt < g.min_dt
-    take_another_step = cond(
-        solver_did_not_converge,
-        lambda: cond(at_exact_t_final, lambda: True, lambda: ~next_dt_too_small
-                     ),
-        lambda: False,
-    )
+    if solver_did_not_converge:
+        if at_exact_t_final:
+            take_another_step = True
+        else:
+            take_another_step = ~next_dt_too_small
+    else:
+        take_another_step = False
     return take_another_step & ~is_nan_next_dt
 
 
