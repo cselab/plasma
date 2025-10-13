@@ -3472,29 +3472,26 @@ g.geo_rho_hires = rho_hires
 g.geo_Phi_b_dot = np.asarray(0.0)
 g.geo_z_magnetic_axis = None
 
-class _GeoCache:
-    def __init__(self):
-        self._q_correction_factor = jnp.where(False, 1.25, 1)
-        Phi_b = g.geo_Phi_face[..., -1]
-        self._Phi_b = Phi_b
-        self._rho_b = jnp.sqrt(Phi_b / np.pi / g.B_0)
-        self._rho_face = g.face_centers * jnp.expand_dims(self._rho_b, axis=-1)
-        self._rho = g.cell_centers * jnp.expand_dims(self._rho_b, axis=-1)
-        self._epsilon_face = (g.geo_R_out_face - g.geo_R_in_face) / (g.geo_R_out_face + g.geo_R_in_face)
-        bulk = g.geo_g0_face[..., 1:] / g.geo_vpr_face[..., 1:]
-        first_element = jnp.ones_like(self._rho_b) / self._rho_b
-        self._g0_over_vpr_face = jnp.concatenate([jnp.expand_dims(first_element, axis=-1), bulk], axis=-1)
-        bulk = g.geo_g1_face[..., 1:] / g.geo_vpr_face[..., 1:]
-        first_element = jnp.zeros_like(self._rho_b)
-        self._g1_over_vpr_face = jnp.concatenate([jnp.expand_dims(first_element, axis=-1), bulk], axis=-1)
-        bulk = g.geo_g1_face[..., 1:] / g.geo_vpr_face[..., 1:]**2
-        first_element = jnp.ones_like(self._rho_b) / self._rho_b**2
-        self._g1_over_vpr2_face = jnp.concatenate([jnp.expand_dims(first_element, axis=-1), bulk], axis=-1)
-
-_geo_cache = _GeoCache()
+# Initialize geometry cache in g.*
+g.geo_q_correction_factor = jnp.where(False, 1.25, 1)
+Phi_b = g.geo_Phi_face[..., -1]
+g.geo_Phi_b = Phi_b
+g.geo_rho_b = jnp.sqrt(Phi_b / np.pi / g.B_0)
+g.geo_rho_face = g.face_centers * jnp.expand_dims(g.geo_rho_b, axis=-1)
+g.geo_rho = g.cell_centers * jnp.expand_dims(g.geo_rho_b, axis=-1)
+g.geo_epsilon_face = (g.geo_R_out_face - g.geo_R_in_face) / (g.geo_R_out_face + g.geo_R_in_face)
+bulk = g.geo_g0_face[..., 1:] / g.geo_vpr_face[..., 1:]
+first_element = jnp.ones_like(g.geo_rho_b) / g.geo_rho_b
+g.geo_g0_over_vpr_face = jnp.concatenate([jnp.expand_dims(first_element, axis=-1), bulk], axis=-1)
+bulk = g.geo_g1_face[..., 1:] / g.geo_vpr_face[..., 1:]
+first_element = jnp.zeros_like(g.geo_rho_b)
+g.geo_g1_over_vpr_face = jnp.concatenate([jnp.expand_dims(first_element, axis=-1), bulk], axis=-1)
+bulk = g.geo_g1_face[..., 1:] / g.geo_vpr_face[..., 1:]**2
+first_element = jnp.ones_like(g.geo_rho_b) / g.geo_rho_b**2
+g.geo_g1_over_vpr2_face = jnp.concatenate([jnp.expand_dims(first_element, axis=-1), bulk], axis=-1)
 
 def geo_q_correction_factor():
-    return _geo_cache._q_correction_factor
+    return g.geo_q_correction_factor
 
 def geo_rho_norm():
     return g.cell_centers
@@ -3506,28 +3503,28 @@ def geo_drho_norm():
     return jnp.array(g.dx)
 
 def geo_Phi_b():
-    return _geo_cache._Phi_b
+    return g.geo_Phi_b
 
 def geo_rho_b():
-    return _geo_cache._rho_b
+    return g.geo_rho_b
 
 def geo_rho_face():
-    return _geo_cache._rho_face
+    return g.geo_rho_face
 
 def geo_rho():
-    return _geo_cache._rho
+    return g.geo_rho
 
 def geo_epsilon_face():
-    return _geo_cache._epsilon_face
+    return g.geo_epsilon_face
 
 def geo_g0_over_vpr_face():
-    return _geo_cache._g0_over_vpr_face
+    return g.geo_g0_over_vpr_face
 
 def geo_g1_over_vpr_face():
-    return _geo_cache._g1_over_vpr_face
+    return g.geo_g1_over_vpr_face
 
 def geo_g1_over_vpr2_face():
-    return _geo_cache._g1_over_vpr2_face
+    return g.geo_g1_over_vpr2_face
 
 
 g.pedestal_model = PedestalConfig().build_pedestal_model()
