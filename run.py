@@ -2266,18 +2266,10 @@ def prepare_qualikiz_inputs(geo, core_profiles):
         epsilon_lcfs=epsilon_lcfs,
     )
 
-def call_qlknn_implementation(
-    transport_runtime_params,
-    runtime_params,
-    geo,
-    core_profiles,
-    pedestal_model_output,
-):
-    runtime_config_inputs = QLKNNRuntimeConfigInputs.from_runtime_params_slice(
-        transport_runtime_params,
-        runtime_params,
-        pedestal_model_output,
-    )
+def calculate_transport_coeffs(runtime_params, geo, core_profiles,
+                 pedestal_model_output):
+    transport_runtime_params = runtime_params.transport
+    # Inlined call_qlknn_implementation
     qualikiz_inputs = prepare_qualikiz_inputs(
         geo=geo,
         core_profiles=core_profiles,
@@ -2318,22 +2310,11 @@ def call_qlknn_implementation(
     Veff_mask = jnp.invert(Deff_mask)
     d_face_el = jnp.where(Veff_mask, 0.0, Deff)
     v_face_el = jnp.where(Deff_mask, 0.0, Veff)
-    return TurbulentTransport(
+    transport_coeffs = TurbulentTransport(
         chi_face_ion=chi_face_ion,
         chi_face_el=chi_face_el,
         d_face_el=d_face_el,
         v_face_el=v_face_el,
-    )
-
-def calculate_transport_coeffs(runtime_params, geo, core_profiles,
-                 pedestal_model_output):
-    transport_runtime_params = runtime_params.transport
-    transport_coeffs = call_qlknn_implementation(
-        transport_runtime_params,
-        runtime_params,
-        geo,
-        core_profiles,
-        pedestal_model_output,
     )
     transport_coeffs = apply_domain_restriction_transport(
         transport_runtime_params,
