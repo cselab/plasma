@@ -2227,420 +2227,408 @@ def clip_inputs(feature_scan, clip_margin, inputs_and_ranges):
     return feature_scan
 
 
-class QLKNNTransportModel0:
 
-    def __init__(self, ):
-        super().__init__()
-        self._frozen = True
+def apply_domain_restriction_transport(transport_runtime_params, geo,
+                              transport_coeffs, pedestal_model_output):
+    active_mask = (
+        (geo_rho_face_norm() > transport_runtime_params.rho_min)
+        & (geo_rho_face_norm() <= transport_runtime_params.rho_max)
+        & (geo_rho_face_norm() <= g.rho_norm_ped_top))
+    active_mask = (jnp.asarray(active_mask).at[0].set(
+        transport_runtime_params.rho_min == 0))
+    chi_face_ion = jnp.where(active_mask, transport_coeffs.chi_face_ion,
+                             0.0)
+    chi_face_el = jnp.where(active_mask, transport_coeffs.chi_face_el, 0.0)
+    d_face_el = jnp.where(active_mask, transport_coeffs.d_face_el, 0.0)
+    v_face_el = jnp.where(active_mask, transport_coeffs.v_face_el, 0.0)
+    return dataclasses.replace(
+        transport_coeffs,
+        chi_face_ion=chi_face_ion,
+        chi_face_el=chi_face_el,
+        d_face_el=d_face_el,
+        v_face_el=v_face_el,
+    )
 
-    def __setattr__(self, attr, value):
-        return super().__setattr__(attr, value)
+def apply_clipping_transport(transport_runtime_params, transport_coeffs):
+    chi_face_ion = jnp.clip(
+        transport_coeffs.chi_face_ion,
+        g.chi_min,
+        g.chi_max,
+    )
+    chi_face_el = jnp.clip(
+        transport_coeffs.chi_face_el,
+        g.chi_min,
+        g.chi_max,
+    )
+    d_face_el = jnp.clip(
+        transport_coeffs.d_face_el,
+        g.D_e_min,
+        g.D_e_max,
+    )
+    v_face_el = jnp.clip(
+        transport_coeffs.v_face_el,
+        g.V_e_min,
+        g.V_e_max,
+    )
+    return dataclasses.replace(
+        transport_coeffs,
+        chi_face_ion=chi_face_ion,
+        chi_face_el=chi_face_el,
+        d_face_el=d_face_el,
+        v_face_el=v_face_el,
+    )
 
-    def __call__(self, runtime_params, geo, core_profiles,
+def apply_transport_patches(transport_runtime_params,
+                             runtime_params, geo, transport_coeffs):
+    chi_face_ion = jnp.where(
+        jnp.logical_and(
+            True,
+            geo_rho_face_norm() < g.rho_inner + g.eps,
+        ),
+        g.chi_i_inner,
+        transport_coeffs.chi_face_ion,
+    )
+    chi_face_el = jnp.where(
+        jnp.logical_and(
+            True,
+            geo_rho_face_norm() < g.rho_inner + g.eps,
+        ),
+        g.chi_e_inner,
+        transport_coeffs.chi_face_el,
+    )
+    d_face_el = jnp.where(
+        jnp.logical_and(
+            True,
+            geo_rho_face_norm() < g.rho_inner + g.eps,
+        ),
+        g.D_e_inner,
+        transport_coeffs.d_face_el,
+    )
+    v_face_el = jnp.where(
+        jnp.logical_and(
+            True,
+            geo_rho_face_norm() < g.rho_inner + g.eps,
+        ),
+        g.V_e_inner,
+        transport_coeffs.v_face_el,
+    )
+    chi_face_ion = jnp.where(
+        jnp.logical_and(
+            jnp.logical_and(
+                True,
+                jnp.logical_not(True),
+            ),
+            geo_rho_face_norm() > g.rho_outer - g.eps,
+        ),
+        g.chi_i_outer,
+        chi_face_ion,
+    )
+    chi_face_el = jnp.where(
+        jnp.logical_and(
+            jnp.logical_and(
+                True,
+                jnp.logical_not(True),
+            ),
+            geo_rho_face_norm() > g.rho_outer - g.eps,
+        ),
+        g.chi_e_outer,
+        chi_face_el,
+    )
+    d_face_el = jnp.where(
+        jnp.logical_and(
+            jnp.logical_and(
+                True,
+                jnp.logical_not(True),
+            ),
+            geo_rho_face_norm() > g.rho_outer - g.eps,
+        ),
+        g.D_e_outer,
+        d_face_el,
+    )
+    v_face_el = jnp.where(
+        jnp.logical_and(
+            jnp.logical_and(
+                True,
+                jnp.logical_not(True),
+            ),
+            geo_rho_face_norm() > g.rho_outer - g.eps,
+        ),
+        g.V_e_outer,
+        v_face_el,
+    )
+    return dataclasses.replace(
+        transport_coeffs,
+        chi_face_ion=chi_face_ion,
+        chi_face_el=chi_face_el,
+        d_face_el=d_face_el,
+        v_face_el=v_face_el,
+    )
+
+def smooth_coeffs_transport(
+    transport_runtime_params,
+    runtime_params,
+    geo,
+    transport_coeffs,
+    pedestal_model_output,
+):
+    smoothing_matrix = _build_smoothing_matrix(
+        transport_runtime_params,
+        runtime_params,
+        geo,
+        pedestal_model_output,
+    )
+
+    def smooth_single_coeff(coeff):
+        return jax.lax.cond(
+            jnp.all(coeff == 0.0),
+            lambda: coeff,
+            lambda: jnp.dot(smoothing_matrix, coeff),
+        )
+
+    return jax.tree_util.tree_map(smooth_single_coeff, transport_coeffs)
+
+def make_core_transport(
+    qi,
+    qe,
+    pfe,
+    quasilinear_inputs,
+    geo,
+    core_profiles,
+    gradient_reference_length,
+    gyrobohm_flux_reference_length,
+):
+    pfe_SI = (pfe * core_profiles.n_e.face_value() *
+              quasilinear_inputs.chiGB / gyrobohm_flux_reference_length)
+    chi_face_ion = (
+        ((gradient_reference_length / gyrobohm_flux_reference_length) * qi)
+        / quasilinear_inputs.lref_over_lti) * quasilinear_inputs.chiGB
+    chi_face_el = (
+        ((gradient_reference_length / gyrobohm_flux_reference_length) * qe)
+        / quasilinear_inputs.lref_over_lte) * quasilinear_inputs.chiGB
+
+    def DV_effective_approach():
+        Deff = -pfe_SI / (core_profiles.n_e.face_grad() *
+                          geo_g1_over_vpr2_face() * geo_rho_b() + g.eps)
+        Veff = pfe_SI / (core_profiles.n_e.face_value() *
+                         geo_g0_over_vpr_face() * geo_rho_b())
+        Deff_mask = (((pfe >= 0) & (quasilinear_inputs.lref_over_lne >= 0))
+                     | ((pfe < 0) &
+                        (quasilinear_inputs.lref_over_lne < 0))) & (abs(
+                            quasilinear_inputs.lref_over_lne) >= g.An_min)
+        Veff_mask = jnp.invert(Deff_mask)
+        d_face_el = jnp.where(Veff_mask, 0.0, Deff)
+        v_face_el = jnp.where(Deff_mask, 0.0, Veff)
+        return d_face_el, v_face_el
+
+    def Dscaled_approach():
+        d_face_el = chi_face_el
+        v_face_el = (pfe_SI / core_profiles.n_e.face_value() -
+                     quasilinear_inputs.lref_over_lne * d_face_el /
+                     gradient_reference_length * geo_g1_over_vpr2_face() *
+                     geo_rho_b()**2) / (geo_g0_over_vpr_face() *
+                                        geo_rho_b())
+        return d_face_el, v_face_el
+
+    d_face_el, v_face_el = jax.lax.cond(
+        True,
+        DV_effective_approach,
+        Dscaled_approach,
+    )
+    return TurbulentTransport(
+        chi_face_ion=chi_face_ion,
+        chi_face_el=chi_face_el,
+        d_face_el=d_face_el,
+        v_face_el=v_face_el,
+    )
+
+def prepare_qualikiz_inputs(geo, core_profiles):
+    rmid = (g.geo_R_out - g.geo_R_in) * 0.5
+    rmid_face = (g.geo_R_out_face - g.geo_R_in_face) * 0.5
+    chiGB = calculate_chiGB(
+        reference_temperature=core_profiles.T_i.face_value(),
+        reference_magnetic_field=g.geo_B_0,
+        reference_mass=core_profiles.A_i,
+        reference_length=g.geo_a_minor,
+    )
+    normalized_logarithmic_gradients = NormalizedLogarithmicGradients.from_profiles(
+        core_profiles=core_profiles,
+        radial_coordinate=rmid,
+        reference_length=g.R_major,
+    )
+    q = core_profiles.q_face
+    iota_scaled = jnp.abs(
+        (core_profiles.psi.face_grad()[1:] / geo_rho_face_norm()[1:]))
+    iota_scaled0 = jnp.expand_dims(jnp.abs(
+        core_profiles.psi.face_grad()[1] / geo_drho_norm()),
+                                   axis=0)
+    iota_scaled = jnp.concatenate([iota_scaled0, iota_scaled])
+    rmid_face = (g.geo_R_out_face - g.geo_R_in_face) * 0.5
+    smag = -rmid_face * jnp.gradient(iota_scaled, rmid_face) / iota_scaled
+    epsilon_lcfs = rmid_face[-1] / g.R_major
+    x = rmid_face / rmid_face[-1]
+    x = jnp.where(jnp.abs(x) < g.eps, g.eps, x)
+    Ti_Te = core_profiles.T_i.face_value() / core_profiles.T_e.face_value()
+    log_lambda_ei_face = calculate_log_lambda_ei(
+        core_profiles.T_e.face_value(),
+        core_profiles.n_e.face_value(),
+    )
+    log_tau_e_Z1 = _calculate_log_tau_e_Z1(
+        core_profiles.T_e.face_value(),
+        core_profiles.n_e.face_value(),
+        log_lambda_ei_face,
+    )
+    nu_e = (1 / jnp.exp(log_tau_e_Z1) * core_profiles.Z_eff_face *
+            g.collisionality_multiplier)
+    epsilon = geo_rho_face() / g.R_major
+    epsilon = jnp.clip(epsilon, g.eps)
+    tau_bounce = (
+        core_profiles.q_face * g.R_major /
+        (epsilon**1.5 *
+         jnp.sqrt(core_profiles.T_e.face_value() * g.keV_to_J / g.m_e)))
+    tau_bounce = tau_bounce.at[0].set(tau_bounce[1])
+    nu_star = nu_e * tau_bounce
+    log_nu_star_face = jnp.log10(nu_star)
+    alpha = calculate_alpha(
+        core_profiles=core_profiles,
+        q=q,
+        reference_magnetic_field=g.geo_B_0,
+        normalized_logarithmic_gradients=normalized_logarithmic_gradients,
+    )
+    smag = jnp.where(
+        g.smag_alpha_correction,
+        smag - alpha / 2,
+        smag,
+    )
+    smag = jnp.where(
+        jnp.logical_and(
+            g.q_sawtooth_proxy,
+            q < 1,
+        ),
+        0.1,
+        smag,
+    )
+    q = jnp.where(
+        jnp.logical_and(
+            g.q_sawtooth_proxy,
+            q < 1,
+        ),
+        1,
+        q,
+    )
+    smag = jnp.where(
+        jnp.logical_and(
+            True,
+            smag - alpha < -0.2,
+        ),
+        alpha - 0.2,
+        smag,
+    )
+    normni = core_profiles.n_i.face_value() / core_profiles.n_e.face_value(
+    )
+    return QualikizInputs(
+        Z_eff_face=core_profiles.Z_eff_face,
+        lref_over_lti=normalized_logarithmic_gradients.lref_over_lti,
+        lref_over_lte=normalized_logarithmic_gradients.lref_over_lte,
+        lref_over_lne=normalized_logarithmic_gradients.lref_over_lne,
+        lref_over_lni0=normalized_logarithmic_gradients.lref_over_lni0,
+        lref_over_lni1=normalized_logarithmic_gradients.lref_over_lni1,
+        q=q,
+        smag=smag,
+        x=x,
+        Ti_Te=Ti_Te,
+        log_nu_star_face=log_nu_star_face,
+        normni=normni,
+        chiGB=chiGB,
+        Rmaj=g.R_major,
+        Rmin=g.geo_a_minor,
+        alpha=alpha,
+        epsilon_lcfs=epsilon_lcfs,
+    )
+
+def call_qlknn_implementation(
+    transport_runtime_params,
+    runtime_params,
+    geo,
+    core_profiles,
+    pedestal_model_output,
+):
+    runtime_config_inputs = QLKNNRuntimeConfigInputs.from_runtime_params_slice(
+        transport_runtime_params,
+        runtime_params,
+        pedestal_model_output,
+    )
+    # _combined inlined
+    qualikiz_inputs = prepare_qualikiz_inputs(
+        geo=geo,
+        core_profiles=core_profiles,
+    )
+    qualikiz_inputs = dataclasses.replace(
+        qualikiz_inputs,
+        x=qualikiz_inputs.x * qualikiz_inputs.epsilon_lcfs / _EPSILON_NN,
+    )
+    feature_scan = get_model_inputs_from_qualikiz_inputs(qualikiz_inputs)
+    feature_scan = jax.lax.cond(
+        g.clip_inputs,
+        lambda: clip_inputs(
+            feature_scan,
+            g.clip_margin,
+            g.model.inputs_and_ranges,
+        ),
+        lambda: feature_scan,
+    )
+    model_output = predict(feature_scan)
+    qi_itg_squeezed = model_output["qi_itg"].squeeze()
+    qi = qi_itg_squeezed + model_output["qi_tem"].squeeze()
+    qe = (model_output["qe_itg"].squeeze() * g.ITG_flux_ratio_correction +
+          model_output["qe_tem"].squeeze() +
+          model_output["qe_etg"].squeeze() * g.ETG_correction_factor)
+    pfe = model_output["pfe_itg"].squeeze(
+    ) + model_output["pfe_tem"].squeeze()
+    return make_core_transport(
+        qi=qi,
+        qe=qe,
+        pfe=pfe,
+        quasilinear_inputs=qualikiz_inputs,
+        geo=geo,
+        core_profiles=core_profiles,
+        gradient_reference_length=g.R_major,
+        gyrobohm_flux_reference_length=g.geo_a_minor,
+    )
+
+def calculate_transport_coeffs(runtime_params, geo, core_profiles,
                  pedestal_model_output):
-        transport_runtime_params = runtime_params.transport
-        transport_coeffs = self._call_implementation(
-            transport_runtime_params,
-            runtime_params,
-            geo,
-            core_profiles,
-            pedestal_model_output,
-        )
-        transport_coeffs = self._apply_domain_restriction(
-            transport_runtime_params,
-            geo,
-            transport_coeffs,
-            pedestal_model_output,
-        )
-        transport_coeffs = self._apply_clipping(
-            transport_runtime_params,
-            transport_coeffs,
-        )
-        transport_coeffs = self._apply_transport_patches(
-            transport_runtime_params,
-            runtime_params,
-            geo,
-            transport_coeffs,
-        )
-        return self._smooth_coeffs(
-            transport_runtime_params,
-            runtime_params,
-            geo,
-            transport_coeffs,
-            pedestal_model_output,
-        )
-
-    def _apply_domain_restriction(self, transport_runtime_params, geo,
-                                  transport_coeffs, pedestal_model_output):
-        active_mask = (
-            (geo_rho_face_norm() > transport_runtime_params.rho_min)
-            & (geo_rho_face_norm() <= transport_runtime_params.rho_max)
-            & (geo_rho_face_norm() <= g.rho_norm_ped_top))
-        active_mask = (jnp.asarray(active_mask).at[0].set(
-            transport_runtime_params.rho_min == 0))
-        chi_face_ion = jnp.where(active_mask, transport_coeffs.chi_face_ion,
-                                 0.0)
-        chi_face_el = jnp.where(active_mask, transport_coeffs.chi_face_el, 0.0)
-        d_face_el = jnp.where(active_mask, transport_coeffs.d_face_el, 0.0)
-        v_face_el = jnp.where(active_mask, transport_coeffs.v_face_el, 0.0)
-        return dataclasses.replace(
-            transport_coeffs,
-            chi_face_ion=chi_face_ion,
-            chi_face_el=chi_face_el,
-            d_face_el=d_face_el,
-            v_face_el=v_face_el,
-        )
-
-    def _apply_clipping(self, transport_runtime_params, transport_coeffs):
-        chi_face_ion = jnp.clip(
-            transport_coeffs.chi_face_ion,
-            g.chi_min,
-            g.chi_max,
-        )
-        chi_face_el = jnp.clip(
-            transport_coeffs.chi_face_el,
-            g.chi_min,
-            g.chi_max,
-        )
-        d_face_el = jnp.clip(
-            transport_coeffs.d_face_el,
-            g.D_e_min,
-            g.D_e_max,
-        )
-        v_face_el = jnp.clip(
-            transport_coeffs.v_face_el,
-            g.V_e_min,
-            g.V_e_max,
-        )
-        return dataclasses.replace(
-            transport_coeffs,
-            chi_face_ion=chi_face_ion,
-            chi_face_el=chi_face_el,
-            d_face_el=d_face_el,
-            v_face_el=v_face_el,
-        )
-
-    def _apply_transport_patches(self, transport_runtime_params,
-                                 runtime_params, geo, transport_coeffs):
-        chi_face_ion = jnp.where(
-            jnp.logical_and(
-                True,
-                geo_rho_face_norm() < g.rho_inner + g.eps,
-            ),
-            g.chi_i_inner,
-            transport_coeffs.chi_face_ion,
-        )
-        chi_face_el = jnp.where(
-            jnp.logical_and(
-                True,
-                geo_rho_face_norm() < g.rho_inner + g.eps,
-            ),
-            g.chi_e_inner,
-            transport_coeffs.chi_face_el,
-        )
-        d_face_el = jnp.where(
-            jnp.logical_and(
-                True,
-                geo_rho_face_norm() < g.rho_inner + g.eps,
-            ),
-            g.D_e_inner,
-            transport_coeffs.d_face_el,
-        )
-        v_face_el = jnp.where(
-            jnp.logical_and(
-                True,
-                geo_rho_face_norm() < g.rho_inner + g.eps,
-            ),
-            g.V_e_inner,
-            transport_coeffs.v_face_el,
-        )
-        chi_face_ion = jnp.where(
-            jnp.logical_and(
-                jnp.logical_and(
-                    True,
-                    jnp.logical_not(True),
-                ),
-                geo_rho_face_norm() > g.rho_outer - g.eps,
-            ),
-            g.chi_i_outer,
-            chi_face_ion,
-        )
-        chi_face_el = jnp.where(
-            jnp.logical_and(
-                jnp.logical_and(
-                    True,
-                    jnp.logical_not(True),
-                ),
-                geo_rho_face_norm() > g.rho_outer - g.eps,
-            ),
-            g.chi_e_outer,
-            chi_face_el,
-        )
-        d_face_el = jnp.where(
-            jnp.logical_and(
-                jnp.logical_and(
-                    True,
-                    jnp.logical_not(True),
-                ),
-                geo_rho_face_norm() > g.rho_outer - g.eps,
-            ),
-            g.D_e_outer,
-            d_face_el,
-        )
-        v_face_el = jnp.where(
-            jnp.logical_and(
-                jnp.logical_and(
-                    True,
-                    jnp.logical_not(True),
-                ),
-                geo_rho_face_norm() > g.rho_outer - g.eps,
-            ),
-            g.V_e_outer,
-            v_face_el,
-        )
-        return dataclasses.replace(
-            transport_coeffs,
-            chi_face_ion=chi_face_ion,
-            chi_face_el=chi_face_el,
-            d_face_el=d_face_el,
-            v_face_el=v_face_el,
-        )
-
-    def _smooth_coeffs(
-        self,
+    transport_runtime_params = runtime_params.transport
+    transport_coeffs = call_qlknn_implementation(
+        transport_runtime_params,
+        runtime_params,
+        geo,
+        core_profiles,
+        pedestal_model_output,
+    )
+    transport_coeffs = apply_domain_restriction_transport(
+        transport_runtime_params,
+        geo,
+        transport_coeffs,
+        pedestal_model_output,
+    )
+    transport_coeffs = apply_clipping_transport(
+        transport_runtime_params,
+        transport_coeffs,
+    )
+    transport_coeffs = apply_transport_patches(
+        transport_runtime_params,
+        runtime_params,
+        geo,
+        transport_coeffs,
+    )
+    return smooth_coeffs_transport(
         transport_runtime_params,
         runtime_params,
         geo,
         transport_coeffs,
         pedestal_model_output,
-    ):
-        smoothing_matrix = _build_smoothing_matrix(
-            transport_runtime_params,
-            runtime_params,
-            geo,
-            pedestal_model_output,
-        )
+    )
 
-        def smooth_single_coeff(coeff):
-            return jax.lax.cond(
-                jnp.all(coeff == 0.0),
-                lambda: coeff,
-                lambda: jnp.dot(smoothing_matrix, coeff),
-            )
-
-        return jax.tree_util.tree_map(smooth_single_coeff, transport_coeffs)
-
-    def _make_core_transport(
-        self,
-        qi,
-        qe,
-        pfe,
-        quasilinear_inputs,
-        geo,
-        core_profiles,
-        gradient_reference_length,
-        gyrobohm_flux_reference_length,
-    ):
-        pfe_SI = (pfe * core_profiles.n_e.face_value() *
-                  quasilinear_inputs.chiGB / gyrobohm_flux_reference_length)
-        chi_face_ion = (
-            ((gradient_reference_length / gyrobohm_flux_reference_length) * qi)
-            / quasilinear_inputs.lref_over_lti) * quasilinear_inputs.chiGB
-        chi_face_el = (
-            ((gradient_reference_length / gyrobohm_flux_reference_length) * qe)
-            / quasilinear_inputs.lref_over_lte) * quasilinear_inputs.chiGB
-
-        def DV_effective_approach():
-            Deff = -pfe_SI / (core_profiles.n_e.face_grad() *
-                              geo_g1_over_vpr2_face() * geo_rho_b() + g.eps)
-            Veff = pfe_SI / (core_profiles.n_e.face_value() *
-                             geo_g0_over_vpr_face() * geo_rho_b())
-            Deff_mask = (((pfe >= 0) & (quasilinear_inputs.lref_over_lne >= 0))
-                         | ((pfe < 0) &
-                            (quasilinear_inputs.lref_over_lne < 0))) & (abs(
-                                quasilinear_inputs.lref_over_lne) >= g.An_min)
-            Veff_mask = jnp.invert(Deff_mask)
-            d_face_el = jnp.where(Veff_mask, 0.0, Deff)
-            v_face_el = jnp.where(Deff_mask, 0.0, Veff)
-            return d_face_el, v_face_el
-
-        def Dscaled_approach():
-            d_face_el = chi_face_el
-            v_face_el = (pfe_SI / core_profiles.n_e.face_value() -
-                         quasilinear_inputs.lref_over_lne * d_face_el /
-                         gradient_reference_length * geo_g1_over_vpr2_face() *
-                         geo_rho_b()**2) / (geo_g0_over_vpr_face() *
-                                            geo_rho_b())
-            return d_face_el, v_face_el
-
-        d_face_el, v_face_el = jax.lax.cond(
-            True,
-            DV_effective_approach,
-            Dscaled_approach,
-        )
-        return TurbulentTransport(
-            chi_face_ion=chi_face_ion,
-            chi_face_el=chi_face_el,
-            d_face_el=d_face_el,
-            v_face_el=v_face_el,
-        )
-
-    def _prepare_qualikiz_inputs(self, geo, core_profiles):
-        rmid = (g.geo_R_out - g.geo_R_in) * 0.5
-        rmid_face = (g.geo_R_out_face - g.geo_R_in_face) * 0.5
-        chiGB = calculate_chiGB(
-            reference_temperature=core_profiles.T_i.face_value(),
-            reference_magnetic_field=g.geo_B_0,
-            reference_mass=core_profiles.A_i,
-            reference_length=g.geo_a_minor,
-        )
-        normalized_logarithmic_gradients = NormalizedLogarithmicGradients.from_profiles(
-            core_profiles=core_profiles,
-            radial_coordinate=rmid,
-            reference_length=g.R_major,
-        )
-        q = core_profiles.q_face
-        iota_scaled = jnp.abs(
-            (core_profiles.psi.face_grad()[1:] / geo_rho_face_norm()[1:]))
-        iota_scaled0 = jnp.expand_dims(jnp.abs(
-            core_profiles.psi.face_grad()[1] / geo_drho_norm()),
-                                       axis=0)
-        iota_scaled = jnp.concatenate([iota_scaled0, iota_scaled])
-        rmid_face = (g.geo_R_out_face - g.geo_R_in_face) * 0.5
-        smag = -rmid_face * jnp.gradient(iota_scaled, rmid_face) / iota_scaled
-        epsilon_lcfs = rmid_face[-1] / g.R_major
-        x = rmid_face / rmid_face[-1]
-        x = jnp.where(jnp.abs(x) < g.eps, g.eps, x)
-        Ti_Te = core_profiles.T_i.face_value() / core_profiles.T_e.face_value()
-        log_lambda_ei_face = calculate_log_lambda_ei(
-            core_profiles.T_e.face_value(),
-            core_profiles.n_e.face_value(),
-        )
-        log_tau_e_Z1 = _calculate_log_tau_e_Z1(
-            core_profiles.T_e.face_value(),
-            core_profiles.n_e.face_value(),
-            log_lambda_ei_face,
-        )
-        nu_e = (1 / jnp.exp(log_tau_e_Z1) * core_profiles.Z_eff_face *
-                g.collisionality_multiplier)
-        epsilon = geo_rho_face() / g.R_major
-        epsilon = jnp.clip(epsilon, g.eps)
-        tau_bounce = (
-            core_profiles.q_face * g.R_major /
-            (epsilon**1.5 *
-             jnp.sqrt(core_profiles.T_e.face_value() * g.keV_to_J / g.m_e)))
-        tau_bounce = tau_bounce.at[0].set(tau_bounce[1])
-        nu_star = nu_e * tau_bounce
-        log_nu_star_face = jnp.log10(nu_star)
-        alpha = calculate_alpha(
-            core_profiles=core_profiles,
-            q=q,
-            reference_magnetic_field=g.geo_B_0,
-            normalized_logarithmic_gradients=normalized_logarithmic_gradients,
-        )
-        smag = jnp.where(
-            g.smag_alpha_correction,
-            smag - alpha / 2,
-            smag,
-        )
-        smag = jnp.where(
-            jnp.logical_and(
-                g.q_sawtooth_proxy,
-                q < 1,
-            ),
-            0.1,
-            smag,
-        )
-        q = jnp.where(
-            jnp.logical_and(
-                g.q_sawtooth_proxy,
-                q < 1,
-            ),
-            1,
-            q,
-        )
-        smag = jnp.where(
-            jnp.logical_and(
-                True,
-                smag - alpha < -0.2,
-            ),
-            alpha - 0.2,
-            smag,
-        )
-        normni = core_profiles.n_i.face_value() / core_profiles.n_e.face_value(
-        )
-        return QualikizInputs(
-            Z_eff_face=core_profiles.Z_eff_face,
-            lref_over_lti=normalized_logarithmic_gradients.lref_over_lti,
-            lref_over_lte=normalized_logarithmic_gradients.lref_over_lte,
-            lref_over_lne=normalized_logarithmic_gradients.lref_over_lne,
-            lref_over_lni0=normalized_logarithmic_gradients.lref_over_lni0,
-            lref_over_lni1=normalized_logarithmic_gradients.lref_over_lni1,
-            q=q,
-            smag=smag,
-            x=x,
-            Ti_Te=Ti_Te,
-            log_nu_star_face=log_nu_star_face,
-            normni=normni,
-            chiGB=chiGB,
-            Rmaj=g.R_major,
-            Rmin=g.geo_a_minor,
-            alpha=alpha,
-            epsilon_lcfs=epsilon_lcfs,
-        )
-
-    def _call_implementation(
-        self,
-        transport_runtime_params,
-        runtime_params,
-        geo,
-        core_profiles,
-        pedestal_model_output,
-    ):
-        runtime_config_inputs = QLKNNRuntimeConfigInputs.from_runtime_params_slice(
-            transport_runtime_params,
-            runtime_params,
-            pedestal_model_output,
-        )
-        return self._combined(runtime_config_inputs, geo, core_profiles)
-
-    def _combined(self, runtime_config_inputs, geo, core_profiles):
-        qualikiz_inputs = self._prepare_qualikiz_inputs(
-            geo=geo,
-            core_profiles=core_profiles,
-        )
-        qualikiz_inputs = dataclasses.replace(
-            qualikiz_inputs,
-            x=qualikiz_inputs.x * qualikiz_inputs.epsilon_lcfs / _EPSILON_NN,
-        )
-        feature_scan = get_model_inputs_from_qualikiz_inputs(qualikiz_inputs)
-        feature_scan = jax.lax.cond(
-            g.clip_inputs,
-            lambda: clip_inputs(
-                feature_scan,
-                g.clip_margin,
-                g.model.inputs_and_ranges,
-            ),
-            lambda: feature_scan,
-        )
-        model_output = predict(feature_scan)
-        qi_itg_squeezed = model_output["qi_itg"].squeeze()
-        qi = qi_itg_squeezed + model_output["qi_tem"].squeeze()
-        qe = (model_output["qe_itg"].squeeze() * g.ITG_flux_ratio_correction +
-              model_output["qe_tem"].squeeze() +
-              model_output["qe_etg"].squeeze() * g.ETG_correction_factor)
-        pfe = model_output["pfe_itg"].squeeze(
-        ) + model_output["pfe_tem"].squeeze()
-        return self._make_core_transport(
-            qi=qi,
-            qe=qe,
-            pfe=pfe,
-            quasilinear_inputs=qualikiz_inputs,
-            geo=geo,
-            core_profiles=core_profiles,
-            gradient_reference_length=g.R_major,
-            gyrobohm_flux_reference_length=g.geo_a_minor,
-        )
 
 
 class QLKNNTransportModel(BaseModelFrozen):
@@ -2658,7 +2646,7 @@ class QLKNNTransportModel(BaseModelFrozen):
 def calculate_total_transport_coeffs(runtime_params, geo, core_profiles):
     pedestal_model_output = g.pedestal_model(runtime_params, geo,
                                              core_profiles)
-    turbulent_transport = g.transport_model(
+    turbulent_transport = calculate_transport_coeffs(
         runtime_params=runtime_params,
         geo=geo,
         core_profiles=core_profiles,
@@ -3087,7 +3075,7 @@ def _calc_coeffs_full(runtime_params, geo, core_profiles,
     tic_psi = jnp.ones_like(toc_psi)
     toc_dens_el = jnp.ones_like(g.geo_vpr)
     tic_dens_el = g.geo_vpr
-    turbulent_transport = g.transport_model(runtime_params, geo, core_profiles,
+    turbulent_transport = calculate_transport_coeffs(runtime_params, geo, core_profiles,
                                             pedestal_model_output)
     chi_face_ion_total = turbulent_transport.chi_face_ion
     chi_face_el_total = turbulent_transport.chi_face_el
@@ -3683,7 +3671,6 @@ g.smag_alpha_correction = True
 g.q_sawtooth_proxy = True
 g.smoothing_width = 0.1
 g.transport_config = QLKNNTransportModel()
-g.transport_model = QLKNNTransportModel0()
 g.bootstrap_current = SauterModelConfig().build_model()
 runtime_params_for_init, geo_for_init = get_consistent_runtime_params_and_geometry(
     t=g.t_initial, )
