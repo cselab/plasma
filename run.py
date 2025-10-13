@@ -3517,13 +3517,12 @@ def get_consistent_runtime_params_and_geometry(*, t):
     runtime_params = g.runtime_params_provider(t=t)
     param_Ip = runtime_params.profile_conditions.Ip
     Ip_scale_factor = param_Ip / g.geo_Ip_profile_face[-1]
-    # Note: Since we inlined StandardGeometry, we need to update the individual variables
     g.geo_Ip_profile_face = g.geo_Ip_profile_face * Ip_scale_factor
     g.geo_psi_from_Ip = g.geo_psi_from_Ip * Ip_scale_factor
     g.geo_psi_from_Ip_face = g.geo_psi_from_Ip_face * Ip_scale_factor
     g.geo_j_total = g.geo_j_total * Ip_scale_factor
     g.geo_j_total_face = g.geo_j_total_face * Ip_scale_factor
-    return runtime_params, None  # No geo object to return anymore
+    return runtime_params, None
 
 
 
@@ -3551,7 +3550,7 @@ def _get_geo_and_runtime_params_at_t_plus_dt_and_phibdot(t, dt, geo_t):
     Phi_b_t_plus_dt = geo_Phi_b()
     Phibdot = (Phi_b_t_plus_dt - Phi_b_t) / dt
     g.geo_Phi_b_dot = Phibdot
-    return (runtime_params_t_plus_dt, None, None)  # No geo objects to return
+    return (runtime_params_t_plus_dt, None, None)
 
 
 def body_fun(inputs):
@@ -3560,7 +3559,7 @@ def body_fun(inputs):
         _get_geo_and_runtime_params_at_t_plus_dt_and_phibdot(
             current_state.t,
             dt,
-            None,  # No geo object to pass
+            None,
         ))
     core_profiles_t = current_state.core_profiles
     profile_conditions_t_plus_dt = runtime_params_t_plus_dt.profile_conditions
