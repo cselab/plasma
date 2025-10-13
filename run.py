@@ -2828,7 +2828,6 @@ def cell_variable_tuple_to_vec(x_tuple):
 
 
 def coeffs_callback(runtime_params,
-                    geo,
                     core_profiles,
                     x,
                     explicit_source_profiles,
@@ -2837,7 +2836,7 @@ def coeffs_callback(runtime_params,
                                                      core_profiles)
     return calc_coeffs(
         runtime_params=runtime_params,
-        geo=geo,
+        geo=None,
         core_profiles=core_profiles,
         explicit_source_profiles=explicit_source_profiles,
         explicit_call=explicit_call,
@@ -3870,7 +3869,6 @@ while current_state.t < (g.t_final - g.tolerance):
         x_new_guess = core_profiles_to_solver_x_tuple(core_profiles_t_plus_dt)
         coeffs_exp = coeffs_callback(
             runtime_params_t,
-            None,
             current_state.core_profiles,
             x_old,
             explicit_source_profiles=explicit_source_profiles,
@@ -3881,7 +3879,6 @@ while current_state.t < (g.t_final - g.tolerance):
         def solver_loop_body(i, x_new_guess):
             coeffs_new = coeffs_callback(
                 runtime_params_t_plus_dt,
-                None,
                 core_profiles_t_plus_dt,
                 x_new_guess,
                 explicit_source_profiles=explicit_source_profiles,
