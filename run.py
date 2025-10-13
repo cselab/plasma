@@ -1494,21 +1494,15 @@ def build_source_profiles0(runtime_params,
     return profiles
 
 
-@functools.partial(
-    jax.jit,
-    static_argnames=[
-        "explicit",
-    ],
-)
+@jax.jit
 def build_source_profiles1(runtime_params,
-                           geo,
                            core_profiles,
-                           explicit,
                            explicit_source_profiles=None,
                            conductivity=None):
+    # Simplified: geo=None and explicit=False are hardcoded (always the same)
     qei = g.source_models.qei_source.get_qei(
         runtime_params=runtime_params,
-        geo=geo,
+        geo=None,
         core_profiles=core_profiles,
     )
     result = _calculate_bootstrap_current(
@@ -1520,7 +1514,7 @@ def build_source_profiles1(runtime_params,
         T_i=core_profiles.T_i,
         psi=core_profiles.psi,
         q_face=core_profiles.q_face,
-        geo=geo,
+        geo=None,
     )
     bootstrap_current = BootstrapCurrent(
         j_bootstrap=result.j_bootstrap,
@@ -1537,9 +1531,9 @@ def build_source_profiles1(runtime_params,
     build_standard_source_profiles(
         calculated_source_profiles=profiles,
         runtime_params=runtime_params,
-        geo=geo,
+        geo=None,
         core_profiles=core_profiles,
-        explicit=explicit,
+        explicit=False,
         conductivity=conductivity,
     )
     return profiles
@@ -2490,9 +2484,7 @@ def _calc_coeffs_full(runtime_params, geo, core_profiles,
     conductivity = calculate_conductivity(geo, core_profiles)
     merged_source_profiles = build_source_profiles1(
         runtime_params=runtime_params,
-        geo=geo,
         core_profiles=core_profiles,
-        explicit=False,
         explicit_source_profiles=explicit_source_profiles,
         conductivity=conductivity,
     )
@@ -3174,9 +3166,7 @@ explicit_source_profiles = build_source_profiles0(
 )
 initial_core_sources = build_source_profiles1(
     runtime_params=runtime_params,
-    geo=geo,
     core_profiles=core_profiles,
-    explicit=False,
     explicit_source_profiles=explicit_source_profiles,
     conductivity=conductivity,
 )
@@ -3530,9 +3520,7 @@ while current_state.t < (g.t_final - g.tolerance):
     )
     final_source_profiles = build_source_profiles1(
         runtime_params=result[3],
-        geo=result[4],
         core_profiles=intermediate_core_profiles,
-        explicit=False,
         explicit_source_profiles=explicit_source_profiles,
         conductivity=conductivity,
     )
