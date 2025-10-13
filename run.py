@@ -2673,7 +2673,6 @@ class QLKNNTransportModel0:
         qe,
         pfe,
         quasilinear_inputs,
-        transport,
         geo,
         core_profiles,
         gradient_reference_length,
@@ -2722,7 +2721,7 @@ class QLKNNTransportModel0:
             v_face_el=v_face_el,
         )
 
-    def _prepare_qualikiz_inputs(self, transport, geo, core_profiles):
+    def _prepare_qualikiz_inputs(self, geo, core_profiles):
         rmid = (g.geo_R_out - g.geo_R_in) * 0.5
         rmid_face = (g.geo_R_out_face - g.geo_R_in_face) * 0.5
         chiGB = calculate_chiGB(
@@ -2759,7 +2758,7 @@ class QLKNNTransportModel0:
             log_lambda_ei_face,
         )
         nu_e = (1 / jnp.exp(log_tau_e_Z1) * core_profiles.Z_eff_face *
-                transport.collisionality_multiplier)
+                g.collisionality_multiplier)
         epsilon = geo_rho_face() / g.R_major
         epsilon = jnp.clip(epsilon, g.eps)
         tau_bounce = (
@@ -2776,13 +2775,13 @@ class QLKNNTransportModel0:
             normalized_logarithmic_gradients=normalized_logarithmic_gradients,
         )
         smag = jnp.where(
-            transport.smag_alpha_correction,
+            g.smag_alpha_correction,
             smag - alpha / 2,
             smag,
         )
         smag = jnp.where(
             jnp.logical_and(
-                transport.q_sawtooth_proxy,
+                g.q_sawtooth_proxy,
                 q < 1,
             ),
             0.1,
@@ -2790,7 +2789,7 @@ class QLKNNTransportModel0:
         )
         q = jnp.where(
             jnp.logical_and(
-                transport.q_sawtooth_proxy,
+                g.q_sawtooth_proxy,
                 q < 1,
             ),
             1,
@@ -2843,7 +2842,6 @@ class QLKNNTransportModel0:
 
     def _combined(self, runtime_config_inputs, geo, core_profiles):
         qualikiz_inputs = self._prepare_qualikiz_inputs(
-            transport=runtime_config_inputs.transport,
             geo=geo,
             core_profiles=core_profiles,
         )
@@ -2853,10 +2851,10 @@ class QLKNNTransportModel0:
         )
         feature_scan = get_model_inputs_from_qualikiz_inputs(qualikiz_inputs)
         feature_scan = jax.lax.cond(
-            runtime_config_inputs.transport.clip_inputs,
+            g.clip_inputs,
             lambda: clip_inputs(
                 feature_scan,
-                runtime_config_inputs.transport.clip_margin,
+                g.clip_margin,
                 g.model.inputs_and_ranges,
             ),
             lambda: feature_scan,
@@ -2867,7 +2865,7 @@ class QLKNNTransportModel0:
         qe = (model_output["qe_itg"].squeeze() * g.ITG_flux_ratio_correction +
               model_output["qe_tem"].squeeze() +
               model_output["qe_etg"].squeeze() *
-              runtime_config_inputs.transport.ETG_correction_factor)
+              g.ETG_correction_factor)
         pfe = model_output["pfe_itg"].squeeze(
         ) + model_output["pfe_tem"].squeeze()
         return self._make_core_transport(
@@ -2875,7 +2873,6 @@ class QLKNNTransportModel0:
             qe=qe,
             pfe=pfe,
             quasilinear_inputs=qualikiz_inputs,
-            transport=runtime_config_inputs.transport,
             geo=geo,
             core_profiles=core_profiles,
             gradient_reference_length=g.R_major,
@@ -4400,6 +4397,9 @@ g.rho_outer = 0.9
 g.chi_min = 0.05
 g.chi_max = 100
 g.D_e_min = 0.05
+g.D_e_max = 100.0
+g.V_e_min = -50.0
+g.V_e_max = 50.0
 g.An_min = 0.05
 file_path = os.path.join("geo", "ITER_hybrid_citrin_equil_cheasedata.mat2cols")
 with open(file_path, "r") as file:
@@ -4623,7 +4623,29 @@ def geo_g1_over_vpr2_face():
     return jnp.concatenate([jnp.expand_dims(first_element, axis=-1), bulk], axis=-1)
 g.pedestal_model = PedestalConfig().build_pedestal_model()
 g.source_models = g.sources.build_models()
-g.transport_config = QLKNNTransportModel()
+g.ETG_correction_factor = 1.0 / 3.0
+g.clip_inputs = False
+g.clip_margin = 0.95
+g.collisionality_multiplier = 1.0
+g.smag_alpha_correction = True
+g.q_sawtooth_proxy = True
+g.rho_min = 0.0
+g.rho_max = 1.0
+g.smoothing_width = 0.1
+g.transport_config = QLKNNTransportModel(
+    ETG_correction_factor=g.ETG_correction_factor,
+    clip_inputs=g.clip_inputs,
+    clip_margin=g.clip_margin,
+    collisionality_multiplier=g.collisionality_multiplier,
+    smag_alpha_correction=g.smag_alpha_correction,
+    q_sawtooth_proxy=g.q_sawtooth_proxy,
+    D_e_max=g.D_e_max,
+    V_e_min=g.V_e_min,
+    V_e_max=g.V_e_max,
+    smoothing_width=g.smoothing_width,
+    rho_min=g.rho_min,
+    rho_max=g.rho_max,
+)
 g.transport_model = QLKNNTransportModel0()
 g.bootstrap_current = SauterModelConfig().build_model()
 g.runtime_params_provider = RuntimeParamsProvider.from_config()
