@@ -2695,7 +2695,6 @@ def build_runtime_params_slice(t):
 @dataclasses.dataclass
 class ToraxSimState:
     t: Any
-    dt: Any
     core_profiles: Any
     core_transport: Any
     core_sources: Any
@@ -3200,7 +3199,6 @@ transport_coeffs = calculate_total_transport_coeffs(
 )
 current_state = ToraxSimState(
     t=np.array(g.t_initial),
-    dt=np.zeros(()),
     core_profiles=initial_core_profiles,
     core_sources=initial_core_sources,
     core_transport=transport_coeffs,
@@ -3578,7 +3576,6 @@ while current_state.t < (g.t_final - g.tolerance):
     )
     output_state = ToraxSimState(
         t=current_state.t + result[1],
-        dt=result[1],
         core_profiles=final_core_profiles,
         core_sources=final_source_profiles,
         core_transport=final_total_transport,
