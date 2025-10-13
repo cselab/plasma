@@ -3657,8 +3657,8 @@ current_state = ToraxSimState(
 state_history = [current_state]
 initial_runtime_params = build_runtime_params_slice(current_state.t)
 while current_state.t < (g.t_final - g.tolerance):
-    runtime_params_t, geo_t = get_consistent_runtime_params_and_geometry(
-        t=current_state.t)
+    geo_t = None
+    runtime_params_t = build_runtime_params_slice(current_state.t)
     explicit_source_profiles = build_source_profiles0(
         runtime_params=runtime_params_t,
         geo=geo_t,
