@@ -1700,10 +1700,7 @@ class RuntimeParamsP:
 
 
 class PlasmaComposition(BaseModelFrozen):
-    impurity: Annotated[
-        ImpurityFractions,
-        pydantic.Field(discriminator="impurity_mode"),
-    ]
+    impurity: ImpurityFractions
     main_ion: IonMapping
     Z_eff: TimeVaryingArray
 
