@@ -127,27 +127,6 @@ class TimeVaryingArray(BaseModelFrozen):
     value: ValueType
     grid: Any = None
 
-    def tree_flatten(self):
-        children = (
-            self.value,
-            self._get_cached_interpolated_param_cell,
-            self._get_cached_interpolated_param_face,
-            self._get_cached_interpolated_param_face_right,
-        )
-        aux_data = (self.grid, )
-        return children, aux_data
-
-    @classmethod
-    def tree_unflatten(cls, aux_data, children):
-        obj = cls.model_construct(
-            value=children[0],
-            grid=aux_data[0],
-        )
-        obj._get_cached_interpolated_param_cell = children[1]
-        obj._get_cached_interpolated_param_face = children[2]
-        obj._get_cached_interpolated_param_face_right = children[3]
-        return obj
-
     def get_value(self, t, grid_type="cell"):
         match grid_type:
             case "cell":
