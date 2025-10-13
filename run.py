@@ -3095,11 +3095,12 @@ def build_runtime_params_slice(t):
 
 def get_consistent_runtime_params_and_geometry(*, t):
     runtime_params = build_runtime_params_slice(t)
+    # Compute Ip scale factor from time-varying Ip parameter
     param_Ip = runtime_params.profile_conditions.Ip
-    Ip_scale_factor = param_Ip / g.geo_Ip_profile_face[-1]
-    g.geo_Ip_profile_face = g.geo_Ip_profile_face * Ip_scale_factor
-    g.geo_psi_from_Ip = g.geo_psi_from_Ip * Ip_scale_factor
-    g.geo_psi_from_Ip_face = g.geo_psi_from_Ip_face * Ip_scale_factor
+    Ip_scale_factor = param_Ip / g.geo_Ip_profile_face_base[-1]
+    # Store scale factor in g.* for use in other parts of the code
+    # This is the ONLY time-varying value we store in g.*
+    g.Ip_scale_factor = Ip_scale_factor
     return runtime_params, None
 
 
@@ -3423,10 +3424,10 @@ g.geo_R_in = Rin
 g.geo_R_in_face = Rin_face
 g.geo_R_out = Rout
 g.geo_R_out_face = Rout_face
-g.geo_Ip_profile_face = Ip_profile_face
+g.geo_Ip_profile_face_base = Ip_profile_face  # Base (unscaled) Ip profile
 g.geo_psi = psi
-g.geo_psi_from_Ip = psi_from_Ip
-g.geo_psi_from_Ip_face = psi_from_Ip_face
+g.geo_psi_from_Ip_base = psi_from_Ip  # Base (unscaled) psi from Ip
+g.geo_psi_from_Ip_face_base = psi_from_Ip_face  # Base (unscaled) psi face from Ip
 g.geo_delta_upper_face = delta_upper_face
 g.geo_delta_lower_face = delta_lower_face
 g.geo_spr_hires = spr_hires
@@ -3556,14 +3557,17 @@ source_profiles = SourceProfiles(
 dpsi_drhonorm_edge = calculate_psi_grad_constraint_from_Ip(
     runtime_params.profile_conditions.Ip, )
 assert not runtime_params.profile_conditions.use_v_loop_lcfs_boundary_condition
+# Compute scaled psi values using the Ip scale factor
+geo_psi_from_Ip_scaled = g.geo_psi_from_Ip_base * g.Ip_scale_factor
+geo_psi_from_Ip_face_scaled = g.geo_psi_from_Ip_face_base * g.Ip_scale_factor
 psi = CellVariable(
-    value=g.geo_psi_from_Ip,
+    value=geo_psi_from_Ip_scaled,
     right_face_grad_constraint=(
         None
         if runtime_params.profile_conditions.use_v_loop_lcfs_boundary_condition
         else dpsi_drhonorm_edge),
     right_face_constraint=(
-        g.geo_psi_from_Ip_face[-1]
+        geo_psi_from_Ip_face_scaled[-1]
         if runtime_params.profile_conditions.use_v_loop_lcfs_boundary_condition
         else None),
     dr=geo_drho_norm(),
