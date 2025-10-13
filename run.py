@@ -3127,8 +3127,6 @@ MIN_DELTA: Final[float] = 1e-7
 
 
 @jax.jit
-
-
 def next_dt(t, runtime_params, geo, core_transport):
     chi_max = core_transport.chi_max(geo)
     basic_dt = (3.0 / 4.0) * (geo_drho_norm()**2) / chi_max
