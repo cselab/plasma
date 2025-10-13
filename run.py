@@ -1586,21 +1586,14 @@ def build_standard_source_profiles(*,
             calculate_source(source_name, source)
 
 
-@jax.tree_util.register_dataclass
-@dataclasses.dataclass(frozen=True)
-class PedestalModelOutput:
-    rho_norm_ped_top_idx: Any
-
-
 class SetTemperatureDensityPedestalModel:
 
     def __call__(self, runtime_params, geo, core_profiles):
         return self._call_implementation(runtime_params, geo, core_profiles)
 
     def _call_implementation(self, runtime_params, geo, core_profiles):
-        return PedestalModelOutput(
-            rho_norm_ped_top_idx=jnp.abs(g.cell_centers -
-                                         g.rho_norm_ped_top).argmin(), )
+        # Return rho_norm_ped_top_idx directly (inlined PedestalModelOutput)
+        return jnp.abs(g.cell_centers - g.rho_norm_ped_top).argmin()
 
 
 class PedestalConfig(BaseModelFrozen):
@@ -1914,7 +1907,7 @@ _EPSILON_NN: Final[float] = 1 / 3
 
 
 def calculate_transport_coeffs(runtime_params, geo, core_profiles,
-                               pedestal_model_output):
+                               rho_norm_ped_top_idx):
     transport_runtime_params = runtime_params.transport
     # Inlined call_qlknn_implementation and prepare_qualikiz_inputs
     rmid = (g.geo_R_out - g.geo_R_in) * 0.5
@@ -2200,13 +2193,13 @@ class QLKNNTransportModel(BaseModelFrozen):
 
 @jax.jit
 def calculate_total_transport_coeffs(runtime_params, geo, core_profiles):
-    pedestal_model_output = g.pedestal_model(runtime_params, geo,
+    rho_norm_ped_top_idx = g.pedestal_model(runtime_params, geo,
                                              core_profiles)
     turbulent_transport = calculate_transport_coeffs(
         runtime_params=runtime_params,
         geo=geo,
         core_profiles=core_profiles,
-        pedestal_model_output=pedestal_model_output,
+        rho_norm_ped_top_idx=rho_norm_ped_top_idx,
     )
     return CoreTransport(**dataclasses.asdict(turbulent_transport))
 
@@ -2489,11 +2482,11 @@ def coeffs_callback(runtime_params,
 @jax.jit
 def _calc_coeffs_full(runtime_params, geo, core_profiles,
                       explicit_source_profiles):
-    pedestal_model_output = g.pedestal_model(runtime_params, geo,
+    rho_norm_ped_top_idx = g.pedestal_model(runtime_params, geo,
                                              core_profiles)
     mask = (jnp.zeros_like(
         g.geo_rho,
-        dtype=bool).at[pedestal_model_output.rho_norm_ped_top_idx].set(True))
+        dtype=bool).at[rho_norm_ped_top_idx].set(True))
     conductivity = calculate_conductivity(geo, core_profiles)
     merged_source_profiles = build_source_profiles1(
         runtime_params=runtime_params,
@@ -2517,7 +2510,7 @@ def _calc_coeffs_full(runtime_params, geo, core_profiles,
     tic_dens_el = g.geo_vpr
     turbulent_transport = calculate_transport_coeffs(runtime_params, geo,
                                                      core_profiles,
-                                                     pedestal_model_output)
+                                                     rho_norm_ped_top_idx)
     chi_face_ion_total = turbulent_transport.chi_face_ion
     chi_face_el_total = turbulent_transport.chi_face_el
     d_face_el_total = turbulent_transport.d_face_el
