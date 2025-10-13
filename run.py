@@ -833,9 +833,9 @@ def _calculate_conductivity0(*, Z_eff_face, n_e, T_e, q_face, geo):
 def calculate_conductivity(geometry, core_profiles):
     result = _calculate_conductivity0(
         Z_eff_face=core_profiles.Z_eff_face,
-        n_e=core_profiles.n_e,
-        T_e=core_profiles.T_e,
-        q_face=core_profiles.q_face,
+                                          n_e=core_profiles.n_e,
+                                          T_e=core_profiles.T_e,
+                                          q_face=core_profiles.q_face,
         geo=geometry,
     )
     return Conductivity(sigma=result.sigma, sigma_face=result.sigma_face)
@@ -3482,39 +3482,22 @@ def next_dt(t, runtime_params, geo, core_transport):
     return dt
 
 
-@jax.tree_util.register_dataclass
-@dataclasses.dataclass(frozen=True)
-class RuntimeParamsProvider:
-    sources: Any
-    profile_conditions: Any
-    plasma_composition: Any
-    transport_model: Any
-
-    @classmethod
-    def from_config(cls):
-        return cls(
-            sources=g.sources,
-            profile_conditions=g.profile_conditions,
-            plasma_composition=g.plasma_composition,
-            transport_model=g.transport_config,
-        )
-
-    @jax.jit
-    def __call__(self, t):
-        return RuntimeParamsSlice(
-            transport=self.transport_model.build_runtime_params(t),
-            sources={
-                source_name: source_config.build_runtime_params(t)
-                for source_name, source_config in dict(self.sources).items()
-                if source_config is not None
-            },
-            plasma_composition=self.plasma_composition.build_runtime_params(t),
-            profile_conditions=self.profile_conditions.build_runtime_params(t),
-        )
+@jax.jit
+def build_runtime_params_slice(t):
+    return RuntimeParamsSlice(
+        transport=g.transport_config.build_runtime_params(t),
+        sources={
+            source_name: source_config.build_runtime_params(t)
+            for source_name, source_config in dict(g.sources).items()
+            if source_config is not None
+        },
+        plasma_composition=g.plasma_composition.build_runtime_params(t),
+        profile_conditions=g.profile_conditions.build_runtime_params(t),
+    )
 
 
 def get_consistent_runtime_params_and_geometry(*, t):
-    runtime_params = g.runtime_params_provider(t=t)
+    runtime_params = build_runtime_params_slice(t)
     param_Ip = runtime_params.profile_conditions.Ip
     Ip_scale_factor = param_Ip / g.geo_Ip_profile_face[-1]
     g.geo_Ip_profile_face = g.geo_Ip_profile_face * Ip_scale_factor
@@ -4109,7 +4092,6 @@ g.smoothing_width = 0.1
 g.transport_config = QLKNNTransportModel()
 g.transport_model = QLKNNTransportModel0()
 g.bootstrap_current = SauterModelConfig().build_model()
-g.runtime_params_provider = RuntimeParamsProvider.from_config()
 runtime_params_for_init, geo_for_init = get_consistent_runtime_params_and_geometry(
     t=g.t_initial, )
 runtime_params = runtime_params_for_init
@@ -4257,7 +4239,7 @@ current_state = ToraxSimState(
     geometry=geo,
 )
 state_history = [current_state]
-initial_runtime_params = g.runtime_params_provider(current_state.t)
+initial_runtime_params = build_runtime_params_slice(current_state.t)
 while not_done(current_state.t, g.t_final):
     runtime_params_t, geo_t = get_consistent_runtime_params_and_geometry(
         t=current_state.t)
