@@ -547,12 +547,12 @@ def calculate_psi_grad_constraint_from_Ip(Ip):
             (g.geo_g2g3_over_rhon_face[-1] * g.geo_F_face[-1]))
 
 
-def calculate_psidot_from_psi_sources(*, psi_sources, sigma, psi, geo):
+def calculate_psidot_from_psi_sources(*, psi_sources, sigma, psi, geo, Phi_b_dot):
     toc_psi = (1.0 / g.resistivity_multiplier * geo_rho_norm() * sigma *
                g.mu_0 * 16 * jnp.pi**2 * geo_Phi_b()**2 / g.geo_F**2)
     d_face_psi = g.geo_g2g3_over_rhon_face
     v_face_psi = jnp.zeros_like(d_face_psi)
-    psi_sources += (8.0 * jnp.pi**2 * g.mu_0 * g.geo_Phi_b_dot * geo_Phi_b() *
+    psi_sources += (8.0 * jnp.pi**2 * g.mu_0 * Phi_b_dot * geo_Phi_b() *
                     geo_rho_norm()**2 * sigma / g.geo_F**2 * psi.grad())
     diffusion_mat, diffusion_vec = make_diffusion_terms(d_face_psi, psi)
     conv_mat, conv_vec = make_convection_terms(v_face_psi, d_face_psi, psi)
@@ -2798,6 +2798,7 @@ def coeffs_callback(runtime_params,
                     core_profiles,
                     x,
                     explicit_source_profiles,
+                    Phi_b_dot,
                     explicit_call=False):
     core_profiles = update_core_profiles_during_step(x, runtime_params, geo,
                                                      core_profiles)
@@ -2806,6 +2807,7 @@ def coeffs_callback(runtime_params,
         geo=None,
         core_profiles=core_profiles,
         explicit_source_profiles=explicit_source_profiles,
+        Phi_b_dot=Phi_b_dot,
         explicit_call=explicit_call,
     )
 
@@ -2864,6 +2866,7 @@ def calc_coeffs(runtime_params,
                 geo,
                 core_profiles,
                 explicit_source_profiles,
+                Phi_b_dot,
                 explicit_call=False):
     if explicit_call and g.theta_implicit == 1.0:
         tic_T_i = core_profiles.n_i.value * g.geo_vpr**(5.0 / 3.0)
@@ -2953,13 +2956,13 @@ def _calc_coeffs_full(runtime_params, geo, core_profiles,
     full_chi_face_el += chi_face_per_el
     full_d_face_el += d_face_per_el
     full_v_face_el += v_face_per_el
-    v_heat_face_ion += (-3.0 / 4.0 * g.geo_Phi_b_dot / geo_Phi_b() *
+    v_heat_face_ion += (-3.0 / 4.0 * Phi_b_dot / geo_Phi_b() *
                         geo_rho_face_norm() * g.geo_vpr_face *
                         core_profiles.n_i.face_value() * g.keV_to_J)
-    v_heat_face_el += (-3.0 / 4.0 * g.geo_Phi_b_dot / geo_Phi_b() *
+    v_heat_face_el += (-3.0 / 4.0 * Phi_b_dot / geo_Phi_b() *
                        geo_rho_face_norm() * g.geo_vpr_face *
                        core_profiles.n_e.face_value() * g.keV_to_J)
-    full_v_face_el += (-1.0 / 2.0 * g.geo_Phi_b_dot / geo_Phi_b() *
+    full_v_face_el += (-1.0 / 2.0 * Phi_b_dot / geo_Phi_b() *
                        geo_rho_face_norm() * g.geo_vpr_face)
     source_i = merged_source_profiles.total_sources("T_i", geo)
     source_e = merged_source_profiles.total_sources("T_e", geo)
@@ -2983,15 +2986,15 @@ def _calc_coeffs_full(runtime_params, geo, core_profiles,
         geo_rho_norm(),
     )
     source_i += (3.0 / 4.0 * g.geo_vpr**(-2.0 / 3.0) * d_vpr53_rhon_n_i_drhon *
-                 g.geo_Phi_b_dot / geo_Phi_b() * core_profiles.T_i.value *
+                 Phi_b_dot / geo_Phi_b() * core_profiles.T_i.value *
                  g.keV_to_J)
     source_e += (3.0 / 4.0 * g.geo_vpr**(-2.0 / 3.0) * d_vpr53_rhon_n_e_drhon *
-                 g.geo_Phi_b_dot / geo_Phi_b() * core_profiles.T_e.value *
+                 Phi_b_dot / geo_Phi_b() * core_profiles.T_e.value *
                  g.keV_to_J)
     d_vpr_rhon_drhon = jnp.gradient(g.geo_vpr * geo_rho_norm(), geo_rho_norm())
-    source_n_e += (1.0 / 2.0 * d_vpr_rhon_drhon * g.geo_Phi_b_dot /
+    source_n_e += (1.0 / 2.0 * d_vpr_rhon_drhon * Phi_b_dot /
                    geo_Phi_b() * core_profiles.n_e.value)
-    source_psi += (8.0 * jnp.pi**2 * g.mu_0 * g.geo_Phi_b_dot * geo_Phi_b() *
+    source_psi += (8.0 * jnp.pi**2 * g.mu_0 * Phi_b_dot * geo_Phi_b() *
                    geo_rho_norm()**2 * conductivity.sigma / g.geo_F**2 *
                    core_profiles.psi.grad())
     var_to_toc = {
@@ -3430,7 +3433,6 @@ g.geo_delta_lower_face = delta_lower_face
 g.geo_spr_hires = spr_hires
 g.geo_rho_hires_norm = rho_hires_norm
 g.geo_rho_hires = rho_hires
-g.geo_Phi_b_dot = np.asarray(0.0)
 g.geo_z_magnetic_axis = None
 g.geo_q_correction_factor = 1
 Phi_b = g.geo_Phi_face[..., -1]
@@ -3606,10 +3608,12 @@ if not sources_are_calculated:
     source_profiles = dataclasses.replace(source_profiles,
                                           bootstrap_current=bootstrap_current)
 psi_sources = source_profiles.total_psi_sources(geo)
+Phi_b_dot_init = 0.0  # Initial Phi_b_dot is zero
 psidot_value = calculate_psidot_from_psi_sources(psi_sources=psi_sources,
                                                  sigma=conductivity.sigma,
                                                  psi=psi,
-                                                 geo=geo)
+                                                 geo=geo,
+                                                 Phi_b_dot=Phi_b_dot_init)
 v_loop_lcfs = (
     runtime_params.profile_conditions.v_loop_lcfs
     if runtime_params.profile_conditions.use_v_loop_lcfs_boundary_condition
@@ -3684,8 +3688,7 @@ while current_state.t < (g.t_final - g.tolerance):
             get_consistent_runtime_params_and_geometry(t=current_state.t + dt))
         Phi_b_t = geo_Phi_b()
         Phi_b_t_plus_dt = geo_Phi_b()
-        Phibdot = (Phi_b_t_plus_dt - Phi_b_t) / dt
-        g.geo_Phi_b_dot = Phibdot
+        Phi_b_dot = (Phi_b_t_plus_dt - Phi_b_t) / dt
         geo_t_with_phibdot = None
         geo_t_plus_dt = None
         core_profiles_t = current_state.core_profiles
@@ -3830,6 +3833,7 @@ while current_state.t < (g.t_final - g.tolerance):
             current_state.core_profiles,
             x_old,
             explicit_source_profiles=explicit_source_profiles,
+            Phi_b_dot=Phi_b_dot,
             explicit_call=True,
         )
 
@@ -3840,6 +3844,7 @@ while current_state.t < (g.t_final - g.tolerance):
                 core_profiles_t_plus_dt,
                 x_new_guess,
                 explicit_source_profiles=explicit_source_profiles,
+                Phi_b_dot=Phi_b_dot,
             )
             x_old_vec = cell_variable_tuple_to_vec(x_old)
             x_new_guess_vec = cell_variable_tuple_to_vec(x_new_guess)
@@ -3987,6 +3992,7 @@ while current_state.t < (g.t_final - g.tolerance):
         sigma=intermediate_core_profiles.sigma,
         psi=intermediate_core_profiles.psi,
         geo=result[4],
+        Phi_b_dot=Phi_b_dot,
     )
     psidot = dataclasses.replace(
         result[5].psidot,
