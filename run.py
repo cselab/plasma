@@ -260,19 +260,6 @@ class RuntimeParamsSlice:
 IonMapping: TypeAlias = Mapping[str, TimeVaryingScalar]
 
 
-@jax.jit
-def cell_integration(x):
-    return jnp.sum(x * jnp.array(g.dx))
-
-
-def area_integration(value, geo):
-    return cell_integration(value * g.geo_spr)
-
-
-def volume_integration(value, geo):
-    return cell_integration(value * g.geo_vpr)
-
-
 @chex.dataclass(frozen=True)
 class CellVariable:
     value: Any
@@ -775,14 +762,14 @@ def _calculate_alpha(f_trap, nu_i_star):
 def exponential_profile(geo, *, decay_start, width, total):
     r = g.cell_centers
     S = jnp.exp(-(decay_start - r) / width)
-    C = total / volume_integration(S, geo)
+    C = total / jnp.sum(S * g.geo_vpr * jnp.array(g.dx))
     return C * S
 
 
 def gaussian_profile(geo, *, center, width, total):
     r = g.cell_centers
     S = jnp.exp(-((r - center)**2) / (2 * width**2))
-    C = total / volume_integration(S, geo)
+    C = total / jnp.sum(S * g.geo_vpr * jnp.array(g.dx))
     return C * S
 
 
@@ -914,7 +901,7 @@ def calculate_generic_current(
     generic_current_form = jnp.exp(
         -((g.cell_centers - source_params.gaussian_location)**2) /
         (2 * source_params.gaussian_width**2))
-    Cext = I_generic / area_integration(generic_current_form, geo)
+    Cext = I_generic / jnp.sum(generic_current_form * g.geo_spr * jnp.array(g.dx))
     generic_current_profile = Cext * generic_current_form
     return (generic_current_profile, )
 
