@@ -3543,7 +3543,7 @@ while current_state.t < (g.t_final - g.tolerance):
             lhs_mat = left_transient - dt * g.theta_implicit * broadcasted * c_mat_new
             lhs_vec = -g.theta_implicit * dt * (1 /
                                                 (tc_out_new * tc_in_new)) * c_new
-            assert theta_exp <= 0.0:
+            assert theta_exp <= 0.0
             rhs_mat = right_transient
             rhs_vec = jnp.zeros_like(x_new_guess_vec)
             rhs = jnp.dot(rhs_mat, x_old_vec) + rhs_vec - lhs_vec
