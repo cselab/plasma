@@ -110,15 +110,6 @@ class BaseModelFrozen(pydantic.BaseModel):
             registered_cls = cls
         return super().__new__(registered_cls)
 
-    @classmethod
-    def tree_unflatten(cls, aux_data, children):
-        dynamic_kwargs = {
-            name: value
-            for name, value in zip(
-                cls._jit_dynamic_kwarg_names(), children, strict=True)
-        }
-        return cls.model_construct(**(dynamic_kwargs | aux_data))
-
 
 ValueType: TypeAlias = Any
 
