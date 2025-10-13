@@ -438,6 +438,7 @@ class CoreProfiles:
     psidot: Any
     n_e: Any
     n_i: Any
+    n_impurity: Any
 
     impurity_fractions: Any
     q_face: Any
@@ -2437,68 +2438,6 @@ OptionalTupleMatrix: TypeAlias = tuple[tuple[jax.Array | None, ...],
 AuxiliaryOutput: TypeAlias = Any
 
 
-@jax.jit
-def get_prescribed_core_profile_values(runtime_params, core_profiles):
-    T_i = core_profiles.T_i.value
-    T_e_cell_variable = core_profiles.T_e
-    T_e = T_e_cell_variable.value
-    n_e_cell_variable = core_profiles.n_e
-    ions = get_updated_ions(
-        runtime_params,
-        n_e_cell_variable,
-        T_e_cell_variable,
-    )
-    n_e = n_e_cell_variable.value
-    n_i = ions.n_i.value
-    n_impurity = ions.n_impurity.value
-    impurity_fractions = ions.impurity_fractions
-    return {
-        "T_i": T_i,
-        "T_e": T_e,
-        "n_e": n_e,
-        "n_i": n_i,
-        "n_impurity": n_impurity,
-        "impurity_fractions": impurity_fractions,
-        "Z_i": ions.Z_i,
-        "Z_i_face": ions.Z_i_face,
-        "Z_impurity": ions.Z_impurity,
-        "Z_impurity_face": ions.Z_impurity_face,
-        "A_i": ions.A_i,
-        "A_impurity": ions.A_impurity,
-        "A_impurity_face": ions.A_impurity_face,
-        "Z_eff": ions.Z_eff,
-        "Z_eff_face": ions.Z_eff_face,
-    }
-
-
-@jax.jit
-def update_core_profiles_during_step(x_new, runtime_params, geo,
-                                     core_profiles):
-    updated_core_profiles = solver_x_tuple_to_core_profiles(
-        x_new, core_profiles)
-    ions = get_updated_ions(
-        runtime_params,
-        updated_core_profiles.n_e,
-        updated_core_profiles.T_e,
-    )
-    return dataclasses.replace(
-        updated_core_profiles,
-        n_i=ions.n_i,
-        n_impurity=ions.n_impurity,
-        impurity_fractions=ions.impurity_fractions,
-        Z_i=ions.Z_i,
-        Z_i_face=ions.Z_i_face,
-        Z_impurity=ions.Z_impurity,
-        Z_impurity_face=ions.Z_impurity_face,
-        A_i=ions.A_i,
-        A_impurity=ions.A_impurity,
-        A_impurity_face=ions.A_impurity_face,
-        Z_eff=ions.Z_eff,
-        Z_eff_face=ions.Z_eff_face,
-        q_face=calc_q_face(geo, updated_core_profiles.psi),
-    )
-
-
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class Block1DCoeffs:
@@ -2516,8 +2455,30 @@ def coeffs_callback(runtime_params,
                     x,
                     explicit_source_profiles,
                     explicit_call=False):
-    core_profiles = update_core_profiles_during_step(x, runtime_params, geo,
-                                                     core_profiles)
+    # Inlined update_core_profiles_during_step
+    updated_core_profiles = solver_x_tuple_to_core_profiles(
+        x, core_profiles)
+    ions = get_updated_ions(
+        runtime_params,
+        updated_core_profiles.n_e,
+        updated_core_profiles.T_e,
+    )
+    core_profiles = dataclasses.replace(
+        updated_core_profiles,
+        n_i=ions.n_i,
+        n_impurity=ions.n_impurity,
+        impurity_fractions=ions.impurity_fractions,
+        Z_i=ions.Z_i,
+        Z_i_face=ions.Z_i_face,
+        Z_impurity=ions.Z_impurity,
+        Z_impurity_face=ions.Z_impurity_face,
+        A_i=ions.A_i,
+        A_impurity=ions.A_impurity,
+        A_impurity_face=ions.A_impurity_face,
+        Z_eff=ions.Z_eff,
+        Z_eff_face=ions.Z_eff_face,
+        q_face=calc_q_face(geo, updated_core_profiles.psi),
+    )
     return calc_coeffs(
         runtime_params=runtime_params,
         geo=None,
@@ -3405,43 +3366,63 @@ while current_state.t < (g.t_final - g.tolerance):
             "Z_impurity_edge":
             Z_impurity_edge,
         }
-        updated_values = get_prescribed_core_profile_values(
-            runtime_params=runtime_params_t_plus_dt,
-            core_profiles=core_profiles_t,
+        # Inlined get_prescribed_core_profile_values
+        T_i_value = core_profiles_t.T_i.value
+        T_e_cell_variable = core_profiles_t.T_e
+        T_e_value = T_e_cell_variable.value
+        n_e_cell_variable = core_profiles_t.n_e
+        ions = get_updated_ions(
+            runtime_params_t_plus_dt,
+            n_e_cell_variable,
+            T_e_cell_variable,
         )
+        n_e_value = n_e_cell_variable.value
+        n_i_value = ions.n_i.value
+        n_impurity_value = ions.n_impurity.value
+        impurity_fractions_value = ions.impurity_fractions
+        Z_i_value = ions.Z_i
+        Z_i_face_value = ions.Z_i_face
+        Z_impurity_value = ions.Z_impurity
+        Z_impurity_face_value = ions.Z_impurity_face
+        A_i_value = ions.A_i
+        A_impurity_value = ions.A_impurity
+        A_impurity_face_value = ions.A_impurity_face
+        Z_eff_value = ions.Z_eff
+        Z_eff_face_value = ions.Z_eff_face
+        
         T_i = dataclasses.replace(
             core_profiles_t.T_i,
-            value=updated_values["T_i"],
+            value=T_i_value,
             **updated_boundary_conditions["T_i"],
         )
         T_e = dataclasses.replace(
             core_profiles_t.T_e,
-            value=updated_values["T_e"],
+            value=T_e_value,
             **updated_boundary_conditions["T_e"],
         )
         psi = dataclasses.replace(core_profiles_t.psi,
                                   **updated_boundary_conditions["psi"])
         n_e = dataclasses.replace(
             core_profiles_t.n_e,
-            value=updated_values["n_e"],
+            value=n_e_value,
             **updated_boundary_conditions["n_e"],
         )
         n_i = dataclasses.replace(
             core_profiles_t.n_i,
-            value=updated_values["n_i"],
+            value=n_i_value,
             **updated_boundary_conditions["n_i"],
         )
         n_impurity = dataclasses.replace(
             core_profiles_t.n_impurity,
-            value=updated_values["n_impurity"],
+            value=n_impurity_value,
             **updated_boundary_conditions["n_impurity"],
         )
         Z_i_face = jnp.concatenate([
-            updated_values["Z_i_face"][:-1],
+            Z_i_face_value[:-1],
             jnp.array([updated_boundary_conditions["Z_i_edge"]]),
         ], )
         Z_impurity_face = jnp.concatenate([
-            updated_values["Z_impurity_face"][:-1],
+            Z_impurity_face_value[:-1],
             jnp.array([updated_boundary_conditions["Z_impurity_edge"]]),
         ], )
         core_profiles_t_plus_dt = dataclasses.replace(
@@ -3452,16 +3433,16 @@ while current_state.t < (g.t_final - g.tolerance):
             n_e=n_e,
             n_i=n_i,
             n_impurity=n_impurity,
-            impurity_fractions=updated_values["impurity_fractions"],
-            Z_i=updated_values["Z_i"],
+            impurity_fractions=impurity_fractions_value,
+            Z_i=Z_i_value,
             Z_i_face=Z_i_face,
-            Z_impurity=updated_values["Z_impurity"],
+            Z_impurity=Z_impurity_value,
             Z_impurity_face=Z_impurity_face,
-            A_i=updated_values["A_i"],
-            A_impurity=updated_values["A_impurity"],
-            A_impurity_face=updated_values["A_impurity_face"],
-            Z_eff=updated_values["Z_eff"],
-            Z_eff_face=updated_values["Z_eff_face"],
+            A_i=A_i_value,
+            A_impurity=A_impurity_value,
+            A_impurity_face=A_impurity_face_value,
+            Z_eff=Z_eff_value,
+            Z_eff_face=Z_eff_face_value,
         )
         x_old = core_profiles_to_solver_x_tuple(current_state.core_profiles)
         x_new_guess = core_profiles_to_solver_x_tuple(core_profiles_t_plus_dt)
