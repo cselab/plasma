@@ -3572,49 +3572,6 @@ def get_consistent_runtime_params_and_geometry(*, t):
     return runtime_params, None  # No geo object to return anymore
 
 
-T_E = "T_e"
-T_I = "T_i"
-PSI = "psi"
-V_LOOP = "v_loop"
-N_E = "n_e"
-N_I = "n_i"
-Q = "q"
-V_LOOP_LCFS = "v_loop_lcfs"
-J_TOTAL = "j_total"
-IP_PROFILE = "Ip_profile"
-IP = "Ip"
-J_OHMIC = "j_ohmic"
-J_EXTERNAL = "j_external"
-J_BOOTSTRAP = "j_bootstrap"
-I_BOOTSTRAP = "I_bootstrap"
-CHI_TURB_I = "chi_turb_i"
-CHI_TURB_E = "chi_turb_e"
-D_TURB_E = "D_turb_e"
-V_TURB_E = "V_turb_e"
-CHI_NEO_I = "chi_neo_i"
-CHI_NEO_E = "chi_neo_e"
-D_NEO_E = "D_neo_e"
-V_NEO_E = "V_neo_e"
-V_NEO_WARE_E = "V_neo_ware_e"
-CHI_BOHM_E = "chi_bohm_e"
-CHI_GYROBOHM_E = "chi_gyrobohm_e"
-CHI_BOHM_I = "chi_bohm_i"
-CHI_GYROBOHM_I = "chi_gyrobohm_i"
-RHO_FACE_NORM = "rho_face_norm"
-RHO_CELL_NORM = "rho_cell_norm"
-RHO_FACE = "rho_face"
-RHO_CELL = "rho_cell"
-TIME = "time"
-Q_FUSION = "Q_fusion"
-EXCLUDED_GEOMETRY_NAMES = frozenset({
-    RHO_FACE,
-    RHO_CELL,
-    RHO_CELL_NORM,
-    RHO_FACE_NORM,
-    "rho",
-    "rho_norm",
-    "q_correction_factor",
-})
 
 
 @jax.tree_util.register_dataclass
