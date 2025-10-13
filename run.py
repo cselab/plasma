@@ -3371,10 +3371,6 @@ def solver_x_new(
     )
 
 
-def not_done(t, t_final):
-    return t < (t_final - g.tolerance)
-
-
 def next_dt(t, runtime_params, geo, core_transport):
     chi_max = core_transport.chi_max(geo)
     basic_dt = (3.0 / 4.0) * (geo_drho_norm()**2) / chi_max
@@ -3978,7 +3974,7 @@ current_state = ToraxSimState(
     )
 state_history = [current_state]
 initial_runtime_params = build_runtime_params_slice(current_state.t)
-while not_done(current_state.t, g.t_final):
+while current_state.t < (g.t_final - g.tolerance):
     runtime_params_t, geo_t = get_consistent_runtime_params_and_geometry(
         t=current_state.t)
     explicit_source_profiles = build_source_profiles0(
