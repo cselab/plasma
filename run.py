@@ -3739,44 +3739,6 @@ class ToraxSimState:
     solver_numeric_outputs: Any
 
 
-def _finalize_outputs(
-    t,
-    dt,
-    x_new,
-    solver_numeric_outputs,
-    geometry_t_plus_dt,
-    runtime_params_t_plus_dt,
-    core_profiles_t,
-    core_profiles_t_plus_dt,
-    explicit_source_profiles,
-):
-    final_core_profiles, final_source_profiles = (
-        update_core_and_source_profiles_after_step(
-            dt=dt,
-            x_new=x_new,
-            runtime_params_t_plus_dt=runtime_params_t_plus_dt,
-            geo=geometry_t_plus_dt,
-            core_profiles_t=core_profiles_t,
-            core_profiles_t_plus_dt=core_profiles_t_plus_dt,
-            explicit_source_profiles=explicit_source_profiles,
-        ))
-    final_total_transport = calculate_total_transport_coeffs(
-        runtime_params_t_plus_dt,
-        geometry_t_plus_dt,
-        final_core_profiles,
-    )
-    output_state = ToraxSimState(
-        t=t + dt,
-        dt=dt,
-        core_profiles=final_core_profiles,
-        core_sources=final_source_profiles,
-        core_transport=final_total_transport,
-        geometry=geometry_t_plus_dt,
-        solver_numeric_outputs=solver_numeric_outputs,
-    )
-    return output_state
-
-
 def _get_geo_and_runtime_params_at_t_plus_dt_and_phibdot(t, dt, geo_t):
     runtime_params_t_plus_dt, geo_t_plus_dt = (
         get_consistent_runtime_params_and_geometry(t=t + dt))
@@ -4525,16 +4487,29 @@ while not_done(current_state.t, g.t_final):
             ),
         ),
     )
-    output_state = _finalize_outputs(
-        t=current_state.t,
+    final_core_profiles, final_source_profiles = (
+        update_core_and_source_profiles_after_step(
+            dt=result[1],
+            x_new=result[0],
+            runtime_params_t_plus_dt=result[3],
+            geo=result[4],
+            core_profiles_t=current_state.core_profiles,
+            core_profiles_t_plus_dt=result[5],
+            explicit_source_profiles=explicit_source_profiles,
+        ))
+    final_total_transport = calculate_total_transport_coeffs(
+        result[3],
+        result[4],
+        final_core_profiles,
+    )
+    output_state = ToraxSimState(
+        t=current_state.t + result[1],
         dt=result[1],
-        x_new=result[0],
+        core_profiles=final_core_profiles,
+        core_sources=final_source_profiles,
+        core_transport=final_total_transport,
+        geometry=result[4],
         solver_numeric_outputs=result[2],
-        runtime_params_t_plus_dt=result[3],
-        geometry_t_plus_dt=result[4],
-        core_profiles_t=current_state.core_profiles,
-        core_profiles_t_plus_dt=result[5],
-        explicit_source_profiles=explicit_source_profiles,
     )
     current_state = output_state
     state_history.append(current_state)
