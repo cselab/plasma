@@ -920,7 +920,7 @@ class Source:
         return self.model_func(
             runtime_params,
             geo,
-            self.source_name,
+            self.SOURCE_NAME,
             core_profiles,
             calculated_source_profiles,
             conductivity,
@@ -971,10 +971,6 @@ def _calculate_I_generic(runtime_params, source_params):
 class GenericCurrentSource(Source):
     SOURCE_NAME: typing.ClassVar[str] = "generic_current"
     model_func: Any = calculate_generic_current
-
-    @property
-    def source_name(self):
-        return self.SOURCE_NAME
 
     @property
     def affected_core_profiles(self):
@@ -1067,10 +1063,6 @@ class GenericIonElectronHeatSource(Source):
     model_func: Any = default_formula
 
     @property
-    def source_name(self):
-        return self.SOURCE_NAME
-
-    @property
     def affected_core_profiles(self):
         return (
             AffectedCoreProfile.TEMP_ION,
@@ -1129,10 +1121,6 @@ def calc_generic_particle_source(
 class GenericParticleSource(Source):
     SOURCE_NAME: typing.ClassVar[str] = "generic_particle"
     model_func: Any = calc_generic_particle_source
-
-    @property
-    def source_name(self):
-        return self.SOURCE_NAME
 
     @property
     def affected_core_profiles(self):
@@ -1194,10 +1182,6 @@ def calc_pellet_source(
 class PelletSource(Source):
     SOURCE_NAME: typing.ClassVar[str] = "pellet"
     model_func: Any = calc_pellet_source
-
-    @property
-    def source_name(self):
-        return self.SOURCE_NAME
 
     @property
     def affected_core_profiles(self):
@@ -1309,10 +1293,6 @@ class FusionHeatSource(Source):
     model_func: Any = fusion_heat_model_func
 
     @property
-    def source_name(self):
-        return self.SOURCE_NAME
-
-    @property
     def affected_core_profiles(self):
         return (
             AffectedCoreProfile.TEMP_ION,
@@ -1370,10 +1350,6 @@ class GasPuffSource(Source):
     model_func: Any = calc_puff_source
 
     @property
-    def source_name(self):
-        return self.SOURCE_NAME
-
-    @property
     def affected_core_profiles(self):
         return (AffectedCoreProfile.NE, )
 
@@ -1406,13 +1382,9 @@ class GasPuffSourceConfig(SourceModelBase):
 class QeiSource(Source):
     SOURCE_NAME: typing.ClassVar[str] = "ei_exchange"
 
-    @property
-    def source_name(self):
-        return self.SOURCE_NAME
-
     def get_qei(self, runtime_params, geo, core_profiles):
         return jax.lax.cond(
-            runtime_params.sources[self.source_name].mode == Mode.MODEL_BASED,
+            runtime_params.sources[self.SOURCE_NAME].mode == Mode.MODEL_BASED,
             lambda: _model_based_qei(
                 runtime_params,
                 geo,
@@ -2750,10 +2722,6 @@ class Block1DCoeffs:
     auxiliary_outputs: AuxiliaryOutput | None = None
 
 
-def cell_variable_tuple_to_vec(x_tuple):
-    return jnp.concatenate([x.value for x in x_tuple])
-
-
 def coeffs_callback(runtime_params,
                     core_profiles,
                     x,
@@ -3724,8 +3692,8 @@ while current_state.t < (g.t_final - g.tolerance):
                 x_new_guess,
                 explicit_source_profiles=explicit_source_profiles,
             )
-            x_old_vec = cell_variable_tuple_to_vec(x_old)
-            x_new_guess_vec = cell_variable_tuple_to_vec(x_new_guess)
+            x_old_vec = jnp.concatenate([x.value for x in x_old])
+            x_new_guess_vec = jnp.concatenate([x.value for x in x_new_guess])
             theta_exp = 1.0 - g.theta_implicit
             tc_in_old = jnp.concatenate(coeffs_exp.transient_in_cell)
             tc_out_new = jnp.concatenate(coeffs_new.transient_out_cell)
