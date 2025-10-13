@@ -595,8 +595,6 @@ def face_to_cell(face):
     return 0.5 * (face[:-1] + face[1:])
 
 
-
-
 def calculate_scaling_law_confinement_time(geo, core_profiles, Ploss,
                                            scaling_law):
     scaling_params = {
@@ -681,8 +679,8 @@ def calc_q_face(geo, psi):
 
 
 def calc_j_total(geo, psi):
-    Ip_profile_face = (psi.face_grad() * g.geo_g2g3_over_rhon_face * g.geo_F_face /
-                       geo_Phi_b() / (16 * jnp.pi**3 * g.mu_0))
+    Ip_profile_face = (psi.face_grad() * g.geo_g2g3_over_rhon_face *
+                       g.geo_F_face / geo_Phi_b() / (16 * jnp.pi**3 * g.mu_0))
     Ip_profile = (psi.grad() * g.geo_g2g3_over_rhon * g.geo_F / geo_Phi_b() /
                   (16 * jnp.pi**3 * g.mu_0))
     dI_drhon_face = jnp.gradient(Ip_profile_face, geo_rho_face_norm())
@@ -698,7 +696,8 @@ def calc_j_total(geo, psi):
 
 def calc_s_face(geo, psi):
     iota_scaled = jnp.abs((psi.face_grad()[1:] / geo_rho_face_norm()[1:]))
-    iota_scaled0 = jnp.expand_dims(jnp.abs(psi.face_grad()[1] / geo_drho_norm()),
+    iota_scaled0 = jnp.expand_dims(jnp.abs(psi.face_grad()[1] /
+                                           geo_drho_norm()),
                                    axis=0)
     iota_scaled = jnp.concatenate([iota_scaled0, iota_scaled])
     s_face = (-geo_rho_face_norm() *
@@ -712,8 +711,8 @@ def calculate_psi_grad_constraint_from_Ip(Ip):
 
 
 def calculate_psidot_from_psi_sources(*, psi_sources, sigma, psi, geo):
-    toc_psi = (1.0 / g.resistivity_multiplier * geo_rho_norm() * sigma * g.mu_0 *
-               16 * jnp.pi**2 * geo_Phi_b()**2 / g.geo_F**2)
+    toc_psi = (1.0 / g.resistivity_multiplier * geo_rho_norm() * sigma *
+               g.mu_0 * 16 * jnp.pi**2 * geo_Phi_b()**2 / g.geo_F**2)
     d_face_psi = g.geo_g2g3_over_rhon_face
     v_face_psi = jnp.zeros_like(d_face_psi)
     psi_sources += (8.0 * jnp.pi**2 * g.mu_0 * g.geo_Phi_b_dot * geo_Phi_b() *
@@ -810,52 +809,52 @@ def _calculate_log_tau_e_Z1(T_e, n_e, log_lambda_ei):
 
 _MAVRIN_Z_COEFFS = immutabledict.immutabledict({
     "C":
-        np.array([
-            [-7.2007e00, -1.2217e01, -7.3521e00, -1.7632e00, 5.8588e00],
-            [0.0000e00, 0.0000e00, 0.0000e00, 0.0000e00, 6.0000e00],
-        ]),
+    np.array([
+        [-7.2007e00, -1.2217e01, -7.3521e00, -1.7632e00, 5.8588e00],
+        [0.0000e00, 0.0000e00, 0.0000e00, 0.0000e00, 6.0000e00],
+    ]),
     "N":
-        np.array([
-            [0.0000e00, 3.3818e00, 1.8861e00, 1.5668e-01, 6.9728e00],
-            [0.0000e00, 0.0000e00, 0.0000e00, 0.0000e00, 7.0000e00],
-        ]),
+    np.array([
+        [0.0000e00, 3.3818e00, 1.8861e00, 1.5668e-01, 6.9728e00],
+        [0.0000e00, 0.0000e00, 0.0000e00, 0.0000e00, 7.0000e00],
+    ]),
     "O":
-        np.array([
-            [0.0000e00, -1.8560e01, -3.8664e01, -2.2093e01, 4.0451e00],
-            [-4.3092e00, -4.6261e-01, -3.7050e-02, 8.0180e-02, 7.9878e00],
-            [0.0000e00, 0.0000e00, 0.0000e00, 0.0000e00, 8.0000e00],
-        ]),
+    np.array([
+        [0.0000e00, -1.8560e01, -3.8664e01, -2.2093e01, 4.0451e00],
+        [-4.3092e00, -4.6261e-01, -3.7050e-02, 8.0180e-02, 7.9878e00],
+        [0.0000e00, 0.0000e00, 0.0000e00, 0.0000e00, 8.0000e00],
+    ]),
     "Ne":
-        np.array([
-            [-2.5303e01, -6.4696e01, -5.3631e01, -1.3242e01, 8.9737e00],
-            [-7.0678e00, 3.6868e00, -8.0723e-01, 2.1413e-01, 9.9532e00],
-            [0.0000e00, 0.0000e00, 0.0000e00, 0.0000e00, 1.0000e01],
-        ]),
+    np.array([
+        [-2.5303e01, -6.4696e01, -5.3631e01, -1.3242e01, 8.9737e00],
+        [-7.0678e00, 3.6868e00, -8.0723e-01, 2.1413e-01, 9.9532e00],
+        [0.0000e00, 0.0000e00, 0.0000e00, 0.0000e00, 1.0000e01],
+    ]),
     "Ar":
-        np.array([
-            [6.8717e00, -1.1595e01, -4.3776e01, -2.0781e01, 1.3171e01],
-            [-4.8830e-02, 1.8455e00, 2.5023e00, 1.1413e00, 1.5986e01],
-            [-5.9213e-01, 3.5667e00, -8.0048e00, 7.9986e00, 1.4948e01],
-        ]),
+    np.array([
+        [6.8717e00, -1.1595e01, -4.3776e01, -2.0781e01, 1.3171e01],
+        [-4.8830e-02, 1.8455e00, 2.5023e00, 1.1413e00, 1.5986e01],
+        [-5.9213e-01, 3.5667e00, -8.0048e00, 7.9986e00, 1.4948e01],
+    ]),
     "Kr":
-        np.array([
-            [1.3630e02, 4.6320e02, 5.6890e02, 3.0638e02, 7.7040e01],
-            [-1.0279e02, 6.8446e01, 1.5744e01, 1.5186e00, 2.4728e01],
-            [-2.4682e00, 1.3215e01, -2.5703e01, 2.3443e01, 2.5368e01],
-        ]),
+    np.array([
+        [1.3630e02, 4.6320e02, 5.6890e02, 3.0638e02, 7.7040e01],
+        [-1.0279e02, 6.8446e01, 1.5744e01, 1.5186e00, 2.4728e01],
+        [-2.4682e00, 1.3215e01, -2.5703e01, 2.3443e01, 2.5368e01],
+    ]),
     "Xe":
-        np.array([
-            [5.8178e02, 1.9967e03, 2.5189e03, 1.3973e03, 3.0532e02],
-            [8.6824e01, -2.9061e01, -4.8384e01, 1.6271e01, 3.2616e01],
-            [4.0756e02, -9.0008e02, 6.6739e02, -1.7259e02, 4.8066e01],
-            [-1.0019e01, 7.3261e01, -1.9931e02, 2.4056e02, -5.7527e01],
-        ]),
+    np.array([
+        [5.8178e02, 1.9967e03, 2.5189e03, 1.3973e03, 3.0532e02],
+        [8.6824e01, -2.9061e01, -4.8384e01, 1.6271e01, 3.2616e01],
+        [4.0756e02, -9.0008e02, 6.6739e02, -1.7259e02, 4.8066e01],
+        [-1.0019e01, 7.3261e01, -1.9931e02, 2.4056e02, -5.7527e01],
+    ]),
     "W":
-        np.array([
-            [1.6823e01, 3.4582e01, 2.1027e01, 1.6518e01, 2.6703e01],
-            [-2.5887e02, -1.0577e01, 2.5532e02, -7.9611e01, 3.6902e01],
-            [1.5119e01, -8.4207e01, 1.5985e02, -1.0011e02, 6.3795e01],
-        ]),
+    np.array([
+        [1.6823e01, 3.4582e01, 2.1027e01, 1.6518e01, 2.6703e01],
+        [-2.5887e02, -1.0577e01, 2.5532e02, -7.9611e01, 3.6902e01],
+        [1.5119e01, -8.4207e01, 1.5985e02, -1.0011e02, 6.3795e01],
+    ]),
 })
 _TEMPERATURE_INTERVALS = immutabledict.immutabledict({
     "C":
@@ -1003,9 +1002,9 @@ def _calculate_conductivity0(*, Z_eff_face, n_e, T_e, q_face, geo):
 def calculate_conductivity(geometry, core_profiles):
     result = _calculate_conductivity0(
         Z_eff_face=core_profiles.Z_eff_face,
-                                          n_e=core_profiles.n_e,
-                                          T_e=core_profiles.T_e,
-                                          q_face=core_profiles.q_face,
+        n_e=core_profiles.n_e,
+        T_e=core_profiles.T_e,
+        q_face=core_profiles.q_face,
         geo=geometry,
     )
     return Conductivity(sigma=result.sigma, sigma_face=result.sigma_face)
@@ -1173,7 +1172,8 @@ class SourceProfiles:
         total = self.bootstrap_current.j_bootstrap
         total += sum(self.psi.values())
         mu0 = g.mu_0
-        prefactor = 8 * g.geo_vpr * jnp.pi**2 * g.geo_B_0 * mu0 * geo_Phi_b() / g.geo_F**2
+        prefactor = 8 * g.geo_vpr * jnp.pi**2 * g.geo_B_0 * mu0 * geo_Phi_b(
+        ) / g.geo_F**2
         return -total * prefactor
 
     def total_sources(self, source_type, geo):
@@ -1253,7 +1253,7 @@ def calculate_generic_current(
     geo,
     source_name,
     unused_state,
-                              unused_calculated_source_profiles,
+    unused_calculated_source_profiles,
     unused_conductivity,
 ):
     source_params = runtime_params.sources[source_name]
@@ -1423,8 +1423,8 @@ def calc_generic_particle_source(
     runtime_params,
     geo,
     source_name,
-                                 unused_state,
-                                 unused_calculated_source_profiles,
+    unused_state,
+    unused_calculated_source_profiles,
     unused_conductivity,
 ):
     source_params = runtime_params.sources[source_name]
@@ -1582,8 +1582,8 @@ def calc_fusion(geo, core_profiles, runtime_params):
                        2 * jnp.log(core_profiles.n_i.face_value()) + logsigmav)
             Pfus_face = jnp.exp(logPfus)
             Pfus_cell = 0.5 * (Pfus_face[:-1] + Pfus_face[1:])
-            P_total = (jax.scipy.integrate.trapezoid(Pfus_face * g.geo_vpr_face,
-                                                     geo_rho_face_norm()) / 1e6)
+            P_total = (jax.scipy.integrate.trapezoid(
+                Pfus_face * g.geo_vpr_face, geo_rho_face_norm()) / 1e6)
             alpha_fraction = 3.5 / 17.6
             birth_energy = 3520
             alpha_mass = 4.002602
@@ -1792,8 +1792,8 @@ class QeiSourceConfig(SourceModelBase):
     def build_runtime_params(self, t):
         return RuntimeParamsSrc(
             prescribed_values=tuple(
-            [v.get_value(t) for v in self.prescribed_values]),
-                                mode=self.mode,
+                [v.get_value(t) for v in self.prescribed_values]),
+            mode=self.mode,
             is_explicit=self.is_explicit,
         )
 
@@ -1819,12 +1819,12 @@ class Sources(BaseModelFrozen):
         {"mode": "ZERO"})
     generic_heat: GenericIonElHeatSourceConfig | None = pydantic.Field(
         discriminator="model_name",
-                       default=None,
-                   )
+        default=None,
+    )
     generic_particle: GenericParticleSourceConfig | None = pydantic.Field(
         discriminator="model_name",
-                           default=None,
-                       )
+        default=None,
+    )
     impurity_radiation: None = pydantic.Field(
         discriminator="model_name",
         default=None,
@@ -1906,14 +1906,12 @@ def build_source_profiles0(runtime_params,
         "explicit",
     ],
 )
-def build_source_profiles1(
-    runtime_params,
+def build_source_profiles1(runtime_params,
                            geo,
                            core_profiles,
                            explicit,
                            explicit_source_profiles=None,
-    conductivity=None,
-):
+                           conductivity=None):
     qei = g.source_models.qei_source.get_qei(
         runtime_params=runtime_params,
         geo=geo,
@@ -1942,13 +1940,13 @@ def build_source_profiles1(
 
 def build_standard_source_profiles(
     *,
-                                   calculated_source_profiles,
-                                   runtime_params,
+    calculated_source_profiles,
+    runtime_params,
     geo,
-                                   core_profiles,
+    core_profiles,
     explicit=True,
-                                   conductivity=None,
-                                   calculate_anyway=False,
+    conductivity=None,
+    calculate_anyway=False,
     psi_only=False,
 ):
 
@@ -2499,10 +2497,10 @@ class QLKNNTransportModel0:
 
     def _apply_domain_restriction(self, transport_runtime_params, geo,
                                   transport_coeffs, pedestal_model_output):
-        active_mask = ((geo_rho_face_norm() > transport_runtime_params.rho_min)
-                       &
-                       (geo_rho_face_norm() <= transport_runtime_params.rho_max)
-                       & (geo_rho_face_norm() <= g.rho_norm_ped_top))
+        active_mask = (
+            (geo_rho_face_norm() > transport_runtime_params.rho_min)
+            & (geo_rho_face_norm() <= transport_runtime_params.rho_max)
+            & (geo_rho_face_norm() <= g.rho_norm_ped_top))
         active_mask = (jnp.asarray(active_mask).at[0].set(
             transport_runtime_params.rho_min == 0))
         chi_face_ion = jnp.where(active_mask, transport_coeffs.chi_face_ion,
@@ -2696,7 +2694,8 @@ class QLKNNTransportModel0:
             v_face_el = (pfe_SI / core_profiles.n_e.face_value() -
                          quasilinear_inputs.lref_over_lne * d_face_el /
                          gradient_reference_length * geo_g1_over_vpr2_face() *
-                         geo_rho_b()**2) / (geo_g0_over_vpr_face() * geo_rho_b())
+                         geo_rho_b()**2) / (geo_g0_over_vpr_face() *
+                                            geo_rho_b())
             return d_face_el, v_face_el
 
         d_face_el, v_face_el = jax.lax.cond(
@@ -2854,8 +2853,7 @@ class QLKNNTransportModel0:
         qi = qi_itg_squeezed + model_output["qi_tem"].squeeze()
         qe = (model_output["qe_itg"].squeeze() * g.ITG_flux_ratio_correction +
               model_output["qe_tem"].squeeze() +
-              model_output["qe_etg"].squeeze() *
-              g.ETG_correction_factor)
+              model_output["qe_etg"].squeeze() * g.ETG_correction_factor)
         pfe = model_output["pfe_itg"].squeeze(
         ) + model_output["pfe_tem"].squeeze()
         return self._make_core_transport(
@@ -3086,10 +3084,14 @@ def calculate_impurity_species_output(sim_state, runtime_params):
 
 
 SCALING_FACTORS: Final[Mapping[str, float]] = immutabledict.immutabledict({
-    "T_i": 1.0,
-    "T_e": 1.0,
-    "n_e": 1e20,
-    "psi": 1.0,
+    "T_i":
+    1.0,
+    "T_e":
+    1.0,
+    "n_e":
+    1e20,
+    "psi":
+    1.0,
 })
 
 
@@ -3122,7 +3124,8 @@ def get_updated_electron_temperature(profile_conditions_params):
 
 
 def get_updated_electron_density(profile_conditions_params):
-    nGW = profile_conditions_params.Ip / 1e6 / (jnp.pi * g.geo_a_minor**2) * 1e20
+    nGW = profile_conditions_params.Ip / 1e6 / (jnp.pi *
+                                                g.geo_a_minor**2) * 1e20
     n_e_value = jnp.where(
         True,
         profile_conditions_params.n_e * nGW,
@@ -3146,7 +3149,7 @@ def get_updated_electron_density(profile_conditions_params):
     )
     nbar_from_n_e_face_inner = (
         jax.scipy.integrate.trapezoid(n_e_face[:-1], g.geo_R_out_face[:-1]) /
-                                a_minor_out)
+        a_minor_out)
     dr_edge = g.geo_R_out_face[-1] - g.geo_R_out_face[-2]
     C = (target_nbar - 0.5 * n_e_face[-1] * dr_edge / a_minor_out) / (
         nbar_from_n_e_face_inner + 0.5 * n_e_face[-2] * dr_edge / a_minor_out)
@@ -3522,11 +3525,14 @@ def coeffs_callback(runtime_params,
 
 def _calculate_pereverzev_flux(geo, core_profiles, pedestal_model_output):
     geo_factor = jnp.concatenate(
-        [jnp.ones(1), geo_g1_over_vpr_face()[1:] / g.geo_g0_face[1:]])
-    chi_face_per_ion = (geo_g1_over_vpr_face() * core_profiles.n_i.face_value() *
-                        g.keV_to_J * g.chi_pereverzev)
-    chi_face_per_el = (geo_g1_over_vpr_face() * core_profiles.n_e.face_value() *
-                       g.keV_to_J * g.chi_pereverzev)
+        [jnp.ones(1),
+         geo_g1_over_vpr_face()[1:] / g.geo_g0_face[1:]])
+    chi_face_per_ion = (geo_g1_over_vpr_face() *
+                        core_profiles.n_i.face_value() * g.keV_to_J *
+                        g.chi_pereverzev)
+    chi_face_per_el = (geo_g1_over_vpr_face() *
+                       core_profiles.n_e.face_value() * g.keV_to_J *
+                       g.chi_pereverzev)
     d_face_per_el = g.D_pereverzev
     v_face_per_el = (core_profiles.n_e.face_grad() /
                      core_profiles.n_e.face_value() * d_face_per_el *
@@ -3635,8 +3641,9 @@ def _calc_coeffs_full(runtime_params, geo, core_profiles,
     full_chi_face_ion = (geo_g1_over_vpr_face() *
                          core_profiles.n_i.face_value() * g.keV_to_J *
                          chi_face_ion_total)
-    full_chi_face_el = (geo_g1_over_vpr_face() * core_profiles.n_e.face_value() *
-                        g.keV_to_J * chi_face_el_total)
+    full_chi_face_el = (geo_g1_over_vpr_face() *
+                        core_profiles.n_e.face_value() * g.keV_to_J *
+                        chi_face_el_total)
     full_d_face_el = geo_g1_over_vpr_face() * d_face_el_total
     full_v_face_el = g.geo_g0_face * v_face_el_total
     source_mat_nn = jnp.zeros_like(geo_rho())
@@ -3699,8 +3706,8 @@ def _calc_coeffs_full(runtime_params, geo, core_profiles,
                  g.geo_Phi_b_dot / geo_Phi_b() * core_profiles.T_e.value *
                  g.keV_to_J)
     d_vpr_rhon_drhon = jnp.gradient(g.geo_vpr * geo_rho_norm(), geo_rho_norm())
-    source_n_e += (1.0 / 2.0 * d_vpr_rhon_drhon * g.geo_Phi_b_dot / geo_Phi_b() *
-                   core_profiles.n_e.value)
+    source_n_e += (1.0 / 2.0 * d_vpr_rhon_drhon * g.geo_Phi_b_dot /
+                   geo_Phi_b() * core_profiles.n_e.value)
     source_psi += (8.0 * jnp.pi**2 * g.mu_0 * g.geo_Phi_b_dot * geo_Phi_b() *
                    geo_rho_norm()**2 * conductivity.sigma / g.geo_F**2 *
                    core_profiles.psi.grad())
@@ -4056,7 +4063,8 @@ def _get_geo_and_runtime_params_at_t_plus_dt_and_phibdot(t, dt, geo_t):
     # Since we inlined geometry, we need to calculate Phi_b_dot differently
     Phi_b_t = geo_Phi_b()
     # Update geometry variables for t+dt
-    runtime_params_t_plus_dt, _ = get_consistent_runtime_params_and_geometry(t=t + dt)
+    runtime_params_t_plus_dt, _ = get_consistent_runtime_params_and_geometry(
+        t=t + dt)
     Phi_b_t_plus_dt = geo_Phi_b()
     Phibdot = (Phi_b_t_plus_dt - Phi_b_t) / dt
     g.geo_Phi_b_dot = Phibdot
@@ -4129,11 +4137,11 @@ def body_fun(inputs):
         ),
         "psi":
         dict(
-            right_face_grad_constraint=(calculate_psi_grad_constraint_from_Ip(
-                Ip=profile_conditions_t_plus_dt.Ip,
-            ) if not runtime_params_t.profile_conditions.
-                                        use_v_loop_lcfs_boundary_condition else
-                                        None),
+            right_face_grad_constraint=(
+                calculate_psi_grad_constraint_from_Ip(
+                    Ip=profile_conditions_t_plus_dt.Ip, )
+                if not runtime_params_t.profile_conditions.
+                use_v_loop_lcfs_boundary_condition else None),
             right_face_constraint=(_calculate_psi_value_constraint_from_v_loop(
                 dt=dt,
                 v_loop_lcfs_t=runtime_params_t.profile_conditions.v_loop_lcfs,
@@ -4275,7 +4283,10 @@ g.main_ion_T = 0.5
 g.impurity = "Ne"
 g.Z_eff = 1.6
 g.plasma_composition = PlasmaComposition(
-    main_ion={"D": g.main_ion_D, "T": g.main_ion_T},
+    main_ion={
+        "D": g.main_ion_D,
+        "T": g.main_ion_T
+    },
     impurity=g.impurity,
     Z_eff=g.Z_eff,
 )
@@ -4548,47 +4559,65 @@ g.geo_rho_hires = rho_hires
 g.geo_Phi_b_dot = np.asarray(0.0)
 g.geo_z_magnetic_axis = None
 
+
 def geo_q_correction_factor():
     return jnp.where(False, 1.25, 1)
+
 
 def geo_rho_norm():
     return g.cell_centers
 
+
 def geo_rho_face_norm():
     return g.face_centers
+
 
 def geo_drho_norm():
     return jnp.array(g.dx)
 
+
 def geo_Phi_b():
     return g.geo_Phi_face[..., -1]
+
 
 def geo_rho_b():
     return jnp.sqrt(geo_Phi_b() / np.pi / g.B_0)
 
+
 def geo_rho_face():
     return geo_rho_face_norm() * jnp.expand_dims(geo_rho_b(), axis=-1)
+
 
 def geo_rho():
     return geo_rho_norm() * jnp.expand_dims(geo_rho_b(), axis=-1)
 
+
 def geo_epsilon_face():
-    return (g.geo_R_out_face - g.geo_R_in_face) / (g.geo_R_out_face + g.geo_R_in_face)
+    return (g.geo_R_out_face - g.geo_R_in_face) / (g.geo_R_out_face +
+                                                   g.geo_R_in_face)
+
 
 def geo_g0_over_vpr_face():
     bulk = g.geo_g0_face[..., 1:] / g.geo_vpr_face[..., 1:]
     first_element = jnp.ones_like(geo_rho_b()) / geo_rho_b()
-    return jnp.concatenate([jnp.expand_dims(first_element, axis=-1), bulk], axis=-1)
+    return jnp.concatenate([jnp.expand_dims(first_element, axis=-1), bulk],
+                           axis=-1)
+
 
 def geo_g1_over_vpr_face():
     bulk = g.geo_g1_face[..., 1:] / g.geo_vpr_face[..., 1:]
     first_element = jnp.zeros_like(geo_rho_b())
-    return jnp.concatenate([jnp.expand_dims(first_element, axis=-1), bulk], axis=-1)
+    return jnp.concatenate([jnp.expand_dims(first_element, axis=-1), bulk],
+                           axis=-1)
+
 
 def geo_g1_over_vpr2_face():
     bulk = g.geo_g1_face[..., 1:] / g.geo_vpr_face[..., 1:]**2
     first_element = jnp.ones_like(geo_rho_b()) / geo_rho_b()**2
-    return jnp.concatenate([jnp.expand_dims(first_element, axis=-1), bulk], axis=-1)
+    return jnp.concatenate([jnp.expand_dims(first_element, axis=-1), bulk],
+                           axis=-1)
+
+
 g.pedestal_model = PedestalConfig().build_pedestal_model()
 g.source_models = g.sources.build_models()
 g.ETG_correction_factor = 1.0 / 3.0
@@ -4653,11 +4682,10 @@ core_profiles = CoreProfiles(
     Ip_profile_face=np.zeros_like(geo_rho_face()),
 )
 sources_are_calculated = False
-source_profiles = SourceProfiles(bootstrap_current=BootstrapCurrent.zeros(None),
-                                 qei=QeiInfo.zeros(None))
+source_profiles = SourceProfiles(
+    bootstrap_current=BootstrapCurrent.zeros(None), qei=QeiInfo.zeros(None))
 dpsi_drhonorm_edge = calculate_psi_grad_constraint_from_Ip(
-    runtime_params.profile_conditions.Ip,
-)
+    runtime_params.profile_conditions.Ip, )
 assert not runtime_params.profile_conditions.use_v_loop_lcfs_boundary_condition
 psi = CellVariable(
     value=g.geo_psi_from_Ip,
