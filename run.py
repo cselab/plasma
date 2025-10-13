@@ -2165,7 +2165,10 @@ def smooth_coeffs_transport(
 
     return jax.tree_util.tree_map(smooth_single_coeff, transport_coeffs)
 
-def prepare_qualikiz_inputs(geo, core_profiles):
+def calculate_transport_coeffs(runtime_params, geo, core_profiles,
+                 pedestal_model_output):
+    transport_runtime_params = runtime_params.transport
+    # Inlined call_qlknn_implementation and prepare_qualikiz_inputs
     rmid = (g.geo_R_out - g.geo_R_in) * 0.5
     rmid_face = (g.geo_R_out_face - g.geo_R_in_face) * 0.5
     chiGB = calculate_chiGB(
@@ -2238,15 +2241,13 @@ def prepare_qualikiz_inputs(geo, core_profiles):
         1,
         q,
     )
-    # jnp.logical_and(True, X) = X
     smag = jnp.where(
         smag - alpha < -0.2,
         alpha - 0.2,
         smag,
     )
-    normni = core_profiles.n_i.face_value() / core_profiles.n_e.face_value(
-    )
-    return QualikizInputs(
+    normni = core_profiles.n_i.face_value() / core_profiles.n_e.face_value()
+    qualikiz_inputs = QualikizInputs(
         Z_eff_face=core_profiles.Z_eff_face,
         lref_over_lti=normalized_logarithmic_gradients.lref_over_lti,
         lref_over_lte=normalized_logarithmic_gradients.lref_over_lte,
@@ -2264,15 +2265,6 @@ def prepare_qualikiz_inputs(geo, core_profiles):
         Rmin=g.geo_a_minor,
         alpha=alpha,
         epsilon_lcfs=epsilon_lcfs,
-    )
-
-def calculate_transport_coeffs(runtime_params, geo, core_profiles,
-                 pedestal_model_output):
-    transport_runtime_params = runtime_params.transport
-    # Inlined call_qlknn_implementation
-    qualikiz_inputs = prepare_qualikiz_inputs(
-        geo=geo,
-        core_profiles=core_profiles,
     )
     qualikiz_inputs = dataclasses.replace(
         qualikiz_inputs,
