@@ -2062,25 +2062,6 @@ class QLKNNRuntimeConfigInputs:
         )
 
 
-def clip_inputs(feature_scan, clip_margin, inputs_and_ranges):
-    for i, key in enumerate(inputs_and_ranges.keys()):
-        bounds = inputs_and_ranges[key]
-        min_val = bounds.get("min", -jnp.inf)
-        max_val = bounds.get("max", jnp.inf)
-        min_val += jnp.where(jnp.isfinite(min_val),
-                             jnp.abs(min_val) * (1 - clip_margin), 0.0)
-        max_val -= jnp.where(jnp.isfinite(max_val),
-                             jnp.abs(max_val) * (1 - clip_margin), 0.0)
-        feature_scan = feature_scan.at[:, i].set(
-            jnp.clip(
-                feature_scan[:, i],
-                min_val,
-                max_val,
-            ))
-    return feature_scan
-
-
-
 def apply_domain_restriction_transport(transport_runtime_params, geo,
                               transport_coeffs, pedestal_model_output):
     active_mask = (
@@ -2306,15 +2287,6 @@ def call_qlknn_implementation(
         x=qualikiz_inputs.x * qualikiz_inputs.epsilon_lcfs / _EPSILON_NN,
     )
     feature_scan = get_model_inputs_from_qualikiz_inputs(qualikiz_inputs)
-    feature_scan = jax.lax.cond(
-        False,
-        lambda: clip_inputs(
-            feature_scan,
-            g.clip_margin,
-            g.model.inputs_and_ranges,
-        ),
-        lambda: feature_scan,
-    )
     model_output = predict(feature_scan)
     qi_itg_squeezed = model_output["qi_itg"].squeeze()
     qi = qi_itg_squeezed + model_output["qi_tem"].squeeze()
@@ -3323,7 +3295,6 @@ g.geo_g1_over_vpr2_face = jnp.concatenate([jnp.expand_dims(first_element, axis=-
 g.pedestal_model = PedestalConfig().build_pedestal_model()
 g.source_models = g.sources.build_models()
 g.ETG_correction_factor = 1.0 / 3.0
-g.clip_margin = 0.95
 g.collisionality_multiplier = 1.0
 g.smag_alpha_correction = True
 g.q_sawtooth_proxy = True
