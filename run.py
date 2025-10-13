@@ -934,7 +934,6 @@ class RuntimeParamsGcS(RuntimeParamsSrc):
     fraction_of_total_current: Any
     gaussian_width: Any
     gaussian_location: Any
-    use_absolute_current: Any
 
 
 def calculate_generic_current(
@@ -959,12 +958,8 @@ def calculate_generic_current(
 
 
 def _calculate_I_generic(runtime_params, source_params):
-    return jnp.where(
-        source_params.use_absolute_current,
-        source_params.I_generic,
-        (runtime_params.profile_conditions.Ip *
-         source_params.fraction_of_total_current),
-    )
+    return (runtime_params.profile_conditions.Ip *
+            source_params.fraction_of_total_current)
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True, eq=True)
@@ -984,7 +979,6 @@ class GenericCurrentSourceConfig(SourceModelBase):
         0.2)
     gaussian_width: TimeVaryingScalar = ValidatedDefault(0.05)
     gaussian_location: UnitIntervalTimeVaryingScalar = ValidatedDefault(0.4)
-    use_absolute_current: bool = False
     mode: Annotated[Mode, JAX_STATIC] = Mode.MODEL_BASED
 
     @property
@@ -1002,7 +996,6 @@ class GenericCurrentSourceConfig(SourceModelBase):
                 t),
             gaussian_width=self.gaussian_width.get_value(t),
             gaussian_location=self.gaussian_location.get_value(t),
-            use_absolute_current=self.use_absolute_current,
         )
 
     def build_source(self):
