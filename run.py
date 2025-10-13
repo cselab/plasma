@@ -473,7 +473,7 @@ class CoreTransport:
     V_neo_e: Any = None
     V_neo_ware_e: Any = None
 
-    def chi_max(self, geo):
+    def chi_max(self):
         return jnp.maximum(
             jnp.max(self.chi_face_ion * g.geo_g1_over_vpr2_face),
             jnp.max(self.chi_face_el * g.geo_g1_over_vpr2_face),
@@ -2644,7 +2644,7 @@ MIN_DELTA: Final[float] = 1e-7
 
 @jax.jit
 def next_dt(t, runtime_params, geo, core_transport):
-    chi_max = core_transport.chi_max(geo)
+    chi_max = core_transport.chi_max()
     basic_dt = (3.0 / 4.0) * (jnp.array(g.dx)**2) / chi_max
     dt = jnp.minimum(
         g.chi_timestep_prefactor * basic_dt,
