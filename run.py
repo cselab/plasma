@@ -170,14 +170,6 @@ class TimeVaryingArray(BaseModelFrozen):
             rho_norm=g.face_centers,
         )
 
-    @functools.cached_property
-    def _get_cached_interpolated_param_face_right(self):
-        return InterpolatedVarTimeRho(
-            self.value,
-            rho_norm=g.face_centers[-1],
-        )
-
-
 class TimeVaryingScalar(BaseModelFrozen):
     time: Any
     value: Any
