@@ -2479,13 +2479,28 @@ def coeffs_callback(runtime_params,
         Z_eff_face=ions.Z_eff_face,
         q_face=calc_q_face(geo, updated_core_profiles.psi),
     )
-    return calc_coeffs(
-        runtime_params=runtime_params,
-        geo=None,
-        core_profiles=core_profiles,
-        explicit_source_profiles=explicit_source_profiles,
-        explicit_call=explicit_call,
-    )
+    # Inlined calc_coeffs
+    if explicit_call and g.theta_implicit == 1.0:
+        tic_T_i = core_profiles.n_i.value * g.geo_vpr**(5.0 / 3.0)
+        tic_T_e = core_profiles.n_e.value * g.geo_vpr**(5.0 / 3.0)
+        tic_psi = jnp.ones_like(g.geo_vpr)
+        tic_dens_el = g.geo_vpr
+        var_to_tic = {
+            "T_i": tic_T_i,
+            "T_e": tic_T_e,
+            "psi": tic_psi,
+            "n_e": tic_dens_el,
+        }
+        transient_in_cell = tuple(var_to_tic[var] for var in g.evolving_names)
+        coeffs = Block1DCoeffs(transient_in_cell=transient_in_cell, )
+        return coeffs
+    else:
+        return _calc_coeffs_full(
+            runtime_params=runtime_params,
+            geo=None,
+            core_profiles=core_profiles,
+            explicit_source_profiles=explicit_source_profiles,
+        )
 
 
 def _calculate_pereverzev_flux(geo, core_profiles, pedestal_model_output):
@@ -2535,34 +2550,6 @@ def _calculate_pereverzev_flux(geo, core_profiles, pedestal_model_output):
         d_face_per_el,
         v_face_per_el,
     )
-
-
-def calc_coeffs(runtime_params,
-                geo,
-                core_profiles,
-                explicit_source_profiles,
-                explicit_call=False):
-    if explicit_call and g.theta_implicit == 1.0:
-        tic_T_i = core_profiles.n_i.value * g.geo_vpr**(5.0 / 3.0)
-        tic_T_e = core_profiles.n_e.value * g.geo_vpr**(5.0 / 3.0)
-        tic_psi = jnp.ones_like(g.geo_vpr)
-        tic_dens_el = g.geo_vpr
-        var_to_tic = {
-            "T_i": tic_T_i,
-            "T_e": tic_T_e,
-            "psi": tic_psi,
-            "n_e": tic_dens_el,
-        }
-        transient_in_cell = tuple(var_to_tic[var] for var in g.evolving_names)
-        coeffs = Block1DCoeffs(transient_in_cell=transient_in_cell, )
-        return coeffs
-    else:
-        return _calc_coeffs_full(
-            runtime_params=runtime_params,
-            geo=geo,
-            core_profiles=core_profiles,
-            explicit_source_profiles=explicit_source_profiles,
-        )
 
 
 @jax.jit
