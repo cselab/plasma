@@ -2734,17 +2734,6 @@ class Ions:
     Z_eff_face: Any
 
 
-def get_updated_electron_temperature(profile_conditions_params):
-    T_e = CellVariable(
-        value=profile_conditions_params.T_e,
-        left_face_grad_constraint=jnp.zeros(()),
-        right_face_grad_constraint=None,
-        right_face_constraint=profile_conditions_params.T_e_right_bc,
-        dr=geo_drho_norm(),
-    )
-    return T_e
-
-
 def get_updated_electron_density(profile_conditions_params):
     nGW = profile_conditions_params.Ip / 1e6 / (jnp.pi *
                                                 g.geo_a_minor**2) * 1e20
@@ -3846,7 +3835,13 @@ T_i = CellVariable(
     right_face_constraint=runtime_params.profile_conditions.T_i_right_bc,
     dr=geo_drho_norm(),
 )
-T_e = get_updated_electron_temperature(runtime_params.profile_conditions)
+T_e = CellVariable(
+    value=runtime_params.profile_conditions.T_e,
+    left_face_grad_constraint=jnp.zeros(()),
+    right_face_grad_constraint=None,
+    right_face_constraint=runtime_params.profile_conditions.T_e_right_bc,
+    dr=geo_drho_norm(),
+)
 n_e = get_updated_electron_density(runtime_params.profile_conditions)
 ions = get_updated_ions(runtime_params, n_e, T_e)
 v_loop_lcfs = (
