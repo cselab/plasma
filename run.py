@@ -2307,7 +2307,7 @@ def call_qlknn_implementation(
     )
     feature_scan = get_model_inputs_from_qualikiz_inputs(qualikiz_inputs)
     feature_scan = jax.lax.cond(
-        g.clip_inputs,
+        False,
         lambda: clip_inputs(
             feature_scan,
             g.clip_margin,
@@ -3303,7 +3303,6 @@ g.geo_delta_lower_face = delta_lower_face
 g.geo_spr_hires = spr_hires
 g.geo_rho_hires_norm = rho_hires_norm
 g.geo_rho_hires = rho_hires
-g.geo_z_magnetic_axis = None
 g.geo_q_correction_factor = 1
 Phi_b = g.geo_Phi_face[..., -1]
 g.geo_Phi_b = Phi_b
@@ -3324,7 +3323,6 @@ g.geo_g1_over_vpr2_face = jnp.concatenate([jnp.expand_dims(first_element, axis=-
 g.pedestal_model = PedestalConfig().build_pedestal_model()
 g.source_models = g.sources.build_models()
 g.ETG_correction_factor = 1.0 / 3.0
-g.clip_inputs = False
 g.clip_margin = 0.95
 g.collisionality_multiplier = 1.0
 g.smag_alpha_correction = True
