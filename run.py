@@ -1705,8 +1705,8 @@ class PlasmaComposition(BaseModelFrozen):
         ImpurityFractions,
         pydantic.Field(discriminator="impurity_mode"),
     ]
-    main_ion: IonMapping = ValidatedDefault({"D": 0.5, "T": 0.5})
-    Z_eff: TimeVaryingArray = ValidatedDefault(1.0)
+    main_ion: IonMapping
+    Z_eff: TimeVaryingArray
 
     def tree_flatten(self):
         children = (
@@ -1730,14 +1730,13 @@ class PlasmaComposition(BaseModelFrozen):
 
     @functools.cached_property
     def _main_ion_mixture(self):
+        print(f"preved: {self.impurity=}")
         return IonMixture.model_construct(species=self.main_ion, )
 
     def get_main_ion_names(self):
         return tuple(self._main_ion_mixture.species.keys())
 
     def get_impurity_names(self):
-        print(self.impurity)
-        print(type(self.impurity))
         return tuple(self.impurity.species.keys())
 
     def build_runtime_params(self, t):
