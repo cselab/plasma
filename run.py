@@ -111,19 +111,6 @@ class BaseModelFrozen(pydantic.BaseModel):
         return super().__new__(registered_cls)
 
     @classmethod
-    @functools.cache
-    def _jit_static_kwarg_names(cls):
-        return tuple(name for name in cls.model_fields.keys()
-                     if JAX_STATIC in cls.model_fields[name].metadata)
-
-    def tree_flatten(self):
-        static_names = self._jit_static_kwarg_names()
-        dynamic_names = self._jit_dynamic_kwarg_names()
-        static_children = {name: getattr(self, name) for name in static_names}
-        dynamic_children = [getattr(self, name) for name in dynamic_names]
-        return (dynamic_children, static_children)
-
-    @classmethod
     def tree_unflatten(cls, aux_data, children):
         dynamic_kwargs = {
             name: value
