@@ -2871,8 +2871,6 @@ class QLKNNTransportModel0:
 
 
 class QLKNNTransportModel(BaseModelFrozen):
-    model_name: Annotated[Literal["qlknn"], JAX_STATIC] = "qlknn"
-    model_path: Annotated[str, JAX_STATIC] = ""
     rho_min: UnitIntervalTimeVaryingScalar = ValidatedDefault(0.0)
     rho_max: UnitIntervalTimeVaryingScalar = ValidatedDefault(1.0)
 
