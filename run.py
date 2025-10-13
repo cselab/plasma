@@ -267,13 +267,8 @@ g.mu_0 = 4 * jnp.pi * 1e-7
 g.k_B = 1.380649e-23
 g.eps = 1e-7
 ION_PROPERTIES: Final[tuple[IonProperties, ...]] = (
-    IonProperties(symbol="H", name="Hydrogen", A=1.008, Z=1.0),
     IonProperties(symbol="D", name="Deuterium", A=2.0141, Z=1.0),
     IonProperties(symbol="T", name="Tritium", A=3.0160, Z=1.0),
-    IonProperties(symbol="He3", name="Helium-3", A=3.0160, Z=2.0),
-    IonProperties(symbol="He4", name="Helium-4", A=4.0026, Z=2.0),
-    IonProperties(symbol="Li", name="Lithium", A=5.3917, Z=3.0),
-    IonProperties(symbol="Be", name="Beryllium", A=9.0122, Z=4.0),
     IonProperties(symbol="C", name="Carbon", A=12.011, Z=6.0),
     IonProperties(symbol="N", name="Nitrogen", A=14.007, Z=7.0),
     IonProperties(symbol="O", name="Oxygen", A=15.999, Z=8.0),
