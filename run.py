@@ -799,34 +799,6 @@ class BootstrapCurrent:
         )
 
 
-class SauterModel:
-
-    def calculate_bootstrap_current(self, geometry, core_profiles):
-        result = _calculate_bootstrap_current(
-            Z_eff_face=core_profiles.Z_eff_face,
-            Z_i_face=core_profiles.Z_i_face,
-            n_e=core_profiles.n_e,
-            n_i=core_profiles.n_i,
-            T_e=core_profiles.T_e,
-            T_i=core_profiles.T_i,
-            psi=core_profiles.psi,
-            q_face=core_profiles.q_face,
-            geo=geometry,
-        )
-        return BootstrapCurrent(
-            j_bootstrap=result.j_bootstrap,
-            j_bootstrap_face=result.j_bootstrap_face,
-        )
-
-
-class SauterModelConfig(BaseModelFrozen):
-    model_name: Annotated[Literal["sauter"], JAX_STATIC] = "sauter"
-    bootstrap_multiplier: float = 1.0
-
-    def build_model(self):
-        return SauterModel()
-
-
 @jax.jit
 def _calculate_bootstrap_current(*, Z_eff_face, Z_i_face, n_e, n_i, T_e, T_i,
                                  psi, q_face, geo):
@@ -1692,8 +1664,21 @@ def build_source_profiles1(runtime_params,
         geo=geo,
         core_profiles=core_profiles,
     )
-    bootstrap_current = g.bootstrap_current.calculate_bootstrap_current(
-        geo, core_profiles)
+    result = _calculate_bootstrap_current(
+        Z_eff_face=core_profiles.Z_eff_face,
+        Z_i_face=core_profiles.Z_i_face,
+        n_e=core_profiles.n_e,
+        n_i=core_profiles.n_i,
+        T_e=core_profiles.T_e,
+        T_i=core_profiles.T_i,
+        psi=core_profiles.psi,
+        q_face=core_profiles.q_face,
+        geo=geo,
+    )
+    bootstrap_current = BootstrapCurrent(
+        j_bootstrap=result.j_bootstrap,
+        j_bootstrap_face=result.j_bootstrap_face,
+    )
     profiles = SourceProfiles(
         bootstrap_current=bootstrap_current,
         qei=qei,
@@ -3671,7 +3656,6 @@ g.smag_alpha_correction = True
 g.q_sawtooth_proxy = True
 g.smoothing_width = 0.1
 g.transport_config = QLKNNTransportModel()
-g.bootstrap_current = SauterModelConfig().build_model()
 runtime_params_for_init, geo_for_init = get_consistent_runtime_params_and_geometry(
     t=g.t_initial, )
 runtime_params = runtime_params_for_init
@@ -3760,8 +3744,21 @@ if not sources_are_calculated:
         calculate_anyway=True,
         calculated_source_profiles=source_profiles,
     )
-    bootstrap_current = g.bootstrap_current.calculate_bootstrap_current(
-        geo, core_profiles)
+    result = _calculate_bootstrap_current(
+        Z_eff_face=core_profiles.Z_eff_face,
+        Z_i_face=core_profiles.Z_i_face,
+        n_e=core_profiles.n_e,
+        n_i=core_profiles.n_i,
+        T_e=core_profiles.T_e,
+        T_i=core_profiles.T_i,
+        psi=core_profiles.psi,
+        q_face=core_profiles.q_face,
+        geo=geo,
+    )
+    bootstrap_current = BootstrapCurrent(
+        j_bootstrap=result.j_bootstrap,
+        j_bootstrap_face=result.j_bootstrap_face,
+    )
     source_profiles = dataclasses.replace(source_profiles,
                                           bootstrap_current=bootstrap_current)
 psi_sources = source_profiles.total_psi_sources(geo)
