@@ -46,12 +46,6 @@ class InterpolatedVarSingleAxis:
     def __init__(self, value, interpolation_mode):
         self.xs, self.ys = value
 
-    def tree_flatten(self):
-        static_params = {
-            "interpolation_mode": None,
-        }
-        return (self._value, static_params)
-
     @classmethod
     def tree_unflatten(cls, aux_data, children):
         return cls(children, **aux_data)
