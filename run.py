@@ -200,15 +200,7 @@ class TimeVaryingScalar(BaseModelFrozen):
         )
 
 
-def _interval(time_varying_scalar, lower_bound, upper_bound):
-    return time_varying_scalar
-
-
-UnitIntervalTimeVaryingScalar: TypeAlias = typing_extensions.Annotated[
-    TimeVaryingScalar,
-    pydantic.AfterValidator(
-        functools.partial(_interval, lower_bound=0.0, upper_bound=1.0)),
-]
+UnitIntervalTimeVaryingScalar: TypeAlias = TimeVaryingScalar
 UnitInterval: TypeAlias = Annotated[float, pydantic.Field(ge=0.0, le=1.0)]
 OpenUnitInterval: TypeAlias = Annotated[float, pydantic.Field(gt=0.0, lt=1.0)]
 ValidatedDefault = functools.partial(pydantic.Field, validate_default=True)
@@ -493,11 +485,6 @@ class SolverNumericOutputs:
     solver_error_state: Any = 0
 
 
-def face_to_cell(face):
-    return 0.5 * (face[:-1] + face[1:])
-
-
-
 def calc_q_face(geo, psi):
     inv_iota = jnp.abs(
         (2 * g.geo_Phi_b * g.face_centers[1:]) / psi.face_grad()[1:])
@@ -534,11 +521,6 @@ def calc_s_face(geo, psi):
     return s_face
 
 
-def calculate_psi_grad_constraint_from_Ip(Ip):
-    return (Ip * (16 * jnp.pi**3 * g.mu_0 * g.geo_Phi_b) /
-            (g.geo_g2g3_over_rhon_face[-1] * g.geo_F_face[-1]))
-
-
 def calculate_psidot_from_psi_sources(*, psi_sources, sigma, psi, geo):
     toc_psi = (1.0 / g.resistivity_multiplier * g.cell_centers * sigma *
                g.mu_0 * 16 * jnp.pi**2 * g.geo_Phi_b**2 / g.geo_F**2)
@@ -551,14 +533,6 @@ def calculate_psidot_from_psi_sources(*, psi_sources, sigma, psi, geo):
     c += psi_sources
     psidot = (jnp.dot(c_mat, psi.value) + c) / toc_psi
     return psidot
-
-
-def calculate_main_ion_dilution_factor(Z_i, Z_impurity, Z_eff):
-    return (Z_impurity - Z_eff) / (Z_i * (Z_impurity - Z_i))
-
-def calculate_log_lambda_ei(T_e, n_e):
-    T_e_ev = T_e * 1e3
-    return 31.3 - 0.5 * jnp.log(n_e) + jnp.log(T_e_ev)
 
 
 def _calculate_log_tau_e_Z1(T_e, n_e, log_lambda_ei):
@@ -719,7 +693,7 @@ class Conductivity:
 def _calculate_conductivity0(*, Z_eff_face, n_e, T_e, q_face, geo):
     f_trap = calculate_f_trap(geo)
     NZ = 0.58 + 0.74 / (0.76 + Z_eff_face)
-    log_lambda_ei = calculate_log_lambda_ei(T_e.face_value(), n_e.face_value())
+    log_lambda_ei = 31.3 - 0.5 * jnp.log(n_e.face_value()) + jnp.log(T_e.face_value() * 1e3)
     sigsptz = (1.9012e04 * (T_e.face_value() * 1e3)**1.5 / Z_eff_face / NZ /
                log_lambda_ei)
     nu_e_star_face = calculate_nu_e_star(
@@ -736,7 +710,7 @@ def _calculate_conductivity0(*, Z_eff_face, n_e, T_e, q_face, geo):
     signeo_face = 1.0 - ft33 * (1.0 + 0.36 / Z_eff_face - ft33 *
                                 (0.59 / Z_eff_face - 0.23 / Z_eff_face * ft33))
     sigma_face = sigsptz * signeo_face
-    sigmaneo_cell = face_to_cell(sigma_face)
+    sigmaneo_cell = 0.5 * (sigma_face[:-1] + sigma_face[1:])
     return Conductivity(
         sigma=sigmaneo_cell,
         sigma_face=sigma_face,
@@ -772,7 +746,7 @@ class BootstrapCurrent:
 def _calculate_bootstrap_current(*, Z_eff_face, Z_i_face, n_e, n_i, T_e, T_i,
                                  psi, q_face, geo):
     f_trap = calculate_f_trap(geo)
-    log_lambda_ei = calculate_log_lambda_ei(T_e.face_value(), n_e.face_value())
+    log_lambda_ei = 31.3 - 0.5 * jnp.log(n_e.face_value()) + jnp.log(T_e.face_value() * 1e3)
     T_i_ev = T_i.face_value() * 1e3
     log_lambda_ii = (30.0 - 0.5 * jnp.log(n_i.face_value()) +
                      1.5 * jnp.log(T_i_ev) - 3.0 * jnp.log(Z_i_face))
@@ -814,7 +788,7 @@ def _calculate_bootstrap_current(*, Z_eff_face, Z_i_face, n_e, n_i, T_e, T_i,
     j_bootstrap_face = global_coeff * (
         necoeff * dlnne_drnorm + nicoeff * dlnni_drnorm +
         tecoeff * dlnte_drnorm + ticoeff * dlnti_drnorm)
-    j_bootstrap = face_to_cell(j_bootstrap_face)
+    j_bootstrap = 0.5 * (j_bootstrap_face[:-1] + j_bootstrap_face[1:])
     return BootstrapCurrent(
         j_bootstrap=j_bootstrap,
         j_bootstrap_face=j_bootstrap_face,
@@ -1465,8 +1439,7 @@ class SourceModels:
 
 def _model_based_qei(runtime_params, geo, core_profiles):
     zeros = jnp.zeros_like(g.cell_centers)
-    log_lambda_ei = calculate_log_lambda_ei(core_profiles.T_e.value,
-                                            core_profiles.n_e.value)
+    log_lambda_ei = 31.3 - 0.5 * jnp.log(core_profiles.n_e.value) + jnp.log(core_profiles.T_e.value * 1e3)
     log_tau_e_Z1 = _calculate_log_tau_e_Z1(
         core_profiles.T_e.value,
         core_profiles.n_e.value,
@@ -2292,9 +2265,8 @@ def prepare_qualikiz_inputs(geo, core_profiles):
     x = rmid_face / rmid_face[-1]
     x = jnp.where(jnp.abs(x) < g.eps, g.eps, x)
     Ti_Te = core_profiles.T_i.face_value() / core_profiles.T_e.face_value()
-    log_lambda_ei_face = calculate_log_lambda_ei(
-        core_profiles.T_e.face_value(),
-        core_profiles.n_e.face_value(),
+    log_lambda_ei_face = (31.3 - 0.5 * jnp.log(core_profiles.n_e.face_value()) + 
+                          jnp.log(core_profiles.T_e.face_value() * 1e3)
     )
     log_tau_e_Z1 = _calculate_log_tau_e_Z1(
         core_profiles.T_e.face_value(),
@@ -2601,13 +2573,12 @@ def get_updated_ions(runtime_params, n_e, T_e):
     dilution_factor = jnp.where(
         Z_eff == 1.0,
         1.0,
-        calculate_main_ion_dilution_factor(Z_i, Z_impurity, Z_eff),
+        (Z_impurity - Z_eff) / (Z_i * (Z_impurity - Z_i)),
     )
     dilution_factor_edge = jnp.where(
         Z_eff_edge == 1.0,
         1.0,
-        calculate_main_ion_dilution_factor(Z_i_face[-1], Z_impurity_face[-1],
-                                           Z_eff_edge),
+        (Z_impurity_face[-1] - Z_eff_edge) / (Z_i_face[-1] * (Z_impurity_face[-1] - Z_i_face[-1])),
             )
     n_i = CellVariable(
         value=n_e.value * dilution_factor,
@@ -3472,8 +3443,8 @@ core_profiles = CoreProfiles(
 sources_are_calculated = False
 source_profiles = SourceProfiles(
     bootstrap_current=BootstrapCurrent.zeros(None), qei=QeiInfo.zeros(None))
-dpsi_drhonorm_edge = calculate_psi_grad_constraint_from_Ip(
-    runtime_params.profile_conditions.Ip, )
+dpsi_drhonorm_edge = (runtime_params.profile_conditions.Ip * (16 * jnp.pi**3 * g.mu_0 * g.geo_Phi_b) /
+                      (g.geo_g2g3_over_rhon_face[-1] * g.geo_F_face[-1]))
 assert not runtime_params.profile_conditions.use_v_loop_lcfs_boundary_condition
 # Compute scaled psi values using the Ip scale factor
 geo_psi_from_Ip_scaled = g.geo_psi_from_Ip_base * Ip_scale_factor
@@ -3620,11 +3591,8 @@ while current_state.t < (g.t_final - g.tolerance):
         )
         Z_i_edge = ions_edge.Z_i_face[-1]
         Z_impurity_edge = ions_edge.Z_impurity_face[-1]
-        dilution_factor_edge = calculate_main_ion_dilution_factor(
-            Z_i_edge,
-            Z_impurity_edge,
-            runtime_params_t_plus_dt.plasma_composition.Z_eff_face[-1],
-        )
+        Z_eff_edge = runtime_params_t_plus_dt.plasma_composition.Z_eff_face[-1]
+        dilution_factor_edge = (Z_impurity_edge - Z_eff_edge) / (Z_i_edge * (Z_impurity_edge - Z_i_edge))
         n_i_bound_right = n_e_right_bc * dilution_factor_edge
         n_impurity_bound_right = (n_e_right_bc -
                                   n_i_bound_right * Z_i_edge) / Z_impurity_edge
@@ -3662,8 +3630,8 @@ while current_state.t < (g.t_final - g.tolerance):
                 "psi":
             dict(
                     right_face_grad_constraint=(
-                        calculate_psi_grad_constraint_from_Ip(
-                            Ip=profile_conditions_t_plus_dt.Ip, )
+                        (profile_conditions_t_plus_dt.Ip * (16 * jnp.pi**3 * g.mu_0 * g.geo_Phi_b) /
+                         (g.geo_g2g3_over_rhon_face[-1] * g.geo_F_face[-1]))
                         if not runtime_params_t.profile_conditions.
                         use_v_loop_lcfs_boundary_condition else None),
                 right_face_constraint=(_calculate_psi_value_constraint_from_v_loop(
