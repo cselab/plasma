@@ -1855,39 +1855,6 @@ class TurbulentTransport:
     chi_face_ion_gyrobohm: jax.Array | None = None
 
 
-def _build_smoothing_matrix(transport_runtime_params, runtime_params, geo,
-                            pedestal_model_output):
-    lower_cutoff = 0.01
-    kernel = jnp.exp(
-        -jnp.log(2) *
-        (g.face_centers[:, jnp.newaxis] - g.face_centers)**2 /
-        (g.smoothing_width**2 + g.eps))
-    mask_outer_edge = g.rho_norm_ped_top - g.eps
-    mask_inner_edge = g.rho_inner + g.eps
-    mask = jnp.where(
-        jnp.logical_and(
-            g.face_centers > mask_inner_edge,
-            g.face_centers < mask_outer_edge,
-        ),
-        1.0,
-        0.0,
-    )
-    diag_mask = jnp.diag(mask)
-    kernel = jnp.dot(diag_mask, kernel)
-    num_rows = len(mask)
-    mask_mat = jnp.tile(mask, (num_rows, 1))
-    kernel *= mask_mat
-    zero_row_mask = jnp.all(kernel == 0, axis=1)
-    kernel = jnp.where(zero_row_mask[:, jnp.newaxis], jnp.eye(kernel.shape[0]),
-                       kernel)
-    row_sums = jnp.sum(kernel, axis=1)
-    kernel /= row_sums[:, jnp.newaxis]
-    kernel = jnp.where(kernel < lower_cutoff, 0.0, kernel)
-    row_sums = jnp.sum(kernel, axis=1)
-    kernel /= row_sums[:, jnp.newaxis]
-    return kernel
-
-
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class NormalizedLogarithmicGradients:
@@ -2011,24 +1978,6 @@ _FLUX_NAME_MAP: Final[Mapping[str, str]] = immutabledict.immutabledict({
 })
 
 
-def get_model_inputs_from_qualikiz_inputs(qualikiz_inputs):
-    input_map = {
-        "Ani": lambda x: x.Ani0,
-        "LogNuStar": lambda x: x.log_nu_star_face,
-    }
-
-    def _get_input(key):
-        return jnp.array(
-            input_map.get(key, lambda x: getattr(x, key))(qualikiz_inputs),
-            dtype=jnp.float64,
-        )
-
-    return jnp.array(
-        [_get_input(key) for key in g.model.inputs_and_ranges.keys()],
-        dtype=jnp.float64,
-    ).T
-
-
 def predict(inputs):
     model_predictions = g.model.predict(inputs)
     return {
@@ -2061,27 +2010,6 @@ class QLKNNRuntimeConfigInputs:
             Ped_top=g.rho_norm_ped_top,
         )
 
-
-def apply_domain_restriction_transport(transport_runtime_params, geo,
-                              transport_coeffs, pedestal_model_output):
-    active_mask = (
-        (g.face_centers > transport_runtime_params.rho_min)
-        & (g.face_centers <= transport_runtime_params.rho_max)
-        & (g.face_centers <= g.rho_norm_ped_top))
-    active_mask = (jnp.asarray(active_mask).at[0].set(
-        transport_runtime_params.rho_min == 0))
-    chi_face_ion = jnp.where(active_mask, transport_coeffs.chi_face_ion,
-                             0.0)
-    chi_face_el = jnp.where(active_mask, transport_coeffs.chi_face_el, 0.0)
-    d_face_el = jnp.where(active_mask, transport_coeffs.d_face_el, 0.0)
-    v_face_el = jnp.where(active_mask, transport_coeffs.v_face_el, 0.0)
-    return dataclasses.replace(
-        transport_coeffs,
-        chi_face_ion=chi_face_ion,
-        chi_face_el=chi_face_el,
-        d_face_el=d_face_el,
-        v_face_el=v_face_el,
-    )
 
 def apply_clipping_transport(transport_runtime_params, transport_coeffs):
     chi_face_ion = jnp.clip(
@@ -2149,12 +2077,36 @@ def smooth_coeffs_transport(
     transport_coeffs,
     pedestal_model_output,
 ):
-    smoothing_matrix = _build_smoothing_matrix(
-        transport_runtime_params,
-        runtime_params,
-        geo,
-        pedestal_model_output,
+    # Inlined _build_smoothing_matrix
+    lower_cutoff = 0.01
+    kernel = jnp.exp(
+        -jnp.log(2) *
+        (g.face_centers[:, jnp.newaxis] - g.face_centers)**2 /
+        (g.smoothing_width**2 + g.eps))
+    mask_outer_edge = g.rho_norm_ped_top - g.eps
+    mask_inner_edge = g.rho_inner + g.eps
+    mask = jnp.where(
+        jnp.logical_and(
+            g.face_centers > mask_inner_edge,
+            g.face_centers < mask_outer_edge,
+        ),
+        1.0,
+        0.0,
     )
+    diag_mask = jnp.diag(mask)
+    kernel = jnp.dot(diag_mask, kernel)
+    num_rows = len(mask)
+    mask_mat = jnp.tile(mask, (num_rows, 1))
+    kernel *= mask_mat
+    zero_row_mask = jnp.all(kernel == 0, axis=1)
+    kernel = jnp.where(zero_row_mask[:, jnp.newaxis], jnp.eye(kernel.shape[0]),
+                       kernel)
+    row_sums = jnp.sum(kernel, axis=1)
+    kernel /= row_sums[:, jnp.newaxis]
+    kernel = jnp.where(kernel < lower_cutoff, 0.0, kernel)
+    row_sums = jnp.sum(kernel, axis=1)
+    kernel /= row_sums[:, jnp.newaxis]
+    smoothing_matrix = kernel
 
     def smooth_single_coeff(coeff):
         return jax.lax.cond(
@@ -2270,7 +2222,20 @@ def calculate_transport_coeffs(runtime_params, geo, core_profiles,
         qualikiz_inputs,
         x=qualikiz_inputs.x * qualikiz_inputs.epsilon_lcfs / _EPSILON_NN,
     )
-    feature_scan = get_model_inputs_from_qualikiz_inputs(qualikiz_inputs)
+    # Inlined get_model_inputs_from_qualikiz_inputs
+    input_map = {
+        "Ani": lambda x: x.Ani0,
+        "LogNuStar": lambda x: x.log_nu_star_face,
+    }
+    def _get_input(key):
+        return jnp.array(
+            input_map.get(key, lambda x: getattr(x, key))(qualikiz_inputs),
+            dtype=jnp.float64,
+        )
+    feature_scan = jnp.array(
+        [_get_input(key) for key in g.model.inputs_and_ranges.keys()],
+        dtype=jnp.float64,
+    ).T
     model_output = predict(feature_scan)
     qi_itg_squeezed = model_output["qi_itg"].squeeze()
     qi = qi_itg_squeezed + model_output["qi_tem"].squeeze()
@@ -2308,11 +2273,23 @@ def calculate_transport_coeffs(runtime_params, geo, core_profiles,
         d_face_el=d_face_el,
         v_face_el=v_face_el,
     )
-    transport_coeffs = apply_domain_restriction_transport(
-        transport_runtime_params,
-        geo,
+    # Inlined apply_domain_restriction_transport
+    active_mask = (
+        (g.face_centers > transport_runtime_params.rho_min)
+        & (g.face_centers <= transport_runtime_params.rho_max)
+        & (g.face_centers <= g.rho_norm_ped_top))
+    active_mask = (jnp.asarray(active_mask).at[0].set(
+        transport_runtime_params.rho_min == 0))
+    chi_face_ion = jnp.where(active_mask, transport_coeffs.chi_face_ion, 0.0)
+    chi_face_el = jnp.where(active_mask, transport_coeffs.chi_face_el, 0.0)
+    d_face_el = jnp.where(active_mask, transport_coeffs.d_face_el, 0.0)
+    v_face_el = jnp.where(active_mask, transport_coeffs.v_face_el, 0.0)
+    transport_coeffs = dataclasses.replace(
         transport_coeffs,
-        pedestal_model_output,
+        chi_face_ion=chi_face_ion,
+        chi_face_el=chi_face_el,
+        d_face_el=d_face_el,
+        v_face_el=v_face_el,
     )
     transport_coeffs = apply_clipping_transport(
         transport_runtime_params,
