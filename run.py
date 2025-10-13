@@ -480,12 +480,6 @@ class CoreTransport:
         )
 
 
-@jax.tree_util.register_dataclass
-@dataclasses.dataclass
-class SolverNumericOutputs:
-    solver_error_state: Any = 0
-
-
 def calc_q_face(geo, psi):
     inv_iota = jnp.abs(
         (2 * g.geo_Phi_b * g.face_centers[1:]) / psi.face_grad()[1:])
@@ -2503,55 +2497,6 @@ def coeffs_callback(runtime_params,
         )
 
 
-def _calculate_pereverzev_flux(geo, core_profiles, pedestal_model_output):
-    geo_factor = jnp.concatenate(
-        [jnp.ones(1), g.geo_g1_over_vpr_face[1:] / g.geo_g0_face[1:]])
-    chi_face_per_ion = (g.geo_g1_over_vpr_face *
-                        core_profiles.n_i.face_value() * g.keV_to_J *
-                        g.chi_pereverzev)
-    chi_face_per_el = (g.geo_g1_over_vpr_face *
-                       core_profiles.n_e.face_value() * g.keV_to_J *
-                       g.chi_pereverzev)
-    d_face_per_el = g.D_pereverzev
-    v_face_per_el = (core_profiles.n_e.face_grad() /
-                     core_profiles.n_e.face_value() * d_face_per_el *
-                     geo_factor)
-    chi_face_per_ion = jnp.where(
-        g.face_centers > g.rho_norm_ped_top,
-        0.0,
-        chi_face_per_ion,
-    )
-    chi_face_per_el = jnp.where(
-        g.face_centers > g.rho_norm_ped_top,
-        0.0,
-        chi_face_per_el,
-    )
-    v_heat_face_ion = (core_profiles.T_i.face_grad() /
-                       core_profiles.T_i.face_value() * chi_face_per_ion)
-    v_heat_face_el = (core_profiles.T_e.face_grad() /
-                      core_profiles.T_e.face_value() * chi_face_per_el)
-    d_face_per_el = jnp.where(
-        g.face_centers > g.rho_norm_ped_top,
-        0.0,
-        d_face_per_el * g.geo_g1_over_vpr_face,
-    )
-    v_face_per_el = jnp.where(
-        g.face_centers > g.rho_norm_ped_top,
-        0.0,
-        v_face_per_el * g.geo_g0_face,
-    )
-    chi_face_per_ion = chi_face_per_ion.at[0].set(chi_face_per_ion[1])
-    chi_face_per_el = chi_face_per_el.at[0].set(chi_face_per_el[1])
-    return (
-        chi_face_per_ion,
-        chi_face_per_el,
-        v_heat_face_ion,
-        v_heat_face_el,
-        d_face_per_el,
-        v_face_per_el,
-    )
-
-
 @jax.jit
 def _calc_coeffs_full(runtime_params, geo, core_profiles,
                       explicit_source_profiles):
@@ -2602,14 +2547,45 @@ def _calc_coeffs_full(runtime_params, geo, core_profiles,
     source_n_e = merged_source_profiles.total_sources("n_e", geo)
     source_n_e += mask * g.adaptive_n_source_prefactor * g.n_e_ped
     source_mat_nn += -(mask * g.adaptive_n_source_prefactor)
-    (
+    # Inlined _calculate_pereverzev_flux
+    geo_factor = jnp.concatenate(
+        [jnp.ones(1), g.geo_g1_over_vpr_face[1:] / g.geo_g0_face[1:]])
+    chi_face_per_ion = (g.geo_g1_over_vpr_face *
+                        core_profiles.n_i.face_value() * g.keV_to_J *
+                        g.chi_pereverzev)
+    chi_face_per_el = (g.geo_g1_over_vpr_face *
+                       core_profiles.n_e.face_value() * g.keV_to_J *
+                       g.chi_pereverzev)
+    d_face_per_el = g.D_pereverzev
+    v_face_per_el = (core_profiles.n_e.face_grad() /
+                     core_profiles.n_e.face_value() * d_face_per_el *
+                     geo_factor)
+    chi_face_per_ion = jnp.where(
+        g.face_centers > g.rho_norm_ped_top,
+        0.0,
         chi_face_per_ion,
+    )
+    chi_face_per_el = jnp.where(
+        g.face_centers > g.rho_norm_ped_top,
+        0.0,
         chi_face_per_el,
-        v_heat_face_ion,
-        v_heat_face_el,
-        d_face_per_el,
-        v_face_per_el,
-    ) = _calculate_pereverzev_flux(geo, core_profiles, pedestal_model_output)
+    )
+    v_heat_face_ion = (core_profiles.T_i.face_grad() /
+                       core_profiles.T_i.face_value() * chi_face_per_ion)
+    v_heat_face_el = (core_profiles.T_e.face_grad() /
+                      core_profiles.T_e.face_value() * chi_face_per_el)
+    d_face_per_el = jnp.where(
+        g.face_centers > g.rho_norm_ped_top,
+        0.0,
+        d_face_per_el * g.geo_g1_over_vpr_face,
+    )
+    v_face_per_el = jnp.where(
+        g.face_centers > g.rho_norm_ped_top,
+        0.0,
+        v_face_per_el * g.geo_g0_face,
+    )
+    chi_face_per_ion = chi_face_per_ion.at[0].set(chi_face_per_ion[1])
+    chi_face_per_el = chi_face_per_el.at[0].set(chi_face_per_el[1])
     full_chi_face_ion += chi_face_per_ion
     full_chi_face_el += chi_face_per_el
     full_d_face_el += d_face_per_el
@@ -2735,14 +2711,14 @@ class ToraxSimState:
     core_transport: Any
     core_sources: Any
     geometry: Any
-    solver_numeric_outputs: Any
+    solver_numeric_outputs: int
 
 
 def cond_fun(inputs):
     next_dt, output = inputs
     solver_outputs = output[2]
     is_nan_next_dt = jnp.isnan(next_dt)
-    solver_did_not_converge = solver_outputs.solver_error_state == 1
+    solver_did_not_converge = solver_outputs == 1
     at_exact_t_final = jnp.allclose(
         current_state.t + next_dt,
         g.t_final,
@@ -3239,7 +3215,7 @@ current_state = ToraxSimState(
     core_profiles=initial_core_profiles,
     core_sources=initial_core_sources,
     core_transport=transport_coeffs,
-    solver_numeric_outputs=SolverNumericOutputs(solver_error_state=0, ),
+    solver_numeric_outputs=0,
     geometry=geo,
 )
 state_history = [current_state]
@@ -3258,7 +3234,7 @@ while current_state.t < (g.t_final - g.tolerance):
     loop_output = (
         core_profiles_to_solver_x_tuple(current_state.core_profiles),
         initial_dt,
-        SolverNumericOutputs(solver_error_state=1, ),
+        1,
         runtime_params_t,
         geo_t,
         current_state.core_profiles,
@@ -3527,7 +3503,7 @@ while current_state.t < (g.t_final - g.tolerance):
         x_new = x_new_guess
         for i in range(0, g.n_corrector_steps + 1):
             x_new = solver_loop_body(i, x_new)
-        solver_numeric_outputs = SolverNumericOutputs(solver_error_state=0, )
+        solver_numeric_outputs = 0
         reduced_dt = dt / g.dt_reduction_factor
         loop_dt = reduced_dt
         loop_output = (
