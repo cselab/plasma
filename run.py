@@ -1938,17 +1938,15 @@ def build_source_profiles1(runtime_params,
     return profiles
 
 
-def build_standard_source_profiles(
-    *,
-    calculated_source_profiles,
-    runtime_params,
-    geo,
-    core_profiles,
-    explicit=True,
-    conductivity=None,
-    calculate_anyway=False,
-    psi_only=False,
-):
+def build_standard_source_profiles(*,
+                                   calculated_source_profiles,
+                                   runtime_params,
+                                   geo,
+                                   core_profiles,
+                                   explicit=True,
+                                   conductivity=None,
+                                   calculate_anyway=False,
+                                   psi_only=False):
 
     def calculate_source(source_name, source):
         source_params = runtime_params.sources[source_name]
