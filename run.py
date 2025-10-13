@@ -1729,7 +1729,6 @@ class PedestalModelOutput:
 class SetTemperatureDensityPedestalModel:
 
     def __call__(self, runtime_params, geo, core_profiles):
-        # jax.lax.cond(True, ...) always takes first branch
         return self._call_implementation(runtime_params, geo, core_profiles)
 
     def _call_implementation(self, runtime_params, geo, core_profiles):
@@ -1955,11 +1954,8 @@ def _build_smoothing_matrix(transport_runtime_params, runtime_params, geo,
         -jnp.log(2) *
         (geo_rho_face_norm()[:, jnp.newaxis] - geo_rho_face_norm())**2 /
         (g.smoothing_width**2 + g.eps))
-    # jnp.logical_and(jnp.logical_not(True), True) = False, always take second branch
     mask_outer_edge = g.rho_norm_ped_top - g.eps
-    # jax.lax.cond(True, ...) always takes first branch
     mask_inner_edge = g.rho_inner + g.eps
-    # jnp.logical_or(False, X) = X
     mask = jnp.where(
         jnp.logical_and(
             geo_rho_face_norm() > mask_inner_edge,
@@ -2229,7 +2225,6 @@ def apply_clipping_transport(transport_runtime_params, transport_coeffs):
 
 def apply_transport_patches(transport_runtime_params,
                              runtime_params, geo, transport_coeffs):
-    # jnp.logical_and(True, X) = X
     chi_face_ion = jnp.where(
         geo_rho_face_norm() < g.rho_inner + g.eps,
         g.chi_i_inner,
@@ -2250,8 +2245,6 @@ def apply_transport_patches(transport_runtime_params,
         g.V_e_inner,
         transport_coeffs.v_face_el,
     )
-    # jnp.logical_and(jnp.logical_and(True, jnp.logical_not(True)), ...) = False
-    # All outer edge conditions are always False, so they don't modify the variables
     return dataclasses.replace(
         transport_coeffs,
         chi_face_ion=chi_face_ion,
@@ -2325,7 +2318,6 @@ def make_core_transport(
                                         geo_rho_b())
         return d_face_el, v_face_el
 
-    # jax.lax.cond(True, ...) always takes first branch
     d_face_el, v_face_el = DV_effective_approach()
     return TurbulentTransport(
         chi_face_ion=chi_face_ion,
@@ -2450,7 +2442,6 @@ def call_qlknn_implementation(
         runtime_params,
         pedestal_model_output,
     )
-    # _combined inlined
     qualikiz_inputs = prepare_qualikiz_inputs(
         geo=geo,
         core_profiles=core_profiles,
@@ -2593,9 +2584,7 @@ class Ions:
 def get_updated_electron_density(profile_conditions_params):
     nGW = profile_conditions_params.Ip / 1e6 / (jnp.pi *
                                                 g.geo_a_minor**2) * 1e20
-    # jnp.where(True, ...) always takes second argument
     n_e_value = profile_conditions_params.n_e * nGW
-    # jnp.where(False, ...) always takes third argument
     n_e_right_bc = profile_conditions_params.n_e_right_bc
     face_left = n_e_value[0]
     face_right = n_e_right_bc
@@ -2982,7 +2971,6 @@ def _calc_coeffs_full(runtime_params, geo, core_profiles,
     source_n_e = merged_source_profiles.total_sources("n_e", geo)
     source_n_e += mask * g.adaptive_n_source_prefactor * g.n_e_ped
     source_mat_nn += -(mask * g.adaptive_n_source_prefactor)
-    # jax.lax.cond(True, ...) always takes first branch
     (
         chi_face_per_ion,
         chi_face_per_el,
@@ -2993,7 +2981,7 @@ def _calc_coeffs_full(runtime_params, geo, core_profiles,
     ) = _calculate_pereverzev_flux(
         geo,
         core_profiles,
-        pedestal_model_output,
+        pedestal_model_output
     )
     full_chi_face_ion += chi_face_per_ion
     full_chi_face_el += chi_face_per_el
@@ -3878,7 +3866,6 @@ while current_state.t < (g.t_final - g.tolerance):
                 Z_eff=updated_values["Z_eff"],
                 Z_eff_face=updated_values["Z_eff_face"],
         )
-        # Inline solver_x_new
         x_old = core_profiles_to_solver_x_tuple(current_state.core_profiles)
         x_new_guess = core_profiles_to_solver_x_tuple(core_profiles_t_plus_dt)
         coeffs_exp = coeffs_callback(
