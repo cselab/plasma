@@ -3193,7 +3193,7 @@ while current_state.t < (g.t_final - g.tolerance):
         initial_dt,
         1,
         runtime_params_t,
-        geo_t,
+        None,
         current_state.core_profiles,
     )
     while cond_fun((loop_dt, loop_output)):
