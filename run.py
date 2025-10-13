@@ -3473,7 +3473,8 @@ g.geo_Phi_b_dot = np.asarray(0.0)
 g.geo_z_magnetic_axis = None
 
 # Initialize geometry cache in g.*
-g.geo_q_correction_factor = jnp.where(False, 1.25, 1)
+# jnp.where(False, ...) always takes third argument
+g.geo_q_correction_factor = 1
 Phi_b = g.geo_Phi_face[..., -1]
 g.geo_Phi_b = Phi_b
 g.geo_rho_b = jnp.sqrt(Phi_b / np.pi / g.B_0)
