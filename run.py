@@ -2883,14 +2883,16 @@ class QLKNNTransportModel0:
 class QLKNNTransportModel(BaseModelFrozen):
     model_name: Annotated[Literal["qlknn"], JAX_STATIC] = "qlknn"
     model_path: Annotated[str, JAX_STATIC] = ""
+    rho_min: UnitIntervalTimeVaryingScalar = ValidatedDefault(0.0)
+    rho_max: UnitIntervalTimeVaryingScalar = ValidatedDefault(1.0)
 
     def build_runtime_params(self, t):
         return RuntimeParams0(
             D_e_max=g.D_e_max,
             V_e_min=g.V_e_min,
             V_e_max=g.V_e_max,
-            rho_min=g.rho_min,
-            rho_max=g.rho_max,
+            rho_min=self.rho_min.get_value(t),
+            rho_max=self.rho_max.get_value(t),
             smoothing_width=g.smoothing_width,
             ETG_correction_factor=g.ETG_correction_factor,
             clip_inputs=g.clip_inputs,
@@ -4617,8 +4619,6 @@ g.clip_margin = 0.95
 g.collisionality_multiplier = 1.0
 g.smag_alpha_correction = True
 g.q_sawtooth_proxy = True
-g.rho_min = 0.0
-g.rho_max = 1.0
 g.smoothing_width = 0.1
 g.transport_config = QLKNNTransportModel()
 g.transport_model = QLKNNTransportModel0()
