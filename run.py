@@ -707,52 +707,52 @@ def _calculate_log_tau_e_Z1(T_e, n_e, log_lambda_ei):
 
 _MAVRIN_Z_COEFFS = immutabledict.immutabledict({
     "C":
-    np.array([
-        [-7.2007e00, -1.2217e01, -7.3521e00, -1.7632e00, 5.8588e00],
-        [0.0000e00, 0.0000e00, 0.0000e00, 0.0000e00, 6.0000e00],
-    ]),
+        np.array([
+            [-7.2007e00, -1.2217e01, -7.3521e00, -1.7632e00, 5.8588e00],
+            [0.0000e00, 0.0000e00, 0.0000e00, 0.0000e00, 6.0000e00],
+        ]),
     "N":
-    np.array([
-        [0.0000e00, 3.3818e00, 1.8861e00, 1.5668e-01, 6.9728e00],
-        [0.0000e00, 0.0000e00, 0.0000e00, 0.0000e00, 7.0000e00],
-    ]),
+        np.array([
+            [0.0000e00, 3.3818e00, 1.8861e00, 1.5668e-01, 6.9728e00],
+            [0.0000e00, 0.0000e00, 0.0000e00, 0.0000e00, 7.0000e00],
+        ]),
     "O":
-    np.array([
-        [0.0000e00, -1.8560e01, -3.8664e01, -2.2093e01, 4.0451e00],
-        [-4.3092e00, -4.6261e-01, -3.7050e-02, 8.0180e-02, 7.9878e00],
-        [0.0000e00, 0.0000e00, 0.0000e00, 0.0000e00, 8.0000e00],
-    ]),
+        np.array([
+            [0.0000e00, -1.8560e01, -3.8664e01, -2.2093e01, 4.0451e00],
+            [-4.3092e00, -4.6261e-01, -3.7050e-02, 8.0180e-02, 7.9878e00],
+            [0.0000e00, 0.0000e00, 0.0000e00, 0.0000e00, 8.0000e00],
+        ]),
     "Ne":
-    np.array([
-        [-2.5303e01, -6.4696e01, -5.3631e01, -1.3242e01, 8.9737e00],
-        [-7.0678e00, 3.6868e00, -8.0723e-01, 2.1413e-01, 9.9532e00],
-        [0.0000e00, 0.0000e00, 0.0000e00, 0.0000e00, 1.0000e01],
-    ]),
+        np.array([
+            [-2.5303e01, -6.4696e01, -5.3631e01, -1.3242e01, 8.9737e00],
+            [-7.0678e00, 3.6868e00, -8.0723e-01, 2.1413e-01, 9.9532e00],
+            [0.0000e00, 0.0000e00, 0.0000e00, 0.0000e00, 1.0000e01],
+        ]),
     "Ar":
-    np.array([
-        [6.8717e00, -1.1595e01, -4.3776e01, -2.0781e01, 1.3171e01],
-        [-4.8830e-02, 1.8455e00, 2.5023e00, 1.1413e00, 1.5986e01],
-        [-5.9213e-01, 3.5667e00, -8.0048e00, 7.9986e00, 1.4948e01],
-    ]),
+        np.array([
+            [6.8717e00, -1.1595e01, -4.3776e01, -2.0781e01, 1.3171e01],
+            [-4.8830e-02, 1.8455e00, 2.5023e00, 1.1413e00, 1.5986e01],
+            [-5.9213e-01, 3.5667e00, -8.0048e00, 7.9986e00, 1.4948e01],
+        ]),
     "Kr":
-    np.array([
-        [1.3630e02, 4.6320e02, 5.6890e02, 3.0638e02, 7.7040e01],
-        [-1.0279e02, 6.8446e01, 1.5744e01, 1.5186e00, 2.4728e01],
-        [-2.4682e00, 1.3215e01, -2.5703e01, 2.3443e01, 2.5368e01],
-    ]),
+        np.array([
+            [1.3630e02, 4.6320e02, 5.6890e02, 3.0638e02, 7.7040e01],
+            [-1.0279e02, 6.8446e01, 1.5744e01, 1.5186e00, 2.4728e01],
+            [-2.4682e00, 1.3215e01, -2.5703e01, 2.3443e01, 2.5368e01],
+        ]),
     "Xe":
-    np.array([
-        [5.8178e02, 1.9967e03, 2.5189e03, 1.3973e03, 3.0532e02],
-        [8.6824e01, -2.9061e01, -4.8384e01, 1.6271e01, 3.2616e01],
-        [4.0756e02, -9.0008e02, 6.6739e02, -1.7259e02, 4.8066e01],
-        [-1.0019e01, 7.3261e01, -1.9931e02, 2.4056e02, -5.7527e01],
-    ]),
+        np.array([
+            [5.8178e02, 1.9967e03, 2.5189e03, 1.3973e03, 3.0532e02],
+            [8.6824e01, -2.9061e01, -4.8384e01, 1.6271e01, 3.2616e01],
+            [4.0756e02, -9.0008e02, 6.6739e02, -1.7259e02, 4.8066e01],
+            [-1.0019e01, 7.3261e01, -1.9931e02, 2.4056e02, -5.7527e01],
+        ]),
     "W":
-    np.array([
-        [1.6823e01, 3.4582e01, 2.1027e01, 1.6518e01, 2.6703e01],
-        [-2.5887e02, -1.0577e01, 2.5532e02, -7.9611e01, 3.6902e01],
-        [1.5119e01, -8.4207e01, 1.5985e02, -1.0011e02, 6.3795e01],
-    ]),
+        np.array([
+            [1.6823e01, 3.4582e01, 2.1027e01, 1.6518e01, 2.6703e01],
+            [-2.5887e02, -1.0577e01, 2.5532e02, -7.9611e01, 3.6902e01],
+            [1.5119e01, -8.4207e01, 1.5985e02, -1.0011e02, 6.3795e01],
+        ]),
 })
 _TEMPERATURE_INTERVALS = immutabledict.immutabledict({
     "C":
@@ -900,9 +900,9 @@ def _calculate_conductivity0(*, Z_eff_face, n_e, T_e, q_face, geo):
 def calculate_conductivity(geometry, core_profiles):
     result = _calculate_conductivity0(
         Z_eff_face=core_profiles.Z_eff_face,
-        n_e=core_profiles.n_e,
-        T_e=core_profiles.T_e,
-        q_face=core_profiles.q_face,
+                                          n_e=core_profiles.n_e,
+                                          T_e=core_profiles.T_e,
+                                          q_face=core_profiles.q_face,
         geo=geometry,
     )
     return Conductivity(sigma=result.sigma, sigma_face=result.sigma_face)
@@ -1151,7 +1151,7 @@ def calculate_generic_current(
     geo,
     source_name,
     unused_state,
-    unused_calculated_source_profiles,
+                              unused_calculated_source_profiles,
     unused_conductivity,
 ):
     source_params = runtime_params.sources[source_name]
@@ -1321,8 +1321,8 @@ def calc_generic_particle_source(
     runtime_params,
     geo,
     source_name,
-    unused_state,
-    unused_calculated_source_profiles,
+                                 unused_state,
+                                 unused_calculated_source_profiles,
     unused_conductivity,
 ):
     source_params = runtime_params.sources[source_name]
@@ -1690,8 +1690,8 @@ class QeiSourceConfig(SourceModelBase):
     def build_runtime_params(self, t):
         return RuntimeParamsSrc(
             prescribed_values=tuple(
-                [v.get_value(t) for v in self.prescribed_values]),
-            mode=self.mode,
+            [v.get_value(t) for v in self.prescribed_values]),
+                                mode=self.mode,
             is_explicit=self.is_explicit,
         )
 
@@ -1717,12 +1717,12 @@ class Sources(BaseModelFrozen):
         {"mode": "ZERO"})
     generic_heat: GenericIonElHeatSourceConfig | None = pydantic.Field(
         discriminator="model_name",
-        default=None,
-    )
+                       default=None,
+                   )
     generic_particle: GenericParticleSourceConfig | None = pydantic.Field(
         discriminator="model_name",
-        default=None,
-    )
+                           default=None,
+                       )
     impurity_radiation: None = pydantic.Field(
         discriminator="model_name",
         default=None,
@@ -1838,13 +1838,13 @@ def build_source_profiles1(runtime_params,
 
 def build_standard_source_profiles(
     *,
-    calculated_source_profiles,
-    runtime_params,
+                                   calculated_source_profiles,
+                                   runtime_params,
     geo,
-    core_profiles,
+                                   core_profiles,
     explicit=True,
-    conductivity=None,
-    calculate_anyway=False,
+                                   conductivity=None,
+                                   calculate_anyway=False,
     psi_only=False
 ):
 
@@ -2869,7 +2869,7 @@ def get_updated_electron_density(profile_conditions_params):
     )
     nbar_from_n_e_face_inner = (
         jax.scipy.integrate.trapezoid(n_e_face[:-1], g.geo_R_out_face[:-1]) /
-        a_minor_out)
+                                a_minor_out)
     dr_edge = g.geo_R_out_face[-1] - g.geo_R_out_face[-2]
     C = (target_nbar - 0.5 * n_e_face[-1] * dr_edge / a_minor_out) / (
         nbar_from_n_e_face_inner + 0.5 * n_e_face[-2] * dr_edge / a_minor_out)
@@ -4280,62 +4280,63 @@ g.geo_Phi_b_dot = np.asarray(0.0)
 g.geo_z_magnetic_axis = None
 
 
-def geo_q_correction_factor():
-    return jnp.where(False, 1.25, 1)
+# Store computed geometry values to match original @property behavior
+class _GeoCache:
+    def __init__(self):
+        self._q_correction_factor = jnp.where(False, 1.25, 1)
+        Phi_b = g.geo_Phi_face[..., -1]
+        self._Phi_b = Phi_b
+        self._rho_b = jnp.sqrt(Phi_b / np.pi / g.B_0)
+        self._rho_face = g.face_centers * jnp.expand_dims(self._rho_b, axis=-1)
+        self._rho = g.cell_centers * jnp.expand_dims(self._rho_b, axis=-1)
+        self._epsilon_face = (g.geo_R_out_face - g.geo_R_in_face) / (g.geo_R_out_face + g.geo_R_in_face)
+        bulk = g.geo_g0_face[..., 1:] / g.geo_vpr_face[..., 1:]
+        first_element = jnp.ones_like(self._rho_b) / self._rho_b
+        self._g0_over_vpr_face = jnp.concatenate([jnp.expand_dims(first_element, axis=-1), bulk], axis=-1)
+        bulk = g.geo_g1_face[..., 1:] / g.geo_vpr_face[..., 1:]
+        first_element = jnp.zeros_like(self._rho_b)
+        self._g1_over_vpr_face = jnp.concatenate([jnp.expand_dims(first_element, axis=-1), bulk], axis=-1)
+        bulk = g.geo_g1_face[..., 1:] / g.geo_vpr_face[..., 1:]**2
+        first_element = jnp.ones_like(self._rho_b) / self._rho_b**2
+        self._g1_over_vpr2_face = jnp.concatenate([jnp.expand_dims(first_element, axis=-1), bulk], axis=-1)
 
+_geo_cache = _GeoCache()
+
+def geo_q_correction_factor():
+    return _geo_cache._q_correction_factor
 
 def geo_rho_norm():
     return g.cell_centers
 
-
 def geo_rho_face_norm():
     return g.face_centers
-
 
 def geo_drho_norm():
     return jnp.array(g.dx)
 
-
 def geo_Phi_b():
-    return g.geo_Phi_face[..., -1]
-
+    return _geo_cache._Phi_b
 
 def geo_rho_b():
-    return jnp.sqrt(geo_Phi_b() / np.pi / g.B_0)
-
+    return _geo_cache._rho_b
 
 def geo_rho_face():
-    return geo_rho_face_norm() * jnp.expand_dims(geo_rho_b(), axis=-1)
-
+    return _geo_cache._rho_face
 
 def geo_rho():
-    return geo_rho_norm() * jnp.expand_dims(geo_rho_b(), axis=-1)
-
+    return _geo_cache._rho
 
 def geo_epsilon_face():
-    return (g.geo_R_out_face - g.geo_R_in_face) / (g.geo_R_out_face +
-                                                   g.geo_R_in_face)
-
+    return _geo_cache._epsilon_face
 
 def geo_g0_over_vpr_face():
-    bulk = g.geo_g0_face[..., 1:] / g.geo_vpr_face[..., 1:]
-    first_element = jnp.ones_like(geo_rho_b()) / geo_rho_b()
-    return jnp.concatenate([jnp.expand_dims(first_element, axis=-1), bulk],
-                           axis=-1)
-
+    return _geo_cache._g0_over_vpr_face
 
 def geo_g1_over_vpr_face():
-    bulk = g.geo_g1_face[..., 1:] / g.geo_vpr_face[..., 1:]
-    first_element = jnp.zeros_like(geo_rho_b())
-    return jnp.concatenate([jnp.expand_dims(first_element, axis=-1), bulk],
-                           axis=-1)
-
+    return _geo_cache._g1_over_vpr_face
 
 def geo_g1_over_vpr2_face():
-    bulk = g.geo_g1_face[..., 1:] / g.geo_vpr_face[..., 1:]**2
-    first_element = jnp.ones_like(geo_rho_b()) / geo_rho_b()**2
-    return jnp.concatenate([jnp.expand_dims(first_element, axis=-1), bulk],
-                           axis=-1)
+    return _geo_cache._g1_over_vpr2_face
 
 
 g.pedestal_model = PedestalConfig().build_pedestal_model()
