@@ -3187,7 +3187,7 @@ initial_core_sources = build_source_profiles1(
     explicit_source_profiles=explicit_source_profiles,
     conductivity=conductivity,
 )
-transport_coeffs = calculate_total_transport_coeffs(
+core_transport = calculate_total_transport_coeffs(
     runtime_params,
     geo,
     initial_core_profiles,
@@ -3207,7 +3207,7 @@ while current_state.t < (g.t_final - g.tolerance):
         core_profiles=current_state.core_profiles,
     )
     initial_dt = next_dt(current_state.t, runtime_params_t, geo_t,
-                         current_state.core_transport)
+                         core_transport)
     loop_dt = initial_dt
     loop_output = (
         core_profiles_to_solver_x_tuple(current_state.core_profiles),
@@ -3560,7 +3560,7 @@ while current_state.t < (g.t_final - g.tolerance):
         intermediate_core_profiles,
         psidot=psidot,
     )
-    final_total_transport = calculate_total_transport_coeffs(
+    core_transport = calculate_total_transport_coeffs(
         result[3],
         result[4],
         final_core_profiles,
