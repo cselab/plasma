@@ -3100,8 +3100,6 @@ def get_consistent_runtime_params_and_geometry(*, t):
     g.geo_Ip_profile_face = g.geo_Ip_profile_face * Ip_scale_factor
     g.geo_psi_from_Ip = g.geo_psi_from_Ip * Ip_scale_factor
     g.geo_psi_from_Ip_face = g.geo_psi_from_Ip_face * Ip_scale_factor
-    g.geo_j_total = g.geo_j_total * Ip_scale_factor
-    g.geo_j_total_face = g.geo_j_total_face * Ip_scale_factor
     return runtime_params, None
 
 
@@ -3429,8 +3427,6 @@ g.geo_Ip_profile_face = Ip_profile_face
 g.geo_psi = psi
 g.geo_psi_from_Ip = psi_from_Ip
 g.geo_psi_from_Ip_face = psi_from_Ip_face
-g.geo_j_total = j_total
-g.geo_j_total_face = j_total_face
 g.geo_delta_upper_face = delta_upper_face
 g.geo_delta_lower_face = delta_lower_face
 g.geo_spr_hires = spr_hires
