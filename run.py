@@ -4386,21 +4386,18 @@ while not_done(current_state.t, g.t_final):
     )
     initial_dt = next_dt(current_state.t, runtime_params_t, geo_t,
                          current_state.core_transport)
-    _, result = while_loop(
-        cond_fun,
-        body_fun,
-        (
-            initial_dt,
-            (
-                core_profiles_to_solver_x_tuple(current_state.core_profiles),
-                initial_dt,
-                SolverNumericOutputs(solver_error_state=1, ),
-                runtime_params_t,
-                geo_t,
-                current_state.core_profiles,
-            ),
-        ),
+    loop_dt = initial_dt
+    loop_output = (
+        core_profiles_to_solver_x_tuple(current_state.core_profiles),
+        initial_dt,
+        SolverNumericOutputs(solver_error_state=1, ),
+        runtime_params_t,
+        geo_t,
+        current_state.core_profiles,
     )
+    while cond_fun((loop_dt, loop_output)):
+        loop_dt, loop_output = body_fun((loop_dt, loop_output))
+    result = loop_output
     updated_core_profiles_t_plus_dt = solver_x_tuple_to_core_profiles(
         result[0], result[5])
     ions = get_updated_ions(
