@@ -3543,8 +3543,7 @@ while current_state.t < (g.t_final - g.tolerance):
             lhs_mat = left_transient - dt * g.theta_implicit * broadcasted * c_mat_new
             lhs_vec = -g.theta_implicit * dt * (1 /
                                                 (tc_out_new * tc_in_new)) * c_new
-            if theta_exp > 0.0:
-                assert False
+            assert theta_exp <= 0.0:
             rhs_mat = right_transient
             rhs_vec = jnp.zeros_like(x_new_guess_vec)
             rhs = jnp.dot(rhs_mat, x_old_vec) + rhs_vec - lhs_vec
@@ -3662,10 +3661,7 @@ for var_name in g.evolving_names:
     var_data = []
     for state in state_history:
         var_cell = getattr(state.core_profiles, var_name)
-        if hasattr(var_cell, "cell_plus_boundaries"):
-            data = var_cell.cell_plus_boundaries()
-        else:
-            data = var_cell.value
+        data = var_cell.cell_plus_boundaries()
         var_data.append(data)
     evolving_data[var_name] = np.stack(var_data)
 with open("run.raw", "wb") as f:
