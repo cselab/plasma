@@ -1469,7 +1469,6 @@ class Sources(BaseModelFrozen):
 
 @jax.jit
 def build_source_profiles0(runtime_params,
-                           geo,
                            core_profiles,
                            explicit_source_profiles=None,
                            conductivity=None):
@@ -2643,7 +2642,7 @@ MIN_DELTA: Final[float] = 1e-7
 
 
 @jax.jit
-def next_dt(t, runtime_params, geo, core_transport):
+def next_dt(t, core_transport):
     chi_max = core_transport.chi_max()
     basic_dt = (3.0 / 4.0) * (jnp.array(g.dx)**2) / chi_max
     dt = jnp.minimum(
@@ -3161,7 +3160,6 @@ conductivity = Conductivity(sigma=initial_core_profiles.sigma,
 core_profiles = initial_core_profiles
 explicit_source_profiles = build_source_profiles0(
     runtime_params=runtime_params,
-    geo=geo,
     core_profiles=core_profiles,
 )
 initial_core_sources = build_source_profiles1(
@@ -3182,14 +3180,12 @@ current_state = ToraxSimState(
 state_history = [current_state]
 initial_runtime_params = build_runtime_params_slice(current_state.t)
 while current_state.t < (g.t_final - g.tolerance):
-    geo_t = None
     runtime_params_t = build_runtime_params_slice(current_state.t)
     explicit_source_profiles = build_source_profiles0(
         runtime_params=runtime_params_t,
-        geo=geo_t,
         core_profiles=current_state.core_profiles,
     )
-    initial_dt = next_dt(current_state.t, runtime_params_t, geo_t,
+    initial_dt = next_dt(current_state.t,
                          core_transport)
     loop_dt = initial_dt
     loop_output = (
