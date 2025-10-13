@@ -110,6 +110,15 @@ class BaseModelFrozen(pydantic.BaseModel):
             registered_cls = cls
         return super().__new__(registered_cls)
 
+    @classmethod
+    def tree_unflatten(cls, aux_data, children):
+        dynamic_kwargs = {
+            name: value
+            for name, value in zip(
+                cls._jit_dynamic_kwarg_names(), children, strict=True)
+        }
+        return cls.model_construct(**(dynamic_kwargs | aux_data))
+
 
 ValueType: TypeAlias = Any
 
@@ -117,6 +126,27 @@ ValueType: TypeAlias = Any
 class TimeVaryingArray(BaseModelFrozen):
     value: ValueType
     grid: Any = None
+
+    def tree_flatten(self):
+        children = (
+            self.value,
+            self._get_cached_interpolated_param_cell,
+            self._get_cached_interpolated_param_face,
+            self._get_cached_interpolated_param_face_right,
+        )
+        aux_data = (self.grid, )
+        return children, aux_data
+
+    @classmethod
+    def tree_unflatten(cls, aux_data, children):
+        obj = cls.model_construct(
+            value=children[0],
+            grid=aux_data[0],
+        )
+        obj._get_cached_interpolated_param_cell = children[1]
+        obj._get_cached_interpolated_param_face = children[2]
+        obj._get_cached_interpolated_param_face_right = children[3]
+        return obj
 
     def get_value(self, t, grid_type="cell"):
         match grid_type:
