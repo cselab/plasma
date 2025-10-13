@@ -3098,10 +3098,7 @@ def get_consistent_runtime_params_and_geometry(*, t):
     # Compute Ip scale factor from time-varying Ip parameter
     param_Ip = runtime_params.profile_conditions.Ip
     Ip_scale_factor = param_Ip / g.geo_Ip_profile_face_base[-1]
-    # Store scale factor in g.* for use in other parts of the code
-    # This is the ONLY time-varying value we store in g.*
-    g.Ip_scale_factor = Ip_scale_factor
-    return runtime_params, None
+    return runtime_params, Ip_scale_factor
 
 
 
@@ -3499,10 +3496,11 @@ g.smag_alpha_correction = True
 g.q_sawtooth_proxy = True
 g.smoothing_width = 0.1
 g.transport_config = QLKNNTransportModel()
-runtime_params_for_init, geo_for_init = get_consistent_runtime_params_and_geometry(
+runtime_params_for_init, Ip_scale_factor_init = get_consistent_runtime_params_and_geometry(
     t=g.t_initial, )
 runtime_params = runtime_params_for_init
-geo = geo_for_init
+geo = None
+Ip_scale_factor = Ip_scale_factor_init
 T_i = CellVariable(
     value=runtime_params.profile_conditions.T_i,
     left_face_grad_constraint=jnp.zeros(()),
@@ -3558,8 +3556,8 @@ dpsi_drhonorm_edge = calculate_psi_grad_constraint_from_Ip(
     runtime_params.profile_conditions.Ip, )
 assert not runtime_params.profile_conditions.use_v_loop_lcfs_boundary_condition
 # Compute scaled psi values using the Ip scale factor
-geo_psi_from_Ip_scaled = g.geo_psi_from_Ip_base * g.Ip_scale_factor
-geo_psi_from_Ip_face_scaled = g.geo_psi_from_Ip_face_base * g.Ip_scale_factor
+geo_psi_from_Ip_scaled = g.geo_psi_from_Ip_base * Ip_scale_factor
+geo_psi_from_Ip_face_scaled = g.geo_psi_from_Ip_face_base * Ip_scale_factor
 psi = CellVariable(
     value=geo_psi_from_Ip_scaled,
     right_face_grad_constraint=(
@@ -3682,11 +3680,9 @@ while current_state.t < (g.t_final - g.tolerance):
     while cond_fun((loop_dt, loop_output)):
         dt = loop_dt
         output = loop_output
-        runtime_params_t_plus_dt, geo_t_plus_dt = (
+        runtime_params_t_plus_dt, Ip_scale_factor_t_plus_dt = (
             get_consistent_runtime_params_and_geometry(t=current_state.t + dt))
         Phi_b_t = geo_Phi_b()
-        runtime_params_t_plus_dt, _ = get_consistent_runtime_params_and_geometry(
-            t=current_state.t + dt)
         Phi_b_t_plus_dt = geo_Phi_b()
         Phibdot = (Phi_b_t_plus_dt - Phi_b_t) / dt
         g.geo_Phi_b_dot = Phibdot
