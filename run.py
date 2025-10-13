@@ -371,10 +371,6 @@ def line_average(value):
     return cell_integration(value)
 
 
-def volume_average(value, geo):
-    return cell_integration(value * g.geo_vpr) / g.geo_volume_face[-1]
-
-
 @chex.dataclass(frozen=True)
 class CellVariable:
     value: Any
@@ -595,79 +591,6 @@ def face_to_cell(face):
     return 0.5 * (face[:-1] + face[1:])
 
 
-def calculate_scaling_law_confinement_time(geo, core_profiles, Ploss,
-                                           scaling_law):
-    scaling_params = {
-        "H89P": {
-            "prefactor": 0.038128,
-            "Ip_exponent": 0.85,
-            "B_exponent": 0.2,
-            "line_avg_n_e_exponent": 0.1,
-            "Ploss_exponent": -0.5,
-            "R_exponent": 1.5,
-            "inverse_aspect_ratio_exponent": 0.3,
-            "elongation_exponent": 0.5,
-            "effective_mass_exponent": 0.50,
-            "triangularity_exponent": 0.0,
-        },
-        "H98": {
-            "prefactor": 0.0562,
-            "Ip_exponent": 0.93,
-            "B_exponent": 0.15,
-            "line_avg_n_e_exponent": 0.41,
-            "Ploss_exponent": -0.69,
-            "R_exponent": 1.97,
-            "inverse_aspect_ratio_exponent": 0.58,
-            "elongation_exponent": 0.78,
-            "effective_mass_exponent": 0.19,
-            "triangularity_exponent": 0.0,
-        },
-        "H97L": {
-            "prefactor": 0.023,
-            "Ip_exponent": 0.96,
-            "B_exponent": 0.03,
-            "line_avg_n_e_exponent": 0.4,
-            "Ploss_exponent": -0.73,
-            "R_exponent": 1.83,
-            "inverse_aspect_ratio_exponent": -0.06,
-            "elongation_exponent": 0.64,
-            "effective_mass_exponent": 0.20,
-            "triangularity_exponent": 0.0,
-        },
-        "H20": {
-            "prefactor": 0.053,
-            "Ip_exponent": 0.98,
-            "B_exponent": 0.22,
-            "line_avg_n_e_exponent": 0.24,
-            "Ploss_exponent": -0.669,
-            "R_exponent": 1.71,
-            "inverse_aspect_ratio_exponent": 0.35,
-            "elongation_exponent": 0.80,
-            "effective_mass_exponent": 0.20,
-            "triangularity_exponent": 0.36,
-        },
-    }
-    params = scaling_params[scaling_law]
-    scaled_Ip = core_profiles.Ip_profile_face[-1] / 1e6
-    scaled_Ploss = Ploss / 1e6
-    B = g.geo_B_0
-    line_avg_n_e = line_average(core_profiles.n_e.value) / 1e19
-    R = g.R_major
-    inverse_aspect_ratio = g.geo_a_minor / g.R_major
-    elongation = g.geo_area_face[-1] / (jnp.pi * g.geo_a_minor**2)
-    effective_mass = core_profiles.A_i
-    triangularity = g.geo_delta_face[-1]
-    tau_scaling = (
-        params["prefactor"] * scaled_Ip**params["Ip_exponent"] *
-        B**params["B_exponent"] *
-        line_avg_n_e**params["line_avg_n_e_exponent"] *
-        scaled_Ploss**params["Ploss_exponent"] * R**params["R_exponent"] *
-        inverse_aspect_ratio**params["inverse_aspect_ratio_exponent"] *
-        elongation**params["elongation_exponent"] *
-        effective_mass**params["effective_mass_exponent"] *
-        (1 + triangularity)**params["triangularity_exponent"])
-    return tau_scaling
-
 
 def calc_q_face(geo, psi):
     inv_iota = jnp.abs(
@@ -765,36 +688,11 @@ def calc_pprime(core_profiles):
     _, _, p_total = calculate_pressure(core_profiles)
     psi = core_profiles.psi.face_value()
     n_e = core_profiles.n_e.face_value()
-    n_i = core_profiles.n_i.face_value()
-    n_impurity = core_profiles.n_impurity.face_value()
-    T_i = core_profiles.T_i.face_value()
-    T_e = core_profiles.T_e.face_value()
-    dne_drhon = core_profiles.n_e.face_grad()
-    dni_drhon = core_profiles.n_i.face_grad()
-    dnimp_drhon = core_profiles.n_impurity.face_grad()
-    dti_drhon = core_profiles.T_i.face_grad()
-    dte_drhon = core_profiles.T_e.face_grad()
-    dpsi_drhon = core_profiles.psi.face_grad()
-    dptot_drhon = g.keV_to_J * (n_e * dte_drhon + n_i * dti_drhon +
-                                n_impurity * dti_drhon + dne_drhon * T_e +
-                                dni_drhon * T_i + dnimp_drhon * T_i)
-    p_total_face = p_total.face_value()
-    pprime_face_axis = jnp.expand_dims(
-        (2 * p_total_face[0] - 5 * p_total_face[1] + 4 * p_total_face[2] -
-         p_total_face[3]) / (2 * psi[0] - 5 * psi[1] + 4 * psi[2] - psi[3]),
-        axis=0,
-    )
-    pprime_face = jnp.concatenate(
-        [pprime_face_axis, dptot_drhon[1:] / dpsi_drhon[1:]])
-    return pprime_face
-
 
 def calculate_greenwald_fraction(n_e_avg, core_profiles, geo):
     gw_limit = core_profiles.Ip_profile_face[-1] * 1e-6 / (jnp.pi *
                                                            g.geo_a_minor**2)
     fgw = n_e_avg / (gw_limit * 1e20)
-    return fgw
-
 
 def calculate_log_lambda_ei(T_e, n_e):
     T_e_ev = T_e * 1e3
@@ -1938,15 +1836,17 @@ def build_source_profiles1(runtime_params,
     return profiles
 
 
-def build_standard_source_profiles(*,
-                                   calculated_source_profiles,
-                                   runtime_params,
-                                   geo,
-                                   core_profiles,
-                                   explicit=True,
-                                   conductivity=None,
-                                   calculate_anyway=False,
-                                   psi_only=False):
+def build_standard_source_profiles(
+    *,
+    calculated_source_profiles,
+    runtime_params,
+    geo,
+    core_profiles,
+    explicit=True,
+    conductivity=None,
+    calculate_anyway=False,
+    psi_only=False
+):
 
     def calculate_source(source_name, source):
         source_params = runtime_params.sources[source_name]
@@ -2901,184 +2801,6 @@ def _smooth_savgol(data, idx_limit, polyorder):
                                                mode="nearest")
     return np.concatenate(
         [np.array([data[0]]), smoothed_data[1:idx_limit], data[idx_limit:]])
-
-
-@jax.tree_util.register_dataclass
-@dataclasses.dataclass(frozen=True)
-class SafetyFactorFit:
-    rho_q_min: Any
-    q_min: Any
-    rho_q_3_2_first: Any
-    rho_q_2_1_first: Any
-    rho_q_3_1_first: Any
-    rho_q_3_2_second: Any
-    rho_q_2_1_second: Any
-    rho_q_3_1_second: Any
-
-
-def _sliding_window_of_three(flat_array):
-    window_size = 3
-    starts = jnp.arange(len(flat_array) - window_size + 1)
-    return jax.vmap(lambda start: jax.lax.dynamic_slice(
-        flat_array, (start, ), (window_size, )))(starts)
-
-
-def _fit_polynomial_to_intervals_of_three(rho_norm: jax.Array,
-                                          q_face: jax.Array):
-    q_face_intervals = _sliding_window_of_three(q_face, )
-    rho_norm_intervals = _sliding_window_of_three(rho_norm, )
-
-    @jax.vmap
-    def batch_polyfit(q_face_interval: jax.Array,
-                      rho_norm_interval: jax.Array):
-        rho_norm_squared = rho_norm_interval**2
-        A = jnp.array([
-            [rho_norm_squared[0], rho_norm_interval[0], 1],
-            [rho_norm_squared[1], rho_norm_interval[1], 1],
-            [rho_norm_squared[2], rho_norm_interval[2], 1],
-        ])
-        b = jnp.array(
-            [q_face_interval[0], q_face_interval[1], q_face_interval[2]])
-        coeffs = jnp.linalg.solve(A, b)
-        return coeffs
-
-    return (
-        batch_polyfit(q_face_intervals, rho_norm_intervals),
-        rho_norm_intervals,
-        q_face_intervals,
-    )
-
-
-@jax.vmap
-def _minimum_location_value_in_interval(coeffs: jax.Array,
-                                        rho_norm_interval: jax.Array,
-                                        q_interval: jax.Array):
-    min_interval, max_interval = rho_norm_interval[0], rho_norm_interval[1]
-    q_min_interval, q_max_interval = (
-        q_interval[0],
-        q_interval[1],
-    )
-    a, b = coeffs[0], coeffs[1]
-    extremum_location = -b / (2 * a)
-    extremum_in_interval = jnp.greater(extremum_location,
-                                       min_interval) & jnp.less(
-                                           extremum_location, max_interval)
-    extremum_value = jax.lax.cond(
-        extremum_in_interval,
-        lambda x: jnp.polyval(coeffs, x),
-        lambda x: jnp.inf,
-        extremum_location,
-    )
-    interval_minimum_location, interval_minimum_value = jax.lax.cond(
-        jnp.less(q_min_interval, q_max_interval),
-        lambda: (min_interval, q_min_interval),
-        lambda: (max_interval, q_max_interval),
-    )
-    overall_minimum_location, overall_minimum_value = jax.lax.cond(
-        jnp.less(interval_minimum_value, extremum_value),
-        lambda: (interval_minimum_location, interval_minimum_value),
-        lambda: (extremum_location, extremum_value),
-    )
-    return overall_minimum_location, overall_minimum_value
-
-
-def _find_roots_quadratic(coeffs):
-    a, b, c = coeffs[0], coeffs[1], coeffs[2]
-    determinant = b**2 - 4.0 * a * c
-    roots_exist = jnp.greater(determinant, 0)
-    plus_root = jax.lax.cond(
-        roots_exist,
-        lambda: (-b + jnp.sqrt(determinant)) / (2.0 * a),
-        lambda: -jnp.inf,
-    )
-    minus_root = jax.lax.cond(
-        roots_exist,
-        lambda: (-b - jnp.sqrt(determinant)) / (2.0 * a),
-        lambda: -jnp.inf,
-    )
-    return jnp.array([plus_root, minus_root])
-
-
-@functools.partial(jax.vmap, in_axes=(0, 0, None))
-def _root_in_interval(coeffs: jax.Array, interval: jax.Array,
-                      q_surface: float):
-    intercept_coeffs = coeffs - jnp.array([0.0, 0.0, q_surface])
-    min_interval, max_interval = interval[0], interval[1]
-    root_values = _find_roots_quadratic(intercept_coeffs)
-    in_interval = jnp.greater(root_values, min_interval) & jnp.less(
-        root_values, max_interval)
-    return jnp.where(in_interval, root_values, -jnp.inf)
-
-
-@jax.jit
-def find_min_q_and_q_surface_intercepts(rho_norm, q_face):
-    sorted_indices = jnp.argsort(rho_norm)
-    rho_norm = rho_norm[sorted_indices]
-    q_face = q_face[sorted_indices]
-    poly_coeffs, rho_norm_3, q_face_3 = _fit_polynomial_to_intervals_of_three(
-        rho_norm, q_face)
-    first_rho_norm = jnp.expand_dims(jnp.array([rho_norm[0], rho_norm[2]]),
-                                     axis=0)
-    first_q_face = jnp.expand_dims(jnp.array([q_face[0], q_face[2]]), axis=0)
-    rho_norms = jnp.concat([first_rho_norm, rho_norm_3[1:, 1:]], axis=0)
-    q_faces = jnp.concat([first_q_face, q_face_3[1:, 1:]], axis=0)
-    rho_q_min_intervals, q_min_intervals = _minimum_location_value_in_interval(
-        poly_coeffs, rho_norms, q_faces)
-    arg_q_min = jnp.argmin(q_min_intervals)
-    rho_q_min = rho_q_min_intervals[arg_q_min]
-    q_min = q_min_intervals[arg_q_min]
-    rho_q_3_2 = _root_in_interval(poly_coeffs, rho_norms, 1.5).flatten()
-    outermost_rho_q_3_2 = rho_q_3_2[jnp.argsort(rho_q_3_2)[-2:]]
-    rho_q_2_1 = _root_in_interval(poly_coeffs, rho_norms, 2.0).flatten()
-    outermost_rho_q_2_1 = rho_q_2_1[jnp.argsort(rho_q_2_1)[-2:]]
-    rho_q_3_1 = _root_in_interval(poly_coeffs, rho_norms, 3.0).flatten()
-    outermost_rho_q_3_1 = rho_q_3_1[jnp.argsort(rho_q_3_1)[-2:]]
-    return SafetyFactorFit(
-        rho_q_min=rho_q_min,
-        q_min=q_min,
-        rho_q_3_2_first=outermost_rho_q_3_2[0],
-        rho_q_2_1_first=outermost_rho_q_2_1[0],
-        rho_q_3_1_first=outermost_rho_q_3_1[0],
-        rho_q_3_2_second=outermost_rho_q_3_2[1],
-        rho_q_2_1_second=outermost_rho_q_2_1[1],
-        rho_q_3_1_second=outermost_rho_q_3_1[1],
-    )
-
-
-RADIATION_OUTPUT_NAME = "radiation_impurity_species"
-DENSITY_OUTPUT_NAME = "n_impurity_species"
-Z_OUTPUT_NAME = "Z_impurity_species"
-IMPURITY_DIM = "impurity_symbol"
-
-
-@jax.tree_util.register_dataclass
-@dataclasses.dataclass(frozen=True)
-class ImpuritySpeciesOutput:
-    radiation: Any
-    n_impurity: Any
-    Z_impurity: Any
-
-
-def calculate_impurity_species_output(sim_state, runtime_params):
-    impurity_species_output = {}
-    impurity_fractions = sim_state.core_profiles.impurity_fractions
-    impurity_names = runtime_params.plasma_composition.impurity_names
-    charge_state_info = get_average_charge_state(
-        ion_symbols=impurity_names,
-        T_e=sim_state.core_profiles.T_e.value,
-        fractions=jnp.stack(
-            [impurity_fractions[symbol] for symbol in impurity_names]),
-    )
-    for i, symbol in enumerate(impurity_names):
-        core_profiles = sim_state.core_profiles
-        impurity_density_scaling = core_profiles.Z_impurity / charge_state_info.Z_avg
-        n_imp = (impurity_fractions[symbol] * core_profiles.n_impurity.value *
-                 impurity_density_scaling)
-        Z_imp = charge_state_info.Z_per_species[i]
-        radiation = jnp.zeros_like(n_imp)
-        impurity_species_output[symbol] = ImpuritySpeciesOutput(
-            radiation=radiation, n_impurity=n_imp, Z_impurity=Z_imp)
-    return impurity_species_output
 
 
 SCALING_FACTORS: Final[Mapping[str, float]] = immutabledict.immutabledict({
