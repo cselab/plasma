@@ -1003,9 +1003,9 @@ def _calculate_conductivity0(*, Z_eff_face, n_e, T_e, q_face, geo):
 def calculate_conductivity(geometry, core_profiles):
     result = _calculate_conductivity0(
         Z_eff_face=core_profiles.Z_eff_face,
-        n_e=core_profiles.n_e,
-        T_e=core_profiles.T_e,
-        q_face=core_profiles.q_face,
+                                          n_e=core_profiles.n_e,
+                                          T_e=core_profiles.T_e,
+                                          q_face=core_profiles.q_face,
         geo=geometry,
     )
     return Conductivity(sigma=result.sigma, sigma_face=result.sigma_face)
@@ -2221,7 +2221,7 @@ def _build_smoothing_matrix(transport_runtime_params, runtime_params, geo,
     kernel = jnp.exp(
         -jnp.log(2) *
         (geo_rho_face_norm()[:, jnp.newaxis] - geo_rho_face_norm())**2 /
-        (transport_runtime_params.smoothing_width**2 + g.eps))
+        (g.smoothing_width**2 + g.eps))
     mask_outer_edge = jax.lax.cond(
         jnp.logical_and(
             jnp.logical_not(True),
@@ -2414,18 +2414,8 @@ def predict(inputs):
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class RuntimeParams0:
-    D_e_max: Any
-    V_e_min: Any
-    V_e_max: Any
     rho_min: Any
     rho_max: Any
-    smoothing_width: Any
-    collisionality_multiplier: float
-    smag_alpha_correction: bool
-    q_sawtooth_proxy: bool
-    ETG_correction_factor: float
-    clip_inputs: bool
-    clip_margin: float
 
 
 _EPSILON_NN: Final[float] = 1 / 3
@@ -2542,12 +2532,12 @@ class QLKNNTransportModel0:
         d_face_el = jnp.clip(
             transport_coeffs.d_face_el,
             g.D_e_min,
-            transport_runtime_params.D_e_max,
+            g.D_e_max,
         )
         v_face_el = jnp.clip(
             transport_coeffs.v_face_el,
-            transport_runtime_params.V_e_min,
-            transport_runtime_params.V_e_max,
+            g.V_e_min,
+            g.V_e_max,
         )
         return dataclasses.replace(
             transport_coeffs,
@@ -2888,18 +2878,8 @@ class QLKNNTransportModel(BaseModelFrozen):
 
     def build_runtime_params(self, t):
         return RuntimeParams0(
-            D_e_max=g.D_e_max,
-            V_e_min=g.V_e_min,
-            V_e_max=g.V_e_max,
             rho_min=self.rho_min.get_value(t),
             rho_max=self.rho_max.get_value(t),
-            smoothing_width=g.smoothing_width,
-            ETG_correction_factor=g.ETG_correction_factor,
-            clip_inputs=g.clip_inputs,
-            clip_margin=g.clip_margin,
-            collisionality_multiplier=g.collisionality_multiplier,
-            smag_alpha_correction=g.smag_alpha_correction,
-            q_sawtooth_proxy=g.q_sawtooth_proxy,
         )
 
 
