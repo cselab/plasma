@@ -817,7 +817,7 @@ class SourceProfiles:
     n_e: dict[str, jax.Array] = dataclasses.field(default_factory=dict)
     psi: dict[str, jax.Array] = dataclasses.field(default_factory=dict)
 
-    def total_psi_sources(self, geo):
+    def total_psi_sources(self):
         total = self.bootstrap_current.j_bootstrap
         total += sum(self.psi.values())
         mu0 = g.mu_0
@@ -2504,7 +2504,7 @@ def _calc_coeffs_full(runtime_params, geo, core_profiles,
         conductivity=conductivity,
     )
     source_mat_psi = jnp.zeros_like(g.geo_rho)
-    source_psi = merged_source_profiles.total_psi_sources(geo)
+    source_psi = merged_source_profiles.total_psi_sources()
     toc_T_i = 1.5 * g.geo_vpr**(-2.0 / 3.0) * g.keV_to_J
     tic_T_i = core_profiles.n_i.value * g.geo_vpr**(5.0 / 3.0)
     toc_T_e = 1.5 * g.geo_vpr**(-2.0 / 3.0) * g.keV_to_J
@@ -3150,7 +3150,7 @@ if not sources_are_calculated:
     )
     source_profiles = dataclasses.replace(source_profiles,
                                           bootstrap_current=bootstrap_current)
-psi_sources = source_profiles.total_psi_sources(geo)
+psi_sources = source_profiles.total_psi_sources()
 psidot_value = calculate_psidot_from_psi_sources(psi_sources=psi_sources,
                                                  sigma=conductivity.sigma,
                                                  psi=psi,
@@ -3543,7 +3543,7 @@ while current_state.t < (g.t_final - g.tolerance):
         explicit_source_profiles=explicit_source_profiles,
         conductivity=conductivity,
     )
-    psi_sources = final_source_profiles.total_psi_sources(result[4])
+    psi_sources = final_source_profiles.total_psi_sources()
     psidot_value = calculate_psidot_from_psi_sources(
         psi_sources=psi_sources,
         sigma=intermediate_core_profiles.sigma,
