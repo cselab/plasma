@@ -346,10 +346,6 @@ def volume_integration(value, geo):
     return cell_integration(value * g.geo_vpr)
 
 
-def line_average(value):
-    return cell_integration(value)
-
-
 @chex.dataclass(frozen=True)
 class CellVariable:
     value: Any
@@ -630,48 +626,6 @@ def calculate_psidot_from_psi_sources(*, psi_sources, sigma, psi, geo):
 
 def calculate_main_ion_dilution_factor(Z_i, Z_impurity, Z_eff):
     return (Z_impurity - Z_eff) / (Z_i * (Z_impurity - Z_i))
-
-
-def calculate_pressure(core_profiles):
-    pressure_thermal_el = CellVariable(
-        value=core_profiles.n_e.value * core_profiles.T_e.value * g.keV_to_J,
-        dr=core_profiles.n_e.dr,
-        right_face_constraint=core_profiles.n_e.right_face_constraint *
-        core_profiles.T_e.right_face_constraint * g.keV_to_J,
-        right_face_grad_constraint=None,
-    )
-    pressure_thermal_ion = CellVariable(
-        value=core_profiles.T_i.value * g.keV_to_J *
-        (core_profiles.n_i.value + core_profiles.n_impurity.value),
-        dr=core_profiles.n_i.dr,
-        right_face_constraint=core_profiles.T_i.right_face_constraint *
-        g.keV_to_J * (core_profiles.n_i.right_face_constraint +
-                      core_profiles.n_impurity.right_face_constraint),
-        right_face_grad_constraint=None,
-    )
-    pressure_thermal_tot = CellVariable(
-        value=pressure_thermal_el.value + pressure_thermal_ion.value,
-        dr=pressure_thermal_el.dr,
-        right_face_constraint=pressure_thermal_el.right_face_constraint +
-        pressure_thermal_ion.right_face_constraint,
-        right_face_grad_constraint=None,
-    )
-    return (
-        pressure_thermal_el,
-        pressure_thermal_ion,
-        pressure_thermal_tot,
-    )
-
-
-def calc_pprime(core_profiles):
-    _, _, p_total = calculate_pressure(core_profiles)
-    psi = core_profiles.psi.face_value()
-    n_e = core_profiles.n_e.face_value()
-
-def calculate_greenwald_fraction(n_e_avg, core_profiles, geo):
-    gw_limit = core_profiles.Ip_profile_face[-1] * 1e-6 / (jnp.pi *
-                                                           g.geo_a_minor**2)
-    fgw = n_e_avg / (gw_limit * 1e20)
 
 def calculate_log_lambda_ei(T_e, n_e):
     T_e_ev = T_e * 1e3
