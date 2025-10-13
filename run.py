@@ -112,12 +112,6 @@ class BaseModelFrozen(pydantic.BaseModel):
 
     @classmethod
     @functools.cache
-    def _jit_dynamic_kwarg_names(cls):
-        return tuple(name for name in cls.model_fields.keys()
-                     if JAX_STATIC not in cls.model_fields[name].metadata)
-
-    @classmethod
-    @functools.cache
     def _jit_static_kwarg_names(cls):
         return tuple(name for name in cls.model_fields.keys()
                      if JAX_STATIC in cls.model_fields[name].metadata)
