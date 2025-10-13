@@ -478,7 +478,6 @@ class CoreProfiles:
     n_impurity: Any
     impurity_fractions: Any
     q_face: Any
-    s_face: Any
     v_loop_lcfs: Any
     Z_i: Any
     Z_i_face: Any
@@ -491,9 +490,6 @@ class CoreProfiles:
     Z_eff_face: Any
     sigma: Any
     sigma_face: Any
-    j_total: Any
-    j_total_face: Any
-    Ip_profile_face: Any
 
 
 @jax.tree_util.register_dataclass
@@ -2948,7 +2944,6 @@ def update_core_profiles_during_step(x_new, runtime_params, geo,
         Z_eff=ions.Z_eff,
         Z_eff_face=ions.Z_eff_face,
         q_face=calc_q_face(geo, updated_core_profiles.psi),
-        s_face=calc_s_face(geo, updated_core_profiles.psi),
     )
 
 
@@ -3738,13 +3733,9 @@ core_profiles = CoreProfiles(
     psi=psi,
     psidot=psidot,
     q_face=np.zeros_like(geo_rho_face()),
-    s_face=np.zeros_like(geo_rho_face()),
     v_loop_lcfs=v_loop_lcfs,
     sigma=np.zeros_like(geo_rho()),
     sigma_face=np.zeros_like(geo_rho_face()),
-    j_total=np.zeros_like(geo_rho()),
-    j_total_face=np.zeros_like(geo_rho_face()),
-    Ip_profile_face=np.zeros_like(geo_rho_face()),
 )
 sources_are_calculated = False
 source_profiles = SourceProfiles(
@@ -3764,15 +3755,10 @@ psi = CellVariable(
         else None),
     dr=geo_drho_norm(),
 )
-j_total, j_total_face, Ip_profile_face = calc_j_total(geo, psi)
 core_profiles = dataclasses.replace(
     core_profiles,
     psi=psi,
     q_face=calc_q_face(geo, psi),
-    s_face=calc_s_face(geo, psi),
-    j_total=j_total,
-    j_total_face=j_total_face,
-    Ip_profile_face=Ip_profile_face,
 )
 conductivity = calculate_conductivity(
     geo,
@@ -4135,10 +4121,6 @@ while current_state.t < (g.t_final - g.tolerance):
                    use_v_loop_lcfs_boundary_condition else
                    (updated_core_profiles_t_plus_dt.psi.face_value()[-1] -
                     current_state.core_profiles.psi.face_value()[-1]) / result[1])
-    j_total, j_total_face, Ip_profile_face = calc_j_total(
-        result[4],
-        updated_core_profiles_t_plus_dt.psi,
-    )
     intermediate_core_profiles = CoreProfiles(
         T_i=updated_core_profiles_t_plus_dt.T_i,
         T_e=updated_core_profiles_t_plus_dt.T_e,
@@ -4153,7 +4135,6 @@ while current_state.t < (g.t_final - g.tolerance):
         Z_impurity_face=ions.Z_impurity_face,
         psidot=result[5].psidot,
         q_face=calc_q_face(result[4], updated_core_profiles_t_plus_dt.psi),
-        s_face=calc_s_face(result[4], updated_core_profiles_t_plus_dt.psi),
         A_i=ions.A_i,
         A_impurity=ions.A_impurity,
         A_impurity_face=ions.A_impurity_face,
@@ -4162,9 +4143,6 @@ while current_state.t < (g.t_final - g.tolerance):
         v_loop_lcfs=v_loop_lcfs,
         sigma=result[5].sigma,
         sigma_face=result[5].sigma_face,
-        j_total=j_total,
-        j_total_face=j_total_face,
-        Ip_profile_face=Ip_profile_face,
     )
     conductivity = calculate_conductivity(result[4], intermediate_core_profiles)
     intermediate_core_profiles = dataclasses.replace(
