@@ -661,10 +661,11 @@ def calculate_conductivity(geometry, core_profiles):
     # Inlined _calculate_conductivity0
     f_trap = calculate_f_trap(geometry)
     NZ = 0.58 + 0.74 / (0.76 + core_profiles.Z_eff_face)
-    log_lambda_ei = 31.3 - 0.5 * jnp.log(core_profiles.n_e.face_value()) + jnp.log(
-        core_profiles.T_e.face_value() * 1e3)
-    sigsptz = (1.9012e04 * (core_profiles.T_e.face_value() * 1e3)**1.5 / core_profiles.Z_eff_face / NZ /
-               log_lambda_ei)
+    log_lambda_ei = 31.3 - 0.5 * jnp.log(
+        core_profiles.n_e.face_value()) + jnp.log(
+            core_profiles.T_e.face_value() * 1e3)
+    sigsptz = (1.9012e04 * (core_profiles.T_e.face_value() * 1e3)**1.5 /
+               core_profiles.Z_eff_face / NZ / log_lambda_ei)
     nu_e_star_face = calculate_nu_e_star(
         q=core_profiles.q_face,
         geo=geometry,
@@ -675,9 +676,11 @@ def calculate_conductivity(geometry, core_profiles):
     )
     ft33 = f_trap / (1.0 +
                      (0.55 - 0.1 * f_trap) * jnp.sqrt(nu_e_star_face) + 0.45 *
-                     (1.0 - f_trap) * nu_e_star_face / (core_profiles.Z_eff_face**1.5))
+                     (1.0 - f_trap) * nu_e_star_face /
+                     (core_profiles.Z_eff_face**1.5))
     signeo_face = 1.0 - ft33 * (1.0 + 0.36 / core_profiles.Z_eff_face - ft33 *
-                                (0.59 / core_profiles.Z_eff_face - 0.23 / core_profiles.Z_eff_face * ft33))
+                                (0.59 / core_profiles.Z_eff_face -
+                                 0.23 / core_profiles.Z_eff_face * ft33))
     sigma_face = sigsptz * signeo_face
     sigmaneo_cell = 0.5 * (sigma_face[:-1] + sigma_face[1:])
     return Conductivity(
@@ -1801,40 +1804,6 @@ class TurbulentTransport:
 
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
-class NormalizedLogarithmicGradients:
-    lref_over_lti: Any
-    lref_over_lte: Any
-    lref_over_lne: Any
-    lref_over_lni0: Any
-    lref_over_lni1: Any
-
-    @classmethod
-    def from_profiles(cls, core_profiles, radial_coordinate, reference_length):
-        gradients = {}
-        for name, profile in {
-                "lref_over_lti": core_profiles.T_i,
-                "lref_over_lte": core_profiles.T_e,
-                "lref_over_lne": core_profiles.n_e,
-                "lref_over_lni0": core_profiles.n_i,
-                "lref_over_lni1": core_profiles.n_impurity,
-        }.items():
-            result = jnp.where(
-                jnp.abs(profile.face_value()) < g.eps,
-                g.eps,
-                -reference_length * profile.face_grad(radial_coordinate) /
-                profile.face_value(),
-            )
-            result = jnp.where(
-                jnp.abs(result) < g.eps,
-                g.eps,
-                result,
-            )
-            gradients[name] = result
-        return cls(**gradients)
-
-
-@jax.tree_util.register_dataclass
-@dataclasses.dataclass(frozen=True)
 class QualikizInputs:
     chiGB: Any
     Rmin: Any
@@ -1908,11 +1877,51 @@ def calculate_transport_coeffs(runtime_params, geo, core_profiles,
     chiGB = ((core_profiles.A_i * g.m_amu)**0.5 / (g.geo_B_0 * g.q_e)**2 *
              (core_profiles.T_i.face_value() * g.keV_to_J)**1.5 /
              g.geo_a_minor)
-    normalized_logarithmic_gradients = NormalizedLogarithmicGradients.from_profiles(
-        core_profiles=core_profiles,
-        radial_coordinate=rmid,
-        reference_length=g.R_major,
+    # Inlined NormalizedLogarithmicGradients.from_profiles
+    lref_over_lti_result = jnp.where(
+        jnp.abs(core_profiles.T_i.face_value()) < g.eps,
+        g.eps,
+        -g.R_major * core_profiles.T_i.face_grad(rmid) /
+        core_profiles.T_i.face_value(),
     )
+    lref_over_lti = jnp.where(
+        jnp.abs(lref_over_lti_result) < g.eps, g.eps, lref_over_lti_result)
+
+    lref_over_lte_result = jnp.where(
+        jnp.abs(core_profiles.T_e.face_value()) < g.eps,
+        g.eps,
+        -g.R_major * core_profiles.T_e.face_grad(rmid) /
+        core_profiles.T_e.face_value(),
+    )
+    lref_over_lte = jnp.where(
+        jnp.abs(lref_over_lte_result) < g.eps, g.eps, lref_over_lte_result)
+
+    lref_over_lne_result = jnp.where(
+        jnp.abs(core_profiles.n_e.face_value()) < g.eps,
+        g.eps,
+        -g.R_major * core_profiles.n_e.face_grad(rmid) /
+        core_profiles.n_e.face_value(),
+    )
+    lref_over_lne = jnp.where(
+        jnp.abs(lref_over_lne_result) < g.eps, g.eps, lref_over_lne_result)
+
+    lref_over_lni0_result = jnp.where(
+        jnp.abs(core_profiles.n_i.face_value()) < g.eps,
+        g.eps,
+        -g.R_major * core_profiles.n_i.face_grad(rmid) /
+        core_profiles.n_i.face_value(),
+    )
+    lref_over_lni0 = jnp.where(
+        jnp.abs(lref_over_lni0_result) < g.eps, g.eps, lref_over_lni0_result)
+
+    lref_over_lni1_result = jnp.where(
+        jnp.abs(core_profiles.n_impurity.face_value()) < g.eps,
+        g.eps,
+        -g.R_major * core_profiles.n_impurity.face_grad(rmid) /
+        core_profiles.n_impurity.face_value(),
+    )
+    lref_over_lni1 = jnp.where(
+        jnp.abs(lref_over_lni1_result) < g.eps, g.eps, lref_over_lni1_result)
     q = core_profiles.q_face
     iota_scaled = jnp.abs(
         (core_profiles.psi.face_grad()[1:] / g.face_centers[1:]))
@@ -1946,15 +1955,11 @@ def calculate_transport_coeffs(runtime_params, geo, core_profiles,
     factor_0 = 2 * g.keV_to_J / g.geo_B_0**2 * g.mu_0 * q**2
     alpha = factor_0 * (
         core_profiles.T_e.face_value() * core_profiles.n_e.face_value() *
-        (normalized_logarithmic_gradients.lref_over_lte +
-         normalized_logarithmic_gradients.lref_over_lne) +
+        (lref_over_lte + lref_over_lne) +
         core_profiles.n_i.face_value() * core_profiles.T_i.face_value() *
-        (normalized_logarithmic_gradients.lref_over_lti +
-         normalized_logarithmic_gradients.lref_over_lni0) +
+        (lref_over_lti + lref_over_lni0) +
         core_profiles.n_impurity.face_value() *
-        core_profiles.T_i.face_value() *
-        (normalized_logarithmic_gradients.lref_over_lti +
-         normalized_logarithmic_gradients.lref_over_lni1))
+        core_profiles.T_i.face_value() * (lref_over_lti + lref_over_lni1))
     smag = jnp.where(
         g.smag_alpha_correction,
         smag - alpha / 2,
@@ -1984,11 +1989,11 @@ def calculate_transport_coeffs(runtime_params, geo, core_profiles,
     normni = core_profiles.n_i.face_value() / core_profiles.n_e.face_value()
     qualikiz_inputs = QualikizInputs(
         Z_eff_face=core_profiles.Z_eff_face,
-        lref_over_lti=normalized_logarithmic_gradients.lref_over_lti,
-        lref_over_lte=normalized_logarithmic_gradients.lref_over_lte,
-        lref_over_lne=normalized_logarithmic_gradients.lref_over_lne,
-        lref_over_lni0=normalized_logarithmic_gradients.lref_over_lni0,
-        lref_over_lni1=normalized_logarithmic_gradients.lref_over_lni1,
+        lref_over_lti=lref_over_lti,
+        lref_over_lte=lref_over_lte,
+        lref_over_lne=lref_over_lne,
+        lref_over_lni0=lref_over_lni0,
+        lref_over_lni1=lref_over_lni1,
         q=q,
         smag=smag,
         x=x,
@@ -2186,8 +2191,7 @@ class QLKNNTransportModel(BaseModelFrozen):
 
 @jax.jit
 def calculate_total_transport_coeffs(runtime_params, geo, core_profiles):
-    rho_norm_ped_top_idx = g.pedestal_model(runtime_params, geo,
-                                             core_profiles)
+    rho_norm_ped_top_idx = g.pedestal_model(runtime_params, geo, core_profiles)
     turbulent_transport = calculate_transport_coeffs(
         runtime_params=runtime_params,
         geo=geo,
@@ -2425,8 +2429,7 @@ def coeffs_callback(runtime_params,
                     explicit_source_profiles,
                     explicit_call=False):
     # Inlined update_core_profiles_during_step
-    updated_core_profiles = solver_x_tuple_to_core_profiles(
-        x, core_profiles)
+    updated_core_profiles = solver_x_tuple_to_core_profiles(x, core_profiles)
     ions = get_updated_ions(
         runtime_params,
         updated_core_profiles.n_e,
@@ -2475,11 +2478,9 @@ def coeffs_callback(runtime_params,
 @jax.jit
 def _calc_coeffs_full(runtime_params, geo, core_profiles,
                       explicit_source_profiles):
-    rho_norm_ped_top_idx = g.pedestal_model(runtime_params, geo,
-                                             core_profiles)
-    mask = (jnp.zeros_like(
-        g.geo_rho,
-        dtype=bool).at[rho_norm_ped_top_idx].set(True))
+    rho_norm_ped_top_idx = g.pedestal_model(runtime_params, geo, core_profiles)
+    mask = (jnp.zeros_like(g.geo_rho,
+                           dtype=bool).at[rho_norm_ped_top_idx].set(True))
     conductivity = calculate_conductivity(geo, core_profiles)
     merged_source_profiles = build_source_profiles1(
         runtime_params=runtime_params,
@@ -2680,6 +2681,7 @@ def build_runtime_params_slice(t):
 class ToraxSimState:
     t: Any
     core_profiles: Any
+
 
 def cond_fun(inputs):
     next_dt, output = inputs
@@ -3173,10 +3175,8 @@ core_transport = calculate_total_transport_coeffs(
     geo,
     initial_core_profiles,
 )
-current_state = ToraxSimState(
-    t=np.array(g.t_initial),
-    core_profiles=initial_core_profiles
-)
+current_state = ToraxSimState(t=np.array(g.t_initial),
+                              core_profiles=initial_core_profiles)
 state_history = [current_state]
 initial_runtime_params = build_runtime_params_slice(current_state.t)
 while current_state.t < (g.t_final - g.tolerance):
@@ -3185,8 +3185,7 @@ while current_state.t < (g.t_final - g.tolerance):
         runtime_params=runtime_params_t,
         core_profiles=current_state.core_profiles,
     )
-    initial_dt = next_dt(current_state.t,
-                         core_transport)
+    initial_dt = next_dt(current_state.t, core_transport)
     loop_dt = initial_dt
     loop_output = (
         core_profiles_to_solver_x_tuple(current_state.core_profiles),
@@ -3309,7 +3308,7 @@ while current_state.t < (g.t_final - g.tolerance):
         A_impurity_face_value = ions.A_impurity_face
         Z_eff_value = ions.Z_eff
         Z_eff_face_value = ions.Z_eff_face
-        
+
         T_i = dataclasses.replace(
             core_profiles_t.T_i,
             value=T_i_value,
@@ -3542,9 +3541,8 @@ while current_state.t < (g.t_final - g.tolerance):
         result[4],
         final_core_profiles,
     )
-    output_state = ToraxSimState(
-        t=current_state.t + result[1],
-        core_profiles=final_core_profiles)
+    output_state = ToraxSimState(t=current_state.t + result[1],
+                                 core_profiles=final_core_profiles)
     current_state = output_state
     state_history.append(current_state)
 t = np.array([state.t for state in state_history])
