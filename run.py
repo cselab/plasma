@@ -85,11 +85,6 @@ class InterpolatedVarTimeRho:
             interpolation_mode=None,
         )
 
-    def tree_flatten(self):
-        children = (self._time_interpolated_var, )
-        aux_data = (None, None)
-        return children, aux_data
-
     @classmethod
     def tree_unflatten(cls, aux_data, children):
         obj = object.__new__(InterpolatedVarTimeRho)
