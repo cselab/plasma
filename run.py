@@ -2011,65 +2011,6 @@ class QLKNNRuntimeConfigInputs:
         )
 
 
-def apply_clipping_transport(transport_runtime_params, transport_coeffs):
-    chi_face_ion = jnp.clip(
-        transport_coeffs.chi_face_ion,
-        g.chi_min,
-        g.chi_max,
-    )
-    chi_face_el = jnp.clip(
-        transport_coeffs.chi_face_el,
-        g.chi_min,
-        g.chi_max,
-    )
-    d_face_el = jnp.clip(
-        transport_coeffs.d_face_el,
-        g.D_e_min,
-        g.D_e_max,
-    )
-    v_face_el = jnp.clip(
-        transport_coeffs.v_face_el,
-        g.V_e_min,
-        g.V_e_max,
-    )
-    return dataclasses.replace(
-        transport_coeffs,
-        chi_face_ion=chi_face_ion,
-        chi_face_el=chi_face_el,
-        d_face_el=d_face_el,
-        v_face_el=v_face_el,
-    )
-
-def apply_transport_patches(transport_runtime_params,
-                             runtime_params, geo, transport_coeffs):
-    chi_face_ion = jnp.where(
-        g.face_centers < g.rho_inner + g.eps,
-        g.chi_i_inner,
-        transport_coeffs.chi_face_ion,
-    )
-    chi_face_el = jnp.where(
-        g.face_centers < g.rho_inner + g.eps,
-        g.chi_e_inner,
-        transport_coeffs.chi_face_el,
-    )
-    d_face_el = jnp.where(
-        g.face_centers < g.rho_inner + g.eps,
-        g.D_e_inner,
-        transport_coeffs.d_face_el,
-    )
-    v_face_el = jnp.where(
-        g.face_centers < g.rho_inner + g.eps,
-        g.V_e_inner,
-        transport_coeffs.v_face_el,
-    )
-    return dataclasses.replace(
-        transport_coeffs,
-        chi_face_ion=chi_face_ion,
-        chi_face_el=chi_face_el,
-        d_face_el=d_face_el,
-        v_face_el=v_face_el,
-    )
-
 def smooth_coeffs_transport(
     transport_runtime_params,
     runtime_params,
@@ -2291,15 +2232,61 @@ def calculate_transport_coeffs(runtime_params, geo, core_profiles,
         d_face_el=d_face_el,
         v_face_el=v_face_el,
     )
-    transport_coeffs = apply_clipping_transport(
-        transport_runtime_params,
-        transport_coeffs,
+    # Inlined apply_clipping_transport
+    chi_face_ion = jnp.clip(
+        transport_coeffs.chi_face_ion,
+        g.chi_min,
+        g.chi_max,
     )
-    transport_coeffs = apply_transport_patches(
-        transport_runtime_params,
-        runtime_params,
-        geo,
+    chi_face_el = jnp.clip(
+        transport_coeffs.chi_face_el,
+        g.chi_min,
+        g.chi_max,
+    )
+    d_face_el = jnp.clip(
+        transport_coeffs.d_face_el,
+        g.D_e_min,
+        g.D_e_max,
+    )
+    v_face_el = jnp.clip(
+        transport_coeffs.v_face_el,
+        g.V_e_min,
+        g.V_e_max,
+    )
+    transport_coeffs = dataclasses.replace(
         transport_coeffs,
+        chi_face_ion=chi_face_ion,
+        chi_face_el=chi_face_el,
+        d_face_el=d_face_el,
+        v_face_el=v_face_el,
+    )
+    # Inlined apply_transport_patches
+    chi_face_ion = jnp.where(
+        g.face_centers < g.rho_inner + g.eps,
+        g.chi_i_inner,
+        transport_coeffs.chi_face_ion,
+    )
+    chi_face_el = jnp.where(
+        g.face_centers < g.rho_inner + g.eps,
+        g.chi_e_inner,
+        transport_coeffs.chi_face_el,
+    )
+    d_face_el = jnp.where(
+        g.face_centers < g.rho_inner + g.eps,
+        g.D_e_inner,
+        transport_coeffs.d_face_el,
+    )
+    v_face_el = jnp.where(
+        g.face_centers < g.rho_inner + g.eps,
+        g.V_e_inner,
+        transport_coeffs.v_face_el,
+    )
+    transport_coeffs = dataclasses.replace(
+        transport_coeffs,
+        chi_face_ion=chi_face_ion,
+        chi_face_el=chi_face_el,
+        d_face_el=d_face_el,
+        v_face_el=v_face_el,
     )
     return smooth_coeffs_transport(
         transport_runtime_params,
