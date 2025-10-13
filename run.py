@@ -494,33 +494,6 @@ def calc_q_face(geo, psi):
     return q_face * g.geo_q_correction_factor
 
 
-def calc_j_total(geo, psi):
-    Ip_profile_face = (psi.face_grad() * g.geo_g2g3_over_rhon_face *
-                       g.geo_F_face / g.geo_Phi_b / (16 * jnp.pi**3 * g.mu_0))
-    Ip_profile = (psi.grad() * g.geo_g2g3_over_rhon * g.geo_F / g.geo_Phi_b /
-                  (16 * jnp.pi**3 * g.mu_0))
-    dI_drhon_face = jnp.gradient(Ip_profile_face, g.face_centers)
-    dI_drhon = jnp.gradient(Ip_profile, g.cell_centers)
-    j_total_bulk = dI_drhon[1:] / g.geo_spr[1:]
-    j_total_face_bulk = dI_drhon_face[1:] / g.geo_spr_face[1:]
-    j_total_axis = j_total_bulk[0] - (j_total_bulk[1] - j_total_bulk[0])
-    j_total = jnp.concatenate([jnp.array([j_total_axis]), j_total_bulk])
-    j_total_face = jnp.concatenate(
-        [jnp.array([j_total_axis]), j_total_face_bulk])
-    return j_total, j_total_face, Ip_profile_face
-
-
-def calc_s_face(geo, psi):
-    iota_scaled = jnp.abs((psi.face_grad()[1:] / g.face_centers[1:]))
-    iota_scaled0 = jnp.expand_dims(jnp.abs(psi.face_grad()[1] /
-                                           jnp.array(g.dx)),
-                                   axis=0)
-    iota_scaled = jnp.concatenate([iota_scaled0, iota_scaled])
-    s_face = (-g.face_centers *
-              jnp.gradient(iota_scaled, g.face_centers) / iota_scaled)
-    return s_face
-
-
 def calculate_psidot_from_psi_sources(*, psi_sources, sigma, psi, geo):
     toc_psi = (1.0 / g.resistivity_multiplier * g.cell_centers * sigma *
                g.mu_0 * 16 * jnp.pi**2 * g.geo_Phi_b**2 / g.geo_F**2)
@@ -1953,21 +1926,6 @@ class RuntimeParams0:
 
 
 _EPSILON_NN: Final[float] = 1 / 3
-
-
-@jax.tree_util.register_dataclass
-@dataclasses.dataclass(frozen=True)
-class QLKNNRuntimeConfigInputs:
-    transport: RuntimeParams0
-    Ped_top: float
-
-    @staticmethod
-    def from_runtime_params_slice(transport_runtime_params, runtime_params,
-                                  pedestal_model_output):
-        return QLKNNRuntimeConfigInputs(
-            transport=transport_runtime_params,
-            Ped_top=g.rho_norm_ped_top,
-        )
 
 
 def calculate_transport_coeffs(runtime_params, geo, core_profiles,
