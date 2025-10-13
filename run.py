@@ -40,15 +40,10 @@ JAX_STATIC: Final[str] = "_pydantic_jax_static_field"
 _interp_fn = jax.jit(jnp.interp)
 
 
-@jax.tree_util.register_pytree_node_class
 class InterpolatedVarSingleAxis:
 
     def __init__(self, value, interpolation_mode):
         self.xs, self.ys = value
-
-    @classmethod
-    def tree_unflatten(cls, aux_data, children):
-        return cls(children, **aux_data)
 
     def get_value(self, x):
         x_shape = getattr(x, "shape", ())
