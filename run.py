@@ -1640,12 +1640,6 @@ class ImpurityFractions(BaseModelFrozen):
             A_avg_face=A_avg_face,
         )
 
-    @pydantic.model_validator(mode="before")
-    @classmethod
-    def _conform_impurity_data(cls, data):
-        if "legacy" in data:
-            del data["legacy"]
-        return data
 
 
 @jax.tree_util.register_dataclass
@@ -1726,7 +1720,6 @@ class PlasmaComposition(BaseModelFrozen):
         configurable_data["impurity"] = {
             "impurity_mode": _IMPURITY_MODE_FRACTIONS,
             "species": impurity_data,
-            "legacy": True,
         }
         return configurable_data
 
