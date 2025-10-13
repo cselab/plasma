@@ -44,7 +44,6 @@ _interp_fn = jax.jit(jnp.interp)
 class InterpolatedVarSingleAxis:
 
     def __init__(self, value, interpolation_mode):
-        self._value = value
         self.xs, self.ys = value
 
     def tree_flatten(self):
