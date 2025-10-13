@@ -1874,52 +1874,19 @@ class NormalizedLogarithmicGradients:
                 "lref_over_lni0": core_profiles.n_i,
                 "lref_over_lni1": core_profiles.n_impurity,
         }.items():
-            gradients[name] = calculate_normalized_logarithmic_gradient(
-                var=profile,
-                radial_coordinate=radial_coordinate,
-                reference_length=reference_length,
+            result = jnp.where(
+                jnp.abs(profile.face_value()) < g.eps,
+                g.eps,
+                -reference_length * profile.face_grad(radial_coordinate) /
+                profile.face_value(),
             )
+            result = jnp.where(
+                jnp.abs(result) < g.eps,
+                g.eps,
+                result,
+            )
+            gradients[name] = result
         return cls(**gradients)
-
-
-def calculate_chiGB(reference_temperature, reference_magnetic_field,
-                    reference_mass, reference_length):
-    return ((reference_mass * g.m_amu)**0.5 /
-            (reference_magnetic_field * g.q_e)**2 *
-            (reference_temperature * g.keV_to_J)**1.5 / reference_length)
-
-
-def calculate_alpha(core_profiles, q, reference_magnetic_field,
-                    normalized_logarithmic_gradients):
-    factor_0 = 2 * g.keV_to_J / reference_magnetic_field**2 * g.mu_0 * q**2
-    alpha = factor_0 * (
-        core_profiles.T_e.face_value() * core_profiles.n_e.face_value() *
-        (normalized_logarithmic_gradients.lref_over_lte +
-         normalized_logarithmic_gradients.lref_over_lne) +
-        core_profiles.n_i.face_value() * core_profiles.T_i.face_value() *
-        (normalized_logarithmic_gradients.lref_over_lti +
-         normalized_logarithmic_gradients.lref_over_lni0) +
-        core_profiles.n_impurity.face_value() *
-        core_profiles.T_i.face_value() *
-        (normalized_logarithmic_gradients.lref_over_lti +
-         normalized_logarithmic_gradients.lref_over_lni1))
-    return alpha
-
-
-def calculate_normalized_logarithmic_gradient(var, radial_coordinate,
-                                              reference_length):
-    result = jnp.where(
-        jnp.abs(var.face_value()) < g.eps,
-        g.eps,
-        -reference_length * var.face_grad(radial_coordinate) /
-        var.face_value(),
-    )
-    result = jnp.where(
-        jnp.abs(result) < g.eps,
-        g.eps,
-        result,
-    )
-    return result
 
 
 @jax.tree_util.register_dataclass
@@ -1978,14 +1945,6 @@ _FLUX_NAME_MAP: Final[Mapping[str, str]] = immutabledict.immutabledict({
 })
 
 
-def predict(inputs):
-    model_predictions = g.model.predict(inputs)
-    return {
-        _FLUX_NAME_MAP.get(flux_name, flux_name): flux_value
-        for flux_name, flux_value in model_predictions.items()
-    }
-
-
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class RuntimeParams0:
@@ -2017,12 +1976,9 @@ def calculate_transport_coeffs(runtime_params, geo, core_profiles,
     # Inlined call_qlknn_implementation and prepare_qualikiz_inputs
     rmid = (g.geo_R_out - g.geo_R_in) * 0.5
     rmid_face = (g.geo_R_out_face - g.geo_R_in_face) * 0.5
-    chiGB = calculate_chiGB(
-        reference_temperature=core_profiles.T_i.face_value(),
-        reference_magnetic_field=g.geo_B_0,
-        reference_mass=core_profiles.A_i,
-        reference_length=g.geo_a_minor,
-    )
+    chiGB = ((core_profiles.A_i * g.m_amu)**0.5 /
+             (g.geo_B_0 * g.q_e)**2 *
+             (core_profiles.T_i.face_value() * g.keV_to_J)**1.5 / g.geo_a_minor)
     normalized_logarithmic_gradients = NormalizedLogarithmicGradients.from_profiles(
         core_profiles=core_profiles,
         radial_coordinate=rmid,
@@ -2060,12 +2016,18 @@ def calculate_transport_coeffs(runtime_params, geo, core_profiles,
     tau_bounce = tau_bounce.at[0].set(tau_bounce[1])
     nu_star = nu_e * tau_bounce
     log_nu_star_face = jnp.log10(nu_star)
-    alpha = calculate_alpha(
-        core_profiles=core_profiles,
-        q=q,
-        reference_magnetic_field=g.geo_B_0,
-        normalized_logarithmic_gradients=normalized_logarithmic_gradients,
-    )
+    factor_0 = 2 * g.keV_to_J / g.geo_B_0**2 * g.mu_0 * q**2
+    alpha = factor_0 * (
+        core_profiles.T_e.face_value() * core_profiles.n_e.face_value() *
+        (normalized_logarithmic_gradients.lref_over_lte +
+         normalized_logarithmic_gradients.lref_over_lne) +
+        core_profiles.n_i.face_value() * core_profiles.T_i.face_value() *
+        (normalized_logarithmic_gradients.lref_over_lti +
+         normalized_logarithmic_gradients.lref_over_lni0) +
+        core_profiles.n_impurity.face_value() *
+        core_profiles.T_i.face_value() *
+        (normalized_logarithmic_gradients.lref_over_lti +
+         normalized_logarithmic_gradients.lref_over_lni1))
     smag = jnp.where(
         g.smag_alpha_correction,
         smag - alpha / 2,
@@ -2130,7 +2092,11 @@ def calculate_transport_coeffs(runtime_params, geo, core_profiles,
         [_get_input(key) for key in g.model.inputs_and_ranges.keys()],
         dtype=jnp.float64,
     ).T
-    model_output = predict(feature_scan)
+    model_predictions = g.model.predict(feature_scan)
+    model_output = {
+        _FLUX_NAME_MAP.get(flux_name, flux_name): flux_value
+        for flux_name, flux_value in model_predictions.items()
+    }
     qi_itg_squeezed = model_output["qi_itg"].squeeze()
     qi = qi_itg_squeezed + model_output["qi_tem"].squeeze()
     qe = (model_output["qe_itg"].squeeze() * g.ITG_flux_ratio_correction +
