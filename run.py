@@ -1581,9 +1581,6 @@ class PedestalConfig(BaseModelFrozen):
         return SetTemperatureDensityPedestalModel()
 
 
-_IMPURITY_MODE_FRACTIONS: Final[str] = "fractions"
-
-
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class RuntimeParamsIM:
@@ -1639,7 +1636,6 @@ class ImpurityFractions(BaseModelFrozen):
             A_avg=A_avg,
             A_avg_face=A_avg_face,
         )
-
 
 
 @jax.tree_util.register_dataclass
@@ -1712,17 +1708,6 @@ class PlasmaComposition(BaseModelFrozen):
     main_ion: IonMapping = ValidatedDefault({"D": 0.5, "T": 0.5})
     Z_eff: TimeVaryingArray = ValidatedDefault(1.0)
 
-    @pydantic.model_validator(mode="before")
-    @classmethod
-    def _conform_impurity_data(cls, data):
-        configurable_data = copy.deepcopy(data)
-        impurity_data = configurable_data["impurity"]
-        configurable_data["impurity"] = {
-            "impurity_mode": _IMPURITY_MODE_FRACTIONS,
-            "species": impurity_data,
-        }
-        return configurable_data
-
     def tree_flatten(self):
         children = (
             self.main_ion,
@@ -1751,6 +1736,8 @@ class PlasmaComposition(BaseModelFrozen):
         return tuple(self._main_ion_mixture.species.keys())
 
     def get_impurity_names(self):
+        print(self.impurity)
+        print(type(self.impurity))
         return tuple(self.impurity.species.keys())
 
     def build_runtime_params(self, t):
@@ -2699,17 +2686,16 @@ g.a_minor = 2.0
 g.B_0 = 5.3
 g.tolerance = 1e-7
 g.n_corrector_steps = 1
-g.main_ion_D = 0.5
-g.main_ion_T = 0.5
-g.impurity = "Ne"
-g.Z_eff = 1.6
 g.plasma_composition = PlasmaComposition(
     main_ion={
-        "D": g.main_ion_D,
-        "T": g.main_ion_T
+        "D": 0.5,
+        "T": 0.5
     },
-    impurity=g.impurity,
-    Z_eff=g.Z_eff,
+    impurity={
+        'impurity_mode': 'fractions',
+        'species': 'Ne'
+    },
+    Z_eff=1.6,
 )
 g.Ip = 10.5e6
 g.T_i_initial = {0.0: {0.0: 15.0, 1.0: 0.2}}
