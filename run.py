@@ -2011,53 +2011,6 @@ class QLKNNRuntimeConfigInputs:
         )
 
 
-def smooth_coeffs_transport(
-    transport_runtime_params,
-    runtime_params,
-    geo,
-    transport_coeffs,
-    pedestal_model_output,
-):
-    # Inlined _build_smoothing_matrix
-    lower_cutoff = 0.01
-    kernel = jnp.exp(
-        -jnp.log(2) *
-        (g.face_centers[:, jnp.newaxis] - g.face_centers)**2 /
-        (g.smoothing_width**2 + g.eps))
-    mask_outer_edge = g.rho_norm_ped_top - g.eps
-    mask_inner_edge = g.rho_inner + g.eps
-    mask = jnp.where(
-        jnp.logical_and(
-            g.face_centers > mask_inner_edge,
-            g.face_centers < mask_outer_edge,
-        ),
-        1.0,
-        0.0,
-    )
-    diag_mask = jnp.diag(mask)
-    kernel = jnp.dot(diag_mask, kernel)
-    num_rows = len(mask)
-    mask_mat = jnp.tile(mask, (num_rows, 1))
-    kernel *= mask_mat
-    zero_row_mask = jnp.all(kernel == 0, axis=1)
-    kernel = jnp.where(zero_row_mask[:, jnp.newaxis], jnp.eye(kernel.shape[0]),
-                       kernel)
-    row_sums = jnp.sum(kernel, axis=1)
-    kernel /= row_sums[:, jnp.newaxis]
-    kernel = jnp.where(kernel < lower_cutoff, 0.0, kernel)
-    row_sums = jnp.sum(kernel, axis=1)
-    kernel /= row_sums[:, jnp.newaxis]
-    smoothing_matrix = kernel
-
-    def smooth_single_coeff(coeff):
-        return jax.lax.cond(
-            jnp.all(coeff == 0.0),
-            lambda: coeff,
-            lambda: jnp.dot(smoothing_matrix, coeff),
-        )
-
-    return jax.tree_util.tree_map(smooth_single_coeff, transport_coeffs)
-
 def calculate_transport_coeffs(runtime_params, geo, core_profiles,
                  pedestal_model_output):
     transport_runtime_params = runtime_params.transport
@@ -2288,13 +2241,45 @@ def calculate_transport_coeffs(runtime_params, geo, core_profiles,
         d_face_el=d_face_el,
         v_face_el=v_face_el,
     )
-    return smooth_coeffs_transport(
-        transport_runtime_params,
-        runtime_params,
-        geo,
-        transport_coeffs,
-        pedestal_model_output,
+    # Inlined smooth_coeffs_transport
+    lower_cutoff = 0.01
+    kernel = jnp.exp(
+        -jnp.log(2) *
+        (g.face_centers[:, jnp.newaxis] - g.face_centers)**2 /
+        (g.smoothing_width**2 + g.eps))
+    mask_outer_edge = g.rho_norm_ped_top - g.eps
+    mask_inner_edge = g.rho_inner + g.eps
+    mask = jnp.where(
+        jnp.logical_and(
+            g.face_centers > mask_inner_edge,
+            g.face_centers < mask_outer_edge,
+        ),
+        1.0,
+        0.0,
     )
+    diag_mask = jnp.diag(mask)
+    kernel = jnp.dot(diag_mask, kernel)
+    num_rows = len(mask)
+    mask_mat = jnp.tile(mask, (num_rows, 1))
+    kernel *= mask_mat
+    zero_row_mask = jnp.all(kernel == 0, axis=1)
+    kernel = jnp.where(zero_row_mask[:, jnp.newaxis], jnp.eye(kernel.shape[0]),
+                       kernel)
+    row_sums = jnp.sum(kernel, axis=1)
+    kernel /= row_sums[:, jnp.newaxis]
+    kernel = jnp.where(kernel < lower_cutoff, 0.0, kernel)
+    row_sums = jnp.sum(kernel, axis=1)
+    kernel /= row_sums[:, jnp.newaxis]
+    smoothing_matrix = kernel
+
+    def smooth_single_coeff(coeff):
+        return jax.lax.cond(
+            jnp.all(coeff == 0.0),
+            lambda: coeff,
+            lambda: jnp.dot(smoothing_matrix, coeff),
+        )
+
+    return jax.tree_util.tree_map(smooth_single_coeff, transport_coeffs)
 
 
 
