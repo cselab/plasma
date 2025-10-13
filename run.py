@@ -1699,7 +1699,6 @@ class RuntimeParamsP:
     Z_eff_face: Any
 
 
-@jax.tree_util.register_pytree_node_class
 class PlasmaComposition(BaseModelFrozen):
     impurity: Annotated[
         ImpurityFractions,
@@ -1707,26 +1706,6 @@ class PlasmaComposition(BaseModelFrozen):
     ]
     main_ion: IonMapping
     Z_eff: TimeVaryingArray
-
-    def tree_flatten(self):
-        children = (
-            self.main_ion,
-            self.impurity,
-            self.Z_eff,
-            self._main_ion_mixture,
-        )
-        aux_data = ()
-        return children, aux_data
-
-    @classmethod
-    def tree_unflatten(cls, aux_data, children):
-        obj = cls.model_construct(
-            main_ion=children[0],
-            impurity=children[1],
-            Z_eff=children[2],
-        )
-        obj._main_ion_mixture = children[3]
-        return obj
 
     @functools.cached_property
     def _main_ion_mixture(self):
