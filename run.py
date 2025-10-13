@@ -2400,11 +2400,9 @@ def prepare_qualikiz_inputs(geo, core_profiles):
         1,
         q,
     )
+    # jnp.logical_and(True, X) = X
     smag = jnp.where(
-        jnp.logical_and(
-            True,
-            smag - alpha < -0.2,
-        ),
+        smag - alpha < -0.2,
         alpha - 0.2,
         smag,
     )
@@ -3471,9 +3469,6 @@ g.geo_rho_hires_norm = rho_hires_norm
 g.geo_rho_hires = rho_hires
 g.geo_Phi_b_dot = np.asarray(0.0)
 g.geo_z_magnetic_axis = None
-
-# Initialize geometry cache in g.*
-# jnp.where(False, ...) always takes third argument
 g.geo_q_correction_factor = 1
 Phi_b = g.geo_Phi_face[..., -1]
 g.geo_Phi_b = Phi_b
