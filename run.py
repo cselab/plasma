@@ -2686,15 +2686,6 @@ def _calc_coeffs_full(runtime_params, geo, core_profiles,
     source_e += mask * g.adaptive_T_source_prefactor * g.T_e_ped
     source_mat_ii -= mask * g.adaptive_T_source_prefactor
     source_mat_ee -= mask * g.adaptive_T_source_prefactor
-    d_vpr53_rhon_n_e_drhon = jnp.gradient(
-        g.geo_vpr**(5.0 / 3.0) * g.cell_centers * core_profiles.n_e.value,
-        g.cell_centers,
-    )
-    d_vpr53_rhon_n_i_drhon = jnp.gradient(
-        g.geo_vpr**(5.0 / 3.0) * g.cell_centers * core_profiles.n_i.value,
-        g.cell_centers,
-    )
-    d_vpr_rhon_drhon = jnp.gradient(g.geo_vpr * g.cell_centers, g.cell_centers)
     var_to_toc = {
         "T_i": toc_T_i,
         "T_e": toc_T_e,
