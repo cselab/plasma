@@ -276,13 +276,6 @@ BooleanNumeric = Any
 thread_context = threading.local()
 
 
-def while_loop(cond_fun, body_fun, init_val):
-    val = init_val
-    while cond_fun(val):
-        val = body_fun(val)
-    return val
-
-
 def cond(cond_val, true_fun, false_fun, *operands):
     if cond_val:
         return true_fun(*operands)
@@ -900,9 +893,9 @@ def _calculate_conductivity0(*, Z_eff_face, n_e, T_e, q_face, geo):
 def calculate_conductivity(geometry, core_profiles):
     result = _calculate_conductivity0(
         Z_eff_face=core_profiles.Z_eff_face,
-                                          n_e=core_profiles.n_e,
-                                          T_e=core_profiles.T_e,
-                                          q_face=core_profiles.q_face,
+        n_e=core_profiles.n_e,
+        T_e=core_profiles.T_e,
+        q_face=core_profiles.q_face,
         geo=geometry,
     )
     return Conductivity(sigma=result.sigma, sigma_face=result.sigma_face)
@@ -4388,12 +4381,12 @@ while not_done(current_state.t, g.t_final):
                          current_state.core_transport)
     loop_dt = initial_dt
     loop_output = (
-        core_profiles_to_solver_x_tuple(current_state.core_profiles),
-        initial_dt,
-        SolverNumericOutputs(solver_error_state=1, ),
-        runtime_params_t,
-        geo_t,
-        current_state.core_profiles,
+                core_profiles_to_solver_x_tuple(current_state.core_profiles),
+                initial_dt,
+                SolverNumericOutputs(solver_error_state=1, ),
+                runtime_params_t,
+                geo_t,
+                current_state.core_profiles,
     )
     while cond_fun((loop_dt, loop_output)):
         loop_dt, loop_output = body_fun((loop_dt, loop_output))
