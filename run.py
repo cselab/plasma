@@ -3124,92 +3124,6 @@ def update_core_profiles_during_step(x_new, runtime_params, geo,
     )
 
 
-def update_core_and_source_profiles_after_step(
-    dt,
-    x_new,
-    runtime_params_t_plus_dt,
-    geo,
-    core_profiles_t,
-    core_profiles_t_plus_dt,
-    explicit_source_profiles,
-):
-    updated_core_profiles_t_plus_dt = solver_x_tuple_to_core_profiles(
-        x_new, core_profiles_t_plus_dt)
-    ions = get_updated_ions(
-        runtime_params_t_plus_dt,
-        updated_core_profiles_t_plus_dt.n_e,
-        updated_core_profiles_t_plus_dt.T_e,
-    )
-    v_loop_lcfs = (runtime_params_t_plus_dt.profile_conditions.v_loop_lcfs
-                   if runtime_params_t_plus_dt.profile_conditions.
-                   use_v_loop_lcfs_boundary_condition else
-                   (updated_core_profiles_t_plus_dt.psi.face_value()[-1] -
-                    core_profiles_t.psi.face_value()[-1]) / dt)
-    j_total, j_total_face, Ip_profile_face = calc_j_total(
-        geo,
-        updated_core_profiles_t_plus_dt.psi,
-    )
-    intermediate_core_profiles = CoreProfiles(
-        T_i=updated_core_profiles_t_plus_dt.T_i,
-        T_e=updated_core_profiles_t_plus_dt.T_e,
-        psi=updated_core_profiles_t_plus_dt.psi,
-        n_e=updated_core_profiles_t_plus_dt.n_e,
-        n_i=ions.n_i,
-        n_impurity=ions.n_impurity,
-        impurity_fractions=ions.impurity_fractions,
-        Z_i=ions.Z_i,
-        Z_i_face=ions.Z_i_face,
-        Z_impurity=ions.Z_impurity,
-        Z_impurity_face=ions.Z_impurity_face,
-        psidot=core_profiles_t_plus_dt.psidot,
-        q_face=calc_q_face(geo, updated_core_profiles_t_plus_dt.psi),
-        s_face=calc_s_face(geo, updated_core_profiles_t_plus_dt.psi),
-        A_i=ions.A_i,
-        A_impurity=ions.A_impurity,
-        A_impurity_face=ions.A_impurity_face,
-        Z_eff=ions.Z_eff,
-        Z_eff_face=ions.Z_eff_face,
-        v_loop_lcfs=v_loop_lcfs,
-        sigma=core_profiles_t_plus_dt.sigma,
-        sigma_face=core_profiles_t_plus_dt.sigma_face,
-        j_total=j_total,
-        j_total_face=j_total_face,
-        Ip_profile_face=Ip_profile_face,
-    )
-    conductivity = calculate_conductivity(geo, intermediate_core_profiles)
-    intermediate_core_profiles = dataclasses.replace(
-        intermediate_core_profiles,
-        sigma=conductivity.sigma,
-        sigma_face=conductivity.sigma_face,
-    )
-    total_source_profiles = build_source_profiles1(
-        runtime_params=runtime_params_t_plus_dt,
-        geo=geo,
-        core_profiles=intermediate_core_profiles,
-        explicit=False,
-        explicit_source_profiles=explicit_source_profiles,
-        conductivity=conductivity,
-    )
-    psi_sources = total_source_profiles.total_psi_sources(geo)
-    psidot_value = calculate_psidot_from_psi_sources(
-        psi_sources=psi_sources,
-        sigma=intermediate_core_profiles.sigma,
-        psi=intermediate_core_profiles.psi,
-        geo=geo,
-    )
-    psidot = dataclasses.replace(
-        core_profiles_t_plus_dt.psidot,
-        value=psidot_value,
-        right_face_constraint=v_loop_lcfs,
-        right_face_grad_constraint=None,
-    )
-    core_profiles_t_plus_dt = dataclasses.replace(
-        intermediate_core_profiles,
-        psidot=psidot,
-    )
-    return core_profiles_t_plus_dt, total_source_profiles
-
-
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class Block1DCoeffs:
@@ -4487,16 +4401,80 @@ while not_done(current_state.t, g.t_final):
             ),
         ),
     )
-    final_core_profiles, final_source_profiles = (
-        update_core_and_source_profiles_after_step(
-            dt=result[1],
-            x_new=result[0],
-            runtime_params_t_plus_dt=result[3],
-            geo=result[4],
-            core_profiles_t=current_state.core_profiles,
-            core_profiles_t_plus_dt=result[5],
-            explicit_source_profiles=explicit_source_profiles,
-        ))
+    updated_core_profiles_t_plus_dt = solver_x_tuple_to_core_profiles(
+        result[0], result[5])
+    ions = get_updated_ions(
+        result[3],
+        updated_core_profiles_t_plus_dt.n_e,
+        updated_core_profiles_t_plus_dt.T_e,
+    )
+    v_loop_lcfs = (result[3].profile_conditions.v_loop_lcfs
+                   if result[3].profile_conditions.
+                   use_v_loop_lcfs_boundary_condition else
+                   (updated_core_profiles_t_plus_dt.psi.face_value()[-1] -
+                    current_state.core_profiles.psi.face_value()[-1]) / result[1])
+    j_total, j_total_face, Ip_profile_face = calc_j_total(
+        result[4],
+        updated_core_profiles_t_plus_dt.psi,
+    )
+    intermediate_core_profiles = CoreProfiles(
+        T_i=updated_core_profiles_t_plus_dt.T_i,
+        T_e=updated_core_profiles_t_plus_dt.T_e,
+        psi=updated_core_profiles_t_plus_dt.psi,
+        n_e=updated_core_profiles_t_plus_dt.n_e,
+        n_i=ions.n_i,
+        n_impurity=ions.n_impurity,
+        impurity_fractions=ions.impurity_fractions,
+        Z_i=ions.Z_i,
+        Z_i_face=ions.Z_i_face,
+        Z_impurity=ions.Z_impurity,
+        Z_impurity_face=ions.Z_impurity_face,
+        psidot=result[5].psidot,
+        q_face=calc_q_face(result[4], updated_core_profiles_t_plus_dt.psi),
+        s_face=calc_s_face(result[4], updated_core_profiles_t_plus_dt.psi),
+        A_i=ions.A_i,
+        A_impurity=ions.A_impurity,
+        A_impurity_face=ions.A_impurity_face,
+        Z_eff=ions.Z_eff,
+        Z_eff_face=ions.Z_eff_face,
+        v_loop_lcfs=v_loop_lcfs,
+        sigma=result[5].sigma,
+        sigma_face=result[5].sigma_face,
+        j_total=j_total,
+        j_total_face=j_total_face,
+        Ip_profile_face=Ip_profile_face,
+    )
+    conductivity = calculate_conductivity(result[4], intermediate_core_profiles)
+    intermediate_core_profiles = dataclasses.replace(
+        intermediate_core_profiles,
+        sigma=conductivity.sigma,
+        sigma_face=conductivity.sigma_face,
+    )
+    final_source_profiles = build_source_profiles1(
+        runtime_params=result[3],
+        geo=result[4],
+        core_profiles=intermediate_core_profiles,
+        explicit=False,
+        explicit_source_profiles=explicit_source_profiles,
+        conductivity=conductivity,
+    )
+    psi_sources = final_source_profiles.total_psi_sources(result[4])
+    psidot_value = calculate_psidot_from_psi_sources(
+        psi_sources=psi_sources,
+        sigma=intermediate_core_profiles.sigma,
+        psi=intermediate_core_profiles.psi,
+        geo=result[4],
+    )
+    psidot = dataclasses.replace(
+        result[5].psidot,
+        value=psidot_value,
+        right_face_constraint=v_loop_lcfs,
+        right_face_grad_constraint=None,
+    )
+    final_core_profiles = dataclasses.replace(
+        intermediate_core_profiles,
+        psidot=psidot,
+    )
     final_total_transport = calculate_total_transport_coeffs(
         result[3],
         result[4],
