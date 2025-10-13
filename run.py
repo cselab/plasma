@@ -3740,7 +3740,6 @@ def cond_fun(inputs):
     return take_another_step & ~is_nan_next_dt
 
 
-# Source configuration parameters
 g.generic_current_fraction = 0.46
 g.generic_current_width = 0.075
 g.generic_current_location = 0.36
@@ -3834,7 +3833,6 @@ g.adaptive_T_source_prefactor = 2.0e10
 g.adaptive_n_source_prefactor = 2.0e8
 g.t_initial = 0.0
 g.ITG_flux_ratio_correction = 1
-# {'n_rho': 25, 'a_minor': 2.0, 'B_0': 5.3}
 g.n_rho = 25
 g.dx = 1 / g.n_rho
 g.face_centers = np.linspace(0, g.n_rho * g.dx, g.n_rho + 1)
@@ -3846,7 +3844,6 @@ g.n_e_ped = 0.62e20
 g.T_i_ped = 4.5
 g.T_e_ped = 4.5
 g.rho_norm_ped_top = 0.91
-# transport
 g.D_e_inner = 0.25
 g.V_e_inner = 0.0
 g.chi_i_inner = 1.0
@@ -4043,8 +4040,6 @@ g.geo_rho_hires = rho_hires
 g.geo_Phi_b_dot = np.asarray(0.0)
 g.geo_z_magnetic_axis = None
 
-
-# Store computed geometry values to match original @property behavior
 class _GeoCache:
     def __init__(self):
         self._q_correction_factor = jnp.where(False, 1.25, 1)
