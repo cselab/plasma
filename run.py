@@ -1019,24 +1019,6 @@ class RuntimeParamsGeIO(RuntimeParamsSrc):
     absorption_fraction: Any
 
 
-def calc_generic_heat_source(
-    geo,
-    gaussian_location,
-    gaussian_width,
-    P_total,
-    electron_heat_fraction,
-    absorption_fraction,
-):
-    absorbed_power = P_total * absorption_fraction
-    profile = gaussian_profile(geo,
-                               center=gaussian_location,
-                               width=gaussian_width,
-                               total=absorbed_power)
-    source_ion = profile * (1 - electron_heat_fraction)
-    source_el = profile * electron_heat_fraction
-    return source_ion, source_el
-
-
 def default_formula(
     runtime_params: RuntimeParamsSlice,
     geo: Any,
@@ -1046,14 +1028,13 @@ def default_formula(
     unused_conductivity: Conductivity | None,
 ):
     source_params = runtime_params.sources[source_name]
-    ion, el = calc_generic_heat_source(
-        geo,
-        source_params.gaussian_location,
-        source_params.gaussian_width,
-        source_params.P_total,
-        source_params.electron_heat_fraction,
-        source_params.absorption_fraction,
-    )
+    absorbed_power = source_params.P_total * source_params.absorption_fraction
+    profile = gaussian_profile(geo,
+                               center=source_params.gaussian_location,
+                               width=source_params.gaussian_width,
+                               total=absorbed_power)
+    ion = profile * (1 - source_params.electron_heat_fraction)
+    el = profile * source_params.electron_heat_fraction
     return (ion, el)
 
 
