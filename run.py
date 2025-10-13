@@ -2276,56 +2276,6 @@ def smooth_coeffs_transport(
 
     return jax.tree_util.tree_map(smooth_single_coeff, transport_coeffs)
 
-def make_core_transport(
-    qi,
-    qe,
-    pfe,
-    quasilinear_inputs,
-    geo,
-    core_profiles,
-    gradient_reference_length,
-    gyrobohm_flux_reference_length,
-):
-    pfe_SI = (pfe * core_profiles.n_e.face_value() *
-              quasilinear_inputs.chiGB / gyrobohm_flux_reference_length)
-    chi_face_ion = (
-        ((gradient_reference_length / gyrobohm_flux_reference_length) * qi)
-        / quasilinear_inputs.lref_over_lti) * quasilinear_inputs.chiGB
-    chi_face_el = (
-        ((gradient_reference_length / gyrobohm_flux_reference_length) * qe)
-        / quasilinear_inputs.lref_over_lte) * quasilinear_inputs.chiGB
-
-    def DV_effective_approach():
-        Deff = -pfe_SI / (core_profiles.n_e.face_grad() *
-                          geo_g1_over_vpr2_face() * geo_rho_b() + g.eps)
-        Veff = pfe_SI / (core_profiles.n_e.face_value() *
-                         geo_g0_over_vpr_face() * geo_rho_b())
-        Deff_mask = (((pfe >= 0) & (quasilinear_inputs.lref_over_lne >= 0))
-                     | ((pfe < 0) &
-                        (quasilinear_inputs.lref_over_lne < 0))) & (abs(
-                            quasilinear_inputs.lref_over_lne) >= g.An_min)
-        Veff_mask = jnp.invert(Deff_mask)
-        d_face_el = jnp.where(Veff_mask, 0.0, Deff)
-        v_face_el = jnp.where(Deff_mask, 0.0, Veff)
-        return d_face_el, v_face_el
-
-    def Dscaled_approach():
-        d_face_el = chi_face_el
-        v_face_el = (pfe_SI / core_profiles.n_e.face_value() -
-                     quasilinear_inputs.lref_over_lne * d_face_el /
-                     gradient_reference_length * geo_g1_over_vpr2_face() *
-                     geo_rho_b()**2) / (geo_g0_over_vpr_face() *
-                                        geo_rho_b())
-        return d_face_el, v_face_el
-
-    d_face_el, v_face_el = DV_effective_approach()
-    return TurbulentTransport(
-        chi_face_ion=chi_face_ion,
-        chi_face_el=chi_face_el,
-        d_face_el=d_face_el,
-        v_face_el=v_face_el,
-    )
-
 def prepare_qualikiz_inputs(geo, core_profiles):
     rmid = (g.geo_R_out - g.geo_R_in) * 0.5
     rmid_face = (g.geo_R_out_face - g.geo_R_in_face) * 0.5
@@ -2466,15 +2416,34 @@ def call_qlknn_implementation(
           model_output["qe_etg"].squeeze() * g.ETG_correction_factor)
     pfe = model_output["pfe_itg"].squeeze(
     ) + model_output["pfe_tem"].squeeze()
-    return make_core_transport(
-        qi=qi,
-        qe=qe,
-        pfe=pfe,
-        quasilinear_inputs=qualikiz_inputs,
-        geo=geo,
-        core_profiles=core_profiles,
-        gradient_reference_length=g.R_major,
-        gyrobohm_flux_reference_length=g.geo_a_minor,
+    # Inline make_core_transport
+    gradient_reference_length = g.R_major
+    gyrobohm_flux_reference_length = g.geo_a_minor
+    pfe_SI = (pfe * core_profiles.n_e.face_value() *
+              qualikiz_inputs.chiGB / gyrobohm_flux_reference_length)
+    chi_face_ion = (
+        ((gradient_reference_length / gyrobohm_flux_reference_length) * qi)
+        / qualikiz_inputs.lref_over_lti) * qualikiz_inputs.chiGB
+    chi_face_el = (
+        ((gradient_reference_length / gyrobohm_flux_reference_length) * qe)
+        / qualikiz_inputs.lref_over_lte) * qualikiz_inputs.chiGB
+    # DV_effective_approach (only branch used)
+    Deff = -pfe_SI / (core_profiles.n_e.face_grad() *
+                      geo_g1_over_vpr2_face() * geo_rho_b() + g.eps)
+    Veff = pfe_SI / (core_profiles.n_e.face_value() *
+                     geo_g0_over_vpr_face() * geo_rho_b())
+    Deff_mask = (((pfe >= 0) & (qualikiz_inputs.lref_over_lne >= 0))
+                 | ((pfe < 0) &
+                    (qualikiz_inputs.lref_over_lne < 0))) & (abs(
+                        qualikiz_inputs.lref_over_lne) >= g.An_min)
+    Veff_mask = jnp.invert(Deff_mask)
+    d_face_el = jnp.where(Veff_mask, 0.0, Deff)
+    v_face_el = jnp.where(Deff_mask, 0.0, Veff)
+    return TurbulentTransport(
+        chi_face_ion=chi_face_ion,
+        chi_face_el=chi_face_el,
+        d_face_el=d_face_el,
+        v_face_el=v_face_el,
     )
 
 def calculate_transport_coeffs(runtime_params, geo, core_profiles,
