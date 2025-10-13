@@ -699,14 +699,9 @@ def get_average_charge_state(ion_symbols, T_e, fractions):
     fractions = fractions if fractions.ndim == 2 else fractions[:, jnp.newaxis]
     Z_avg = jnp.sum(fractions * Z_per_species, axis=0)
     Z2_avg = jnp.sum(fractions * Z_per_species**2, axis=0)
-    # Return a simple object with Z_avg, Z2_avg, Z_per_species attributes
-    class _ChargeState:
-        pass
-    result = _ChargeState()
-    result.Z_avg = Z_avg
-    result.Z2_avg = Z2_avg
-    result.Z_per_species = Z_per_species
-    return result
+    from collections import namedtuple
+    ChargeState = namedtuple('ChargeState', ['Z_avg', 'Z2_avg', 'Z_per_species'])
+    return ChargeState(Z_avg, Z2_avg, Z_per_species)
 
 
 def calculate_f_trap(geo):
