@@ -3072,16 +3072,6 @@ def build_runtime_params_slice(t):
     )
 
 
-def get_consistent_runtime_params_and_geometry(*, t):
-    runtime_params = build_runtime_params_slice(t)
-    # Compute Ip scale factor from time-varying Ip parameter
-    param_Ip = runtime_params.profile_conditions.Ip
-    Ip_scale_factor = param_Ip / g.geo_Ip_profile_face_base[-1]
-    return runtime_params, Ip_scale_factor
-
-
-
-
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass
 class ToraxSimState:
@@ -3474,11 +3464,9 @@ g.smag_alpha_correction = True
 g.q_sawtooth_proxy = True
 g.smoothing_width = 0.1
 g.transport_config = QLKNNTransportModel()
-runtime_params_for_init, Ip_scale_factor_init = get_consistent_runtime_params_and_geometry(
-    t=g.t_initial, )
-runtime_params = runtime_params_for_init
+runtime_params = build_runtime_params_slice(g.t_initial)
+Ip_scale_factor = runtime_params.profile_conditions.Ip / g.geo_Ip_profile_face_base[-1]
 geo = None
-Ip_scale_factor = Ip_scale_factor_init
 T_i = CellVariable(
     value=runtime_params.profile_conditions.T_i,
     left_face_grad_constraint=jnp.zeros(()),
@@ -3658,8 +3646,7 @@ while current_state.t < (g.t_final - g.tolerance):
     while cond_fun((loop_dt, loop_output)):
         dt = loop_dt
         output = loop_output
-        runtime_params_t_plus_dt, Ip_scale_factor_t_plus_dt = (
-            get_consistent_runtime_params_and_geometry(t=current_state.t + dt))
+        runtime_params_t_plus_dt = build_runtime_params_slice(current_state.t + dt)
         geo_t_with_phibdot = None
         geo_t_plus_dt = None
         core_profiles_t = current_state.core_profiles
