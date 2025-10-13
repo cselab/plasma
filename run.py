@@ -901,7 +901,8 @@ def calculate_generic_current(
     generic_current_form = jnp.exp(
         -((g.cell_centers - source_params.gaussian_location)**2) /
         (2 * source_params.gaussian_width**2))
-    Cext = I_generic / jnp.sum(generic_current_form * g.geo_spr * jnp.array(g.dx))
+    Cext = I_generic / jnp.sum(
+        generic_current_form * g.geo_spr * jnp.array(g.dx))
     generic_current_profile = Cext * generic_current_form
     return (generic_current_profile, )
 
@@ -961,14 +962,8 @@ class RuntimeParamsGeIO(RuntimeParamsSrc):
     absorption_fraction: Any
 
 
-def default_formula(
-    runtime_params: RuntimeParamsSlice,
-    geo: Any,
-    source_name: str,
-    unused_core_profiles: CoreProfiles,
-    unused_calculated_source_profiles: SourceProfiles | None,
-    unused_conductivity: Conductivity | None,
-):
+def default_formula(runtime_params, geo, source_name, unused_core_profiles,
+                    unused_calculated_source_profiles, unused_conductivity):
     source_params = runtime_params.sources[source_name]
     absorbed_power = source_params.P_total * source_params.absorption_fraction
     profile = gaussian_profile(geo,
