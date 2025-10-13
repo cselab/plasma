@@ -2883,33 +2883,21 @@ class QLKNNTransportModel0:
 class QLKNNTransportModel(BaseModelFrozen):
     model_name: Annotated[Literal["qlknn"], JAX_STATIC] = "qlknn"
     model_path: Annotated[str, JAX_STATIC] = ""
-    ETG_correction_factor: float = 1.0 / 3.0
-    clip_inputs: bool = False
-    clip_margin: float = 0.95
-    collisionality_multiplier: float = 1.0
-    smag_alpha_correction: bool = True
-    q_sawtooth_proxy: bool = True
-    D_e_max: Any = 100.0
-    V_e_min: Any = -50.0
-    V_e_max: Any = 50.0
-    smoothing_width: pydantic.NonNegativeFloat = 0.1
-    rho_min: UnitIntervalTimeVaryingScalar = ValidatedDefault(0.0)
-    rho_max: UnitIntervalTimeVaryingScalar = ValidatedDefault(1.0)
 
     def build_runtime_params(self, t):
         return RuntimeParams0(
-            D_e_max=self.D_e_max,
-            V_e_min=self.V_e_min,
-            V_e_max=self.V_e_max,
-            rho_min=self.rho_min.get_value(t),
-            rho_max=self.rho_max.get_value(t),
-            smoothing_width=self.smoothing_width,
-            ETG_correction_factor=self.ETG_correction_factor,
-            clip_inputs=self.clip_inputs,
-            clip_margin=self.clip_margin,
-            collisionality_multiplier=self.collisionality_multiplier,
-            smag_alpha_correction=self.smag_alpha_correction,
-            q_sawtooth_proxy=self.q_sawtooth_proxy,
+            D_e_max=g.D_e_max,
+            V_e_min=g.V_e_min,
+            V_e_max=g.V_e_max,
+            rho_min=g.rho_min,
+            rho_max=g.rho_max,
+            smoothing_width=g.smoothing_width,
+            ETG_correction_factor=g.ETG_correction_factor,
+            clip_inputs=g.clip_inputs,
+            clip_margin=g.clip_margin,
+            collisionality_multiplier=g.collisionality_multiplier,
+            smag_alpha_correction=g.smag_alpha_correction,
+            q_sawtooth_proxy=g.q_sawtooth_proxy,
         )
 
 
@@ -4632,20 +4620,7 @@ g.q_sawtooth_proxy = True
 g.rho_min = 0.0
 g.rho_max = 1.0
 g.smoothing_width = 0.1
-g.transport_config = QLKNNTransportModel(
-    ETG_correction_factor=g.ETG_correction_factor,
-    clip_inputs=g.clip_inputs,
-    clip_margin=g.clip_margin,
-    collisionality_multiplier=g.collisionality_multiplier,
-    smag_alpha_correction=g.smag_alpha_correction,
-    q_sawtooth_proxy=g.q_sawtooth_proxy,
-    D_e_max=g.D_e_max,
-    V_e_min=g.V_e_min,
-    V_e_max=g.V_e_max,
-    smoothing_width=g.smoothing_width,
-    rho_min=g.rho_min,
-    rho_max=g.rho_max,
-)
+g.transport_config = QLKNNTransportModel()
 g.transport_model = QLKNNTransportModel0()
 g.bootstrap_current = SauterModelConfig().build_model()
 g.runtime_params_provider = RuntimeParamsProvider.from_config()
