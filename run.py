@@ -699,9 +699,7 @@ def get_average_charge_state(ion_symbols, T_e, fractions):
     fractions = fractions if fractions.ndim == 2 else fractions[:, jnp.newaxis]
     Z_avg = jnp.sum(fractions * Z_per_species, axis=0)
     Z2_avg = jnp.sum(fractions * Z_per_species**2, axis=0)
-    from collections import namedtuple
-    ChargeState = namedtuple('ChargeState', ['Z_avg', 'Z2_avg', 'Z_per_species'])
-    return ChargeState(Z_avg, Z2_avg, Z_per_species)
+    return Z_avg, Z2_avg, Z_per_species
 
 
 def calculate_f_trap(geo):
@@ -2762,31 +2760,31 @@ def get_updated_electron_density(profile_conditions_params):
 
 @jax.jit
 def get_updated_ions(runtime_params, n_e, T_e):
-    charge_state_i = get_average_charge_state(
+    Z_i_avg, Z_i_Z2_avg, _ = get_average_charge_state(
         ion_symbols=runtime_params.plasma_composition.main_ion_names,
         T_e=T_e.value,
         fractions=runtime_params.plasma_composition.main_ion.fractions,
     )
-    Z_i = charge_state_i.Z2_avg / charge_state_i.Z_avg
-    charge_state_i_face = get_average_charge_state(
+    Z_i = Z_i_Z2_avg / Z_i_avg
+    Z_i_face_avg, Z_i_face_Z2_avg, _ = get_average_charge_state(
         ion_symbols=runtime_params.plasma_composition.main_ion_names,
         T_e=T_e.face_value(),
         fractions=runtime_params.plasma_composition.main_ion.fractions,
     )
-    Z_i_face = charge_state_i_face.Z2_avg / charge_state_i_face.Z_avg
+    Z_i_face = Z_i_face_Z2_avg / Z_i_face_avg
     impurity_params = runtime_params.plasma_composition.impurity
-    charge_state_impurity = get_average_charge_state(
+    Z_impurity_avg, Z_impurity_Z2_avg, _ = get_average_charge_state(
         ion_symbols=runtime_params.plasma_composition.impurity_names,
         T_e=T_e.value,
         fractions=impurity_params.fractions,
     )
-    Z_impurity = charge_state_impurity.Z2_avg / charge_state_impurity.Z_avg
-    charge_state_impurity_face = get_average_charge_state(
+    Z_impurity = Z_impurity_Z2_avg / Z_impurity_avg
+    Z_impurity_face_avg, Z_impurity_face_Z2_avg, _ = get_average_charge_state(
         ion_symbols=runtime_params.plasma_composition.impurity_names,
         T_e=T_e.face_value(),
         fractions=impurity_params.fractions_face,
     )
-    Z_impurity_face = charge_state_impurity_face.Z2_avg / charge_state_impurity_face.Z_avg
+    Z_impurity_face = Z_impurity_face_Z2_avg / Z_impurity_face_avg
     Z_eff = runtime_params.plasma_composition.Z_eff
     Z_eff_edge = runtime_params.plasma_composition.Z_eff_face[-1]
     dilution_factor = jnp.where(
