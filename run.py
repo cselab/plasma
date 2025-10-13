@@ -47,6 +47,16 @@ class InterpolatedVarSingleAxis:
         self._value = value
         self.xs, self.ys = value
 
+    def tree_flatten(self):
+        static_params = {
+            "interpolation_mode": None,
+        }
+        return (self._value, static_params)
+
+    @classmethod
+    def tree_unflatten(cls, aux_data, children):
+        return cls(children, **aux_data)
+
     def get_value(self, x):
         x_shape = getattr(x, "shape", ())
         is_jax = isinstance(x, jax.Array)
