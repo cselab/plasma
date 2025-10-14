@@ -43,6 +43,80 @@ g.z = dict(zip(g.sym, [1.0, 1.0, 10.0]))
 g.A = dict(zip(g.sym, [2.0141, 3.0160, 20.180]))
 
 
+# Standalone functions for cell variable operations
+def compute_face_grad(value, dr, left_face_constraint, right_face_constraint,
+                      left_face_grad_constraint, right_face_grad_constraint, x=None):
+    """Compute face gradients with boundary conditions.
+    
+    This function computes gradients at cell faces using finite differences,
+    with special handling for boundary conditions.
+    """
+    if x is None:
+        forward_difference = jnp.diff(value) / dr
+    else:
+        forward_difference = jnp.diff(value) / jnp.diff(x)
+
+    def constrained_grad(face, grad, cell, right):
+        if face is not None:
+            if x is None:
+                dx = dr
+            else:
+                dx = x[-1] - x[-2] if right else x[1] - x[0]
+            sign = -1 if right else 1
+            return sign * (cell - face) / (0.5 * dx)
+        else:
+            return grad
+
+    left_grad = constrained_grad(
+        left_face_constraint,
+        left_face_grad_constraint,
+        value[0],
+        right=False,
+    )
+    right_grad = constrained_grad(
+        right_face_constraint,
+        right_face_grad_constraint,
+        value[-1],
+        right=True,
+    )
+    left = jnp.expand_dims(left_grad, axis=0)
+    right = jnp.expand_dims(right_grad, axis=0)
+    return jnp.concatenate([left, forward_difference, right])
+
+
+def compute_left_face_value(value):
+    """Get left boundary face value."""
+    return value[..., 0:1]
+
+
+def compute_right_face_value(value, dr, right_face_constraint, right_face_grad_constraint):
+    """Get right boundary face value with constraint."""
+    if right_face_constraint is not None:
+        face_value = right_face_constraint
+        face_value = jnp.expand_dims(face_value, axis=-1)
+    else:
+        face_value = (
+            value[..., -1:] +
+            jnp.expand_dims(right_face_grad_constraint, axis=-1) *
+            jnp.expand_dims(dr, axis=-1) / 2)
+    return face_value
+
+
+def compute_face_value(value, dr, right_face_constraint, right_face_grad_constraint):
+    """Interpolate cell values to face values with boundary conditions."""
+    left_face = compute_left_face_value(value)
+    inner = (value[..., :-1] + value[..., 1:]) / 2.0
+    right_face = compute_right_face_value(value, dr, right_face_constraint, right_face_grad_constraint)
+    return jnp.concatenate([left_face, inner, right_face], axis=-1)
+
+
+def compute_cell_plus_boundaries(value, dr, right_face_constraint, right_face_grad_constraint):
+    """Return cell values concatenated with boundary values."""
+    left_value = compute_left_face_value(value)
+    right_value = compute_right_face_value(value, dr, right_face_constraint, right_face_grad_constraint)
+    return jnp.concatenate([left_value, value, right_value], axis=-1)
+
+
 @chex.dataclass(frozen=True)
 class CellVariable:
     value: Any
@@ -55,66 +129,37 @@ class CellVariable:
         default_factory=lambda: jnp.zeros(()))
 
     def face_grad(self, x=None):
-        if x is None:
-            forward_difference = jnp.diff(self.value) / self.dr
-        else:
-            forward_difference = jnp.diff(self.value) / jnp.diff(x)
-
-        def constrained_grad(face, grad, cell, right):
-            if face is not None:
-                if x is None:
-                    dx = self.dr
-                else:
-                    dx = x[-1] - x[-2] if right else x[1] - x[0]
-                sign = -1 if right else 1
-                return sign * (cell - face) / (0.5 * dx)
-            else:
-                return grad
-
-        left_grad = constrained_grad(
-            self.left_face_constraint,
-            self.left_face_grad_constraint,
-            self.value[0],
-            right=False,
+        """Delegate to standalone function."""
+        return compute_face_grad(
+            self.value, self.dr,
+            self.left_face_constraint, self.right_face_constraint,
+            self.left_face_grad_constraint, self.right_face_grad_constraint,
+            x=x
         )
-        right_grad = constrained_grad(
-            self.right_face_constraint,
-            self.right_face_grad_constraint,
-            self.value[-1],
-            right=True,
-        )
-        left = jnp.expand_dims(left_grad, axis=0)
-        right = jnp.expand_dims(right_grad, axis=0)
-        return jnp.concatenate([left, forward_difference, right])
 
     def _left_face_value(self):
-        value = self.value[..., 0:1]
-        return value
+        """Delegate to standalone function."""
+        return compute_left_face_value(self.value)
 
     def _right_face_value(self):
-        if self.right_face_constraint is not None:
-            value = self.right_face_constraint
-            value = jnp.expand_dims(value, axis=-1)
-        else:
-            value = (
-                self.value[..., -1:] +
-                jnp.expand_dims(self.right_face_grad_constraint, axis=-1) *
-                jnp.expand_dims(self.dr, axis=-1) / 2)
-        return value
+        """Delegate to standalone function."""
+        return compute_right_face_value(
+            self.value, self.dr,
+            self.right_face_constraint, self.right_face_grad_constraint
+        )
 
     def face_value(self):
-        inner = (self.value[..., :-1] + self.value[..., 1:]) / 2.0
-        return jnp.concatenate(
-            [self._left_face_value(), inner,
-             self._right_face_value()],
-            axis=-1)
+        """Delegate to standalone function."""
+        return compute_face_value(
+            self.value, self.dr,
+            self.right_face_constraint, self.right_face_grad_constraint
+        )
 
     def cell_plus_boundaries(self):
-        right_value = self._right_face_value()
-        left_value = self._left_face_value()
-        return jnp.concatenate(
-            [left_value, self.value, right_value],
-            axis=-1,
+        """Delegate to standalone function."""
+        return compute_cell_plus_boundaries(
+            self.value, self.dr,
+            self.right_face_constraint, self.right_face_grad_constraint
         )
 
 
