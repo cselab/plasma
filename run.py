@@ -46,10 +46,8 @@ class InterpolatedVarSingleAxis:
         self.xs, self.ys = value
 
     def get_value(self, x):
-        x_shape = getattr(x, "shape", ())
         is_jax = isinstance(x, jax.Array)
         interp = _interp_fn if is_jax else np.interp
-        full = jnp.full if is_jax else np.full
         match self.ys.ndim:
             case 1:
                 if self.ys.size == 1:
