@@ -1204,15 +1204,22 @@ class QeiSourceConfig(SourceModelBase):
 
 
 def build_models():
+    # Build Source objects from source_registry
     standard_sources = {}
-    for k, v in g.sources.items():
-        if k == "ei_exchange":
-            continue
-        else:
-            if v is not None:
-                source = v.build_source()
-                standard_sources[k] = source
-                qei_source_model = g.sources["ei_exchange"].build_source()
+    for source_name, handler in g.source_registry.items():
+        # Create the correct Source type for each source
+        if source_name == "generic_current":
+            source = GenericCurrentSource(model_func=handler.eval_fn)
+        elif source_name in ("generic_heat", "fusion"):
+            source = GenericIonElectronHeatSource(model_func=handler.eval_fn)
+        elif source_name == "generic_particle":
+            source = GenericParticleSource(model_func=handler.eval_fn)
+        elif source_name == "pellet":
+            source = PelletSource(model_func=handler.eval_fn)
+        elif source_name == "gas_puff":
+            source = GasPuffSource(model_func=handler.eval_fn)
+        standard_sources[source_name] = source
+    qei_source_model = QeiSource()
     return SourceModels(
         qei_source=qei_source_model,
         standard_sources=immutabledict.immutabledict(standard_sources),
@@ -2247,12 +2254,57 @@ MIN_DELTA: Final[float] = 1e-7
 
 @jax.jit
 def build_runtime_params_slice(t):
+    # Pre-compute all source runtime params directly (all constants except I_generic)
+    Ip_t = g.profile_conditions.Ip.get_value(t)
+    sources_runtime_params = {
+        "generic_current": RuntimeParamsGcS(
+            mode=Mode.MODEL_BASED,
+            is_explicit=False,
+            I_generic=Ip_t * g.generic_current_fraction,
+            fraction_of_total_current=g.generic_current_fraction,
+            gaussian_width=g.generic_current_width,
+            gaussian_location=g.generic_current_location,
+        ),
+        "generic_particle": RuntimeParamsPaSo(
+            mode=Mode.MODEL_BASED,
+            is_explicit=False,
+            particle_width=g.generic_particle_width,
+            deposition_location=g.generic_particle_location,
+            S_total=g.generic_particle_S_total,
+        ),
+        "gas_puff": RuntimeParamsPS(
+            mode=Mode.MODEL_BASED,
+            is_explicit=False,
+            puff_decay_length=g.gas_puff_decay_length,
+            S_total=g.gas_puff_S_total,
+        ),
+        "pellet": RuntimeParamsPE(
+            mode=Mode.MODEL_BASED,
+            is_explicit=False,
+            pellet_width=g.pellet_width,
+            pellet_deposition_location=g.pellet_location,
+            S_total=g.pellet_S_total,
+        ),
+        "generic_heat": RuntimeParamsGeIO(
+            mode=Mode.MODEL_BASED,
+            is_explicit=False,
+            gaussian_width=g.generic_heat_width,
+            gaussian_location=g.generic_heat_location,
+            P_total=g.generic_heat_P_total,
+            electron_heat_fraction=g.generic_heat_electron_fraction,
+            absorption_fraction=1.0,
+        ),
+        "fusion": RuntimeParamsSrc(
+            mode=Mode.MODEL_BASED,
+            is_explicit=False,
+        ),
+        "ei_exchange": RuntimeParamsSrc(
+            mode=Mode.ZERO,
+            is_explicit=False,
+        ),
+    }
     return RuntimeParamsSlice(
-        sources={
-            source_name: source_config.build_runtime_params(t)
-            for source_name, source_config in g.sources.items()
-            if source_config is not None
-        },
+        sources=sources_runtime_params,
         profile_conditions=g.profile_conditions.build_runtime_params(t),
     )
 
@@ -2308,40 +2360,6 @@ g.profile_conditions = ProfileConditions(
     nbar=g.nbar,
     n_e=g.n_e_initial,
 )
-g.sources = {
-    "generic_current": GenericCurrentSourceConfig(
-        model_name="gaussian",
-        fraction_of_total_current=g.generic_current_fraction,
-        gaussian_width=g.generic_current_width,
-        gaussian_location=g.generic_current_location,
-    ),
-    "generic_particle": GenericParticleSourceConfig(
-        model_name="gaussian",
-        S_total=g.generic_particle_S_total,
-        deposition_location=g.generic_particle_location,
-        particle_width=g.generic_particle_width,
-    ),
-    "gas_puff": GasPuffSourceConfig(
-        model_name="exponential",
-        puff_decay_length=g.gas_puff_decay_length,
-        S_total=g.gas_puff_S_total,
-    ),
-    "pellet": PelletSourceConfig(
-        model_name="gaussian",
-        S_total=g.pellet_S_total,
-        pellet_width=g.pellet_width,
-        pellet_deposition_location=g.pellet_location,
-    ),
-    "generic_heat": GenericIonElHeatSourceConfig(
-        model_name="gaussian",
-        gaussian_location=g.generic_heat_location,
-        gaussian_width=g.generic_heat_width,
-        P_total=g.generic_heat_P_total,
-        electron_heat_fraction=g.generic_heat_electron_fraction,
-    ),
-    "fusion": FusionHeatSourceConfig(model_name="bosch_hale"),
-    "ei_exchange": QeiSourceConfig(mode="ZERO"),
-}
 g.chi_pereverzev = 30
 g.D_pereverzev = 15
 g.theta_implicit = 1.0
