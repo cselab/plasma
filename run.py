@@ -40,145 +40,6 @@ JAX_STATIC: Final[str] = "_pydantic_jax_static_field"
 _interp_fn = jax.jit(jnp.interp)
 
 
-class InterpolatedVarSingleAxis:
-
-    def __init__(self, value, interpolation_mode):
-        self.xs, self.ys = value
-
-    def get_value(self, x):
-        is_jax = isinstance(x, jax.Array)
-        interp = _interp_fn if is_jax else np.interp
-        match self.ys.ndim:
-            case 1:
-                if self.ys.size == 1:
-                    return self.ys[0]
-                else:
-                    return interp(x, self.xs, self.ys)
-            case 2:
-                return self.ys[0]
-
-
-@jax.tree_util.register_pytree_node_class
-class InterpolatedVarTimeRho:
-
-    def __init__(self, values, rho_norm):
-        sorted_indices = np.array(sorted(values.keys()))
-        rho_norm_interpolated_values = np.stack(
-            [
-                InterpolatedVarSingleAxis(values[t], None).get_value(rho_norm)
-                for t in sorted_indices
-            ],
-            axis=0,
-        )
-        self._time_interpolated_var = InterpolatedVarSingleAxis(
-            value=(sorted_indices, rho_norm_interpolated_values),
-            interpolation_mode=None,
-        )
-
-    @classmethod
-    def tree_unflatten(cls, aux_data, children):
-        obj = object.__new__(InterpolatedVarTimeRho)
-        obj._time_interpolated_var = children[0]
-        return obj
-
-    def get_value(self, x):
-        return self._time_interpolated_var.get_value(x)
-
-
-class BaseModelFrozen(pydantic.BaseModel):
-    model_config = pydantic.ConfigDict(
-        frozen=True,
-        extra="forbid",
-        arbitrary_types_allowed=True,
-        validate_default=True,
-    )
-
-    def __new__(cls, *unused_args, **unused_kwargs):
-        try:
-            registered_cls = jax.tree_util.register_pytree_node_class(cls)
-        except ValueError:
-            registered_cls = cls
-        return super().__new__(registered_cls)
-
-    @classmethod
-    def tree_unflatten(cls, aux_data, children):
-        dynamic_kwargs = {
-            name: value
-            for name, value in zip(
-                cls._jit_dynamic_kwarg_names(), children, strict=True)
-        }
-        return cls.model_construct(**(dynamic_kwargs | aux_data))
-
-
-ValueType: TypeAlias = Any
-
-
-class TimeVaryingArray(BaseModelFrozen):
-    value: ValueType
-    grid: Any = None
-
-    def get_value(self, t, grid_type="cell"):
-        return self._get_cached_interpolated_param_cell.get_value(t)
-
-    @pydantic.field_validator("value", mode="after")
-    @classmethod
-    def _valid_value(cls, value):
-        value = dict(sorted(value.items()))
-        return value
-
-    @pydantic.model_validator(mode="before")
-    @classmethod
-    def _conform_data(cls, data):
-        if isinstance(data, dict):
-            data.pop("_get_cached_interpolated_param_cell_centers", None)
-            data.pop("_get_cached_interpolated_param_face_centers", None)
-            data.pop("_get_cached_interpolated_param_face_right_centers", None)
-        value = {}
-        for t, v in data.items():
-            x = np.array(list(v.keys()), dtype=np.float64)
-            y = np.array(list(v.values()), dtype=np.float64)
-            value[t] = (x, y)
-        return dict(value=value, )
-
-    @functools.cached_property
-    def _get_cached_interpolated_param_cell(self, ):
-        return InterpolatedVarTimeRho(
-            self.value,
-            rho_norm=g.cell_centers,
-        )
-
-
-class TimeVaryingScalar(BaseModelFrozen):
-    time: Any
-    value: Any
-    interpolation_mode: Any
-
-    def get_value(self, t):
-        return self._get_cached_interpolated_param.get_value(t)
-
-    @pydantic.model_validator(mode="before")
-    @classmethod
-    def _conform_data(cls, data):
-        time = np.array([0.0], dtype=np.float64)
-        value = np.array([data], dtype=np.float64)
-        sort_order = np.argsort(time)
-        time = time[sort_order]
-        value = value[sort_order]
-        return dict(
-            time=time,
-            value=value,
-            interpolation_mode=None,
-        )
-
-    @functools.cached_property
-    def _get_cached_interpolated_param(self):
-        return InterpolatedVarSingleAxis(
-            value=(self.time, self.value),
-            interpolation_mode=self.interpolation_mode,
-        )
-
-
-UnitIntervalTimeVaryingScalar: TypeAlias = TimeVaryingScalar
 UnitInterval: TypeAlias = Annotated[float, pydantic.Field(ge=0.0, le=1.0)]
 OpenUnitInterval: TypeAlias = Annotated[float, pydantic.Field(gt=0.0, lt=1.0)]
 ValidatedDefault = functools.partial(pydantic.Field, validate_default=True)
@@ -200,7 +61,6 @@ g.z = dict(zip(g.sym, [1.0, 1.0, 10.0]))
 g.A = dict(zip(g.sym, [2.0141, 3.0160, 20.180]))
 
 
-IonMapping: TypeAlias = Mapping[str, TimeVaryingScalar]
 
 
 @chex.dataclass(frozen=True)
@@ -998,15 +858,6 @@ class SetTemperatureDensityPedestalModel:
     def _call_implementation(self, geo, core_profiles):
         # Return rho_norm_ped_top_idx directly (inlined PedestalModelOutput)
         return jnp.abs(g.cell_centers - g.rho_norm_ped_top).argmin()
-
-
-class PedestalConfig(BaseModelFrozen):
-    rho_norm_ped_top: TimeVaryingScalar = 0.91
-
-    def build_pedestal_model(self):
-        return SetTemperatureDensityPedestalModel()
-
-
 
 
 @jax.tree_util.register_dataclass
@@ -2122,7 +1973,7 @@ first_element = jnp.ones_like(g.geo_rho_b) / g.geo_rho_b**2
 g.geo_g1_over_vpr2_face = jnp.concatenate(
     [jnp.expand_dims(first_element, axis=-1), bulk], axis=-1)
 
-g.pedestal_model = PedestalConfig().build_pedestal_model()
+g.pedestal_model = SetTemperatureDensityPedestalModel()
 # Simplified source registry using SourceHandler - replaces entire Source class hierarchy
 g.source_registry = {
     "generic_current": SourceHandler(
