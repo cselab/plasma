@@ -611,8 +611,8 @@ def calculate_generic_current(
     return (generic_current_profile, )
 
 
-def default_formula(unused_core_profiles,
-                    unused_calculated_source_profiles, unused_conductivity):
+def default_formula(unused_core_profiles, unused_calculated_source_profiles,
+                    unused_conductivity):
     absorbed_power = g.generic_heat_P_total * 1.0
     profile = gaussian_profile(center=g.generic_heat_location,
                                width=g.generic_heat_width,
@@ -2086,7 +2086,6 @@ while True:
         initial_dt,
     )
     dt = initial_dt
-
     while True:
         core_profiles_t = current_core_profiles
         n_e = get_updated_electron_density()
@@ -2185,7 +2184,6 @@ while True:
             explicit_source_profiles=explicit_source_profiles,
             explicit_call=True,
         )
-
         x_new = x_new_guess
         for _ in range(0, g.n_corrector_steps + 1):
             x_input = x_new
@@ -2218,14 +2216,8 @@ while True:
             c = zero_block_vec.copy()
             if d_face is not None:
                 for i in range(num_channels):
-                    (
-                        diffusion_mat,
-                        diffusion_vec,
-                    ) = make_diffusion_terms(
-                        d_face[i],
-                        x[i].dr,
-                        x[i].bc,
-                    )
+                    (diffusion_mat, diffusion_vec) = make_diffusion_terms(
+                        d_face[i], x[i].dr, x[i].bc)
                     c_mat[i][i] += diffusion_mat
                     c[i] += diffusion_vec
             if v_face is not None:
@@ -2233,15 +2225,9 @@ while True:
                     d_face_i = d_face[i] if d_face is not None else None
                     d_face_i = jnp.zeros_like(
                         v_face[i]) if d_face_i is None else d_face_i
-                    (
-                        conv_mat,
-                        conv_vec,
-                    ) = make_convection_terms(
-                        v_face[i],
-                        d_face_i,
-                        x[i].dr,
-                        x[i].bc,
-                    )
+                    (conv_mat,
+                     conv_vec) = make_convection_terms(v_face[i], d_face_i,
+                                                       x[i].dr, x[i].bc)
                     c_mat[i][i] += conv_mat
                     c[i] += conv_vec
             if source_mat_cell is not None:
