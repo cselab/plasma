@@ -1,7 +1,6 @@
 from fusion_surrogates.qlknn import qlknn_model
 from jax import numpy as jnp
 from typing import Any, Final, Mapping, TypeAlias, TypeVar
-import chex
 import dataclasses
 import enum
 import immutabledict
