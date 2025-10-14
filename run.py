@@ -2339,13 +2339,6 @@ def build_runtime_params_slice(t):
     )
 
 
-@jax.tree_util.register_dataclass
-@dataclasses.dataclass
-class ToraxSimState:
-    t: Any
-    core_profiles: Any
-
-
 g.generic_current_fraction = 0.46
 g.generic_current_width = 0.075
 g.generic_current_location = 0.36
@@ -2825,15 +2818,15 @@ core_transport = calculate_total_transport_coeffs(
     geo,
     initial_core_profiles,
 )
-current_state = ToraxSimState(t=np.array(g.t_initial),
-                              core_profiles=initial_core_profiles)
-state_history = [current_state]
-initial_runtime_params = build_runtime_params_slice(current_state.t)
-while current_state.t < (g.t_final - g.tolerance):
-    runtime_params_t = build_runtime_params_slice(current_state.t)
+current_t = np.array(g.t_initial)
+current_core_profiles = initial_core_profiles
+state_history = [(current_t, current_core_profiles)]
+initial_runtime_params = build_runtime_params_slice(current_t)
+while current_t < (g.t_final - g.tolerance):
+    runtime_params_t = build_runtime_params_slice(current_t)
     explicit_source_profiles = build_source_profiles0(
         runtime_params=runtime_params_t,
-        core_profiles=current_state.core_profiles,
+        core_profiles=current_core_profiles,
     )
     # Inlined next_dt
     chi_max = core_transport.chi_max()
@@ -2842,23 +2835,23 @@ while current_state.t < (g.t_final - g.tolerance):
         g.chi_timestep_prefactor * basic_dt,
         g.max_dt,
     )
-    crosses_t_final = (current_state.t < g.t_final) * (current_state.t + initial_dt > g.t_final)
+    crosses_t_final = (current_t < g.t_final) * (current_t + initial_dt > g.t_final)
     initial_dt = jax.lax.select(
         jnp.logical_and(
             True,
             crosses_t_final,
         ),
-        g.t_final - current_state.t,
+        g.t_final - current_t,
         initial_dt,
     )
     loop_dt = initial_dt
     loop_output = (
-        core_profiles_to_solver_x_tuple(current_state.core_profiles),
+        core_profiles_to_solver_x_tuple(current_core_profiles),
         initial_dt,
         1,
         runtime_params_t,
         None,
-        current_state.core_profiles,
+        current_core_profiles,
     )
     # Inlined cond_fun
     def should_continue(loop_dt, loop_output):
@@ -2866,7 +2859,7 @@ while current_state.t < (g.t_final - g.tolerance):
         is_nan_next_dt = jnp.isnan(loop_dt)
         solver_did_not_converge = solver_outputs == 1
         at_exact_t_final = jnp.allclose(
-            current_state.t + loop_dt,
+            current_t + loop_dt,
             g.t_final,
         )
         next_dt_too_small = loop_dt < g.min_dt
@@ -2882,11 +2875,11 @@ while current_state.t < (g.t_final - g.tolerance):
     while should_continue(loop_dt, loop_output):
         dt = loop_dt
         output = loop_output
-        runtime_params_t_plus_dt = build_runtime_params_slice(current_state.t +
+        runtime_params_t_plus_dt = build_runtime_params_slice(current_t +
                                                               dt)
         geo_t_with_phibdot = None
         geo_t_plus_dt = None
-        core_profiles_t = current_state.core_profiles
+        core_profiles_t = current_core_profiles
         profile_conditions_t_plus_dt = runtime_params_t_plus_dt.profile_conditions
         n_e = get_updated_electron_density(profile_conditions_t_plus_dt)
         n_e_right_bc = n_e.right_face_constraint
@@ -3047,11 +3040,11 @@ while current_state.t < (g.t_final - g.tolerance):
             Z_eff=Z_eff_value,
             Z_eff_face=Z_eff_face_value,
         )
-        x_old = core_profiles_to_solver_x_tuple(current_state.core_profiles)
+        x_old = core_profiles_to_solver_x_tuple(current_core_profiles)
         x_new_guess = core_profiles_to_solver_x_tuple(core_profiles_t_plus_dt)
         coeffs_exp = coeffs_callback(
             runtime_params_t,
-            current_state.core_profiles,
+            current_core_profiles,
             x_old,
             explicit_source_profiles=explicit_source_profiles,
             explicit_call=True,
@@ -3166,7 +3159,7 @@ while current_state.t < (g.t_final - g.tolerance):
         result[3].profile_conditions.v_loop_lcfs
         if result[3].profile_conditions.use_v_loop_lcfs_boundary_condition else
         (updated_core_profiles_t_plus_dt.psi.face_value()[-1] -
-         current_state.core_profiles.psi.face_value()[-1]) / result[1])
+         current_core_profiles.psi.face_value()[-1]) / result[1])
     intermediate_core_profiles = CoreProfiles(
         T_i=updated_core_profiles_t_plus_dt.T_i,
         T_e=updated_core_profiles_t_plus_dt.T_e,
@@ -3228,18 +3221,17 @@ while current_state.t < (g.t_final - g.tolerance):
         result[4],
         final_core_profiles,
     )
-    output_state = ToraxSimState(t=current_state.t + result[1],
-                                 core_profiles=final_core_profiles)
-    current_state = output_state
-    state_history.append(current_state)
-t = np.array([state.t for state in state_history])
+    current_t = current_t + result[1]
+    current_core_profiles = final_core_profiles
+    state_history.append((current_t, current_core_profiles))
+t = np.array([state_t for state_t, _ in state_history])
 rho = np.concatenate([[0.0], np.asarray(g.cell_centers), [1.0]])
 (nt, ) = np.shape(t)
 evolving_data = {}
 for var_name in g.evolving_names:
     var_data = []
-    for state in state_history:
-        var_cell = getattr(state.core_profiles, var_name)
+    for state_t, state_core_profiles in state_history:
+        var_cell = getattr(state_core_profiles, var_name)
         data = var_cell.cell_plus_boundaries()
         var_data.append(data)
     evolving_data[var_name] = np.stack(var_data)
