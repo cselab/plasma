@@ -1,6 +1,6 @@
 from fusion_surrogates.qlknn import qlknn_model
 from jax import numpy as jnp
-from typing import Any, Final, Mapping, Sequence, TypeAlias, TypeVar
+from typing import Any, Final, Mapping, TypeAlias, TypeVar
 import chex
 import dataclasses
 import enum
@@ -831,7 +831,7 @@ _FLUX_NAME_MAP: Final[Mapping[str, str]] = immutabledict.immutabledict({
 _EPSILON_NN: Final[float] = 1 / 3
 
 
-def calculate_transport_coeffs(core_profiles, rho_norm_ped_top_idx):
+def calculate_transport_coeffs(core_profiles):
     # Inlined call_qlknn_implementation and prepare_qualikiz_inputs
     rmid = (g.geo_R_out - g.geo_R_in) * 0.5
     rmid_face = (g.geo_R_out_face - g.geo_R_in_face) * 0.5
@@ -1125,11 +1125,9 @@ def calculate_transport_coeffs(core_profiles, rho_norm_ped_top_idx):
 
 @jax.jit
 def calculate_total_transport_coeffs(core_profiles):
-    rho_norm_ped_top_idx = jnp.abs(g.cell_centers -
-                                   g.rho_norm_ped_top).argmin()
     turbulent_transport = calculate_transport_coeffs(
         core_profiles=core_profiles,
-        rho_norm_ped_top_idx=rho_norm_ped_top_idx,
+        rho_norm_ped_top_idx=None,
     )
     return CoreTransport(**dataclasses.asdict(turbulent_transport))
 
@@ -1425,7 +1423,7 @@ def coeffs_callback(core_profiles,
         toc_dens_el = jnp.ones_like(g.geo_vpr)
         tic_dens_el = g.geo_vpr
         turbulent_transport = calculate_transport_coeffs(core_profiles,
-                                                         rho_norm_ped_top_idx)
+                                                         None)
         chi_face_ion_total = turbulent_transport.chi_face_ion
         chi_face_el_total = turbulent_transport.chi_face_el
         d_face_el_total = turbulent_transport.d_face_el
