@@ -605,7 +605,13 @@ def calc_pellet_source(
     ), )
 
 
-def calc_fusion(core_profiles):
+def fusion_heat_model_func(
+    unused_source_name,
+    core_profiles,
+    unused_calculated_source_profiles,
+    unused_conductivity,
+):
+    # Inlined calc_fusion
     product = 1.0
     for fraction, symbol in zip(g.main_ion_fractions, g.main_ion_names):
         if symbol == "D" or symbol == "T":
@@ -634,8 +640,6 @@ def calc_fusion(core_profiles):
                        2 * jnp.log(core_profiles.n_i.face_value()) + logsigmav)
             Pfus_face = jnp.exp(logPfus)
             Pfus_cell = 0.5 * (Pfus_face[:-1] + Pfus_face[1:])
-            P_total = (jax.scipy.integrate.trapezoid(
-                Pfus_face * g.geo_vpr_face, g.face_centers) / 1e6)
             alpha_fraction = 3.5 / 17.6
             birth_energy = 3520
             alpha_mass = 4.002602
@@ -651,16 +655,6 @@ def calc_fusion(core_profiles):
             frac_e = 1.0 - frac_i
             Pfus_i = Pfus_cell * frac_i * alpha_fraction
             Pfus_e = Pfus_cell * frac_e * alpha_fraction
-    return P_total, Pfus_i, Pfus_e
-
-
-def fusion_heat_model_func(
-    unused_source_name,
-    core_profiles,
-    unused_calculated_source_profiles,
-    unused_conductivity,
-):
-    _, Pfus_i, Pfus_e = calc_fusion(core_profiles)
     return (Pfus_i, Pfus_e)
 
 
