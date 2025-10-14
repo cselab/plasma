@@ -159,7 +159,7 @@ class SolverVariable(typing.NamedTuple):
     bc: dict
 
 
-def make_convection_terms(v_face, d_face, value, dr, bc):
+def make_convection_terms(v_face, d_face, dr, bc):
     eps = g.EPS_CONVECTION
     is_neg = d_face < 0.0
     nonzero_sign = jnp.ones_like(is_neg) - 2 * is_neg
@@ -217,7 +217,7 @@ def make_convection_terms(v_face, d_face, value, dr, bc):
     return mat, vec
 
 
-def make_diffusion_terms(d_face, value, dr, bc):
+def make_diffusion_terms(d_face, dr, bc):
     denom = dr**2
     diag = jnp.asarray(-d_face[1:] - d_face[:-1])
     off = d_face[1:-1]
@@ -295,8 +295,8 @@ def calculate_psidot_from_psi_sources(*, psi_sources, sigma, psi, psi_bc):
     d_face_psi = g.geo_g2g3_over_rhon_face
     v_face_psi = jnp.zeros_like(d_face_psi)
     diffusion_mat, diffusion_vec = make_diffusion_terms(
-        d_face_psi, psi, jnp.array(g.dx), psi_bc)
-    conv_mat, conv_vec = make_convection_terms(v_face_psi, d_face_psi, psi,
+        d_face_psi, jnp.array(g.dx), psi_bc)
+    conv_mat, conv_vec = make_convection_terms(v_face_psi, d_face_psi,
                                                jnp.array(g.dx), psi_bc)
     c_mat = diffusion_mat + conv_mat
     c = diffusion_vec + conv_vec
@@ -597,7 +597,6 @@ class SourceHandler(typing.NamedTuple):
 
 
 def calculate_generic_current(
-    source_name,
     unused_state,
     unused_calculated_source_profiles,
     unused_conductivity,
@@ -612,7 +611,7 @@ def calculate_generic_current(
     return (generic_current_profile, )
 
 
-def default_formula(source_name, unused_core_profiles,
+def default_formula(unused_core_profiles,
                     unused_calculated_source_profiles, unused_conductivity):
     absorbed_power = g.generic_heat_P_total * 1.0
     profile = gaussian_profile(center=g.generic_heat_location,
@@ -624,7 +623,6 @@ def default_formula(source_name, unused_core_profiles,
 
 
 def calc_generic_particle_source(
-    source_name,
     unused_state,
     unused_calculated_source_profiles,
     unused_conductivity,
@@ -637,7 +635,6 @@ def calc_generic_particle_source(
 
 
 def calc_pellet_source(
-    source_name,
     unused_state,
     unused_calculated_source_profiles,
     unused_conductivity,
@@ -650,7 +647,6 @@ def calc_pellet_source(
 
 
 def fusion_heat_model_func(
-    unused_source_name,
     core_profiles,
     unused_calculated_source_profiles,
     unused_conductivity,
@@ -706,7 +702,6 @@ def fusion_heat_model_func(
 
 
 def calc_puff_source(
-    source_name,
     unused_state,
     unused_calculated_source_profiles,
     unused_conductivity,
@@ -811,7 +806,6 @@ def build_standard_source_profiles(*,
         handler = g.source_registry[source_name]
         if (not explicit) | calculate_anyway:
             value = handler.eval_fn(
-                source_name,
                 core_profiles,
                 calculated_source_profiles,
                 conductivity,
@@ -2268,7 +2262,6 @@ while current_t < (g.t_final - g.tolerance):
                         diffusion_vec,
                     ) = make_diffusion_terms(
                         d_face[i],
-                        x[i].value,
                         x[i].dr,
                         x[i].bc,
                     )
@@ -2285,7 +2278,6 @@ while current_t < (g.t_final - g.tolerance):
                     ) = make_convection_terms(
                         v_face[i],
                         d_face_i,
-                        x[i].value,
                         x[i].dr,
                         x[i].bc,
                     )
