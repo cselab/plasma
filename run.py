@@ -2093,7 +2093,7 @@ while current_t < (g.t_final - g.tolerance):
         current_core_profiles,
     )
 
-    def should_continue(loop_dt, loop_output):
+    while True:
         solver_outputs = loop_output[2]
         is_nan_next_dt = jnp.isnan(loop_dt)
         solver_did_not_converge = solver_outputs == 1
@@ -2104,9 +2104,8 @@ while current_t < (g.t_final - g.tolerance):
         next_dt_too_small = loop_dt < g.min_dt
         take_another_step = solver_did_not_converge & (at_exact_t_final
                                                        | ~next_dt_too_small)
-        return take_another_step & ~is_nan_next_dt
-
-    while should_continue(loop_dt, loop_output):
+        if not (take_another_step & ~is_nan_next_dt):
+            break
         dt = loop_dt
         output = loop_output
         core_profiles_t = current_core_profiles
