@@ -732,29 +732,6 @@ class SourceHandler(typing.NamedTuple):
     eval_fn: typing.Callable
 
 
-@dataclasses.dataclass(kw_only=True, frozen=True, eq=True)
-class Source:
-    SOURCE_NAME: typing.ClassVar[str] = "source"
-    model_func: Any = None
-
-    def get_value(
-        self,
-        runtime_params,
-        geo,
-        core_profiles,
-        calculated_source_profiles,
-        conductivity,
-    ):
-        return self.model_func(
-            runtime_params,
-            geo,
-            self.SOURCE_NAME,
-            core_profiles,
-            calculated_source_profiles,
-            conductivity,
-        )
-
-
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class RuntimeParamsGcS(RuntimeParamsSrc):
@@ -791,16 +768,6 @@ def _calculate_I_generic(runtime_params, source_params):
             source_params.fraction_of_total_current)
 
 
-@dataclasses.dataclass(kw_only=True, frozen=True, eq=True)
-class GenericCurrentSource(Source):
-    SOURCE_NAME: typing.ClassVar[str] = "generic_current"
-    model_func: Any = calculate_generic_current
-
-    @property
-    def affected_core_profiles(self):
-        return (AffectedCoreProfile.PSI, )
-
-
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class RuntimeParamsGeIO(RuntimeParamsSrc):
@@ -824,19 +791,6 @@ def default_formula(runtime_params, geo, source_name, unused_core_profiles,
     return (ion, el)
 
 
-@dataclasses.dataclass(kw_only=True, frozen=True, eq=True)
-class GenericIonElectronHeatSource(Source):
-    SOURCE_NAME: typing.ClassVar[str] = "generic_heat"
-    model_func: Any = default_formula
-
-    @property
-    def affected_core_profiles(self):
-        return (
-            AffectedCoreProfile.TEMP_ION,
-            AffectedCoreProfile.TEMP_EL,
-        )
-
-
 def calc_generic_particle_source(
     runtime_params,
     geo,
@@ -852,16 +806,6 @@ def calc_generic_particle_source(
         total=source_params.S_total,
         geo=geo,
     ), )
-
-
-@dataclasses.dataclass(kw_only=True, frozen=True, eq=True)
-class GenericParticleSource(Source):
-    SOURCE_NAME: typing.ClassVar[str] = "generic_particle"
-    model_func: Any = calc_generic_particle_source
-
-    @property
-    def affected_core_profiles(self):
-        return (AffectedCoreProfile.NE, )
 
 
 @jax.tree_util.register_dataclass
@@ -887,16 +831,6 @@ def calc_pellet_source(
         total=source_params.S_total,
         geo=geo,
     ), )
-
-
-@dataclasses.dataclass(kw_only=True, frozen=True, eq=True)
-class PelletSource(Source):
-    SOURCE_NAME: typing.ClassVar[str] = "pellet"
-    model_func: Any = calc_pellet_source
-
-    @property
-    def affected_core_profiles(self):
-        return (AffectedCoreProfile.NE, )
 
 
 @jax.tree_util.register_dataclass
@@ -970,19 +904,6 @@ def fusion_heat_model_func(
     return (Pfus_i, Pfus_e)
 
 
-@dataclasses.dataclass(kw_only=True, frozen=True, eq=True)
-class FusionHeatSource(Source):
-    SOURCE_NAME: typing.ClassVar[str] = "fusion"
-    model_func: Any = fusion_heat_model_func
-
-    @property
-    def affected_core_profiles(self):
-        return (
-            AffectedCoreProfile.TEMP_ION,
-            AffectedCoreProfile.TEMP_EL,
-        )
-
-
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class RuntimeParamsPS(RuntimeParamsSrc):
@@ -1005,58 +926,6 @@ def calc_puff_source(
         total=source_params.S_total,
         geo=geo,
     ), )
-
-
-@dataclasses.dataclass(kw_only=True, frozen=True, eq=True)
-class GasPuffSource(Source):
-    SOURCE_NAME: typing.ClassVar[str] = "gas_puff"
-    model_func: Any = calc_puff_source
-
-    @property
-    def affected_core_profiles(self):
-        return (AffectedCoreProfile.NE, )
-
-
-@dataclasses.dataclass(kw_only=True, frozen=True, eq=True)
-class QeiSource(Source):
-    SOURCE_NAME: typing.ClassVar[str] = "ei_exchange"
-
-@jax.tree_util.register_dataclass
-@dataclasses.dataclass(frozen=True)
-class SourceModels:
-    qei_source: QeiSource
-    standard_sources: immutabledict.immutabledict[str, Source]
-
-    @functools.cached_property
-    def psi_sources(self):
-        return immutabledict.immutabledict({
-            name: source
-            for name, source in self.standard_sources.items()
-            if AffectedCoreProfile.PSI in source.affected_core_profiles
-        })
-
-
-def build_models():
-    # Build Source objects from source_registry
-    standard_sources = {}
-    for source_name, handler in g.source_registry.items():
-        # Create the correct Source type for each source
-        if source_name == "generic_current":
-            source = GenericCurrentSource(model_func=handler.eval_fn)
-        elif source_name in ("generic_heat", "fusion"):
-            source = GenericIonElectronHeatSource(model_func=handler.eval_fn)
-        elif source_name == "generic_particle":
-            source = GenericParticleSource(model_func=handler.eval_fn)
-        elif source_name == "pellet":
-            source = PelletSource(model_func=handler.eval_fn)
-        elif source_name == "gas_puff":
-            source = GasPuffSource(model_func=handler.eval_fn)
-        standard_sources[source_name] = source
-    qei_source_model = QeiSource()
-    return SourceModels(
-        qei_source=qei_source_model,
-        standard_sources=immutabledict.immutabledict(standard_sources),
-    )
 
 
 @jax.jit
