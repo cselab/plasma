@@ -2069,9 +2069,16 @@ def core_profiles_to_solver_x_tuple(core_profiles, ):
     x_tuple_for_solver_list = []
     for name in g.evolving_names:
         original_units_cv = getattr(core_profiles, name)
-        solver_x_tuple_cv = scale_cell_variable(
-            cv=original_units_cv,
-            scaling_factor=1 / SCALING_FACTORS[name],
+        # Inlined scale_cell_variable
+        scaling_factor = 1 / SCALING_FACTORS[name]
+        operation = lambda x, factor: x * factor if x is not None else None
+        solver_x_tuple_cv = CellVariable(
+            value=operation(original_units_cv.value, scaling_factor),
+            left_face_constraint=operation(original_units_cv.left_face_constraint, scaling_factor),
+            left_face_grad_constraint=operation(original_units_cv.left_face_grad_constraint, scaling_factor),
+            right_face_constraint=operation(original_units_cv.right_face_constraint, scaling_factor),
+            right_face_grad_constraint=operation(original_units_cv.right_face_grad_constraint, scaling_factor),
+            dr=original_units_cv.dr,
         )
         x_tuple_for_solver_list.append(solver_x_tuple_cv)
     return tuple(x_tuple_for_solver_list)
@@ -2081,33 +2088,19 @@ def solver_x_tuple_to_core_profiles(x_new, core_profiles):
     updated_vars = {}
     for i, var_name in enumerate(g.evolving_names):
         solver_x_tuple_cv = x_new[i]
-        original_units_cv = scale_cell_variable(
-            cv=solver_x_tuple_cv,
-            scaling_factor=SCALING_FACTORS[var_name],
+        # Inlined scale_cell_variable
+        scaling_factor = SCALING_FACTORS[var_name]
+        operation = lambda x, factor: x * factor if x is not None else None
+        original_units_cv = CellVariable(
+            value=operation(solver_x_tuple_cv.value, scaling_factor),
+            left_face_constraint=operation(solver_x_tuple_cv.left_face_constraint, scaling_factor),
+            left_face_grad_constraint=operation(solver_x_tuple_cv.left_face_grad_constraint, scaling_factor),
+            right_face_constraint=operation(solver_x_tuple_cv.right_face_constraint, scaling_factor),
+            right_face_grad_constraint=operation(solver_x_tuple_cv.right_face_grad_constraint, scaling_factor),
+            dr=solver_x_tuple_cv.dr,
         )
         updated_vars[var_name] = original_units_cv
     return dataclasses.replace(core_profiles, **updated_vars)
-
-
-def scale_cell_variable(cv, scaling_factor):
-    operation = lambda x, factor: x * factor if x is not None else None
-    scaled_value = operation(cv.value, scaling_factor)
-    scaled_left_face_constraint = operation(cv.left_face_constraint,
-                                            scaling_factor)
-    scaled_left_face_grad_constraint = operation(cv.left_face_grad_constraint,
-                                                 scaling_factor)
-    scaled_right_face_constraint = operation(cv.right_face_constraint,
-                                             scaling_factor)
-    scaled_right_face_grad_constraint = operation(
-        cv.right_face_grad_constraint, scaling_factor)
-    return CellVariable(
-        value=scaled_value,
-        left_face_constraint=scaled_left_face_constraint,
-        left_face_grad_constraint=scaled_left_face_grad_constraint,
-        right_face_constraint=scaled_right_face_constraint,
-        right_face_grad_constraint=scaled_right_face_grad_constraint,
-        dr=cv.dr,
-    )
 
 
 OptionalTupleMatrix: TypeAlias = tuple[tuple[jax.Array | None, ...],
