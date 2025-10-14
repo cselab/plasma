@@ -1257,29 +1257,6 @@ class Sources(BaseModelFrozen):
         default=None,
     )
 
-    @pydantic.model_validator(mode="before")
-    @classmethod
-    def _set_default_model_functions(cls, x):
-        constructor_data = copy.deepcopy(x)
-        for k, v in x.items():
-            match k:
-                case "gas_puff":
-                    if "model_name" not in v:
-                        constructor_data[k]["model_name"] = "exponential"
-                case "generic_particle":
-                    if "model_name" not in v:
-                        constructor_data[k]["model_name"] = "gaussian"
-                case "pellet":
-                    if "model_name" not in v:
-                        constructor_data[k]["model_name"] = "gaussian"
-                case "fusion":
-                    if "model_name" not in v:
-                        constructor_data[k]["model_name"] = "bosch_hale"
-                case "generic_heat":
-                    if "model_name" not in v:
-                        constructor_data[k]["model_name"] = "gaussian"
-        return constructor_data
-
     def build_models(self):
         standard_sources = {}
         for k, v in dict(self).items():
@@ -2387,31 +2364,36 @@ g.profile_conditions = ProfileConditions(
 )
 g.sources = Sources(
     generic_current={
+        "model_name": "gaussian",
         "fraction_of_total_current": g.generic_current_fraction,
         "gaussian_width": g.generic_current_width,
         "gaussian_location": g.generic_current_location,
     },
     generic_particle={
+        "model_name": "gaussian",
         "S_total": g.generic_particle_S_total,
         "deposition_location": g.generic_particle_location,
         "particle_width": g.generic_particle_width,
     },
     gas_puff={
+        "model_name": "exponential",
         "puff_decay_length": g.gas_puff_decay_length,
         "S_total": g.gas_puff_S_total,
     },
     pellet={
+        "model_name": "gaussian",
         "S_total": g.pellet_S_total,
         "pellet_width": g.pellet_width,
         "pellet_deposition_location": g.pellet_location,
     },
     generic_heat={
+        "model_name": "gaussian",
         "gaussian_location": g.generic_heat_location,
         "gaussian_width": g.generic_heat_width,
         "P_total": g.generic_heat_P_total,
         "electron_heat_fraction": g.generic_heat_electron_fraction,
     },
-    fusion={},
+    fusion={"model_name": "bosch_hale"},
     ei_exchange={},
 )
 g.chi_pereverzev = 30
