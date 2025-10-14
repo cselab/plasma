@@ -25,10 +25,10 @@ os.environ["XLA_FLAGS"] = (
 jax.config.update("jax_enable_x64", True)
 T = TypeVar("T")
 Array: TypeAlias = jax.Array | np.ndarray
-JAX_STATIC: Final[str] = "_pydantic_jax_static_field"
-_interp_fn = jax.jit(jnp.interp)
 thread_context = threading.local()
-_TOLERANCE: Final[float] = 1e-6
+g.JAX_STATIC = "_pydantic_jax_static_field"
+g.interp_fn = jax.jit(jnp.interp)
+g.TOLERANCE = 1e-6
 g.keV_to_J = 1e3 * 1.602176634e-19
 g.eV_to_J = 1.602176634e-19
 g.m_amu = 1.6605390666e-27
@@ -314,7 +314,7 @@ def _calculate_log_tau_e_Z1(T_e, n_e, log_lambda_ei):
             2 * jnp.log(g.epsilon_0) + 1.5 * jnp.log(T_e * g.keV_to_J))
 
 
-_MAVRIN_Z_COEFFS = immutabledict.immutabledict({
+g.MAVRIN_Z_COEFFS = immutabledict.immutabledict({
     "Ne":
     np.array([
         [-2.5303e01, -6.4696e01, -5.3631e01, -1.3242e01, 8.9737e00],
@@ -322,20 +322,20 @@ _MAVRIN_Z_COEFFS = immutabledict.immutabledict({
         [0.0000e00, 0.0000e00, 0.0000e00, 0.0000e00, 1.0000e01],
     ]),
 })
-_TEMPERATURE_INTERVALS = immutabledict.immutabledict({
+g.TEMPERATURE_INTERVALS = immutabledict.immutabledict({
     "Ne":
     np.array([0.5, 2.0]),
 })
 
 
 def calculate_average_charge_state_single_species(T_e, ion_symbol):
-    if ion_symbol not in _MAVRIN_Z_COEFFS:
+    if ion_symbol not in g.MAVRIN_Z_COEFFS:
         return jnp.ones_like(T_e) * g.z[ion_symbol]
     T_e_allowed_range = (0.1, 100.0)
     T_e = jnp.clip(T_e, *T_e_allowed_range)
-    interval_indices = jnp.searchsorted(_TEMPERATURE_INTERVALS[ion_symbol],
+    interval_indices = jnp.searchsorted(g.TEMPERATURE_INTERVALS[ion_symbol],
                                         T_e)
-    Zavg_coeffs_in_range = jnp.take(_MAVRIN_Z_COEFFS[ion_symbol],
+    Zavg_coeffs_in_range = jnp.take(g.MAVRIN_Z_COEFFS[ion_symbol],
                                     interval_indices,
                                     axis=0).transpose()
     X = jnp.log10(T_e)
@@ -874,7 +874,7 @@ class QualikizInputs:
     epsilon_lcfs: Any
 
 
-_FLUX_NAME_MAP: Final[Mapping[str, str]] = immutabledict.immutabledict({
+g.FLUX_NAME_MAP = immutabledict.immutabledict({
     "efiITG":
     "qi_itg",
     "efeITG":
@@ -890,7 +890,7 @@ _FLUX_NAME_MAP: Final[Mapping[str, str]] = immutabledict.immutabledict({
     "efeETG":
     "qe_etg",
 })
-_EPSILON_NN: Final[float] = 1 / 3
+g.EPSILON_NN = 1 / 3
 
 
 def calculate_transport_coeffs(core_profiles):
@@ -1024,7 +1024,7 @@ def calculate_transport_coeffs(core_profiles):
     )
     qualikiz_inputs = dataclasses.replace(
         qualikiz_inputs,
-        x=qualikiz_inputs.x * qualikiz_inputs.epsilon_lcfs / _EPSILON_NN,
+        x=qualikiz_inputs.x * qualikiz_inputs.epsilon_lcfs / g.EPSILON_NN,
     )
     input_map = {
         "Ati": lambda x: x.lref_over_lti,
@@ -1046,7 +1046,7 @@ def calculate_transport_coeffs(core_profiles):
     ).T
     model_predictions = g.model.predict(feature_scan)
     model_output = {
-        _FLUX_NAME_MAP.get(flux_name, flux_name): flux_value
+        g.FLUX_NAME_MAP.get(flux_name, flux_name): flux_value
         for flux_name, flux_value in model_predictions.items()
     }
     qi_itg_squeezed = model_output["qi_itg"].squeeze()
