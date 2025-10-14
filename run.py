@@ -78,15 +78,11 @@ def compute_face_grad(value,
         forward_difference = jnp.diff(value) / jnp.diff(x)
 
     def constrained_grad(face, grad, cell, right):
-        if face is not None:
-            if x is None:
-                dx = dr
-            else:
-                dx = x[-1] - x[-2] if right else x[1] - x[0]
-            sign = -1 if right else 1
-            return sign * (cell - face) / (0.5 * dx)
-        else:
+        if face is None:
             return grad
+        dx = dr if x is None else (x[-1] - x[-2] if right else x[1] - x[0])
+        sign = -1 if right else 1
+        return sign * (cell - face) / (0.5 * dx)
 
     left_grad = constrained_grad(
         left_face_constraint,
@@ -2134,13 +2130,8 @@ while current_t < (g.t_final - g.tolerance):
             g.t_final,
         )
         next_dt_too_small = loop_dt < g.min_dt
-        if solver_did_not_converge:
-            if at_exact_t_final:
-                take_another_step = True
-            else:
-                take_another_step = ~next_dt_too_small
-        else:
-            take_another_step = False
+        # Continue if: solver didn't converge AND (at final time OR dt is not too small)
+        take_another_step = solver_did_not_converge & (at_exact_t_final | ~next_dt_too_small)
         return take_another_step & ~is_nan_next_dt
 
     while should_continue(loop_dt, loop_output):
