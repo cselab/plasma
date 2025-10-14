@@ -2107,16 +2107,18 @@ while True:
         n_i_bound_right = g.n_e_right_bc * dilution_factor_edge
         n_impurity_bound_right = (g.n_e_right_bc -
                                   n_i_bound_right * Z_i_edge) / Z_impurity_edge
-        n_i_bc_updated = make_bc(
-            left_face_grad_constraint=jnp.zeros(()),
-            right_face_grad_constraint=None,
-            right_face_constraint=jnp.array(n_i_bound_right),
-        )
-        n_impurity_bc_updated = make_bc(
-            left_face_grad_constraint=jnp.zeros(()),
-            right_face_grad_constraint=None,
-            right_face_constraint=jnp.array(n_impurity_bound_right),
-        )
+        n_i_bc_updated = {
+            "left_face_constraint": None,
+            "right_face_constraint": jnp.array(n_i_bound_right),
+            "left_face_grad_constraint": jnp.zeros(()),
+            "right_face_grad_constraint": jnp.zeros(()),
+        }
+        n_impurity_bc_updated = {
+            "left_face_constraint": None,
+            "right_face_constraint": jnp.array(n_impurity_bound_right),
+            "left_face_grad_constraint": jnp.zeros(()),
+            "right_face_grad_constraint": jnp.zeros(()),
+        }
         T_i_value = core_profiles_t.T_i
         T_e_value = core_profiles_t.T_e
         n_e_value = core_profiles_t.n_e
