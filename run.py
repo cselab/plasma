@@ -1889,11 +1889,6 @@ def _calc_coeffs_full(runtime_params, geo, core_profiles,
 MIN_DELTA: Final[float] = 1e-7
 
 
-@jax.jit
-def build_runtime_params_slice(t):
-    return g.profile_conditions.build_runtime_params(t)
-
-
 g.generic_current_fraction = 0.46
 g.generic_current_width = 0.075
 g.generic_current_location = 0.36
@@ -2220,7 +2215,7 @@ g.transport_rho_min = 0.0
 g.transport_rho_max = 1.0
 # Pre-compute source modes (constant values)
 g.qei_mode = "ZERO"  # ei_exchange mode
-runtime_params = build_runtime_params_slice(g.t_initial)
+runtime_params = g.profile_conditions.build_runtime_params(g.t_initial)
 Ip_scale_factor = runtime_params.Ip / g.geo_Ip_profile_face_base[
     -1]
 geo = None
@@ -2359,9 +2354,9 @@ core_transport = calculate_total_transport_coeffs(
 current_t = np.array(g.t_initial)
 current_core_profiles = initial_core_profiles
 state_history = [(current_t, current_core_profiles)]
-initial_runtime_params = build_runtime_params_slice(current_t)
+initial_runtime_params = g.profile_conditions.build_runtime_params(current_t)
 while current_t < (g.t_final - g.tolerance):
-    runtime_params_t = build_runtime_params_slice(current_t)
+    runtime_params_t = g.profile_conditions.build_runtime_params(current_t)
     explicit_source_profiles = build_source_profiles0(
         runtime_params=runtime_params_t,
         core_profiles=current_core_profiles,
@@ -2413,7 +2408,7 @@ while current_t < (g.t_final - g.tolerance):
     while should_continue(loop_dt, loop_output):
         dt = loop_dt
         output = loop_output
-        runtime_params_t_plus_dt = build_runtime_params_slice(current_t +
+        runtime_params_t_plus_dt = g.profile_conditions.build_runtime_params(current_t +
                                                               dt)
         geo_t_with_phibdot = None
         geo_t_plus_dt = None
