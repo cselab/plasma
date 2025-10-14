@@ -1262,11 +1262,7 @@ def get_updated_electron_density():
     C = (target_nbar - 0.5 * n_e_face[-1] * dr_edge / a_minor_out) / (
         nbar_from_n_e_face_inner + 0.5 * n_e_face[-2] * dr_edge / a_minor_out)
     n_e_value = C * n_e_value
-    n_e_bc = make_bc(
-        right_face_grad_constraint=None,
-        right_face_constraint=n_e_right_bc,
-    )
-    return n_e_value, n_e_bc
+    return n_e_value, g.n_e_bc
 
 
 @jax.jit
