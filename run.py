@@ -38,6 +38,10 @@ g.epsilon_0 = 8.85418782e-12
 g.mu_0 = 4 * jnp.pi * 1e-7
 g.k_B = 1.380649e-23
 g.eps = 1e-7
+g.EPS_CONVECTION = 1e-20
+g.EPS_PECLET = 1e-3
+g.SAVGOL_WINDOW_LENGTH = 5
+g.T_E_ALLOWED_RANGE = (0.1, 100.0)
 g.sym = "D", "T", "Ne"
 g.z = dict(zip(g.sym, [1.0, 1.0, 10.0]))
 g.A = dict(zip(g.sym, [2.0141, 3.0160, 20.180]))
@@ -161,7 +165,7 @@ class SolverVariable(typing.NamedTuple):
 
 
 def make_convection_terms(v_face, d_face, value, dr, bc):
-    eps = 1e-20
+    eps = g.EPS_CONVECTION
     is_neg = d_face < 0.0
     nonzero_sign = jnp.ones_like(is_neg) - 2 * is_neg
     d_face = nonzero_sign * jnp.maximum(eps, jnp.abs(d_face))
@@ -173,7 +177,7 @@ def make_convection_terms(v_face, d_face, value, dr, bc):
     right_peclet = ratio[1:]
 
     def peclet_to_alpha(p):
-        eps = 1e-3
+        eps = g.EPS_PECLET
         p = jnp.where(jnp.abs(p) < eps, eps, p)
         alpha_pg10 = (p - 1) / p
         alpha_p0to10 = ((p - 1) + (1 - p / 10)**5) / p
@@ -331,8 +335,7 @@ g.TEMPERATURE_INTERVALS = immutabledict.immutabledict({
 def calculate_average_charge_state_single_species(T_e, ion_symbol):
     if ion_symbol not in g.MAVRIN_Z_COEFFS:
         return jnp.ones_like(T_e) * g.z[ion_symbol]
-    T_e_allowed_range = (0.1, 100.0)
-    T_e = jnp.clip(T_e, *T_e_allowed_range)
+    T_e = jnp.clip(T_e, *g.T_E_ALLOWED_RANGE)
     interval_indices = jnp.searchsorted(g.TEMPERATURE_INTERVALS[ion_symbol],
                                         T_e)
     Zavg_coeffs_in_range = jnp.take(g.MAVRIN_Z_COEFFS[ion_symbol],
@@ -1200,7 +1203,7 @@ g.rho_smoothing_limit = 0.1
 
 
 def _smooth_savgol(data, idx_limit, polyorder):
-    window_length = 5
+    window_length = g.SAVGOL_WINDOW_LENGTH
     smoothed_data = scipy.signal.savgol_filter(data,
                                                window_length,
                                                polyorder,
@@ -1629,7 +1632,7 @@ def coeffs_callback(core_profiles,
         return coeffs
 
 
-MIN_DELTA: Final[float] = 1e-7
+g.MIN_DELTA = 1e-7
 g.generic_current_fraction = 0.46
 g.generic_current_width = 0.075
 g.generic_current_location = 0.36
