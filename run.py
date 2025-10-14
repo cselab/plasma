@@ -232,7 +232,7 @@ ION_PROPERTIES_DICT: Final[Mapping[
     str, IonProperties]] = immutabledict.immutabledict(
         {v.symbol: v
          for v in ION_PROPERTIES})
-ION_SYMBOLS = frozenset(ION_PROPERTIES_DICT.keys())
+ION_SYMBOLS = "D", "T", "Ne"
 
 
 @jax.tree_util.register_dataclass
