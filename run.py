@@ -1257,20 +1257,20 @@ class Sources(BaseModelFrozen):
         default=None,
     )
 
-    def build_models(self):
-        standard_sources = {}
-        for k, v in dict(self).items():
-            if k == "ei_exchange":
-                continue
-            else:
-                if v is not None:
-                    source = v.build_source()
-                    standard_sources[k] = source
-                    qei_source_model = self.ei_exchange.build_source()
-        return SourceModels(
-            qei_source=qei_source_model,
-            standard_sources=immutabledict.immutabledict(standard_sources),
-        )
+def build_models():
+    standard_sources = {}
+    for k, v in dict(g.sources).items():
+        if k == "ei_exchange":
+            continue
+        else:
+            if v is not None:
+                source = v.build_source()
+                standard_sources[k] = source
+                qei_source_model = g.sources.ei_exchange.build_source()
+    return SourceModels(
+        qei_source=qei_source_model,
+        standard_sources=immutabledict.immutabledict(standard_sources),
+    )
 
 
 @jax.jit
@@ -2633,7 +2633,7 @@ g.geo_g1_over_vpr2_face = jnp.concatenate(
     [jnp.expand_dims(first_element, axis=-1), bulk], axis=-1)
 
 g.pedestal_model = PedestalConfig().build_pedestal_model()
-g.source_models = g.sources.build_models()
+g.source_models = build_models()
 g.ETG_correction_factor = 1.0 / 3.0
 g.collisionality_multiplier = 1.0
 g.smag_alpha_correction = True
