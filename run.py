@@ -454,7 +454,6 @@ class BootstrapCurrent:
         )
 
 
-@jax.jit
 def _calculate_bootstrap_current(*, Z_eff_face, Z_i_face, n_e, n_e_bc, n_i,
                                  n_i_bc, T_e, T_e_bc, T_i, T_i_bc, psi, psi_bc,
                                  q_face):
@@ -719,7 +718,6 @@ def calc_puff_source(
     return (C * S, )
 
 
-@jax.jit
 def build_source_profiles0(core_profiles,
                            explicit_source_profiles=None,
                            conductivity=None):
@@ -742,7 +740,6 @@ def build_source_profiles0(core_profiles,
     return profiles
 
 
-@jax.jit
 def build_source_profiles1(core_profiles,
                            explicit_source_profiles=None,
                            conductivity=None):
@@ -1191,7 +1188,6 @@ def calculate_transport_coeffs(core_profiles):
     return jax.tree_util.tree_map(smooth_single_coeff, transport_coeffs)
 
 
-@jax.jit
 def calculate_total_transport_coeffs(core_profiles):
     turbulent_transport = calculate_transport_coeffs(
         core_profiles=core_profiles)
@@ -1267,7 +1263,6 @@ def get_updated_electron_density():
     return n_e_value
 
 
-@jax.jit
 def get_updated_ions(n_e, n_e_bc, T_e, T_e_bc):
     T_e_face = compute_face_value_bc(T_e, jnp.array(g.dx), T_e_bc)
     Z_i_avg, Z_i_Z2_avg, _ = get_average_charge_state(
@@ -2123,14 +2118,8 @@ while current_t < (g.t_final - g.tolerance):
         output = loop_output
         core_profiles_t = current_core_profiles
         n_e = get_updated_electron_density()
-        n_e_bc_edge = {
-            **g.n_e_bc, "right_face_constraint":
-            g.n_e_right_bc
-        }
-        T_e_bc_edge = {
-            **g.T_e_bc, "right_face_constraint":
-            g.T_e_right_bc
-        }
+        n_e_bc_edge = {**g.n_e_bc, "right_face_constraint": g.n_e_right_bc}
+        T_e_bc_edge = {**g.T_e_bc, "right_face_constraint": g.T_e_right_bc}
         ions_edge = get_updated_ions(
             core_profiles_t.n_e,
             n_e_bc_edge,
@@ -2245,7 +2234,6 @@ while current_t < (g.t_final - g.tolerance):
             explicit_call=True,
         )
 
-        @jax.jit
         def solver_loop_body(i, x_new_guess):
             coeffs_new = coeffs_callback(
                 core_profiles_t_plus_dt,
