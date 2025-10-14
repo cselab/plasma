@@ -167,6 +167,11 @@ def compute_cell_plus_boundaries_bc(value, dr, bc):
 
 @chex.dataclass(frozen=True)
 class CellVariable:
+    """Temporary wrapper for solver conversion. Will be eliminated in future refactoring.
+    
+    This class is only used internally by core_profiles_to_solver_x_tuple() to create
+    solver-compatible structures. All storage in CoreProfiles uses plain arrays + BoundaryConditions.
+    """
     value: Any
     dr: Any
     left_face_constraint: Any = None
@@ -180,54 +185,17 @@ class CellVariable:
         """Extract boundary conditions as a BoundaryConditions object."""
         return BoundaryConditions.from_cell_variable(self)
 
-    @classmethod
-    def from_value_and_bc(cls, value, dr, bc):
-        """Create a CellVariable from value, dr, and BoundaryConditions."""
-        return cls(
-            value=value,
-            dr=dr,
-            left_face_constraint=bc.left_face_constraint,
-            right_face_constraint=bc.right_face_constraint,
-            left_face_grad_constraint=bc.left_face_grad_constraint,
-            right_face_grad_constraint=bc.right_face_grad_constraint,
-        )
 
-    def face_grad(self, x=None):
-        """Delegate to standalone function."""
-        return compute_face_grad(
-            self.value, self.dr,
-            self.left_face_constraint, self.right_face_constraint,
-            self.left_face_grad_constraint, self.right_face_grad_constraint,
-            x=x
-        )
-
-    def _left_face_value(self):
-        """Delegate to standalone function."""
-        return compute_left_face_value(self.value)
-
-    def _right_face_value(self):
-        """Delegate to standalone function."""
-        return compute_right_face_value(
-            self.value, self.dr,
-            self.right_face_constraint, self.right_face_grad_constraint
-        )
-
-    def face_value(self):
-        """Delegate to standalone function."""
-        return compute_face_value(
-            self.value, self.dr,
-            self.right_face_constraint, self.right_face_grad_constraint
-        )
-
-    def cell_plus_boundaries(self):
-        """Delegate to standalone function."""
-        return compute_cell_plus_boundaries(
-            self.value, self.dr,
-            self.right_face_constraint, self.right_face_grad_constraint
-        )
-
-
-def make_convection_terms(v_face, d_face, var):
+def make_convection_terms(v_face, d_face, value, dr, bc):
+    """Compute convection terms using plain arrays and boundary conditions.
+    
+    Args:
+        v_face: Face-centered velocities
+        d_face: Face-centered diffusion coefficients
+        value: Cell-centered variable values
+        dr: Cell spacing
+        bc: BoundaryConditions object
+    """
     eps = 1e-20
     is_neg = d_face < 0.0
     nonzero_sign = jnp.ones_like(is_neg) - 2 * is_neg
@@ -235,7 +203,7 @@ def make_convection_terms(v_face, d_face, var):
     half = jnp.array([0.5], dtype=jnp.float64)
     ones = jnp.ones_like(v_face[1:-1])
     scale = jnp.concatenate((half, ones, half))
-    ratio = scale * var.dr * v_face / d_face
+    ratio = scale * dr * v_face / d_face
     left_peclet = -ratio[:-1]
     right_peclet = ratio[1:]
 
@@ -259,47 +227,55 @@ def make_convection_terms(v_face, d_face, var):
     right_alpha = peclet_to_alpha(right_peclet)
     left_v = v_face[:-1]
     right_v = v_face[1:]
-    diag = (left_alpha * left_v - right_alpha * right_v) / var.dr
-    above = -(1.0 - right_alpha) * right_v / var.dr
+    diag = (left_alpha * left_v - right_alpha * right_v) / dr
+    above = -(1.0 - right_alpha) * right_v / dr
     above = above[:-1]
-    below = (1.0 - left_alpha) * left_v / var.dr
+    below = (1.0 - left_alpha) * left_v / dr
     below = below[1:]
     mat = jnp.diag(diag) + jnp.diag(above, 1) + jnp.diag(below, -1)
     vec = jnp.zeros_like(diag)
-    mat_value = (v_face[0] - right_alpha[0] * v_face[1]) / var.dr
+    mat_value = (v_face[0] - right_alpha[0] * v_face[1]) / dr
     vec_value = -v_face[0] * (1.0 -
-                              left_alpha[0]) * var.left_face_grad_constraint
+                              left_alpha[0]) * bc.left_face_grad_constraint
     mat = mat.at[0, 0].set(mat_value)
     vec = vec.at[0].set(vec_value)
-    if var.right_face_constraint is not None:
+    if bc.right_face_constraint is not None:
         mat_value = (v_face[-2] * left_alpha[-1] + v_face[-1] *
-                     (1.0 - 2.0 * right_alpha[-1])) / var.dr
+                     (1.0 - 2.0 * right_alpha[-1])) / dr
         vec_value = (-2.0 * v_face[-1] * (1.0 - right_alpha[-1]) *
-                     var.right_face_constraint) / var.dr
+                     bc.right_face_constraint) / dr
     else:
-        mat_value = -(v_face[-1] - v_face[-2] * left_alpha[-1]) / var.dr
+        mat_value = -(v_face[-1] - v_face[-2] * left_alpha[-1]) / dr
         vec_value = (-v_face[-1] * (1.0 - right_alpha[-1]) *
-                     var.right_face_grad_constraint)
+                     bc.right_face_grad_constraint)
     mat = mat.at[-1, -1].set(mat_value)
     vec = vec.at[-1].set(vec_value)
     return mat, vec
 
 
-def make_diffusion_terms(d_face, var):
-    denom = var.dr**2
+def make_diffusion_terms(d_face, value, dr, bc):
+    """Compute diffusion terms using plain arrays and boundary conditions.
+    
+    Args:
+        d_face: Face-centered diffusion coefficients
+        value: Cell-centered variable values (not used in computation, but kept for compatibility)
+        dr: Cell spacing
+        bc: BoundaryConditions object
+    """
+    denom = dr**2
     diag = jnp.asarray(-d_face[1:] - d_face[:-1])
     off = d_face[1:-1]
     vec = jnp.zeros_like(diag)
     diag = diag.at[0].set(-d_face[1])
-    vec = vec.at[0].set(-d_face[0] * var.left_face_grad_constraint / var.dr)
-    if var.right_face_constraint is not None:
+    vec = vec.at[0].set(-d_face[0] * bc.left_face_grad_constraint / dr)
+    if bc.right_face_constraint is not None:
         diag = diag.at[-1].set(-2 * d_face[-1] - d_face[-2])
-        vec = vec.at[-1].set(2 * d_face[-1] * var.right_face_constraint /
+        vec = vec.at[-1].set(2 * d_face[-1] * bc.right_face_constraint /
                              denom)
     else:
         diag = diag.at[-1].set(-d_face[-2])
-        vec = vec.at[-1].set(d_face[-1] * var.right_face_grad_constraint /
-                             var.dr)
+        vec = vec.at[-1].set(d_face[-1] * bc.right_face_grad_constraint /
+                             dr)
     mat = (jnp.diag(diag) + jnp.diag(off, 1) + jnp.diag(off, -1)) / denom
     return mat, vec
 
@@ -375,10 +351,9 @@ def calculate_psidot_from_psi_sources(*, psi_sources, sigma, psi, psi_bc):
                g.mu_0 * 16 * jnp.pi**2 * g.geo_Phi_b**2 / g.geo_F**2)
     d_face_psi = g.geo_g2g3_over_rhon_face
     v_face_psi = jnp.zeros_like(d_face_psi)
-    # Create temporary CellVariable for diffusion/convection term calculations
-    psi_cv = CellVariable.from_value_and_bc(psi, jnp.array(g.dx), psi_bc)
-    diffusion_mat, diffusion_vec = make_diffusion_terms(d_face_psi, psi_cv)
-    conv_mat, conv_vec = make_convection_terms(v_face_psi, d_face_psi, psi_cv)
+    # Use updated functions with plain arrays and BCs
+    diffusion_mat, diffusion_vec = make_diffusion_terms(d_face_psi, psi, jnp.array(g.dx), psi_bc)
+    conv_mat, conv_vec = make_convection_terms(v_face_psi, d_face_psi, psi, jnp.array(g.dx), psi_bc)
     c_mat = diffusion_mat + conv_mat
     c = diffusion_vec + conv_vec
     c += psi_sources
@@ -2465,12 +2440,15 @@ while current_t < (g.t_final - g.tolerance):
             c = zero_block_vec.copy()
             if d_face is not None:
                 for i in range(num_channels):
+                    # x[i] is a CellVariable from solver, extract value and BC
                     (
                         diffusion_mat,
                         diffusion_vec,
                     ) = make_diffusion_terms(
                         d_face[i],
-                        x[i],
+                        x[i].value,
+                        x[i].dr,
+                        x[i].get_boundary_conditions(),
                     )
                     c_mat[i][i] += diffusion_mat
                     c[i] += diffusion_vec
@@ -2479,13 +2457,16 @@ while current_t < (g.t_final - g.tolerance):
                     d_face_i = d_face[i] if d_face is not None else None
                     d_face_i = jnp.zeros_like(
                         v_face[i]) if d_face_i is None else d_face_i
+                    # x[i] is a CellVariable from solver, extract value and BC
                     (
                         conv_mat,
                         conv_vec,
                     ) = make_convection_terms(
                         v_face[i],
                         d_face_i,
-                        x[i],
+                        x[i].value,
+                        x[i].dr,
+                        x[i].get_boundary_conditions(),
                     )
                     c_mat[i][i] += conv_mat
                     c[i] += conv_vec
