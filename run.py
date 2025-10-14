@@ -732,21 +732,21 @@ def build_source_profiles0(core_profiles,
     return profiles
 
 
-def build_source_profiles1(core_profiles,
+def build_source_profiles1(T_i, T_e, n_e, psi, n_i, n_i_bc, n_impurity, n_impurity_bc, 
+                           Z_i, A_i, Z_impurity, A_impurity, q_face, Z_eff_face, Z_i_face,
                            explicit_source_profiles=None,
                            conductivity=None):
-    log_lambda_ei = calculate_log_lambda_ei(core_profiles.n_e,
-                                            core_profiles.T_e)
+    log_lambda_ei = calculate_log_lambda_ei(n_e, T_e)
     log_tau_e_Z1 = _calculate_log_tau_e_Z1(
-        core_profiles.T_e,
-        core_profiles.n_e,
+        T_e,
+        n_e,
         log_lambda_ei,
     )
     weighted_Z_eff = (
-        core_profiles.n_i * core_profiles.Z_i**2 / core_profiles.A_i +
-        core_profiles.n_impurity * core_profiles.Z_impurity**2 /
-        core_profiles.A_impurity) / core_profiles.n_e
-    log_Qei_coef = (jnp.log(g.Qei_multiplier * 1.5 * core_profiles.n_e) +
+        n_i * Z_i**2 / A_i +
+        n_impurity * Z_impurity**2 /
+        A_impurity) / n_e
+    log_Qei_coef = (jnp.log(g.Qei_multiplier * 1.5 * n_e) +
                     jnp.log(g.keV_to_J / g.m_amu) + jnp.log(2 * g.m_e) +
                     jnp.log(weighted_Z_eff) - log_tau_e_Z1)
     qei_coef = jnp.exp(log_Qei_coef)
@@ -757,19 +757,19 @@ def build_source_profiles1(core_profiles,
         implicit_ei=qei_coef,
     )
     result = _calculate_bootstrap_current(
-        Z_eff_face=core_profiles.Z_eff_face,
-        Z_i_face=core_profiles.Z_i_face,
-        n_e=core_profiles.n_e,
+        Z_eff_face=Z_eff_face,
+        Z_i_face=Z_i_face,
+        n_e=n_e,
         n_e_bc=g.n_e_bc,
-        n_i=core_profiles.n_i,
-        n_i_bc=core_profiles.n_i_bc,
-        T_e=core_profiles.T_e,
+        n_i=n_i,
+        n_i_bc=n_i_bc,
+        T_e=T_e,
         T_e_bc=g.T_e_bc,
-        T_i=core_profiles.T_i,
+        T_i=T_i,
         T_i_bc=g.T_i_bc,
-        psi=core_profiles.psi,
+        psi=psi,
         psi_bc=g.psi_bc,
-        q_face=core_profiles.q_face,
+        q_face=q_face,
     )
     bootstrap_current = BootstrapCurrent(
         j_bootstrap=result.j_bootstrap,
@@ -783,9 +783,30 @@ def build_source_profiles1(core_profiles,
         n_e=explicit_source_profiles.n_e if explicit_source_profiles else {},
         psi=explicit_source_profiles.psi if explicit_source_profiles else {},
     )
+    # Reconstruct core_profiles for source registry functions (they need uniform interface)
+    core_profiles_for_sources = CoreProfiles(
+        T_i=T_i, T_e=T_e, psi=psi, n_e=n_e,
+        n_i=n_i, n_i_bc=n_i_bc,
+        n_impurity=n_impurity, n_impurity_bc=n_impurity_bc,
+        impurity_fractions=g.impurity_fractions,  # constant
+        Z_i=Z_i, Z_i_face=Z_i_face,
+        A_i=A_i,
+        Z_impurity=Z_impurity,
+        Z_impurity_face=jnp.zeros(1),  # Not used by sources
+        A_impurity=A_impurity,
+        A_impurity_face=jnp.zeros(1),  # Not used by sources
+        Z_eff=jnp.zeros(1),  # Not used by sources
+        Z_eff_face=Z_eff_face,
+        q_face=q_face,
+        psidot=jnp.zeros_like(psi),  # Not used by sources
+        psidot_bc=make_bc(),
+        v_loop_lcfs=jnp.array(0.0),  # Not used by sources
+        sigma=jnp.zeros_like(psi),  # Not used by sources
+        sigma_face=jnp.zeros_like(q_face),  # Not used by sources
+    )
     build_standard_source_profiles(
         calculated_source_profiles=profiles,
-        core_profiles=core_profiles,
+        core_profiles=core_profiles_for_sources,
         explicit=False,
         conductivity=conductivity,
     )
@@ -1459,7 +1480,12 @@ def coeffs_callback(core_profiles,
             core_profiles.n_e, core_profiles.T_e,
             core_profiles.Z_eff_face, core_profiles.q_face)
         merged_source_profiles = build_source_profiles1(
-            core_profiles=core_profiles,
+            core_profiles.T_i, core_profiles.T_e, core_profiles.n_e, core_profiles.psi,
+            core_profiles.n_i, core_profiles.n_i_bc,
+            core_profiles.n_impurity, core_profiles.n_impurity_bc,
+            core_profiles.Z_i, core_profiles.A_i,
+            core_profiles.Z_impurity, core_profiles.A_impurity,
+            core_profiles.q_face, core_profiles.Z_eff_face, core_profiles.Z_i_face,
             explicit_source_profiles=explicit_source_profiles,
             conductivity=conductivity,
         )
@@ -2062,7 +2088,12 @@ core_profiles = initial_core_profiles
 explicit_source_profiles = build_source_profiles0(
     core_profiles=core_profiles, )
 initial_core_sources = build_source_profiles1(
-    core_profiles=core_profiles,
+    core_profiles.T_i, core_profiles.T_e, core_profiles.n_e, core_profiles.psi,
+    core_profiles.n_i, core_profiles.n_i_bc,
+    core_profiles.n_impurity, core_profiles.n_impurity_bc,
+    core_profiles.Z_i, core_profiles.A_i,
+    core_profiles.Z_impurity, core_profiles.A_impurity,
+    core_profiles.q_face, core_profiles.Z_eff_face, core_profiles.Z_i_face,
     explicit_source_profiles=explicit_source_profiles,
     conductivity=conductivity,
 )
@@ -2336,7 +2367,14 @@ while True:
         sigma_face=conductivity.sigma_face,
     )
     final_source_profiles = build_source_profiles1(
-        core_profiles=intermediate_core_profiles,
+        intermediate_core_profiles.T_i, intermediate_core_profiles.T_e,
+        intermediate_core_profiles.n_e, intermediate_core_profiles.psi,
+        intermediate_core_profiles.n_i, intermediate_core_profiles.n_i_bc,
+        intermediate_core_profiles.n_impurity, intermediate_core_profiles.n_impurity_bc,
+        intermediate_core_profiles.Z_i, intermediate_core_profiles.A_i,
+        intermediate_core_profiles.Z_impurity, intermediate_core_profiles.A_impurity,
+        intermediate_core_profiles.q_face, intermediate_core_profiles.Z_eff_face,
+        intermediate_core_profiles.Z_i_face,
         explicit_source_profiles=explicit_source_profiles,
         conductivity=conductivity,
     )
