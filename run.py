@@ -407,30 +407,28 @@ class Conductivity:
     sigma_face: Any
 
 
-def calculate_conductivity(core_profiles):
-    n_e_face = compute_face_value_bc(core_profiles.n_e, jnp.array(g.dx),
-                                     g.n_e_bc)
-    T_e_face = compute_face_value_bc(core_profiles.T_e, jnp.array(g.dx),
-                                     g.T_e_bc)
+def calculate_conductivity(n_e, T_e, Z_eff_face, q_face):
+    n_e_face = compute_face_value_bc(n_e, jnp.array(g.dx), g.n_e_bc)
+    T_e_face = compute_face_value_bc(T_e, jnp.array(g.dx), g.T_e_bc)
     f_trap = calculate_f_trap()
-    NZ = 0.58 + 0.74 / (0.76 + core_profiles.Z_eff_face)
+    NZ = 0.58 + 0.74 / (0.76 + Z_eff_face)
     log_lambda_ei = calculate_log_lambda_ei(n_e_face, T_e_face)
-    sigsptz = (1.9012e04 * (T_e_face * 1e3)**1.5 / core_profiles.Z_eff_face /
+    sigsptz = (1.9012e04 * (T_e_face * 1e3)**1.5 / Z_eff_face /
                NZ / log_lambda_ei)
     nu_e_star_face = calculate_nu_e_star(
-        q=core_profiles.q_face,
+        q=q_face,
         n_e=n_e_face,
         T_e=T_e_face,
-        Z_eff=core_profiles.Z_eff_face,
+        Z_eff=Z_eff_face,
         log_lambda_ei=log_lambda_ei,
     )
     ft33 = f_trap / (1.0 +
                      (0.55 - 0.1 * f_trap) * jnp.sqrt(nu_e_star_face) + 0.45 *
                      (1.0 - f_trap) * nu_e_star_face /
-                     (core_profiles.Z_eff_face**1.5))
-    signeo_face = 1.0 - ft33 * (1.0 + 0.36 / core_profiles.Z_eff_face - ft33 *
-                                (0.59 / core_profiles.Z_eff_face -
-                                 0.23 / core_profiles.Z_eff_face * ft33))
+                     (Z_eff_face**1.5))
+    signeo_face = 1.0 - ft33 * (1.0 + 0.36 / Z_eff_face - ft33 *
+                                (0.59 / Z_eff_face -
+                                 0.23 / Z_eff_face * ft33))
     sigma_face = sigsptz * signeo_face
     sigmaneo_cell = 0.5 * (sigma_face[:-1] + sigma_face[1:])
     return Conductivity(
@@ -1463,7 +1461,9 @@ def coeffs_callback(core_profiles,
                                        g.rho_norm_ped_top).argmin()
         mask = (jnp.zeros_like(g.geo_rho,
                                dtype=bool).at[rho_norm_ped_top_idx].set(True))
-        conductivity = calculate_conductivity(core_profiles)
+        conductivity = calculate_conductivity(
+            core_profiles.n_e, core_profiles.T_e,
+            core_profiles.Z_eff_face, core_profiles.q_face)
         merged_source_profiles = build_source_profiles1(
             core_profiles=core_profiles,
             explicit_source_profiles=explicit_source_profiles,
@@ -2010,7 +2010,9 @@ core_profiles = dataclasses.replace(
         jnp.abs((2 * g.geo_Phi_b * g.face_centers[1:]) / psi_face_grad[1:])
     ]) * g.geo_q_correction_factor,
 )
-conductivity = calculate_conductivity(core_profiles, )
+conductivity = calculate_conductivity(
+    core_profiles.n_e, core_profiles.T_e,
+    core_profiles.Z_eff_face, core_profiles.q_face)
 build_standard_source_profiles(
     core_profiles=core_profiles,
     psi_only=True,
@@ -2320,7 +2322,9 @@ while True:
         sigma=result[3].sigma,
         sigma_face=result[3].sigma_face,
     )
-    conductivity = calculate_conductivity(intermediate_core_profiles)
+    conductivity = calculate_conductivity(
+        intermediate_core_profiles.n_e, intermediate_core_profiles.T_e,
+        intermediate_core_profiles.Z_eff_face, intermediate_core_profiles.q_face)
     intermediate_core_profiles = dataclasses.replace(
         intermediate_core_profiles,
         sigma=conductivity.sigma,
