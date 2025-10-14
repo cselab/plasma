@@ -1166,18 +1166,20 @@ def build_standard_source_profiles(*,
                                    calculate_anyway=False,
                                    psi_only=False):
 
-    def calculate_source(source_name, source):
+    def calculate_source(source_name):
+        handler = g.source_registry[source_name]
         source_params = runtime_params.sources[source_name]
         if (explicit == source_params.is_explicit) | calculate_anyway:
-            value = source.get_value(
+            value = handler.eval_fn(
                 runtime_params,
                 geo,
+                source_name,
                 core_profiles,
                 calculated_source_profiles,
                 conductivity,
             )
             for profile, affected_core_profile in zip(
-                    value, source.affected_core_profiles, strict=True):
+                    value, handler.affects, strict=True):
                 match affected_core_profile:
                     case AffectedCoreProfile.PSI:
                         calculated_source_profiles.psi[source_name] = profile
@@ -1188,13 +1190,15 @@ def build_standard_source_profiles(*,
                     case AffectedCoreProfile.TEMP_EL:
                         calculated_source_profiles.T_e[source_name] = profile
 
-    for source_name, source in g.source_models.psi_sources.items():
-        calculate_source(source_name, source)
+    # Calculate PSI sources first
+    for source_name in g.psi_source_names:
+        calculate_source(source_name)
     if psi_only:
         return
-    for source_name, source in g.source_models.standard_sources.items():
-        if source_name not in g.source_models.psi_sources:
-            calculate_source(source_name, source)
+    # Calculate non-PSI sources
+    for source_name in g.source_registry.keys():
+        if source_name not in g.psi_source_names:
+            calculate_source(source_name)
 
 
 class SetTemperatureDensityPedestalModel:
@@ -2430,7 +2434,7 @@ g.geo_g1_over_vpr2_face = jnp.concatenate(
     [jnp.expand_dims(first_element, axis=-1), bulk], axis=-1)
 
 g.pedestal_model = PedestalConfig().build_pedestal_model()
-# Simplified source registry using SourceHandler
+# Simplified source registry using SourceHandler - replaces entire Source class hierarchy
 g.source_registry = {
     "generic_current": SourceHandler(
         affects=(AffectedCoreProfile.PSI,),
@@ -2458,7 +2462,6 @@ g.source_registry = {
     ),
 }
 g.psi_source_names = {"generic_current"}
-g.source_models = build_models()
 g.ETG_correction_factor = 1.0 / 3.0
 g.collisionality_multiplier = 1.0
 g.smag_alpha_correction = True
