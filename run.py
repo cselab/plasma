@@ -223,7 +223,6 @@ g.A = dict(zip(g.sym, [2.0141, 3.0160, 20.180]))
 class RuntimeParamsSlice:
     profile_conditions: Any
     sources: Any
-    transport: Any
 
 
 IonMapping: TypeAlias = Mapping[str, TimeVaryingScalar]
@@ -1666,19 +1665,11 @@ _FLUX_NAME_MAP: Final[Mapping[str, str]] = immutabledict.immutabledict({
 })
 
 
-@jax.tree_util.register_dataclass
-@dataclasses.dataclass(frozen=True)
-class RuntimeParams0:
-    rho_min: Any
-    rho_max: Any
-
-
 _EPSILON_NN: Final[float] = 1 / 3
 
 
 def calculate_transport_coeffs(runtime_params, geo, core_profiles,
                                rho_norm_ped_top_idx):
-    transport_runtime_params = runtime_params.transport
     # Inlined call_qlknn_implementation and prepare_qualikiz_inputs
     rmid = (g.geo_R_out - g.geo_R_in) * 0.5
     rmid_face = (g.geo_R_out_face - g.geo_R_in_face) * 0.5
@@ -1874,11 +1865,11 @@ def calculate_transport_coeffs(runtime_params, geo, core_profiles,
         v_face_el=v_face_el,
     )
     # Inlined apply_domain_restriction_transport
-    active_mask = ((g.face_centers > transport_runtime_params.rho_min)
-                   & (g.face_centers <= transport_runtime_params.rho_max)
+    active_mask = ((g.face_centers > g.transport_rho_min)
+                   & (g.face_centers <= g.transport_rho_max)
                    & (g.face_centers <= g.rho_norm_ped_top))
     active_mask = (jnp.asarray(active_mask).at[0].set(
-        transport_runtime_params.rho_min == 0))
+        g.transport_rho_min == 0))
     chi_face_ion = jnp.where(active_mask, transport_coeffs.chi_face_ion, 0.0)
     chi_face_el = jnp.where(active_mask, transport_coeffs.chi_face_el, 0.0)
     d_face_el = jnp.where(active_mask, transport_coeffs.d_face_el, 0.0)
@@ -1984,17 +1975,6 @@ def calculate_transport_coeffs(runtime_params, geo, core_profiles,
         )
 
     return jax.tree_util.tree_map(smooth_single_coeff, transport_coeffs)
-
-
-class QLKNNTransportModel(BaseModelFrozen):
-    rho_min: UnitIntervalTimeVaryingScalar = ValidatedDefault(0.0)
-    rho_max: UnitIntervalTimeVaryingScalar = ValidatedDefault(1.0)
-
-    def build_runtime_params(self, t):
-        return RuntimeParams0(
-            rho_min=self.rho_min.get_value(t),
-            rho_max=self.rho_max.get_value(t),
-        )
 
 
 @jax.jit
@@ -2471,7 +2451,6 @@ def next_dt(t, core_transport):
 @jax.jit
 def build_runtime_params_slice(t):
     return RuntimeParamsSlice(
-        transport=g.transport_config.build_runtime_params(t),
         sources={
             source_name: source_config.build_runtime_params(t)
             for source_name, source_config in dict(g.sources).items()
@@ -2831,7 +2810,9 @@ g.collisionality_multiplier = 1.0
 g.smag_alpha_correction = True
 g.q_sawtooth_proxy = True
 g.smoothing_width = 0.1
-g.transport_config = QLKNNTransportModel()
+# Pre-compute transport parameters (constant values)
+g.transport_rho_min = 0.0
+g.transport_rho_max = 1.0
 runtime_params = build_runtime_params_slice(g.t_initial)
 Ip_scale_factor = runtime_params.profile_conditions.Ip / g.geo_Ip_profile_face_base[
     -1]
