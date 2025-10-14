@@ -1455,7 +1455,6 @@ class PedestalConfig(BaseModelFrozen):
 @dataclasses.dataclass
 class RuntimeParamsPC:
     Ip: Any
-    v_loop_lcfs: Any
     T_i_right_bc: Any
     T_e_right_bc: Any
     T_e: Any
@@ -1465,14 +1464,10 @@ class RuntimeParamsPC:
     n_e: Any
     nbar: Any
     n_e_right_bc: Any
-    use_v_loop_lcfs_boundary_condition: Any = dataclasses.field(
-        metadata={"static": True})
 
 
 class ProfileConditions(BaseModelFrozen):
     Ip: TimeVaryingScalar = ValidatedDefault(15e6)
-    use_v_loop_lcfs_boundary_condition: Annotated[bool, JAX_STATIC] = False
-    v_loop_lcfs: TimeVaryingScalar = ValidatedDefault(0.0)
     T_i_right_bc: TimeVaryingScalar | None = None
     T_e_right_bc: TimeVaryingScalar | None = None
     T_i: TimeVaryingArray = ValidatedDefault({0: {0: 15.0, 1: 1.0}})
@@ -2722,20 +2717,13 @@ source_profiles = SourceProfiles(
 dpsi_drhonorm_edge = (runtime_params.profile_conditions.Ip *
                       (16 * jnp.pi**3 * g.mu_0 * g.geo_Phi_b) /
                       (g.geo_g2g3_over_rhon_face[-1] * g.geo_F_face[-1]))
-assert not runtime_params.profile_conditions.use_v_loop_lcfs_boundary_condition
 # Compute scaled psi values using the Ip scale factor
 geo_psi_from_Ip_scaled = g.geo_psi_from_Ip_base * Ip_scale_factor
 geo_psi_from_Ip_face_scaled = g.geo_psi_from_Ip_face_base * Ip_scale_factor
 psi = CellVariable(
     value=geo_psi_from_Ip_scaled,
-    right_face_grad_constraint=(
-        None
-        if runtime_params.profile_conditions.use_v_loop_lcfs_boundary_condition
-        else dpsi_drhonorm_edge),
-    right_face_constraint=(
-        geo_psi_from_Ip_face_scaled[-1]
-        if runtime_params.profile_conditions.use_v_loop_lcfs_boundary_condition
-        else None),
+    right_face_grad_constraint=dpsi_drhonorm_edge,
+    right_face_constraint=None,
     dr=jnp.array(g.dx),
 )
 core_profiles = dataclasses.replace(
@@ -2781,10 +2769,7 @@ psidot_value = calculate_psidot_from_psi_sources(psi_sources=psi_sources,
                                                  sigma=conductivity.sigma,
                                                  psi=psi,
                                                  geo=geo)
-v_loop_lcfs = (
-    runtime_params.profile_conditions.v_loop_lcfs
-    if runtime_params.profile_conditions.use_v_loop_lcfs_boundary_condition
-    else psidot_value[-1])
+v_loop_lcfs = psidot_value[-1]
 psidot = dataclasses.replace(
     core_profiles.psidot,
     value=psidot_value,
@@ -3141,11 +3126,8 @@ while current_t < (g.t_final - g.tolerance):
         updated_core_profiles_t_plus_dt.n_e,
         updated_core_profiles_t_plus_dt.T_e,
     )
-    v_loop_lcfs = (
-        result[3].profile_conditions.v_loop_lcfs
-        if result[3].profile_conditions.use_v_loop_lcfs_boundary_condition else
-        (updated_core_profiles_t_plus_dt.psi.face_value()[-1] -
-         current_core_profiles.psi.face_value()[-1]) / result[1])
+    v_loop_lcfs = ((updated_core_profiles_t_plus_dt.psi.face_value()[-1] -
+                    current_core_profiles.psi.face_value()[-1]) / result[1])
     intermediate_core_profiles = CoreProfiles(
         T_i=updated_core_profiles_t_plus_dt.T_i,
         T_e=updated_core_profiles_t_plus_dt.T_e,
