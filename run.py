@@ -719,11 +719,6 @@ class RuntimeParamsSrc:
     is_explicit: bool = dataclasses.field(metadata={"static": True})
 
 
-class SourceModelBase(BaseModelFrozen):
-    mode: Annotated[Mode, JAX_STATIC] = Mode.ZERO
-    is_explicit: Annotated[bool, JAX_STATIC] = False
-
-
 @enum.unique
 class AffectedCoreProfile(enum.IntEnum):
     PSI = 1
@@ -806,34 +801,6 @@ class GenericCurrentSource(Source):
         return (AffectedCoreProfile.PSI, )
 
 
-class GenericCurrentSourceConfig(SourceModelBase):
-    model_name: Annotated[Literal["gaussian"], JAX_STATIC] = "gaussian"
-    I_generic: TimeVaryingScalar = ValidatedDefault(3.0e6)
-    fraction_of_total_current: UnitIntervalTimeVaryingScalar = ValidatedDefault(
-        0.2)
-    gaussian_width: TimeVaryingScalar = ValidatedDefault(0.05)
-    gaussian_location: UnitIntervalTimeVaryingScalar = ValidatedDefault(0.4)
-    mode: Annotated[Mode, JAX_STATIC] = Mode.MODEL_BASED
-
-    @property
-    def model_func(self):
-        return calculate_generic_current
-
-    def build_runtime_params(self, t):
-        return RuntimeParamsGcS(
-            mode=self.mode,
-            is_explicit=self.is_explicit,
-            I_generic=self.I_generic.get_value(t),
-            fraction_of_total_current=self.fraction_of_total_current.get_value(
-                t),
-            gaussian_width=self.gaussian_width.get_value(t),
-            gaussian_location=self.gaussian_location.get_value(t),
-        )
-
-    def build_source(self):
-        return GenericCurrentSource(model_func=self.model_func)
-
-
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class RuntimeParamsGeIO(RuntimeParamsSrc):
@@ -868,34 +835,6 @@ class GenericIonElectronHeatSource(Source):
             AffectedCoreProfile.TEMP_ION,
             AffectedCoreProfile.TEMP_EL,
         )
-
-
-class GenericIonElHeatSourceConfig(SourceModelBase):
-    model_name: Annotated[Literal["gaussian"], JAX_STATIC] = "gaussian"
-    gaussian_width: TimeVaryingScalar = ValidatedDefault(0.25)
-    gaussian_location: TimeVaryingScalar = ValidatedDefault(0.0)
-    P_total: TimeVaryingScalar = ValidatedDefault(120e6)
-    electron_heat_fraction: TimeVaryingScalar = ValidatedDefault(0.66666)
-    absorption_fraction: TimeVaryingScalar = ValidatedDefault(1.0)
-    mode: Annotated[Mode, JAX_STATIC] = Mode.MODEL_BASED
-
-    @property
-    def model_func(self):
-        return default_formula
-
-    def build_runtime_params(self, t):
-        return RuntimeParamsGeIO(
-            mode=self.mode,
-            is_explicit=self.is_explicit,
-            gaussian_width=self.gaussian_width.get_value(t),
-            gaussian_location=self.gaussian_location.get_value(t),
-            P_total=self.P_total.get_value(t),
-            electron_heat_fraction=self.electron_heat_fraction.get_value(t),
-            absorption_fraction=self.absorption_fraction.get_value(t),
-        )
-
-    def build_source(self):
-        return GenericIonElectronHeatSource(model_func=self.model_func)
 
 
 def calc_generic_particle_source(
@@ -933,30 +872,6 @@ class RuntimeParamsPaSo(RuntimeParamsSrc):
     S_total: Any
 
 
-class GenericParticleSourceConfig(SourceModelBase):
-    model_name: Annotated[Literal["gaussian"], JAX_STATIC] = "gaussian"
-    particle_width: TimeVaryingScalar = ValidatedDefault(0.25)
-    deposition_location: TimeVaryingScalar = ValidatedDefault(0.0)
-    S_total: TimeVaryingScalar = ValidatedDefault(1e22)
-    mode: Annotated[Mode, JAX_STATIC] = Mode.MODEL_BASED
-
-    @property
-    def model_func(self):
-        return calc_generic_particle_source
-
-    def build_runtime_params(self, t):
-        return RuntimeParamsPaSo(
-            mode=self.mode,
-            is_explicit=self.is_explicit,
-            particle_width=self.particle_width.get_value(t),
-            deposition_location=self.deposition_location.get_value(t),
-            S_total=self.S_total.get_value(t),
-        )
-
-    def build_source(self):
-        return GenericParticleSource(model_func=self.model_func)
-
-
 def calc_pellet_source(
     runtime_params,
     geo,
@@ -990,31 +905,6 @@ class RuntimeParamsPE(RuntimeParamsSrc):
     pellet_width: Any
     pellet_deposition_location: Any
     S_total: Any
-
-
-class PelletSourceConfig(SourceModelBase):
-    model_name: Annotated[Literal["gaussian"], JAX_STATIC] = "gaussian"
-    pellet_width: TimeVaryingScalar = ValidatedDefault(0.1)
-    pellet_deposition_location: TimeVaryingScalar = ValidatedDefault(0.85)
-    S_total: TimeVaryingScalar = ValidatedDefault(2e22)
-    mode: Annotated[Mode, JAX_STATIC] = Mode.MODEL_BASED
-
-    @property
-    def model_func(self):
-        return calc_pellet_source
-
-    def build_runtime_params(self, t):
-        return RuntimeParamsPE(
-            mode=self.mode,
-            is_explicit=self.is_explicit,
-            pellet_width=self.pellet_width.get_value(t),
-            pellet_deposition_location=self.pellet_deposition_location.
-            get_value(t),
-            S_total=self.S_total.get_value(t),
-        )
-
-    def build_source(self):
-        return PelletSource(model_func=self.model_func)
 
 
 def calc_fusion(geo, core_profiles, runtime_params):
@@ -1093,24 +983,6 @@ class FusionHeatSource(Source):
         )
 
 
-class FusionHeatSourceConfig(SourceModelBase):
-    model_name: Annotated[Literal["bosch_hale"], JAX_STATIC] = "bosch_hale"
-    mode: Annotated[Mode, JAX_STATIC] = Mode.MODEL_BASED
-
-    @property
-    def model_func(self):
-        return fusion_heat_model_func
-
-    def build_runtime_params(self, t):
-        return RuntimeParamsSrc(
-            mode=self.mode,
-            is_explicit=self.is_explicit,
-        )
-
-    def build_source(self):
-        return FusionHeatSource(model_func=self.model_func)
-
-
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class RuntimeParamsPS(RuntimeParamsSrc):
@@ -1145,28 +1017,6 @@ class GasPuffSource(Source):
         return (AffectedCoreProfile.NE, )
 
 
-class GasPuffSourceConfig(SourceModelBase):
-    model_name: Annotated[Literal["exponential"], JAX_STATIC] = "exponential"
-    puff_decay_length: TimeVaryingScalar = ValidatedDefault(0.05)
-    S_total: TimeVaryingScalar = ValidatedDefault(1e22)
-    mode: Annotated[Mode, JAX_STATIC] = Mode.MODEL_BASED
-
-    @property
-    def model_func(self):
-        return calc_puff_source
-
-    def build_runtime_params(self, t):
-        return RuntimeParamsPS(
-            mode=self.mode,
-            is_explicit=self.is_explicit,
-            puff_decay_length=self.puff_decay_length.get_value(t),
-            S_total=self.S_total.get_value(t),
-        )
-
-    def build_source(self):
-        return GasPuffSource(model_func=self.model_func)
-
-
 @dataclasses.dataclass(kw_only=True, frozen=True, eq=True)
 class QeiSource(Source):
     SOURCE_NAME: typing.ClassVar[str] = "ei_exchange"
@@ -1184,23 +1034,6 @@ class SourceModels:
             for name, source in self.standard_sources.items()
             if AffectedCoreProfile.PSI in source.affected_core_profiles
         })
-
-
-class QeiSourceConfig(SourceModelBase):
-    mode: Annotated[Mode, JAX_STATIC] = Mode.MODEL_BASED
-
-    @property
-    def model_func(self):
-        return None
-
-    def build_runtime_params(self, t):
-        return RuntimeParamsSrc(
-            mode=self.mode,
-            is_explicit=self.is_explicit,
-        )
-
-    def build_source(self):
-        return QeiSource(model_func=self.model_func)
 
 
 def build_models():
