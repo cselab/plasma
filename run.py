@@ -1191,11 +1191,37 @@ class QeiSource(Source):
     SOURCE_NAME: typing.ClassVar[str] = "ei_exchange"
 
     def get_qei(self, runtime_params, geo, core_profiles):
-        # Mode is always MODEL_BASED (asserted), so directly call _model_based_qei
-        return _model_based_qei(
-            runtime_params,
-            geo,
-            core_profiles,
+        # Inlined _model_based_qei
+        zeros = jnp.zeros_like(g.cell_centers)
+        log_lambda_ei = 31.3 - 0.5 * jnp.log(core_profiles.n_e.value) + jnp.log(
+            core_profiles.T_e.value * 1e3)
+        log_tau_e_Z1 = _calculate_log_tau_e_Z1(
+            core_profiles.T_e.value,
+            core_profiles.n_e.value,
+            log_lambda_ei,
+        )
+        weighted_Z_eff = (
+            core_profiles.n_i.value * core_profiles.Z_i**2 / core_profiles.A_i +
+            core_profiles.n_impurity.value * core_profiles.Z_impurity**2 /
+            core_profiles.A_impurity) / core_profiles.n_e.value
+        log_Qei_coef = (jnp.log(g.Qei_multiplier * 1.5 * core_profiles.n_e.value) +
+                        jnp.log(g.keV_to_J / g.m_amu) + jnp.log(2 * g.m_e) +
+                        jnp.log(weighted_Z_eff) - log_tau_e_Z1)
+        qei_coef = jnp.exp(log_Qei_coef)
+        implicit_ii = -qei_coef
+        implicit_ee = -qei_coef
+        explicit_i = zeros
+        explicit_e = zeros
+        implicit_ie = qei_coef
+        implicit_ei = qei_coef
+        return QeiInfo(
+            qei_coef=qei_coef,
+            implicit_ii=implicit_ii,
+            explicit_i=explicit_i,
+            implicit_ee=implicit_ee,
+            explicit_e=explicit_e,
+            implicit_ie=implicit_ie,
+            implicit_ei=implicit_ei,
         )
 
 
@@ -1212,40 +1238,6 @@ class SourceModels:
             for name, source in self.standard_sources.items()
             if AffectedCoreProfile.PSI in source.affected_core_profiles
         })
-
-
-def _model_based_qei(runtime_params, geo, core_profiles):
-    zeros = jnp.zeros_like(g.cell_centers)
-    log_lambda_ei = 31.3 - 0.5 * jnp.log(core_profiles.n_e.value) + jnp.log(
-        core_profiles.T_e.value * 1e3)
-    log_tau_e_Z1 = _calculate_log_tau_e_Z1(
-        core_profiles.T_e.value,
-        core_profiles.n_e.value,
-        log_lambda_ei,
-    )
-    weighted_Z_eff = (
-        core_profiles.n_i.value * core_profiles.Z_i**2 / core_profiles.A_i +
-        core_profiles.n_impurity.value * core_profiles.Z_impurity**2 /
-        core_profiles.A_impurity) / core_profiles.n_e.value
-    log_Qei_coef = (jnp.log(g.Qei_multiplier * 1.5 * core_profiles.n_e.value) +
-                    jnp.log(g.keV_to_J / g.m_amu) + jnp.log(2 * g.m_e) +
-                    jnp.log(weighted_Z_eff) - log_tau_e_Z1)
-    qei_coef = jnp.exp(log_Qei_coef)
-    implicit_ii = -qei_coef
-    implicit_ee = -qei_coef
-    explicit_i = zeros
-    explicit_e = zeros
-    implicit_ie = qei_coef
-    implicit_ei = qei_coef
-    return QeiInfo(
-        qei_coef=qei_coef,
-        implicit_ii=implicit_ii,
-        explicit_i=explicit_i,
-        implicit_ee=implicit_ee,
-        explicit_e=explicit_e,
-        implicit_ie=implicit_ie,
-        implicit_ei=implicit_ei,
-    )
 
 
 class QeiSourceConfig(SourceModelBase):
