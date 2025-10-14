@@ -1033,32 +1033,6 @@ class RuntimeParamsPC:
     n_e_right_bc: Any
 
 
-class ProfileConditions(BaseModelFrozen):
-    Ip: TimeVaryingScalar = ValidatedDefault(15e6)
-    T_i_right_bc: TimeVaryingScalar | None = None
-    T_e_right_bc: TimeVaryingScalar | None = None
-    T_i: TimeVaryingArray = ValidatedDefault({0: {0: 15.0, 1: 1.0}})
-    T_e: TimeVaryingArray = ValidatedDefault({0: {0: 15.0, 1: 1.0}})
-    psi: TimeVaryingArray | None = None
-    psidot: TimeVaryingArray | None = None
-    n_e: TimeVaryingArray = ValidatedDefault({0: {0: 1.2e20, 1: 0.8e20}})
-    nbar: TimeVaryingScalar = ValidatedDefault(0.85e20)
-    n_e_right_bc: TimeVaryingScalar | None = None
-
-    def build_runtime_params(self, t):
-        runtime_params = {
-            x.name: getattr(self, x.name)
-            for x in dataclasses.fields(RuntimeParamsPC)
-        }
-
-        def _get_value(x):
-            if isinstance(x, (TimeVaryingScalar, TimeVaryingArray)):
-                return x.get_value(t)
-            else:
-                return x
-
-        runtime_params = {k: _get_value(v) for k, v in runtime_params.items()}
-        return RuntimeParamsPC(**runtime_params)
 
 
 @jax.tree_util.register_dataclass
@@ -1922,23 +1896,38 @@ g.impurity_A_avg_face = g.A['Ne']
 g.main_ion_fractions = jnp.array([0.5, 0.5])
 g.main_ion_A_avg = 0.5 * g.A['D'] + 0.5 * g.A['T']
 
+g.t_initial = 0.0
+g.n_rho = 25
+g.dx = 1 / g.n_rho
+g.face_centers = np.linspace(0, g.n_rho * g.dx, g.n_rho + 1)
+g.cell_centers = np.linspace(g.dx * 0.5, (g.n_rho - 0.5) * g.dx, g.n_rho)
 g.Ip = 10.5e6
-g.T_i_initial = {0.0: {0.0: 15.0, 1.0: 0.2}}
-g.T_i_right_bc = 0.2
-g.T_e_initial = {0.0: {0.0: 15.0, 1.0: 0.2}}
-g.T_e_right_bc = 0.2
-g.n_e_right_bc = 0.25e20
+g.T_i_right_bc = jnp.array(0.2)
+g.T_e_right_bc = jnp.array(0.2)
+g.n_e_right_bc = jnp.array(0.25e20)
 g.nbar = 0.8
-g.n_e_initial = {0: {0.0: 1.5, 1.0: 1.0}}
-g.profile_conditions = ProfileConditions(
+# Pre-compute constant profile values for t=0.0
+g.T_i_profile_dict = {0.0: 15.0, 1.0: 0.2}
+g.T_e_profile_dict = {0.0: 15.0, 1.0: 0.2}
+g.n_e_profile_dict = {0.0: 1.5, 1.0: 1.0}
+# Convert to arrays at t=0.0
+g.T_i_profile_x = np.array(list(g.T_i_profile_dict.keys()))
+g.T_i_profile_y = np.array(list(g.T_i_profile_dict.values()))
+g.T_e_profile_x = np.array(list(g.T_e_profile_dict.keys()))
+g.T_e_profile_y = np.array(list(g.T_e_profile_dict.values()))
+g.n_e_profile_x = np.array(list(g.n_e_profile_dict.keys()))
+g.n_e_profile_y = np.array(list(g.n_e_profile_dict.values()))
+g.runtime_params = RuntimeParamsPC(
     Ip=g.Ip,
-    T_i=g.T_i_initial,
+    T_i=jnp.interp(g.cell_centers, g.T_i_profile_x, g.T_i_profile_y),
     T_i_right_bc=g.T_i_right_bc,
-    T_e=g.T_e_initial,
+    T_e=jnp.interp(g.cell_centers, g.T_e_profile_x, g.T_e_profile_y),
     T_e_right_bc=g.T_e_right_bc,
     n_e_right_bc=g.n_e_right_bc,
     nbar=g.nbar,
-    n_e=g.n_e_initial,
+    n_e=jnp.interp(g.cell_centers, g.n_e_profile_x, g.n_e_profile_y),
+    psi=None,
+    psidot=None,
 )
 g.chi_pereverzev = 30
 g.D_pereverzev = 15
@@ -1951,12 +1940,7 @@ g.chi_timestep_prefactor = 50
 g.dt_reduction_factor = 3
 g.adaptive_T_source_prefactor = 2.0e10
 g.adaptive_n_source_prefactor = 2.0e8
-g.t_initial = 0.0
 g.ITG_flux_ratio_correction = 1
-g.n_rho = 25
-g.dx = 1 / g.n_rho
-g.face_centers = np.linspace(0, g.n_rho * g.dx, g.n_rho + 1)
-g.cell_centers = np.linspace(g.dx * 0.5, (g.n_rho - 0.5) * g.dx, g.n_rho)
 g.hires_factor = 4
 g.Qei_multiplier = 1.0
 g.rho_norm_ped_top = 0.9
@@ -2215,26 +2199,25 @@ g.transport_rho_min = 0.0
 g.transport_rho_max = 1.0
 # Pre-compute source modes (constant values)
 g.qei_mode = "ZERO"  # ei_exchange mode
-runtime_params = g.profile_conditions.build_runtime_params(g.t_initial)
-Ip_scale_factor = runtime_params.Ip / g.geo_Ip_profile_face_base[
+Ip_scale_factor = g.runtime_params.Ip / g.geo_Ip_profile_face_base[
     -1]
 geo = None
 T_i = CellVariable(
-    value=runtime_params.T_i,
+    value=g.runtime_params.T_i,
     left_face_grad_constraint=jnp.zeros(()),
     right_face_grad_constraint=None,
-    right_face_constraint=runtime_params.T_i_right_bc,
+    right_face_constraint=g.runtime_params.T_i_right_bc,
     dr=jnp.array(g.dx),
 )
 T_e = CellVariable(
-    value=runtime_params.T_e,
+    value=g.runtime_params.T_e,
     left_face_grad_constraint=jnp.zeros(()),
     right_face_grad_constraint=None,
-    right_face_constraint=runtime_params.T_e_right_bc,
+    right_face_constraint=g.runtime_params.T_e_right_bc,
     dr=jnp.array(g.dx),
 )
-n_e = get_updated_electron_density(runtime_params)
-ions = get_updated_ions(runtime_params, n_e, T_e)
+n_e = get_updated_electron_density(g.runtime_params)
+ions = get_updated_ions(g.runtime_params, n_e, T_e)
 v_loop_lcfs = np.array(0.0, dtype=jnp.float64)  # use_v_loop_lcfs_boundary_condition is always False
 psidot = CellVariable(
     value=np.zeros_like(g.geo_rho),
@@ -2266,7 +2249,7 @@ core_profiles = CoreProfiles(
 )
 source_profiles = SourceProfiles(
     bootstrap_current=BootstrapCurrent.zeros(None), qei=QeiInfo.zeros(None))
-dpsi_drhonorm_edge = (runtime_params.Ip *
+dpsi_drhonorm_edge = (g.runtime_params.Ip *
                       (16 * jnp.pi**3 * g.mu_0 * g.geo_Phi_b) /
                       (g.geo_g2g3_over_rhon_face[-1] * g.geo_F_face[-1]))
 # Compute scaled psi values using the Ip scale factor
@@ -2291,7 +2274,7 @@ conductivity = calculate_conductivity(
     core_profiles,
 )
 build_standard_source_profiles(
-    runtime_params=runtime_params,
+    runtime_params=g.runtime_params,
     geo=geo,
     core_profiles=core_profiles,
     psi_only=True,
@@ -2337,26 +2320,26 @@ conductivity = Conductivity(sigma=initial_core_profiles.sigma,
                             sigma_face=initial_core_profiles.sigma_face)
 core_profiles = initial_core_profiles
 explicit_source_profiles = build_source_profiles0(
-    runtime_params=runtime_params,
+    runtime_params=g.runtime_params,
     core_profiles=core_profiles,
 )
 initial_core_sources = build_source_profiles1(
-    runtime_params=runtime_params,
+    runtime_params=g.runtime_params,
     core_profiles=core_profiles,
     explicit_source_profiles=explicit_source_profiles,
     conductivity=conductivity,
 )
 core_transport = calculate_total_transport_coeffs(
-    runtime_params,
+    g.runtime_params,
     geo,
     initial_core_profiles,
 )
 current_t = np.array(g.t_initial)
 current_core_profiles = initial_core_profiles
 state_history = [(current_t, current_core_profiles)]
-initial_runtime_params = g.profile_conditions.build_runtime_params(current_t)
+initial_runtime_params = g.runtime_params
 while current_t < (g.t_final - g.tolerance):
-    runtime_params_t = g.profile_conditions.build_runtime_params(current_t)
+    runtime_params_t = g.runtime_params
     explicit_source_profiles = build_source_profiles0(
         runtime_params=runtime_params_t,
         core_profiles=current_core_profiles,
@@ -2408,8 +2391,7 @@ while current_t < (g.t_final - g.tolerance):
     while should_continue(loop_dt, loop_output):
         dt = loop_dt
         output = loop_output
-        runtime_params_t_plus_dt = g.profile_conditions.build_runtime_params(current_t +
-                                                              dt)
+        runtime_params_t_plus_dt = g.runtime_params
         geo_t_with_phibdot = None
         geo_t_plus_dt = None
         core_profiles_t = current_core_profiles
