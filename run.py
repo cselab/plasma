@@ -2416,30 +2416,30 @@ conductivity = calculate_conductivity(
     geo,
     core_profiles,
 )
-build_standard_source_profiles(
-    runtime_params=runtime_params,
-    geo=geo,
-    core_profiles=core_profiles,
-    psi_only=True,
-    calculate_anyway=True,
-    calculated_source_profiles=source_profiles,
-)
-result = _calculate_bootstrap_current(
-    Z_eff_face=core_profiles.Z_eff_face,
-    Z_i_face=core_profiles.Z_i_face,
-    n_e=core_profiles.n_e,
-    n_i=core_profiles.n_i,
-    T_e=core_profiles.T_e,
-    T_i=core_profiles.T_i,
-    psi=core_profiles.psi,
-    q_face=core_profiles.q_face,
-    geo=geo,
-)
-bootstrap_current = BootstrapCurrent(
-    j_bootstrap=result.j_bootstrap,
-    j_bootstrap_face=result.j_bootstrap_face,
-)
-source_profiles = dataclasses.replace(source_profiles,
+    build_standard_source_profiles(
+        runtime_params=runtime_params,
+        geo=geo,
+        core_profiles=core_profiles,
+        psi_only=True,
+        calculate_anyway=True,
+        calculated_source_profiles=source_profiles,
+    )
+    result = _calculate_bootstrap_current(
+        Z_eff_face=core_profiles.Z_eff_face,
+        Z_i_face=core_profiles.Z_i_face,
+        n_e=core_profiles.n_e,
+        n_i=core_profiles.n_i,
+        T_e=core_profiles.T_e,
+        T_i=core_profiles.T_i,
+        psi=core_profiles.psi,
+        q_face=core_profiles.q_face,
+        geo=geo,
+    )
+    bootstrap_current = BootstrapCurrent(
+        j_bootstrap=result.j_bootstrap,
+        j_bootstrap_face=result.j_bootstrap_face,
+    )
+    source_profiles = dataclasses.replace(source_profiles,
                                           bootstrap_current=bootstrap_current)
 psi_sources = source_profiles.total_psi_sources()
 psidot_value = calculate_psidot_from_psi_sources(psi_sources=psi_sources,
