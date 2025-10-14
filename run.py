@@ -2085,10 +2085,9 @@ while current_t < (g.t_final - g.tolerance):
         g.t_final - current_t,
         initial_dt,
     )
-    loop_dt = initial_dt
+    dt = initial_dt
 
     while True:
-        dt = loop_dt
         core_profiles_t = current_core_profiles
         n_e = get_updated_electron_density()
         n_e_bc_edge = {**g.n_e_bc, "right_face_constraint": g.n_e_right_bc}
@@ -2294,22 +2293,21 @@ while current_t < (g.t_final - g.tolerance):
         for i in range(0, g.n_corrector_steps + 1):
             x_new = solver_loop_body(i, x_new)
         solver_numeric_outputs = 0
-        reduced_dt = dt / g.dt_reduction_factor
-        loop_dt = reduced_dt
         loop_output = (
             x_new,
             dt,
             solver_numeric_outputs,
             core_profiles_t_plus_dt,
         )
+        dt = dt / g.dt_reduction_factor
         solver_outputs = loop_output[2]
-        is_nan_next_dt = jnp.isnan(loop_dt)
+        is_nan_next_dt = jnp.isnan(dt)
         solver_did_not_converge = solver_outputs == 1
         at_exact_t_final = jnp.allclose(
-            current_t + loop_dt,
+            current_t + dt,
             g.t_final,
         )
-        next_dt_too_small = loop_dt < g.min_dt
+        next_dt_too_small = dt < g.min_dt
         take_another_step = solver_did_not_converge & (at_exact_t_final
                                                        | ~next_dt_too_small)
         if not (take_another_step & ~is_nan_next_dt):
