@@ -478,13 +478,6 @@ def _calculate_alpha(f_trap, nu_i_star):
     return alpha
 
 
-def exponential_profile(*, decay_start, width, total):
-    r = g.cell_centers
-    S = jnp.exp(-(decay_start - r) / width)
-    C = total / jnp.sum(S * g.geo_vpr * jnp.array(g.dx))
-    return C * S
-
-
 def gaussian_profile(*, center, width, total):
     r = g.cell_centers
     S = jnp.exp(-((r - center)**2) / (2 * width**2))
@@ -664,11 +657,11 @@ def calc_puff_source(
     unused_calculated_source_profiles,
     unused_conductivity,
 ):
-    return (exponential_profile(
-        decay_start=1.0,
-        width=g.gas_puff_decay_length,
-        total=g.gas_puff_S_total,
-    ), )
+    # Inlined exponential_profile
+    r = g.cell_centers
+    S = jnp.exp(-(1.0 - r) / g.gas_puff_decay_length)
+    C = g.gas_puff_S_total / jnp.sum(S * g.geo_vpr * jnp.array(g.dx))
+    return (C * S, )
 
 
 @jax.jit
