@@ -1000,27 +1000,11 @@ def calculate_transport_coeffs(geo, core_profiles,
         (lref_over_lti + lref_over_lni0) +
         core_profiles.n_impurity.face_value() *
         core_profiles.T_i.face_value() * (lref_over_lti + lref_over_lni1))
-    smag = jnp.where(
-        g.smag_alpha_correction,
-        smag - alpha / 2,
-        smag,
-    )
-    smag = jnp.where(
-        jnp.logical_and(
-            g.q_sawtooth_proxy,
-            q < 1,
-        ),
-        0.1,
-        smag,
-    )
-    q = jnp.where(
-        jnp.logical_and(
-            g.q_sawtooth_proxy,
-            q < 1,
-        ),
-        1,
-        q,
-    )
+    # smag_alpha_correction is always True, so always apply correction
+    smag = smag - alpha / 2
+    # q_sawtooth_proxy is always True, so simplify to just q < 1 condition
+    smag = jnp.where(q < 1, 0.1, smag)
+    q = jnp.where(q < 1, 1, q)
     smag = jnp.where(
         smag - alpha < -0.2,
         alpha - 0.2,
@@ -1507,13 +1491,12 @@ def _calc_coeffs_full(geo, core_profiles,
     )
     source_mat_psi = jnp.zeros_like(g.geo_rho)
     source_psi = merged_source_profiles.total_psi_sources()
-    toc_T_i = 1.5 * g.geo_vpr**(-2.0 / 3.0) * g.keV_to_J
+    toc_T_i = g.toc_temperature_factor
     tic_T_i = core_profiles.n_i.value * g.geo_vpr**(5.0 / 3.0)
-    toc_T_e = 1.5 * g.geo_vpr**(-2.0 / 3.0) * g.keV_to_J
+    toc_T_e = g.toc_temperature_factor
     tic_T_e = core_profiles.n_e.value * g.geo_vpr**(5.0 / 3.0)
     toc_psi = (1.0 / g.resistivity_multiplier * g.cell_centers *
-               conductivity.sigma * g.mu_0 * 16 * jnp.pi**2 * g.geo_Phi_b**2 /
-               g.geo_F**2)
+               conductivity.sigma * g.mu0_pi16sq_Phib_sq_over_F_sq)
     tic_psi = jnp.ones_like(toc_psi)
     toc_dens_el = jnp.ones_like(g.geo_vpr)
     tic_dens_el = g.geo_vpr
@@ -1950,6 +1933,13 @@ first_element = jnp.ones_like(g.geo_rho_b) / g.geo_rho_b**2
 g.geo_g1_over_vpr2_face = jnp.concatenate(
     [jnp.expand_dims(first_element, axis=-1), bulk], axis=-1)
 
+# Pre-compute frequently used mathematical constants
+g.pi_16_squared = 16 * jnp.pi**2
+g.pi_16_cubed = 16 * jnp.pi**3
+g.toc_temperature_factor = 1.5 * g.geo_vpr**(-2.0 / 3.0) * g.keV_to_J
+g.mu0_pi16sq_Phib_sq_over_F_sq = g.mu_0 * g.pi_16_squared * g.geo_Phi_b**2 / g.geo_F**2
+g.pi16cubed_mu0_Phib = g.pi_16_cubed * g.mu_0 * g.geo_Phi_b
+
 # Simplified source registry using SourceHandler - replaces entire Source class hierarchy
 g.source_registry = {
     "generic_current": SourceHandler(
@@ -1980,8 +1970,6 @@ g.source_registry = {
 g.psi_source_names = {"generic_current"}
 g.ETG_correction_factor = 1.0 / 3.0
 g.collisionality_multiplier = 1.0
-g.smag_alpha_correction = True
-g.q_sawtooth_proxy = True
 g.smoothing_width = 0.1
 # Pre-compute transport parameters (constant values)
 g.transport_rho_min = 0.0
@@ -2038,8 +2026,7 @@ core_profiles = CoreProfiles(
 )
 source_profiles = SourceProfiles(
     bootstrap_current=BootstrapCurrent.zeros(None), qei=QeiInfo.zeros(None))
-dpsi_drhonorm_edge = (g.Ip *
-                      (16 * jnp.pi**3 * g.mu_0 * g.geo_Phi_b) /
+dpsi_drhonorm_edge = (g.Ip * g.pi16cubed_mu0_Phib /
                       (g.geo_g2g3_over_rhon_face[-1] * g.geo_F_face[-1]))
 # Compute scaled psi values using the Ip scale factor
 geo_psi_from_Ip_scaled = g.geo_psi_from_Ip_base * Ip_scale_factor
@@ -2134,11 +2121,9 @@ while current_t < (g.t_final - g.tolerance):
         g.max_dt,
     )
     crosses_t_final = (current_t < g.t_final) * (current_t + initial_dt > g.t_final)
+    # Simplified: logical_and with True is redundant
     initial_dt = jax.lax.select(
-        jnp.logical_and(
-            True,
-            crosses_t_final,
-        ),
+        crosses_t_final,
         g.t_final - current_t,
         initial_dt,
     )
