@@ -417,15 +417,6 @@ class CoreTransport:
         )
 
 
-def calc_q_face(geo, psi):
-    inv_iota = jnp.abs(
-        (2 * g.geo_Phi_b * g.face_centers[1:]) / psi.face_grad()[1:])
-    inv_iota0 = jnp.expand_dims(
-        jnp.abs((2 * g.geo_Phi_b * jnp.array(g.dx)) / psi.face_grad()[1]), 0)
-    q_face = jnp.concatenate([inv_iota0, inv_iota])
-    return q_face * g.geo_q_correction_factor
-
-
 def calculate_psidot_from_psi_sources(*, psi_sources, sigma, psi, geo):
     toc_psi = (1.0 / g.resistivity_multiplier * g.cell_centers * sigma *
                g.mu_0 * 16 * jnp.pi**2 * g.geo_Phi_b**2 / g.geo_F**2)
@@ -2162,7 +2153,10 @@ def coeffs_callback(runtime_params,
         A_impurity_face=ions.A_impurity_face,
         Z_eff=ions.Z_eff,
         Z_eff_face=ions.Z_eff_face,
-        q_face=calc_q_face(geo, updated_core_profiles.psi),
+        q_face=jnp.concatenate([
+            jnp.expand_dims(jnp.abs((2 * g.geo_Phi_b * jnp.array(g.dx)) / updated_core_profiles.psi.face_grad()[1]), 0),
+            jnp.abs((2 * g.geo_Phi_b * g.face_centers[1:]) / updated_core_profiles.psi.face_grad()[1:])
+        ]) * g.geo_q_correction_factor,
     )
     # Inlined calc_coeffs
     if explicit_call and g.theta_implicit == 1.0:
@@ -2740,6 +2734,8 @@ g.smoothing_width = 0.1
 # Pre-compute transport parameters (constant values)
 g.transport_rho_min = 0.0
 g.transport_rho_max = 1.0
+# Pre-compute source modes (constant values)
+g.qei_mode = "ZERO"  # ei_exchange mode
 runtime_params = build_runtime_params_slice(g.t_initial)
 Ip_scale_factor = runtime_params.profile_conditions.Ip / g.geo_Ip_profile_face_base[
     -1]
@@ -2817,7 +2813,10 @@ psi = CellVariable(
 core_profiles = dataclasses.replace(
     core_profiles,
     psi=psi,
-    q_face=calc_q_face(geo, psi),
+    q_face=jnp.concatenate([
+        jnp.expand_dims(jnp.abs((2 * g.geo_Phi_b * jnp.array(g.dx)) / psi.face_grad()[1]), 0),
+        jnp.abs((2 * g.geo_Phi_b * g.face_centers[1:]) / psi.face_grad()[1:])
+    ]) * g.geo_q_correction_factor,
 )
 conductivity = calculate_conductivity(
     geo,
@@ -3209,7 +3208,10 @@ while current_state.t < (g.t_final - g.tolerance):
         Z_impurity=ions.Z_impurity,
         Z_impurity_face=ions.Z_impurity_face,
         psidot=result[5].psidot,
-        q_face=calc_q_face(result[4], updated_core_profiles_t_plus_dt.psi),
+        q_face=jnp.concatenate([
+            jnp.expand_dims(jnp.abs((2 * g.geo_Phi_b * jnp.array(g.dx)) / updated_core_profiles_t_plus_dt.psi.face_grad()[1]), 0),
+            jnp.abs((2 * g.geo_Phi_b * g.face_centers[1:]) / updated_core_profiles_t_plus_dt.psi.face_grad()[1:])
+        ]) * g.geo_q_correction_factor,
         A_i=ions.A_i,
         A_impurity=ions.A_impurity,
         A_impurity_face=ions.A_impurity_face,
