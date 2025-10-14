@@ -61,8 +61,6 @@ def make_bc(left_face_constraint=None,
     }
 
 
-
-
 def compute_face_grad(value,
                       dr,
                       left_face_constraint,
@@ -157,7 +155,6 @@ def compute_cell_plus_boundaries_bc(value, dr, bc):
 
 
 class SolverVariable(typing.NamedTuple):
-    """Minimal structure for solver - just value, dr, and bc dict."""
     value: jax.Array
     dr: jax.Array
     bc: dict
@@ -1422,8 +1419,8 @@ def solver_x_tuple_to_core_profiles(x_new, core_profiles):
                 solver_var.bc["right_face_grad_constraint"], scaling_factor),
         )
     return dataclasses.replace(core_profiles,
-                              boundary_conditions=updated_bcs,
-                              **updated_vars)
+                               boundary_conditions=updated_bcs,
+                               **updated_vars)
 
 
 OptionalTupleMatrix: TypeAlias = tuple[tuple[jax.Array | None, ...],
