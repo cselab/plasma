@@ -129,10 +129,6 @@ class CellVariable:
              self._right_face_value()],
             axis=-1)
 
-    def grad(self):
-        face = self.face_value()
-        return jnp.diff(face) / jnp.expand_dims(self.dr, axis=-1)
-
     def cell_plus_boundaries(self):
         right_value = self._right_face_value()
         left_value = self._left_face_value()
