@@ -308,6 +308,16 @@ def calculate_psidot_from_psi_sources(*, psi_sources, sigma, psi, psi_bc):
     return psidot
 
 
+def calculate_log_lambda_ei(n_e, T_e_keV):
+    """Calculate Coulomb logarithm for electron-ion collisions.
+    
+    Args:
+        n_e: electron density [m^-3]
+        T_e_keV: electron temperature [keV]
+    """
+    return 31.3 - 0.5 * jnp.log(n_e) + jnp.log(T_e_keV * 1e3)
+
+
 def _calculate_log_tau_e_Z1(T_e, n_e, log_lambda_ei):
     return (jnp.log(12 * jnp.pi**1.5 / (n_e * log_lambda_ei)) -
             4 * jnp.log(g.q_e) + 0.5 * jnp.log(g.m_e / 2.0) +
@@ -412,7 +422,7 @@ def calculate_conductivity(core_profiles):
     T_e_face = compute_face_value_bc(core_profiles.T_e, jnp.array(g.dx), g.T_e_bc)
     f_trap = calculate_f_trap()
     NZ = 0.58 + 0.74 / (0.76 + core_profiles.Z_eff_face)
-    log_lambda_ei = 31.3 - 0.5 * jnp.log(n_e_face) + jnp.log(T_e_face * 1e3)
+    log_lambda_ei = calculate_log_lambda_ei(n_e_face, T_e_face)
     sigsptz = (1.9012e04 * (T_e_face * 1e3)**1.5 / core_profiles.Z_eff_face /
                NZ / log_lambda_ei)
     nu_e_star_face = calculate_nu_e_star(
@@ -466,7 +476,7 @@ def _calculate_bootstrap_current(*, Z_eff_face, Z_i_face, n_e, n_e_bc, n_i,
     n_i_face = compute_face_value_bc(n_i, jnp.array(g.dx), n_i_bc)
     n_i_face_grad = compute_face_grad_bc(n_i, jnp.array(g.dx), n_i_bc)
     f_trap = calculate_f_trap()
-    log_lambda_ei = 31.3 - 0.5 * jnp.log(n_e_face) + jnp.log(T_e_face * 1e3)
+    log_lambda_ei = calculate_log_lambda_ei(n_e_face, T_e_face)
     T_i_ev = T_i_face * 1e3
     log_lambda_ii = (30.0 - 0.5 * jnp.log(n_i_face) + 1.5 * jnp.log(T_i_ev) -
                      3.0 * jnp.log(Z_i_face))
@@ -742,8 +752,7 @@ def build_source_profiles0(core_profiles,
 def build_source_profiles1(core_profiles,
                            explicit_source_profiles=None,
                            conductivity=None):
-    log_lambda_ei = 31.3 - 0.5 * jnp.log(core_profiles.n_e) + jnp.log(
-        core_profiles.T_e * 1e3)
+    log_lambda_ei = calculate_log_lambda_ei(core_profiles.n_e, core_profiles.T_e)
     log_tau_e_Z1 = _calculate_log_tau_e_Z1(
         core_profiles.T_e,
         core_profiles.n_e,
@@ -971,8 +980,7 @@ def calculate_transport_coeffs(core_profiles):
     x = rmid_face / rmid_face[-1]
     x = jnp.where(jnp.abs(x) < g.eps, g.eps, x)
     Ti_Te = T_i_face / T_e_face
-    log_lambda_ei_face = (31.3 - 0.5 * jnp.log(n_e_face) +
-                          jnp.log(T_e_face * 1e3))
+    log_lambda_ei_face = calculate_log_lambda_ei(n_e_face, T_e_face)
     log_tau_e_Z1 = _calculate_log_tau_e_Z1(
         T_e_face,
         n_e_face,
