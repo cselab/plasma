@@ -1380,10 +1380,12 @@ def get_updated_ions(n_e, n_e_bc, T_e, T_e_bc):
     )
 
 
-def core_profiles_to_solver_x_tuple(core_profiles, ):
+def evolving_vars_to_solver_x_tuple(T_i, T_e, psi, n_e):
+    """Convert evolving variables to solver tuple."""
+    evolving_dict = {"T_i": T_i, "T_e": T_e, "psi": psi, "n_e": n_e}
     x_tuple_for_solver_list = []
     for name in g.evolving_names:
-        original_value = getattr(core_profiles, name)
+        original_value = evolving_dict[name]
         original_bc = getattr(g, f"{name}_bc")
         scaling_factor = 1 / SCALING_FACTORS[name]
         operation = lambda x, factor: x * factor if x is not None else None
@@ -1404,6 +1406,12 @@ def core_profiles_to_solver_x_tuple(core_profiles, ):
         )
         x_tuple_for_solver_list.append(solver_var)
     return tuple(x_tuple_for_solver_list)
+
+
+def core_profiles_to_solver_x_tuple(core_profiles, ):
+    """Legacy wrapper - converts CoreProfiles to solver tuple."""
+    return evolving_vars_to_solver_x_tuple(
+        core_profiles.T_i, core_profiles.T_e, core_profiles.psi, core_profiles.n_e)
 
 
 def solver_x_tuple_to_evolving_vars(x_new):
@@ -2114,22 +2122,36 @@ core_transport = calculate_total_transport_coeffs(
     initial_core_profiles.q_face, initial_core_profiles.A_i,
     initial_core_profiles.Z_eff_face, initial_core_profiles.Z_i_face)
 current_t = np.array(g.t_initial)
-current_core_profiles = initial_core_profiles
+current_T_i = initial_core_profiles.T_i
+current_T_e = initial_core_profiles.T_e
+current_psi = initial_core_profiles.psi
+current_n_e = initial_core_profiles.n_e
+current_n_i = initial_core_profiles.n_i
+current_n_i_bc = initial_core_profiles.n_i_bc
+current_n_impurity = initial_core_profiles.n_impurity
+current_n_impurity_bc = initial_core_profiles.n_impurity_bc
+current_Z_i = initial_core_profiles.Z_i
+current_Z_i_face = initial_core_profiles.Z_i_face
+current_A_i = initial_core_profiles.A_i
+current_Z_impurity = initial_core_profiles.Z_impurity
+current_A_impurity = initial_core_profiles.A_impurity
+current_q_face = initial_core_profiles.q_face
+current_Z_eff_face = initial_core_profiles.Z_eff_face
 state_history_t = [current_t]
-state_history_T_i = [initial_core_profiles.T_i]
-state_history_T_e = [initial_core_profiles.T_e]
-state_history_psi = [initial_core_profiles.psi]
-state_history_n_e = [initial_core_profiles.n_e]
+state_history_T_i = [current_T_i]
+state_history_T_e = [current_T_e]
+state_history_psi = [current_psi]
+state_history_n_e = [current_n_e]
 while True:
     explicit_source_profiles = build_source_profiles0(
-        current_core_profiles.T_i, current_core_profiles.T_e,
-        current_core_profiles.n_e, current_core_profiles.psi,
-        current_core_profiles.n_i, current_core_profiles.n_i_bc,
-        current_core_profiles.n_impurity, current_core_profiles.n_impurity_bc,
-        current_core_profiles.Z_i, current_core_profiles.A_i,
-        current_core_profiles.Z_impurity, current_core_profiles.A_impurity,
-        current_core_profiles.q_face, current_core_profiles.Z_eff_face,
-        current_core_profiles.Z_i_face,
+        current_T_i, current_T_e,
+        current_n_e, current_psi,
+        current_n_i, current_n_i_bc,
+        current_n_impurity, current_n_impurity_bc,
+        current_Z_i, current_A_i,
+        current_Z_impurity, current_A_impurity,
+        current_q_face, current_Z_eff_face,
+        current_Z_i_face,
     )
     chi_max = core_transport.chi_max()
     basic_dt = (3.0 / 4.0) * (jnp.array(g.dx)**2) / chi_max
@@ -2146,14 +2168,13 @@ while True:
     )
     dt = initial_dt
     while True:
-        core_profiles_t = current_core_profiles
         n_e = get_updated_electron_density()
         n_e_bc_edge = {**g.n_e_bc, "right_face_constraint": g.n_e_right_bc}
         T_e_bc_edge = {**g.T_e_bc, "right_face_constraint": g.T_e_right_bc}
         ions_edge = get_updated_ions(
-            core_profiles_t.n_e,
+            current_n_e,
             n_e_bc_edge,
-            core_profiles_t.T_e,
+            current_T_e,
             T_e_bc_edge,
         )
         Z_i_edge = ions_edge.Z_i_face[-1]
@@ -2177,66 +2198,25 @@ while True:
             "left_face_grad_constraint": jnp.zeros(()),
             "right_face_grad_constraint": jnp.zeros(()),
         }
-        T_i_value = core_profiles_t.T_i
-        T_e_value = core_profiles_t.T_e
-        n_e_value = core_profiles_t.n_e
-        ions = get_updated_ions(
-            n_e_value,
-            g.n_e_bc,
-            T_e_value,
-            g.T_e_bc,
-        )
-        n_i_value = ions.n_i
+        T_i = current_T_i
+        T_e = current_T_e
+        n_e = current_n_e
+        psi = current_psi
+        ions = get_updated_ions(n_e, g.n_e_bc, T_e, g.T_e_bc)
+        n_i = ions.n_i
         n_i_bc = ions.n_i_bc
-        n_impurity_value = ions.n_impurity
+        n_impurity = ions.n_impurity
         n_impurity_bc = ions.n_impurity_bc
-        impurity_fractions_value = ions.impurity_fractions
-        Z_i_value = ions.Z_i
-        Z_i_face_value = ions.Z_i_face
-        Z_impurity_value = ions.Z_impurity
-        Z_impurity_face_value = ions.Z_impurity_face
-        A_i_value = ions.A_i
-        A_impurity_value = ions.A_impurity
-        A_impurity_face_value = ions.A_impurity_face
-        Z_eff_value = ions.Z_eff
-        Z_eff_face_value = ions.Z_eff_face
-        T_i = T_i_value
-        T_e = T_e_value
-        psi = core_profiles_t.psi
-        n_e = n_e_value
-        n_i = n_i_value
-        n_impurity = n_impurity_value
         Z_i_face = jnp.concatenate([
-            Z_i_face_value[:-1],
+            ions.Z_i_face[:-1],
             jnp.array([Z_i_edge]),
         ], )
         Z_impurity_face = jnp.concatenate([
-            Z_impurity_face_value[:-1],
+            ions.Z_impurity_face[:-1],
             jnp.array([Z_impurity_edge]),
         ], )
-        core_profiles_t_plus_dt = dataclasses.replace(
-            core_profiles_t,
-            T_i=T_i,
-            T_e=T_e,
-            psi=psi,
-            n_e=n_e,
-            n_i=n_i,
-            n_i_bc=n_i_bc_updated,
-            n_impurity=n_impurity,
-            n_impurity_bc=n_impurity_bc_updated,
-            impurity_fractions=impurity_fractions_value,
-            Z_i=Z_i_value,
-            Z_i_face=Z_i_face,
-            Z_impurity=Z_impurity_value,
-            Z_impurity_face=Z_impurity_face,
-            A_i=A_i_value,
-            A_impurity=A_impurity_value,
-            A_impurity_face=A_impurity_face_value,
-            Z_eff=Z_eff_value,
-            Z_eff_face=Z_eff_face_value,
-        )
-        x_old = core_profiles_to_solver_x_tuple(current_core_profiles)
-        x_new_guess = core_profiles_to_solver_x_tuple(core_profiles_t_plus_dt)
+        x_old = evolving_vars_to_solver_x_tuple(current_T_i, current_T_e, current_psi, current_n_e)
+        x_new_guess = evolving_vars_to_solver_x_tuple(T_i, T_e, psi, n_e)
         coeffs_exp = coeffs_callback(
             x_old,
             explicit_source_profiles=explicit_source_profiles,
@@ -2317,7 +2297,6 @@ while True:
             x_new,
             dt,
             solver_numeric_outputs,
-            core_profiles_t_plus_dt,
         )
         dt = dt / g.dt_reduction_factor
         solver_outputs = loop_output[2]
@@ -2333,100 +2312,70 @@ while True:
         if not (take_another_step & ~is_nan_next_dt):
             break
     result = loop_output
-    updated_core_profiles_t_plus_dt = solver_x_tuple_to_core_profiles(
-        result[0], result[3])
-    ions = get_updated_ions(
-        updated_core_profiles_t_plus_dt.n_e,
-        g.n_e_bc,
-        updated_core_profiles_t_plus_dt.T_e,
-        g.T_e_bc,
-    )
-    psi_face_new = compute_face_value_bc(updated_core_profiles_t_plus_dt.psi,
-                                         jnp.array(g.dx), g.psi_bc)
-    psi_face_old = compute_face_value_bc(current_core_profiles.psi,
-                                         jnp.array(g.dx), g.psi_bc)
+    solved = solver_x_tuple_to_evolving_vars(result[0])
+    solved_T_i = solved["T_i"]
+    solved_T_e = solved["T_e"]
+    solved_psi = solved["psi"]
+    solved_n_e = solved["n_e"]
+    ions_final = get_updated_ions(solved_n_e, g.n_e_bc, solved_T_e, g.T_e_bc)
+    psi_face_new = compute_face_value_bc(solved_psi, jnp.array(g.dx), g.psi_bc)
+    psi_face_old = compute_face_value_bc(current_psi, jnp.array(g.dx), g.psi_bc)
     v_loop_lcfs = ((psi_face_new[-1] - psi_face_old[-1]) / result[1])
-    intermediate_core_profiles = CoreProfiles(
-        T_i=updated_core_profiles_t_plus_dt.T_i,
-        T_e=updated_core_profiles_t_plus_dt.T_e,
-        psi=updated_core_profiles_t_plus_dt.psi,
-        n_e=updated_core_profiles_t_plus_dt.n_e,
-        n_i=ions.n_i,
-        n_i_bc=ions.n_i_bc,
-        n_impurity=ions.n_impurity,
-        n_impurity_bc=ions.n_impurity_bc,
-        impurity_fractions=ions.impurity_fractions,
-        Z_i=ions.Z_i,
-        Z_i_face=ions.Z_i_face,
-        Z_impurity=ions.Z_impurity,
-        Z_impurity_face=ions.Z_impurity_face,
-        psidot=result[3].psidot,
-        psidot_bc=result[3].psidot_bc,
-        q_face=(lambda psi_fg: jnp.concatenate([
-            jnp.expand_dims(
-                jnp.abs((2 * g.geo_Phi_b * jnp.array(g.dx)) / psi_fg[1]), 0),
-            jnp.abs((2 * g.geo_Phi_b * g.face_centers[1:]) / psi_fg[1:])
-        ]) * g.geo_q_correction_factor)(compute_face_grad_bc(
-            updated_core_profiles_t_plus_dt.psi, jnp.array(g.dx), g.psi_bc)),
-        A_i=ions.A_i,
-        A_impurity=ions.A_impurity,
-        A_impurity_face=ions.A_impurity_face,
-        Z_eff=ions.Z_eff,
-        Z_eff_face=ions.Z_eff_face,
-        v_loop_lcfs=v_loop_lcfs,
-        sigma=result[3].sigma,
-        sigma_face=result[3].sigma_face,
-    )
+    psi_face_grad_solved = compute_face_grad_bc(solved_psi, jnp.array(g.dx), g.psi_bc)
+    q_face_solved = jnp.concatenate([
+        jnp.expand_dims(
+            jnp.abs((2 * g.geo_Phi_b * jnp.array(g.dx)) / psi_face_grad_solved[1]), 0),
+        jnp.abs((2 * g.geo_Phi_b * g.face_centers[1:]) / psi_face_grad_solved[1:])
+    ]) * g.geo_q_correction_factor
     conductivity = calculate_conductivity(
-        intermediate_core_profiles.n_e, intermediate_core_profiles.T_e,
-        intermediate_core_profiles.Z_eff_face, intermediate_core_profiles.q_face)
-    intermediate_core_profiles = dataclasses.replace(
-        intermediate_core_profiles,
-        sigma=conductivity.sigma,
-        sigma_face=conductivity.sigma_face,
-    )
+        solved_n_e, solved_T_e, ions_final.Z_eff_face, q_face_solved)
+    sigma_solved = conductivity.sigma
+    sigma_face_solved = conductivity.sigma_face
     final_source_profiles = build_source_profiles1(
-        intermediate_core_profiles.T_i, intermediate_core_profiles.T_e,
-        intermediate_core_profiles.n_e, intermediate_core_profiles.psi,
-        intermediate_core_profiles.n_i, intermediate_core_profiles.n_i_bc,
-        intermediate_core_profiles.n_impurity, intermediate_core_profiles.n_impurity_bc,
-        intermediate_core_profiles.Z_i, intermediate_core_profiles.A_i,
-        intermediate_core_profiles.Z_impurity, intermediate_core_profiles.A_impurity,
-        intermediate_core_profiles.q_face, intermediate_core_profiles.Z_eff_face,
-        intermediate_core_profiles.Z_i_face,
+        solved_T_i, solved_T_e, solved_n_e, solved_psi,
+        ions_final.n_i, ions_final.n_i_bc,
+        ions_final.n_impurity, ions_final.n_impurity_bc,
+        ions_final.Z_i, ions_final.A_i,
+        ions_final.Z_impurity, ions_final.A_impurity,
+        q_face_solved, ions_final.Z_eff_face, ions_final.Z_i_face,
         explicit_source_profiles=explicit_source_profiles,
         conductivity=conductivity,
     )
     psi_sources = final_source_profiles.total_psi_sources()
     psidot_value = calculate_psidot_from_psi_sources(
         psi_sources=psi_sources,
-        sigma=intermediate_core_profiles.sigma,
-        psi=intermediate_core_profiles.psi,
+        sigma=sigma_solved,
+        psi=solved_psi,
         psi_bc=g.psi_bc,
     )
-    psidot_bc = {
-        **result[3].psidot_bc, "right_face_constraint": v_loop_lcfs,
-        "right_face_grad_constraint": None
-    }
-    final_core_profiles = dataclasses.replace(
-        intermediate_core_profiles,
-        psidot=psidot_value,
-        psidot_bc=psidot_bc,
-    )
+    psidot_bc = make_bc(right_face_constraint=v_loop_lcfs)
     core_transport = calculate_total_transport_coeffs(
-        final_core_profiles.T_i, final_core_profiles.T_e,
-        final_core_profiles.n_e, final_core_profiles.psi,
-        final_core_profiles.n_i, final_core_profiles.n_i_bc,
-        final_core_profiles.n_impurity, final_core_profiles.n_impurity_bc,
-        final_core_profiles.q_face, final_core_profiles.A_i,
-        final_core_profiles.Z_eff_face, final_core_profiles.Z_i_face)
+        solved_T_i, solved_T_e, solved_n_e, solved_psi,
+        ions_final.n_i, ions_final.n_i_bc,
+        ions_final.n_impurity, ions_final.n_impurity_bc,
+        q_face_solved, ions_final.A_i,
+        ions_final.Z_eff_face, ions_final.Z_i_face)
     current_t = current_t + result[1]
-    current_core_profiles = final_core_profiles
+    current_T_i = solved_T_i
+    current_T_e = solved_T_e
+    current_psi = solved_psi
+    current_n_e = solved_n_e
+    current_n_i = ions_final.n_i
+    current_n_i_bc = ions_final.n_i_bc
+    current_n_impurity = ions_final.n_impurity
+    current_n_impurity_bc = ions_final.n_impurity_bc
+    current_Z_i = ions_final.Z_i
+    current_Z_i_face = ions_final.Z_i_face
+    current_A_i = ions_final.A_i
+    current_Z_impurity = ions_final.Z_impurity
+    current_A_impurity = ions_final.A_impurity
+    current_q_face = q_face_solved
+    current_Z_eff_face = ions_final.Z_eff_face
     state_history_t.append(current_t)
-    state_history_T_i.append(final_core_profiles.T_i)
-    state_history_T_e.append(final_core_profiles.T_e)
-    state_history_psi.append(final_core_profiles.psi)
-    state_history_n_e.append(final_core_profiles.n_e)
+    state_history_T_i.append(solved_T_i)
+    state_history_T_e.append(solved_T_e)
+    state_history_psi.append(solved_psi)
+    state_history_n_e.append(solved_n_e)
     if current_t >= (g.t_final - g.tolerance):
         break
 t = np.array(state_history_t)
