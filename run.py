@@ -719,14 +719,13 @@ class SourceHandler(typing.NamedTuple):
 
 
 def calculate_generic_current(
-    runtime_params,
     geo,
     source_name,
     unused_state,
     unused_calculated_source_profiles,
     unused_conductivity,
 ):
-    I_generic = runtime_params.Ip * g.generic_current_fraction
+    I_generic = g.Ip * g.generic_current_fraction
     generic_current_form = jnp.exp(
         -((g.cell_centers - g.generic_current_location)**2) /
         (2 * g.generic_current_width**2))
@@ -736,7 +735,7 @@ def calculate_generic_current(
     return (generic_current_profile, )
 
 
-def default_formula(runtime_params, geo, source_name, unused_core_profiles,
+def default_formula(geo, source_name, unused_core_profiles,
                     unused_calculated_source_profiles, unused_conductivity):
     absorbed_power = g.generic_heat_P_total * 1.0  # absorption_fraction is always 1.0
     profile = gaussian_profile(geo,
@@ -749,7 +748,6 @@ def default_formula(runtime_params, geo, source_name, unused_core_profiles,
 
 
 def calc_generic_particle_source(
-    runtime_params,
     geo,
     source_name,
     unused_state,
@@ -765,7 +763,6 @@ def calc_generic_particle_source(
 
 
 def calc_pellet_source(
-    runtime_params,
     geo,
     source_name,
     unused_state,
@@ -780,7 +777,7 @@ def calc_pellet_source(
     ), )
 
 
-def calc_fusion(geo, core_profiles, runtime_params):
+def calc_fusion(geo, core_profiles):
     product = 1.0
     for fraction, symbol in zip(
             g.main_ion_fractions,
@@ -832,19 +829,17 @@ def calc_fusion(geo, core_profiles, runtime_params):
 
 
 def fusion_heat_model_func(
-    runtime_params,
     geo,
     unused_source_name,
     core_profiles,
     unused_calculated_source_profiles,
     unused_conductivity,
 ):
-    _, Pfus_i, Pfus_e = calc_fusion(geo, core_profiles, runtime_params)
+    _, Pfus_i, Pfus_e = calc_fusion(geo, core_profiles)
     return (Pfus_i, Pfus_e)
 
 
 def calc_puff_source(
-    runtime_params,
     geo,
     source_name,
     unused_state,
@@ -860,8 +855,7 @@ def calc_puff_source(
 
 
 @jax.jit
-def build_source_profiles0(runtime_params,
-                           core_profiles,
+def build_source_profiles0(core_profiles,
                            explicit_source_profiles=None,
                            conductivity=None):
     qei = QeiInfo.zeros(geo)
@@ -876,7 +870,6 @@ def build_source_profiles0(runtime_params,
     )
     build_standard_source_profiles(
         calculated_source_profiles=profiles,
-        runtime_params=runtime_params,
         geo=geo,
         core_profiles=core_profiles,
         explicit=True,
@@ -886,8 +879,7 @@ def build_source_profiles0(runtime_params,
 
 
 @jax.jit
-def build_source_profiles1(runtime_params,
-                           core_profiles,
+def build_source_profiles1(core_profiles,
                            explicit_source_profiles=None,
                            conductivity=None):
     # Inlined get_qei
@@ -947,7 +939,6 @@ def build_source_profiles1(runtime_params,
     )
     build_standard_source_profiles(
         calculated_source_profiles=profiles,
-        runtime_params=runtime_params,
         geo=None,
         core_profiles=core_profiles,
         explicit=False,
@@ -958,7 +949,6 @@ def build_source_profiles1(runtime_params,
 
 def build_standard_source_profiles(*,
                                    calculated_source_profiles,
-                                   runtime_params,
                                    geo,
                                    core_profiles,
                                    explicit=True,
@@ -971,7 +961,6 @@ def build_standard_source_profiles(*,
         # All sources have is_explicit=False, so check: (explicit == False) | calculate_anyway
         if (not explicit) | calculate_anyway:
             value = handler.eval_fn(
-                runtime_params,
                 geo,
                 source_name,
                 core_profiles,
@@ -1003,10 +992,10 @@ def build_standard_source_profiles(*,
 
 class SetTemperatureDensityPedestalModel:
 
-    def __call__(self, runtime_params, geo, core_profiles):
-        return self._call_implementation(runtime_params, geo, core_profiles)
+    def __call__(self, geo, core_profiles):
+        return self._call_implementation(geo, core_profiles)
 
-    def _call_implementation(self, runtime_params, geo, core_profiles):
+    def _call_implementation(self, geo, core_profiles):
         # Return rho_norm_ped_top_idx directly (inlined PedestalModelOutput)
         return jnp.abs(g.cell_centers - g.rho_norm_ped_top).argmin()
 
@@ -1016,21 +1005,6 @@ class PedestalConfig(BaseModelFrozen):
 
     def build_pedestal_model(self):
         return SetTemperatureDensityPedestalModel()
-
-
-@jax.tree_util.register_dataclass
-@dataclasses.dataclass
-class RuntimeParamsPC:
-    Ip: Any
-    T_i_right_bc: Any
-    T_e_right_bc: Any
-    T_e: Any
-    T_i: Any
-    psi: Any
-    psidot: Any
-    n_e: Any
-    nbar: Any
-    n_e_right_bc: Any
 
 
 
@@ -1107,7 +1081,7 @@ _FLUX_NAME_MAP: Final[Mapping[str, str]] = immutabledict.immutabledict({
 _EPSILON_NN: Final[float] = 1 / 3
 
 
-def calculate_transport_coeffs(runtime_params, geo, core_profiles,
+def calculate_transport_coeffs(geo, core_profiles,
                                rho_norm_ped_top_idx):
     # Inlined call_qlknn_implementation and prepare_qualikiz_inputs
     rmid = (g.geo_R_out - g.geo_R_in) * 0.5
@@ -1417,10 +1391,9 @@ def calculate_transport_coeffs(runtime_params, geo, core_profiles,
 
 
 @jax.jit
-def calculate_total_transport_coeffs(runtime_params, geo, core_profiles):
-    rho_norm_ped_top_idx = g.pedestal_model(runtime_params, geo, core_profiles)
+def calculate_total_transport_coeffs(geo, core_profiles):
+    rho_norm_ped_top_idx = g.pedestal_model(geo, core_profiles)
     turbulent_transport = calculate_transport_coeffs(
-        runtime_params=runtime_params,
         geo=geo,
         core_profiles=core_profiles,
         rho_norm_ped_top_idx=rho_norm_ped_top_idx,
@@ -1470,11 +1443,10 @@ class Ions:
     Z_eff_face: Any
 
 
-def get_updated_electron_density(profile_conditions_params):
-    nGW = profile_conditions_params.Ip / 1e6 / (jnp.pi *
-                                                g.geo_a_minor**2) * 1e20
-    n_e_value = profile_conditions_params.n_e * nGW
-    n_e_right_bc = profile_conditions_params.n_e_right_bc
+def get_updated_electron_density():
+    nGW = g.Ip / 1e6 / (jnp.pi * g.geo_a_minor**2) * 1e20
+    n_e_value = g.n_e * nGW
+    n_e_right_bc = g.n_e_right_bc
     face_left = n_e_value[0]
     face_right = n_e_right_bc
     face_inner = (n_e_value[..., :-1] + n_e_value[..., 1:]) / 2.0
@@ -1483,8 +1455,8 @@ def get_updated_electron_density(profile_conditions_params):
     a_minor_out = g.geo_R_out_face[-1] - g.geo_R_out_face[0]
     target_nbar = jnp.where(
         True,
-        profile_conditions_params.nbar * nGW,
-        profile_conditions_params.nbar,
+        g.nbar * nGW,
+        g.nbar,
     )
     nbar_from_n_e_face_inner = (
         jax.scipy.integrate.trapezoid(n_e_face[:-1], g.geo_R_out_face[:-1]) /
@@ -1503,7 +1475,7 @@ def get_updated_electron_density(profile_conditions_params):
 
 
 @jax.jit
-def get_updated_ions(runtime_params, n_e, T_e):
+def get_updated_ions(n_e, T_e):
     Z_i_avg, Z_i_Z2_avg, _ = get_average_charge_state(
         ion_symbols=g.main_ion_names,
         T_e=T_e.value,
@@ -1641,15 +1613,13 @@ class Block1DCoeffs:
     auxiliary_outputs: AuxiliaryOutput | None = None
 
 
-def coeffs_callback(runtime_params,
-                    core_profiles,
+def coeffs_callback(core_profiles,
                     x,
                     explicit_source_profiles,
                     explicit_call=False):
     # Inlined update_core_profiles_during_step
     updated_core_profiles = solver_x_tuple_to_core_profiles(x, core_profiles)
     ions = get_updated_ions(
-        runtime_params,
         updated_core_profiles.n_e,
         updated_core_profiles.T_e,
     )
@@ -1689,7 +1659,6 @@ def coeffs_callback(runtime_params,
         return coeffs
     else:
         return _calc_coeffs_full(
-            runtime_params=runtime_params,
             geo=None,
             core_profiles=core_profiles,
             explicit_source_profiles=explicit_source_profiles,
@@ -1697,14 +1666,13 @@ def coeffs_callback(runtime_params,
 
 
 @jax.jit
-def _calc_coeffs_full(runtime_params, geo, core_profiles,
+def _calc_coeffs_full(geo, core_profiles,
                       explicit_source_profiles):
-    rho_norm_ped_top_idx = g.pedestal_model(runtime_params, geo, core_profiles)
+    rho_norm_ped_top_idx = g.pedestal_model(geo, core_profiles)
     mask = (jnp.zeros_like(g.geo_rho,
                            dtype=bool).at[rho_norm_ped_top_idx].set(True))
     conductivity = calculate_conductivity(geo, core_profiles)
     merged_source_profiles = build_source_profiles1(
-        runtime_params=runtime_params,
         core_profiles=core_profiles,
         explicit_source_profiles=explicit_source_profiles,
         conductivity=conductivity,
@@ -1721,7 +1689,7 @@ def _calc_coeffs_full(runtime_params, geo, core_profiles,
     tic_psi = jnp.ones_like(toc_psi)
     toc_dens_el = jnp.ones_like(g.geo_vpr)
     tic_dens_el = g.geo_vpr
-    turbulent_transport = calculate_transport_coeffs(runtime_params, geo,
+    turbulent_transport = calculate_transport_coeffs(geo,
                                                      core_profiles,
                                                      rho_norm_ped_top_idx)
     chi_face_ion_total = turbulent_transport.chi_face_ion
@@ -1917,18 +1885,12 @@ g.T_e_profile_x = np.array(list(g.T_e_profile_dict.keys()))
 g.T_e_profile_y = np.array(list(g.T_e_profile_dict.values()))
 g.n_e_profile_x = np.array(list(g.n_e_profile_dict.keys()))
 g.n_e_profile_y = np.array(list(g.n_e_profile_dict.values()))
-g.runtime_params = RuntimeParamsPC(
-    Ip=g.Ip,
-    T_i=jnp.interp(g.cell_centers, g.T_i_profile_x, g.T_i_profile_y),
-    T_i_right_bc=g.T_i_right_bc,
-    T_e=jnp.interp(g.cell_centers, g.T_e_profile_x, g.T_e_profile_y),
-    T_e_right_bc=g.T_e_right_bc,
-    n_e_right_bc=g.n_e_right_bc,
-    nbar=g.nbar,
-    n_e=jnp.interp(g.cell_centers, g.n_e_profile_x, g.n_e_profile_y),
-    psi=None,
-    psidot=None,
-)
+# Pre-compute profile values (constant, not time-varying)
+g.T_i = jnp.interp(g.cell_centers, g.T_i_profile_x, g.T_i_profile_y)
+g.T_e = jnp.interp(g.cell_centers, g.T_e_profile_x, g.T_e_profile_y)
+g.n_e = jnp.interp(g.cell_centers, g.n_e_profile_x, g.n_e_profile_y)
+g.psi = None
+g.psidot = None
 g.chi_pereverzev = 30
 g.D_pereverzev = 15
 g.theta_implicit = 1.0
@@ -2199,25 +2161,25 @@ g.transport_rho_min = 0.0
 g.transport_rho_max = 1.0
 # Pre-compute source modes (constant values)
 g.qei_mode = "ZERO"  # ei_exchange mode
-Ip_scale_factor = g.runtime_params.Ip / g.geo_Ip_profile_face_base[
+Ip_scale_factor = g.Ip / g.geo_Ip_profile_face_base[
     -1]
 geo = None
 T_i = CellVariable(
-    value=g.runtime_params.T_i,
+    value=g.T_i,
     left_face_grad_constraint=jnp.zeros(()),
     right_face_grad_constraint=None,
-    right_face_constraint=g.runtime_params.T_i_right_bc,
+    right_face_constraint=g.T_i_right_bc,
     dr=jnp.array(g.dx),
 )
 T_e = CellVariable(
-    value=g.runtime_params.T_e,
+    value=g.T_e,
     left_face_grad_constraint=jnp.zeros(()),
     right_face_grad_constraint=None,
-    right_face_constraint=g.runtime_params.T_e_right_bc,
+    right_face_constraint=g.T_e_right_bc,
     dr=jnp.array(g.dx),
 )
-n_e = get_updated_electron_density(g.runtime_params)
-ions = get_updated_ions(g.runtime_params, n_e, T_e)
+n_e = get_updated_electron_density()
+ions = get_updated_ions(n_e, T_e)
 v_loop_lcfs = np.array(0.0, dtype=jnp.float64)  # use_v_loop_lcfs_boundary_condition is always False
 psidot = CellVariable(
     value=np.zeros_like(g.geo_rho),
@@ -2249,7 +2211,7 @@ core_profiles = CoreProfiles(
 )
 source_profiles = SourceProfiles(
     bootstrap_current=BootstrapCurrent.zeros(None), qei=QeiInfo.zeros(None))
-dpsi_drhonorm_edge = (g.runtime_params.Ip *
+dpsi_drhonorm_edge = (g.Ip *
                       (16 * jnp.pi**3 * g.mu_0 * g.geo_Phi_b) /
                       (g.geo_g2g3_over_rhon_face[-1] * g.geo_F_face[-1]))
 # Compute scaled psi values using the Ip scale factor
@@ -2274,7 +2236,6 @@ conductivity = calculate_conductivity(
     core_profiles,
 )
 build_standard_source_profiles(
-    runtime_params=g.runtime_params,
     geo=geo,
     core_profiles=core_profiles,
     psi_only=True,
@@ -2320,28 +2281,22 @@ conductivity = Conductivity(sigma=initial_core_profiles.sigma,
                             sigma_face=initial_core_profiles.sigma_face)
 core_profiles = initial_core_profiles
 explicit_source_profiles = build_source_profiles0(
-    runtime_params=g.runtime_params,
     core_profiles=core_profiles,
 )
 initial_core_sources = build_source_profiles1(
-    runtime_params=g.runtime_params,
     core_profiles=core_profiles,
     explicit_source_profiles=explicit_source_profiles,
     conductivity=conductivity,
 )
 core_transport = calculate_total_transport_coeffs(
-    g.runtime_params,
     geo,
     initial_core_profiles,
 )
 current_t = np.array(g.t_initial)
 current_core_profiles = initial_core_profiles
 state_history = [(current_t, current_core_profiles)]
-initial_runtime_params = g.runtime_params
 while current_t < (g.t_final - g.tolerance):
-    runtime_params_t = g.runtime_params
     explicit_source_profiles = build_source_profiles0(
-        runtime_params=runtime_params_t,
         core_profiles=current_core_profiles,
     )
     # Inlined next_dt
@@ -2365,7 +2320,6 @@ while current_t < (g.t_final - g.tolerance):
         core_profiles_to_solver_x_tuple(current_core_profiles),
         initial_dt,
         1,
-        runtime_params_t,
         None,
         current_core_profiles,
     )
@@ -2391,24 +2345,19 @@ while current_t < (g.t_final - g.tolerance):
     while should_continue(loop_dt, loop_output):
         dt = loop_dt
         output = loop_output
-        runtime_params_t_plus_dt = g.runtime_params
         geo_t_with_phibdot = None
         geo_t_plus_dt = None
         core_profiles_t = current_core_profiles
-        profile_conditions_t_plus_dt = runtime_params_t_plus_dt
-        n_e = get_updated_electron_density(profile_conditions_t_plus_dt)
+        n_e = get_updated_electron_density()
         n_e_right_bc = n_e.right_face_constraint
         ions_edge = get_updated_ions(
-            runtime_params_t_plus_dt,
             dataclasses.replace(
                 core_profiles_t.n_e,
-                right_face_constraint=profile_conditions_t_plus_dt.
-                n_e_right_bc,
+                right_face_constraint=g.n_e_right_bc,
             ),
             dataclasses.replace(
                 core_profiles_t.T_e,
-                right_face_constraint=profile_conditions_t_plus_dt.
-                T_e_right_bc,
+                right_face_constraint=g.T_e_right_bc,
             ),
         )
         Z_i_edge = ions_edge.Z_i_face[-1]
@@ -2425,15 +2374,13 @@ while current_t < (g.t_final - g.tolerance):
             dict(
                 left_face_grad_constraint=jnp.zeros(()),
                 right_face_grad_constraint=None,
-                right_face_constraint=profile_conditions_t_plus_dt.
-                T_i_right_bc,
+                right_face_constraint=g.T_i_right_bc,
             ),
             "T_e":
             dict(
                 left_face_grad_constraint=jnp.zeros(()),
                 right_face_grad_constraint=None,
-                right_face_constraint=profile_conditions_t_plus_dt.
-                T_e_right_bc,
+                right_face_constraint=g.T_e_right_bc,
             ),
             "n_e":
             dict(
@@ -2456,7 +2403,7 @@ while current_t < (g.t_final - g.tolerance):
             "psi":
             dict(
                 right_face_grad_constraint=(
-                    profile_conditions_t_plus_dt.Ip *
+                    g.Ip *
                     (16 * jnp.pi**3 * g.mu_0 * g.geo_Phi_b) /
                     (g.geo_g2g3_over_rhon_face[-1] * g.geo_F_face[-1])),
                 right_face_constraint=None,
@@ -2472,7 +2419,6 @@ while current_t < (g.t_final - g.tolerance):
         T_e_value = T_e_cell_variable.value
         n_e_cell_variable = core_profiles_t.n_e
         ions = get_updated_ions(
-            runtime_params_t_plus_dt,
             n_e_cell_variable,
             T_e_cell_variable,
         )
@@ -2547,7 +2493,6 @@ while current_t < (g.t_final - g.tolerance):
         x_old = core_profiles_to_solver_x_tuple(current_core_profiles)
         x_new_guess = core_profiles_to_solver_x_tuple(core_profiles_t_plus_dt)
         coeffs_exp = coeffs_callback(
-            runtime_params_t,
             current_core_profiles,
             x_old,
             explicit_source_profiles=explicit_source_profiles,
@@ -2557,7 +2502,6 @@ while current_t < (g.t_final - g.tolerance):
         @jax.jit
         def solver_loop_body(i, x_new_guess):
             coeffs_new = coeffs_callback(
-                runtime_params_t_plus_dt,
                 core_profiles_t_plus_dt,
                 x_new_guess,
                 explicit_source_profiles=explicit_source_profiles,
@@ -2647,15 +2591,13 @@ while current_t < (g.t_final - g.tolerance):
             x_new,
             dt,
             solver_numeric_outputs,
-            runtime_params_t_plus_dt,
             geo_t_plus_dt,
             core_profiles_t_plus_dt,
         )
     result = loop_output
     updated_core_profiles_t_plus_dt = solver_x_tuple_to_core_profiles(
-        result[0], result[5])
+        result[0], result[4])
     ions = get_updated_ions(
-        result[3],
         updated_core_profiles_t_plus_dt.n_e,
         updated_core_profiles_t_plus_dt.T_e,
     )
@@ -2673,7 +2615,7 @@ while current_t < (g.t_final - g.tolerance):
         Z_i_face=ions.Z_i_face,
         Z_impurity=ions.Z_impurity,
         Z_impurity_face=ions.Z_impurity_face,
-        psidot=result[5].psidot,
+        psidot=result[4].psidot,
         q_face=jnp.concatenate([
             jnp.expand_dims(jnp.abs((2 * g.geo_Phi_b * jnp.array(g.dx)) / updated_core_profiles_t_plus_dt.psi.face_grad()[1]), 0),
             jnp.abs((2 * g.geo_Phi_b * g.face_centers[1:]) / updated_core_profiles_t_plus_dt.psi.face_grad()[1:])
@@ -2684,10 +2626,10 @@ while current_t < (g.t_final - g.tolerance):
         Z_eff=ions.Z_eff,
         Z_eff_face=ions.Z_eff_face,
         v_loop_lcfs=v_loop_lcfs,
-        sigma=result[5].sigma,
-        sigma_face=result[5].sigma_face,
+        sigma=result[4].sigma,
+        sigma_face=result[4].sigma_face,
     )
-    conductivity = calculate_conductivity(result[4],
+    conductivity = calculate_conductivity(result[3],
                                           intermediate_core_profiles)
     intermediate_core_profiles = dataclasses.replace(
         intermediate_core_profiles,
@@ -2695,7 +2637,6 @@ while current_t < (g.t_final - g.tolerance):
         sigma_face=conductivity.sigma_face,
     )
     final_source_profiles = build_source_profiles1(
-        runtime_params=result[3],
         core_profiles=intermediate_core_profiles,
         explicit_source_profiles=explicit_source_profiles,
         conductivity=conductivity,
@@ -2705,10 +2646,10 @@ while current_t < (g.t_final - g.tolerance):
         psi_sources=psi_sources,
         sigma=intermediate_core_profiles.sigma,
         psi=intermediate_core_profiles.psi,
-        geo=result[4],
+        geo=result[3],
     )
     psidot = dataclasses.replace(
-        result[5].psidot,
+        result[4].psidot,
         value=psidot_value,
         right_face_constraint=v_loop_lcfs,
         right_face_grad_constraint=None,
@@ -2719,7 +2660,6 @@ while current_t < (g.t_final - g.tolerance):
     )
     core_transport = calculate_total_transport_coeffs(
         result[3],
-        result[4],
         final_core_profiles,
     )
     current_t = current_t + result[1]
