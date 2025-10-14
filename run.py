@@ -733,10 +733,10 @@ def build_source_profiles0(T_i, T_e, n_e, psi, n_i, n_i_bc, n_impurity, n_impuri
         Z_i=Z_i, Z_i_face=Z_i_face,
         A_i=A_i,
         Z_impurity=Z_impurity,
-        Z_impurity_face=jnp.zeros(1),  # Not used by sources
+        Z_impurity_face=jnp.zeros_like(q_face),  # Not used by sources
         A_impurity=A_impurity,
-        A_impurity_face=jnp.zeros(1),  # Not used by sources
-        Z_eff=jnp.zeros(1),  # Not used by sources
+        A_impurity_face=jnp.zeros_like(q_face),  # Not used by sources
+        Z_eff=jnp.zeros_like(psi),  # Not used by sources
         Z_eff_face=Z_eff_face,
         q_face=q_face,
         psidot=jnp.zeros_like(psi),  # Not used by sources
@@ -814,10 +814,10 @@ def build_source_profiles1(T_i, T_e, n_e, psi, n_i, n_i_bc, n_impurity, n_impuri
         Z_i=Z_i, Z_i_face=Z_i_face,
         A_i=A_i,
         Z_impurity=Z_impurity,
-        Z_impurity_face=jnp.zeros(1),  # Not used by sources
+        Z_impurity_face=jnp.zeros_like(q_face),  # Not used by sources
         A_impurity=A_impurity,
-        A_impurity_face=jnp.zeros(1),  # Not used by sources
-        Z_eff=jnp.zeros(1),  # Not used by sources
+        A_impurity_face=jnp.zeros_like(q_face),  # Not used by sources
+        Z_eff=jnp.zeros_like(psi),  # Not used by sources
         Z_eff_face=Z_eff_face,
         q_face=q_face,
         psidot=jnp.zeros_like(psi),  # Not used by sources
@@ -1406,13 +1406,20 @@ def core_profiles_to_solver_x_tuple(core_profiles, ):
     return tuple(x_tuple_for_solver_list)
 
 
-def solver_x_tuple_to_core_profiles(x_new, core_profiles):
+def solver_x_tuple_to_evolving_vars(x_new):
+    """Convert solver tuple to dict of evolving variables."""
     updated_vars = {}
     for i, var_name in enumerate(g.evolving_names):
         solver_var = x_new[i]
         scaling_factor = SCALING_FACTORS[var_name]
         operation = lambda x, factor: x * factor if x is not None else None
         updated_vars[var_name] = operation(solver_var.value, scaling_factor)
+    return updated_vars
+
+
+def solver_x_tuple_to_core_profiles(x_new, core_profiles):
+    """Legacy wrapper - updates CoreProfiles with solver results."""
+    updated_vars = solver_x_tuple_to_evolving_vars(x_new)
     return dataclasses.replace(core_profiles, **updated_vars)
 
 
@@ -1433,43 +1440,24 @@ class Block1DCoeffs:
     auxiliary_outputs: AuxiliaryOutput | None = None
 
 
-def coeffs_callback(core_profiles,
-                    x,
+def coeffs_callback(x,
                     explicit_source_profiles,
                     explicit_call=False):
-    updated_core_profiles = solver_x_tuple_to_core_profiles(x, core_profiles)
-    ions = get_updated_ions(
-        updated_core_profiles.n_e,
-        g.n_e_bc,
-        updated_core_profiles.T_e,
-        g.T_e_bc,
-    )
-    core_profiles = dataclasses.replace(
-        updated_core_profiles,
-        n_i=ions.n_i,
-        n_i_bc=ions.n_i_bc,
-        n_impurity=ions.n_impurity,
-        n_impurity_bc=ions.n_impurity_bc,
-        impurity_fractions=ions.impurity_fractions,
-        Z_i=ions.Z_i,
-        Z_i_face=ions.Z_i_face,
-        Z_impurity=ions.Z_impurity,
-        Z_impurity_face=ions.Z_impurity_face,
-        A_i=ions.A_i,
-        A_impurity=ions.A_impurity,
-        A_impurity_face=ions.A_impurity_face,
-        Z_eff=ions.Z_eff,
-        Z_eff_face=ions.Z_eff_face,
-        q_face=(lambda psi_fg: jnp.concatenate([
-            jnp.expand_dims(
-                jnp.abs((2 * g.geo_Phi_b * jnp.array(g.dx)) / psi_fg[1]), 0),
-            jnp.abs((2 * g.geo_Phi_b * g.face_centers[1:]) / psi_fg[1:])
-        ]) * g.geo_q_correction_factor)(compute_face_grad_bc(
-            updated_core_profiles.psi, jnp.array(g.dx), g.psi_bc)),
-    )
+    evolved = solver_x_tuple_to_evolving_vars(x)
+    T_i = evolved["T_i"]
+    T_e = evolved["T_e"]
+    psi = evolved["psi"]
+    n_e = evolved["n_e"]
+    ions = get_updated_ions(n_e, g.n_e_bc, T_e, g.T_e_bc)
+    psi_face_grad = compute_face_grad_bc(psi, jnp.array(g.dx), g.psi_bc)
+    q_face = jnp.concatenate([
+        jnp.expand_dims(
+            jnp.abs((2 * g.geo_Phi_b * jnp.array(g.dx)) / psi_face_grad[1]), 0),
+        jnp.abs((2 * g.geo_Phi_b * g.face_centers[1:]) / psi_face_grad[1:])
+    ]) * g.geo_q_correction_factor
     if explicit_call and g.theta_implicit == 1.0:
-        tic_T_i = core_profiles.n_i * g.geo_vpr**(5.0 / 3.0)
-        tic_T_e = core_profiles.n_e * g.geo_vpr**(5.0 / 3.0)
+        tic_T_i = ions.n_i * g.geo_vpr**(5.0 / 3.0)
+        tic_T_e = n_e * g.geo_vpr**(5.0 / 3.0)
         tic_psi = jnp.ones_like(g.geo_vpr)
         tic_dens_el = g.geo_vpr
         var_to_tic = {
@@ -1482,61 +1470,54 @@ def coeffs_callback(core_profiles,
         coeffs = Block1DCoeffs(transient_in_cell=transient_in_cell, )
         return coeffs
     else:
-        T_i_face = compute_face_value_bc(core_profiles.T_i, jnp.array(g.dx),
-                                         g.T_i_bc)
-        T_i_face_grad = compute_face_grad_bc(core_profiles.T_i,
-                                             jnp.array(g.dx), g.T_i_bc)
-        T_e_face = compute_face_value_bc(core_profiles.T_e, jnp.array(g.dx),
-                                         g.T_e_bc)
-        T_e_face_grad = compute_face_grad_bc(core_profiles.T_e,
-                                             jnp.array(g.dx), g.T_e_bc)
-        n_e_face = compute_face_value_bc(core_profiles.n_e, jnp.array(g.dx),
-                                         g.n_e_bc)
-        n_e_face_grad = compute_face_grad_bc(core_profiles.n_e,
-                                             jnp.array(g.dx), g.n_e_bc)
+        T_i_face = compute_face_value_bc(T_i, jnp.array(g.dx), g.T_i_bc)
+        T_i_face_grad = compute_face_grad_bc(T_i, jnp.array(g.dx), g.T_i_bc)
+        T_e_face = compute_face_value_bc(T_e, jnp.array(g.dx), g.T_e_bc)
+        T_e_face_grad = compute_face_grad_bc(T_e, jnp.array(g.dx), g.T_e_bc)
+        n_e_face = compute_face_value_bc(n_e, jnp.array(g.dx), g.n_e_bc)
+        n_e_face_grad = compute_face_grad_bc(n_e, jnp.array(g.dx), g.n_e_bc)
         rho_norm_ped_top_idx = jnp.abs(g.cell_centers -
                                        g.rho_norm_ped_top).argmin()
         mask = (jnp.zeros_like(g.geo_rho,
                                dtype=bool).at[rho_norm_ped_top_idx].set(True))
         conductivity = calculate_conductivity(
-            core_profiles.n_e, core_profiles.T_e,
-            core_profiles.Z_eff_face, core_profiles.q_face)
+            n_e, T_e, ions.Z_eff_face, q_face)
         merged_source_profiles = build_source_profiles1(
-            core_profiles.T_i, core_profiles.T_e, core_profiles.n_e, core_profiles.psi,
-            core_profiles.n_i, core_profiles.n_i_bc,
-            core_profiles.n_impurity, core_profiles.n_impurity_bc,
-            core_profiles.Z_i, core_profiles.A_i,
-            core_profiles.Z_impurity, core_profiles.A_impurity,
-            core_profiles.q_face, core_profiles.Z_eff_face, core_profiles.Z_i_face,
+            T_i, T_e, n_e, psi,
+            ions.n_i, ions.n_i_bc,
+            ions.n_impurity, ions.n_impurity_bc,
+            ions.Z_i, ions.A_i,
+            ions.Z_impurity, ions.A_impurity,
+            q_face, ions.Z_eff_face, ions.Z_i_face,
             explicit_source_profiles=explicit_source_profiles,
             conductivity=conductivity,
         )
         source_mat_psi = jnp.zeros_like(g.geo_rho)
         source_psi = merged_source_profiles.total_psi_sources()
         toc_T_i = g.toc_temperature_factor
-        tic_T_i = core_profiles.n_i * g.geo_vpr**(5.0 / 3.0)
+        tic_T_i = ions.n_i * g.geo_vpr**(5.0 / 3.0)
         toc_T_e = g.toc_temperature_factor
-        tic_T_e = core_profiles.n_e * g.geo_vpr**(5.0 / 3.0)
+        tic_T_e = n_e * g.geo_vpr**(5.0 / 3.0)
         toc_psi = (1.0 / g.resistivity_multiplier * g.cell_centers *
                    conductivity.sigma * g.mu0_pi16sq_Phib_sq_over_F_sq)
         tic_psi = jnp.ones_like(toc_psi)
         toc_dens_el = jnp.ones_like(g.geo_vpr)
         tic_dens_el = g.geo_vpr
         turbulent_transport = calculate_transport_coeffs(
-            core_profiles.T_i, core_profiles.T_e, core_profiles.n_e, core_profiles.psi,
-            core_profiles.n_i, core_profiles.n_i_bc,
-            core_profiles.n_impurity, core_profiles.n_impurity_bc,
-            core_profiles.q_face, core_profiles.A_i,
-            core_profiles.Z_eff_face, core_profiles.Z_i_face)
+            T_i, T_e, n_e, psi,
+            ions.n_i, ions.n_i_bc,
+            ions.n_impurity, ions.n_impurity_bc,
+            q_face, ions.A_i,
+            ions.Z_eff_face, ions.Z_i_face)
         chi_face_ion_total = turbulent_transport.chi_face_ion
         chi_face_el_total = turbulent_transport.chi_face_el
         d_face_el_total = turbulent_transport.d_face_el
         v_face_el_total = turbulent_transport.v_face_el
         d_face_psi = g.geo_g2g3_over_rhon_face
         v_face_psi = jnp.zeros_like(d_face_psi)
-        n_i_face_chi = compute_face_value_bc(core_profiles.n_i,
+        n_i_face_chi = compute_face_value_bc(ions.n_i,
                                              jnp.array(g.dx),
-                                             core_profiles.n_i_bc)
+                                             ions.n_i_bc)
         full_chi_face_ion = (g.geo_g1_over_vpr_face * n_i_face_chi *
                              g.keV_to_J * chi_face_ion_total)
         full_chi_face_el = (g.geo_g1_over_vpr_face * n_e_face * g.keV_to_J *
@@ -2257,7 +2238,6 @@ while True:
         x_old = core_profiles_to_solver_x_tuple(current_core_profiles)
         x_new_guess = core_profiles_to_solver_x_tuple(core_profiles_t_plus_dt)
         coeffs_exp = coeffs_callback(
-            current_core_profiles,
             x_old,
             explicit_source_profiles=explicit_source_profiles,
             explicit_call=True,
@@ -2266,7 +2246,6 @@ while True:
         for _ in range(0, g.n_corrector_steps + 1):
             x_input = x_new
             coeffs_new = coeffs_callback(
-                core_profiles_t_plus_dt,
                 x_input,
                 explicit_source_profiles=explicit_source_profiles,
             )
