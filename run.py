@@ -135,8 +135,6 @@ class TimeVaryingArray(BaseModelFrozen):
             data.pop("_get_cached_interpolated_param_cell_centers", None)
             data.pop("_get_cached_interpolated_param_face_centers", None)
             data.pop("_get_cached_interpolated_param_face_right_centers", None)
-        if isinstance(data, (float, int)):
-            data = {0.0: {0.0: data}}
         value = {}
         for t, v in data.items():
             x = np.array(list(v.keys()), dtype=np.float64)
@@ -149,13 +147,6 @@ class TimeVaryingArray(BaseModelFrozen):
         return InterpolatedVarTimeRho(
             self.value,
             rho_norm=g.cell_centers,
-        )
-
-    @functools.cached_property
-    def _get_cached_interpolated_param_face(self):
-        return InterpolatedVarTimeRho(
-            self.value,
-            rho_norm=g.face_centers,
         )
 
 
