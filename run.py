@@ -61,13 +61,6 @@ def make_bc(left_face_constraint=None,
     }
 
 
-def bc_from_cell_variable(cell_var):
-    return make_bc(
-        left_face_constraint=cell_var.left_face_constraint,
-        right_face_constraint=cell_var.right_face_constraint,
-        left_face_grad_constraint=cell_var.left_face_grad_constraint,
-        right_face_grad_constraint=cell_var.right_face_grad_constraint,
-    )
 
 
 def compute_face_grad(value,
@@ -163,19 +156,11 @@ def compute_cell_plus_boundaries_bc(value, dr, bc):
                                         bc["right_face_grad_constraint"])
 
 
-@chex.dataclass(frozen=True)
-class CellVariable:
-    value: Any
-    dr: Any
-    left_face_constraint: Any = None
-    right_face_constraint: Any = None
-    left_face_grad_constraint: Any = dataclasses.field(
-        default_factory=lambda: jnp.zeros(()))
-    right_face_grad_constraint: Any = dataclasses.field(
-        default_factory=lambda: jnp.zeros(()))
-
-    def get_boundary_conditions(self):
-        return bc_from_cell_variable(self)
+class SolverVariable(typing.NamedTuple):
+    """Minimal structure for solver - just value, dr, and bc dict."""
+    value: jax.Array
+    dr: jax.Array
+    bc: dict
 
 
 def make_convection_terms(v_face, d_face, value, dr, bc):
@@ -1399,8 +1384,7 @@ def core_profiles_to_solver_x_tuple(core_profiles, ):
         original_bc = core_profiles.boundary_conditions[name]
         scaling_factor = 1 / SCALING_FACTORS[name]
         operation = lambda x, factor: x * factor if x is not None else None
-        solver_x_tuple_cv = CellVariable(
-            value=operation(original_value, scaling_factor),
+        scaled_bc = make_bc(
             left_face_constraint=operation(original_bc["left_face_constraint"],
                                            scaling_factor),
             left_face_grad_constraint=operation(
@@ -1409,9 +1393,13 @@ def core_profiles_to_solver_x_tuple(core_profiles, ):
                 original_bc["right_face_constraint"], scaling_factor),
             right_face_grad_constraint=operation(
                 original_bc["right_face_grad_constraint"], scaling_factor),
-            dr=jnp.array(g.dx),
         )
-        x_tuple_for_solver_list.append(solver_x_tuple_cv)
+        solver_var = SolverVariable(
+            value=operation(original_value, scaling_factor),
+            dr=jnp.array(g.dx),
+            bc=scaled_bc,
+        )
+        x_tuple_for_solver_list.append(solver_var)
     return tuple(x_tuple_for_solver_list)
 
 
@@ -1419,24 +1407,23 @@ def solver_x_tuple_to_core_profiles(x_new, core_profiles):
     updated_vars = {}
     updated_bcs = {}
     for i, var_name in enumerate(g.evolving_names):
-        solver_x_tuple_cv = x_new[i]
+        solver_var = x_new[i]
         scaling_factor = SCALING_FACTORS[var_name]
         operation = lambda x, factor: x * factor if x is not None else None
-        updated_vars[var_name] = operation(solver_x_tuple_cv.value,
-                                           scaling_factor)
+        updated_vars[var_name] = operation(solver_var.value, scaling_factor)
         updated_bcs[var_name] = make_bc(
             left_face_constraint=operation(
-                solver_x_tuple_cv.left_face_constraint, scaling_factor),
+                solver_var.bc["left_face_constraint"], scaling_factor),
             left_face_grad_constraint=operation(
-                solver_x_tuple_cv.left_face_grad_constraint, scaling_factor),
+                solver_var.bc["left_face_grad_constraint"], scaling_factor),
             right_face_constraint=operation(
-                solver_x_tuple_cv.right_face_constraint, scaling_factor),
+                solver_var.bc["right_face_constraint"], scaling_factor),
             right_face_grad_constraint=operation(
-                solver_x_tuple_cv.right_face_grad_constraint, scaling_factor),
+                solver_var.bc["right_face_grad_constraint"], scaling_factor),
         )
     return dataclasses.replace(core_profiles,
-                               boundary_conditions=updated_bcs,
-                               **updated_vars)
+                              boundary_conditions=updated_bcs,
+                              **updated_vars)
 
 
 OptionalTupleMatrix: TypeAlias = tuple[tuple[jax.Array | None, ...],
@@ -2371,7 +2358,7 @@ while current_t < (g.t_final - g.tolerance):
                         d_face[i],
                         x[i].value,
                         x[i].dr,
-                        x[i].get_boundary_conditions(),
+                        x[i].bc,
                     )
                     c_mat[i][i] += diffusion_mat
                     c[i] += diffusion_vec
@@ -2388,7 +2375,7 @@ while current_t < (g.t_final - g.tolerance):
                         d_face_i,
                         x[i].value,
                         x[i].dr,
-                        x[i].get_boundary_conditions(),
+                        x[i].bc,
                     )
                     c_mat[i][i] += conv_mat
                     c[i] += conv_vec
@@ -2413,7 +2400,7 @@ while current_t < (g.t_final - g.tolerance):
             x_new = jnp.linalg.solve(lhs_mat, rhs)
             x_new = jnp.split(x_new, len(x_old))
             out = [
-                dataclasses.replace(var, value=value)
+                SolverVariable(value=value, dr=var.dr, bc=var.bc)
                 for var, value in zip(x_new_guess, x_new)
             ]
             out = tuple(out)
