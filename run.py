@@ -691,8 +691,6 @@ def build_source_profiles0(core_profiles,
 def build_source_profiles1(core_profiles,
                            explicit_source_profiles=None,
                            conductivity=None):
-    # Inlined get_qei
-    zeros = jnp.zeros_like(g.cell_centers)
     log_lambda_ei = 31.3 - 0.5 * jnp.log(core_profiles.n_e.value) + jnp.log(
         core_profiles.T_e.value * 1e3)
     log_tau_e_Z1 = _calculate_log_tau_e_Z1(
