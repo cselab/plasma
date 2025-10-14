@@ -1224,49 +1224,16 @@ class QeiSourceConfig(SourceModelBase):
         return QeiSource(model_func=self.model_func)
 
 
-class Sources(BaseModelFrozen):
-    ei_exchange: QeiSourceConfig = ValidatedDefault({"mode": "ZERO"})
-    cyclotron_radiation: None = pydantic.Field(
-        discriminator="model_name",
-        default=None,
-    )
-    fusion: FusionHeatSourceConfig | None = pydantic.Field(
-        discriminator="model_name",
-        default=None,
-    )
-    gas_puff: GasPuffSourceConfig | None = pydantic.Field(
-        discriminator="model_name",
-        default=None,
-    )
-    generic_current: GenericCurrentSourceConfig = ValidatedDefault(
-        {"mode": "ZERO"})
-    generic_heat: GenericIonElHeatSourceConfig | None = pydantic.Field(
-        discriminator="model_name",
-        default=None,
-    )
-    generic_particle: GenericParticleSourceConfig | None = pydantic.Field(
-        discriminator="model_name",
-        default=None,
-    )
-    impurity_radiation: None = pydantic.Field(
-        discriminator="model_name",
-        default=None,
-    )
-    pellet: PelletSourceConfig | None = pydantic.Field(
-        discriminator="model_name",
-        default=None,
-    )
-
 def build_models():
     standard_sources = {}
-    for k, v in dict(g.sources).items():
+    for k, v in g.sources.items():
         if k == "ei_exchange":
             continue
         else:
             if v is not None:
                 source = v.build_source()
                 standard_sources[k] = source
-                qei_source_model = g.sources.ei_exchange.build_source()
+                qei_source_model = g.sources["ei_exchange"].build_source()
     return SourceModels(
         qei_source=qei_source_model,
         standard_sources=immutabledict.immutabledict(standard_sources),
@@ -2304,7 +2271,7 @@ def build_runtime_params_slice(t):
     return RuntimeParamsSlice(
         sources={
             source_name: source_config.build_runtime_params(t)
-            for source_name, source_config in dict(g.sources).items()
+            for source_name, source_config in g.sources.items()
             if source_config is not None
         },
         profile_conditions=g.profile_conditions.build_runtime_params(t),
@@ -2362,40 +2329,40 @@ g.profile_conditions = ProfileConditions(
     nbar=g.nbar,
     n_e=g.n_e_initial,
 )
-g.sources = Sources(
-    generic_current={
-        "model_name": "gaussian",
-        "fraction_of_total_current": g.generic_current_fraction,
-        "gaussian_width": g.generic_current_width,
-        "gaussian_location": g.generic_current_location,
-    },
-    generic_particle={
-        "model_name": "gaussian",
-        "S_total": g.generic_particle_S_total,
-        "deposition_location": g.generic_particle_location,
-        "particle_width": g.generic_particle_width,
-    },
-    gas_puff={
-        "model_name": "exponential",
-        "puff_decay_length": g.gas_puff_decay_length,
-        "S_total": g.gas_puff_S_total,
-    },
-    pellet={
-        "model_name": "gaussian",
-        "S_total": g.pellet_S_total,
-        "pellet_width": g.pellet_width,
-        "pellet_deposition_location": g.pellet_location,
-    },
-    generic_heat={
-        "model_name": "gaussian",
-        "gaussian_location": g.generic_heat_location,
-        "gaussian_width": g.generic_heat_width,
-        "P_total": g.generic_heat_P_total,
-        "electron_heat_fraction": g.generic_heat_electron_fraction,
-    },
-    fusion={"model_name": "bosch_hale"},
-    ei_exchange={},
-)
+g.sources = {
+    "generic_current": GenericCurrentSourceConfig(
+        model_name="gaussian",
+        fraction_of_total_current=g.generic_current_fraction,
+        gaussian_width=g.generic_current_width,
+        gaussian_location=g.generic_current_location,
+    ),
+    "generic_particle": GenericParticleSourceConfig(
+        model_name="gaussian",
+        S_total=g.generic_particle_S_total,
+        deposition_location=g.generic_particle_location,
+        particle_width=g.generic_particle_width,
+    ),
+    "gas_puff": GasPuffSourceConfig(
+        model_name="exponential",
+        puff_decay_length=g.gas_puff_decay_length,
+        S_total=g.gas_puff_S_total,
+    ),
+    "pellet": PelletSourceConfig(
+        model_name="gaussian",
+        S_total=g.pellet_S_total,
+        pellet_width=g.pellet_width,
+        pellet_deposition_location=g.pellet_location,
+    ),
+    "generic_heat": GenericIonElHeatSourceConfig(
+        model_name="gaussian",
+        gaussian_location=g.generic_heat_location,
+        gaussian_width=g.generic_heat_width,
+        P_total=g.generic_heat_P_total,
+        electron_heat_fraction=g.generic_heat_electron_fraction,
+    ),
+    "fusion": FusionHeatSourceConfig(model_name="bosch_hale"),
+    "ei_exchange": QeiSourceConfig(mode="ZERO"),
+}
 g.chi_pereverzev = 30
 g.D_pereverzev = 15
 g.theta_implicit = 1.0
