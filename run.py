@@ -850,16 +850,6 @@ def build_standard_source_profiles(*,
             calculate_source(source_name)
 
 
-class SetTemperatureDensityPedestalModel:
-
-    def __call__(self, geo, core_profiles):
-        return self._call_implementation(geo, core_profiles)
-
-    def _call_implementation(self, geo, core_profiles):
-        # Return rho_norm_ped_top_idx directly (inlined PedestalModelOutput)
-        return jnp.abs(g.cell_centers - g.rho_norm_ped_top).argmin()
-
-
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass
 class TurbulentTransport:
@@ -1243,7 +1233,7 @@ def calculate_transport_coeffs(geo, core_profiles,
 
 @jax.jit
 def calculate_total_transport_coeffs(geo, core_profiles):
-    rho_norm_ped_top_idx = g.pedestal_model(geo, core_profiles)
+    rho_norm_ped_top_idx = jnp.abs(g.cell_centers - g.rho_norm_ped_top).argmin()
     turbulent_transport = calculate_transport_coeffs(
         geo=geo,
         core_profiles=core_profiles,
@@ -1519,7 +1509,7 @@ def coeffs_callback(core_profiles,
 @jax.jit
 def _calc_coeffs_full(geo, core_profiles,
                       explicit_source_profiles):
-    rho_norm_ped_top_idx = g.pedestal_model(geo, core_profiles)
+    rho_norm_ped_top_idx = jnp.abs(g.cell_centers - g.rho_norm_ped_top).argmin()
     mask = (jnp.zeros_like(g.geo_rho,
                            dtype=bool).at[rho_norm_ped_top_idx].set(True))
     conductivity = calculate_conductivity(geo, core_profiles)
@@ -1973,7 +1963,6 @@ first_element = jnp.ones_like(g.geo_rho_b) / g.geo_rho_b**2
 g.geo_g1_over_vpr2_face = jnp.concatenate(
     [jnp.expand_dims(first_element, axis=-1), bulk], axis=-1)
 
-g.pedestal_model = SetTemperatureDensityPedestalModel()
 # Simplified source registry using SourceHandler - replaces entire Source class hierarchy
 g.source_registry = {
     "generic_current": SourceHandler(
