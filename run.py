@@ -1550,24 +1550,6 @@ class PedestalConfig(BaseModelFrozen):
         return SetTemperatureDensityPedestalModel()
 
 
-class IonMixture(BaseModelFrozen):
-    species: IonMapping
-
-
-def _impurity_before_validator(value):
-    return {value: 1.0}
-
-
-ImpurityMapping: TypeAlias = Annotated[
-    Mapping[str, TimeVaryingArray],
-    pydantic.BeforeValidator(_impurity_before_validator),
-]
-
-
-class ImpurityFractions(BaseModelFrozen):
-    species: ImpurityMapping = ValidatedDefault({"Ne": 1.0})
-
-
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass
 class RuntimeParamsPC:
@@ -1624,12 +1606,7 @@ class RuntimeParamsP:
 
 
 class PlasmaComposition(BaseModelFrozen):
-    main_ion: IonMapping
     Z_eff: TimeVaryingArray
-
-    @functools.cached_property
-    def _main_ion_mixture(self):
-        return IonMixture.model_construct(species=self.main_ion, )
 
     def build_runtime_params(self, t):
         return RuntimeParamsP(
@@ -2571,13 +2548,7 @@ g.a_minor = 2.0
 g.B_0 = 5.3
 g.tolerance = 1e-7
 g.n_corrector_steps = 1
-g.plasma_composition = PlasmaComposition(
-    main_ion={
-        "D": 0.5,
-        "T": 0.5
-    },
-    Z_eff=1.6,
-)
+g.plasma_composition = PlasmaComposition(Z_eff=1.6)
 g.impurity_names = ('Ne', )
 g.main_ion_names = 'D', 'T'
 # Pre-compute impurity parameters (constant values for 'Ne')
