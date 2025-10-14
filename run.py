@@ -871,22 +871,6 @@ class QualikizInputs:
     alpha: Any
     epsilon_lcfs: Any
 
-    @property
-    def Ati(self):
-        return self.lref_over_lti
-
-    @property
-    def Ate(self):
-        return self.lref_over_lte
-
-    @property
-    def Ane(self):
-        return self.lref_over_lne
-
-    @property
-    def Ani0(self):
-        return self.lref_over_lni0
-
 
 _FLUX_NAME_MAP: Final[Mapping[str, str]] = immutabledict.immutabledict({
     "efiITG":
@@ -1035,8 +1019,12 @@ def calculate_transport_coeffs(geo, core_profiles,
         x=qualikiz_inputs.x * qualikiz_inputs.epsilon_lcfs / _EPSILON_NN,
     )
     # Inlined get_model_inputs_from_qualikiz_inputs
+    # Map model input names to QualikizInputs attributes
     input_map = {
-        "Ani": lambda x: x.Ani0,
+        "Ati": lambda x: x.lref_over_lti,
+        "Ate": lambda x: x.lref_over_lte,
+        "Ane": lambda x: x.lref_over_lne,
+        "Ani": lambda x: x.lref_over_lni0,
         "LogNuStar": lambda x: x.log_nu_star_face,
     }
 
