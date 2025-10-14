@@ -1126,8 +1126,7 @@ def calculate_transport_coeffs(core_profiles):
 @jax.jit
 def calculate_total_transport_coeffs(core_profiles):
     turbulent_transport = calculate_transport_coeffs(
-        core_profiles=core_profiles,
-        rho_norm_ped_top_idx=None,
+        core_profiles=core_profiles
     )
     return CoreTransport(**dataclasses.asdict(turbulent_transport))
 
@@ -1422,8 +1421,7 @@ def coeffs_callback(core_profiles,
         tic_psi = jnp.ones_like(toc_psi)
         toc_dens_el = jnp.ones_like(g.geo_vpr)
         tic_dens_el = g.geo_vpr
-        turbulent_transport = calculate_transport_coeffs(core_profiles,
-                                                         None)
+        turbulent_transport = calculate_transport_coeffs(core_profiles)
         chi_face_ion_total = turbulent_transport.chi_face_ion
         chi_face_el_total = turbulent_transport.chi_face_el
         d_face_el_total = turbulent_transport.d_face_el
