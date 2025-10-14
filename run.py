@@ -218,7 +218,6 @@ g.z = dict(zip(g.sym, [1.0, 1.0, 10.0]))
 g.A = dict(zip(g.sym, [2.0141, 3.0160, 20.180]))
 
 
-
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class RuntimeParamsSlice:
@@ -1579,32 +1578,8 @@ ImpurityMapping: TypeAlias = Annotated[
 ]
 
 
-@jax.tree_util.register_dataclass
-@dataclasses.dataclass(frozen=True)
-class RuntimeParamsIF:
-    fractions: Any
-    fractions_face: Any
-    A_avg: Any
-    A_avg_face: Any
-
-
 class ImpurityFractions(BaseModelFrozen):
     species: ImpurityMapping = ValidatedDefault({"Ne": 1.0})
-
-    def build_runtime_params(self, t):
-        ions = self.species.keys()
-        fractions = jnp.array([self.species[ion].get_value(t) for ion in ions])
-        fractions_face = jnp.array(
-            [self.species[ion].get_value(t, grid_type="face") for ion in ions])
-        As = jnp.array([g.A[ion] for ion in ions])
-        A_avg = jnp.sum(As[..., jnp.newaxis] * fractions, axis=0)
-        A_avg_face = jnp.sum(As[..., jnp.newaxis] * fractions_face, axis=0)
-        return RuntimeParamsIF(
-            fractions=fractions,
-            fractions_face=fractions_face,
-            A_avg=A_avg,
-            A_avg_face=A_avg_face,
-        )
 
 
 @jax.tree_util.register_dataclass
@@ -1659,13 +1634,11 @@ class ProfileConditions(BaseModelFrozen):
 @dataclasses.dataclass
 class RuntimeParamsP:
     main_ion: Any
-    impurity: Any
     Z_eff: Any
     Z_eff_face: Any
 
 
 class PlasmaComposition(BaseModelFrozen):
-    impurity: ImpurityFractions
     main_ion: IonMapping
     Z_eff: TimeVaryingArray
 
@@ -1676,7 +1649,6 @@ class PlasmaComposition(BaseModelFrozen):
     def build_runtime_params(self, t):
         return RuntimeParamsP(
             main_ion=self._main_ion_mixture.build_runtime_params(t),
-            impurity=self.impurity.build_runtime_params(t),
             Z_eff=self.Z_eff.get_value(t),
             Z_eff_face=self.Z_eff.get_value(t, grid_type="face"),
         )
@@ -2182,17 +2154,16 @@ def get_updated_ions(runtime_params, n_e, T_e):
         fractions=runtime_params.plasma_composition.main_ion.fractions,
     )
     Z_i_face = Z_i_face_Z2_avg / Z_i_face_avg
-    impurity_params = runtime_params.plasma_composition.impurity
     Z_impurity_avg, Z_impurity_Z2_avg, _ = get_average_charge_state(
         ion_symbols=g.impurity_names,
         T_e=T_e.value,
-        fractions=impurity_params.fractions,
+        fractions=g.impurity_fractions,
     )
     Z_impurity = Z_impurity_Z2_avg / Z_impurity_avg
     Z_impurity_face_avg, Z_impurity_face_Z2_avg, _ = get_average_charge_state(
         ion_symbols=g.impurity_names,
         T_e=T_e.face_value(),
-        fractions=impurity_params.fractions_face,
+        fractions=g.impurity_fractions_face,
     )
     Z_impurity_face = Z_impurity_face_Z2_avg / Z_impurity_face_avg
     Z_eff = runtime_params.plasma_composition.Z_eff
@@ -2235,7 +2206,7 @@ def get_updated_ions(runtime_params, n_e, T_e):
                   n_impurity.face_value()) / n_e.face_value()
     impurity_fractions_dict = {}
     for i, symbol in enumerate(g.impurity_names):
-        fraction = impurity_params.fractions[i]
+        fraction = g.impurity_fractions[i]
         impurity_fractions_dict[symbol] = fraction
     return Ions(
         n_i=n_i,
@@ -2246,8 +2217,8 @@ def get_updated_ions(runtime_params, n_e, T_e):
         Z_impurity=Z_impurity,
         Z_impurity_face=Z_impurity_face,
         A_i=runtime_params.plasma_composition.main_ion.A_avg,
-        A_impurity=impurity_params.A_avg,
-        A_impurity_face=impurity_params.A_avg_face,
+        A_impurity=g.impurity_A_avg,
+        A_impurity_face=g.impurity_A_avg_face,
         Z_eff=Z_eff,
         Z_eff_face=Z_eff_face,
     )
@@ -2621,13 +2592,15 @@ g.plasma_composition = PlasmaComposition(
         "D": 0.5,
         "T": 0.5
     },
-    impurity={
-        'species': 'Ne'
-    },
     Z_eff=1.6,
 )
 g.impurity_names = ('Ne', )
 g.main_ion_names = 'D', 'T'
+# Pre-compute impurity parameters (constant values for 'Ne')
+g.impurity_fractions = jnp.array([1.0])
+g.impurity_fractions_face = jnp.array([1.0])
+g.impurity_A_avg = g.A['Ne']
+g.impurity_A_avg_face = g.A['Ne']
 
 g.Ip = 10.5e6
 g.T_i_initial = {0.0: {0.0: 15.0, 1.0: 0.2}}
