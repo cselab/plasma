@@ -877,32 +877,27 @@ g.FLUX_NAME_MAP = immutabledict.immutabledict({
 g.EPSILON_NN = 1 / 3
 
 
-def calculate_transport_coeffs(core_profiles):
-    T_i_face = compute_face_value_bc(core_profiles.T_i, jnp.array(g.dx),
-                                     g.T_i_bc)
-    T_i_face_grad_rmid = compute_face_grad_bc(core_profiles.T_i,
+def calculate_transport_coeffs(T_i, T_e, n_e, psi, n_i, n_i_bc, n_impurity, n_impurity_bc, q_face, A_i, Z_eff_face, Z_i_face):
+    T_i_face = compute_face_value_bc(T_i, jnp.array(g.dx), g.T_i_bc)
+    T_i_face_grad_rmid = compute_face_grad_bc(T_i,
                                               jnp.array(g.dx),
                                               g.T_i_bc,
                                               x=g.geo_rmid)
-    T_e_face = compute_face_value_bc(core_profiles.T_e, jnp.array(g.dx),
-                                     g.T_e_bc)
-    T_e_face_grad_rmid = compute_face_grad_bc(core_profiles.T_e,
+    T_e_face = compute_face_value_bc(T_e, jnp.array(g.dx), g.T_e_bc)
+    T_e_face_grad_rmid = compute_face_grad_bc(T_e,
                                               jnp.array(g.dx),
                                               g.T_e_bc,
                                               x=g.geo_rmid)
-    n_e_face = compute_face_value_bc(core_profiles.n_e, jnp.array(g.dx),
-                                     g.n_e_bc)
-    n_e_face_grad_rmid = compute_face_grad_bc(core_profiles.n_e,
+    n_e_face = compute_face_value_bc(n_e, jnp.array(g.dx), g.n_e_bc)
+    n_e_face_grad_rmid = compute_face_grad_bc(n_e,
                                               jnp.array(g.dx),
                                               g.n_e_bc,
                                               x=g.geo_rmid)
-    n_e_face_grad = compute_face_grad_bc(core_profiles.n_e, jnp.array(g.dx),
-                                         g.n_e_bc)
-    psi_face_grad = compute_face_grad_bc(core_profiles.psi, jnp.array(g.dx),
-                                         g.psi_bc)
+    n_e_face_grad = compute_face_grad_bc(n_e, jnp.array(g.dx), g.n_e_bc)
+    psi_face_grad = compute_face_grad_bc(psi, jnp.array(g.dx), g.psi_bc)
     rmid = g.geo_rmid
     rmid_face = g.geo_rmid_face
-    chiGB = ((core_profiles.A_i * g.m_amu)**0.5 / (g.geo_B_0 * g.q_e)**2 *
+    chiGB = ((A_i * g.m_amu)**0.5 / (g.geo_B_0 * g.q_e)**2 *
              (T_i_face * g.keV_to_J)**1.5 / g.geo_a_minor)
     lref_over_lti_result = jnp.where(
         jnp.abs(T_i_face) < g.eps,
@@ -925,11 +920,10 @@ def calculate_transport_coeffs(core_profiles):
     )
     lref_over_lne = jnp.where(
         jnp.abs(lref_over_lne_result) < g.eps, g.eps, lref_over_lne_result)
-    n_i_face = compute_face_value_bc(core_profiles.n_i, jnp.array(g.dx),
-                                     core_profiles.n_i_bc)
-    n_i_face_grad = compute_face_grad_bc(core_profiles.n_i,
+    n_i_face = compute_face_value_bc(n_i, jnp.array(g.dx), n_i_bc)
+    n_i_face_grad = compute_face_grad_bc(n_i,
                                          jnp.array(g.dx),
-                                         core_profiles.n_i_bc,
+                                         n_i_bc,
                                          x=rmid)
     lref_over_lni0_result = jnp.where(
         jnp.abs(n_i_face) < g.eps,
@@ -938,12 +932,12 @@ def calculate_transport_coeffs(core_profiles):
     )
     lref_over_lni0 = jnp.where(
         jnp.abs(lref_over_lni0_result) < g.eps, g.eps, lref_over_lni0_result)
-    n_impurity_face = compute_face_value_bc(core_profiles.n_impurity,
+    n_impurity_face = compute_face_value_bc(n_impurity,
                                             jnp.array(g.dx),
-                                            core_profiles.n_impurity_bc)
-    n_impurity_face_grad = compute_face_grad_bc(core_profiles.n_impurity,
+                                            n_impurity_bc)
+    n_impurity_face_grad = compute_face_grad_bc(n_impurity,
                                                 jnp.array(g.dx),
-                                                core_profiles.n_impurity_bc,
+                                                n_impurity_bc,
                                                 x=rmid)
     lref_over_lni1_result = jnp.where(
         jnp.abs(n_impurity_face) < g.eps,
@@ -952,7 +946,7 @@ def calculate_transport_coeffs(core_profiles):
     )
     lref_over_lni1 = jnp.where(
         jnp.abs(lref_over_lni1_result) < g.eps, g.eps, lref_over_lni1_result)
-    q = core_profiles.q_face
+    q = q_face
     iota_scaled = jnp.abs((psi_face_grad[1:] / g.face_centers[1:]))
     iota_scaled0 = jnp.expand_dims(jnp.abs(psi_face_grad[1] / jnp.array(g.dx)),
                                    axis=0)
@@ -969,11 +963,11 @@ def calculate_transport_coeffs(core_profiles):
         n_e_face,
         log_lambda_ei_face,
     )
-    nu_e = (1 / jnp.exp(log_tau_e_Z1) * core_profiles.Z_eff_face *
+    nu_e = (1 / jnp.exp(log_tau_e_Z1) * Z_eff_face *
             g.collisionality_multiplier)
     epsilon = g.geo_rho_face / g.R_major
     epsilon = jnp.clip(epsilon, g.eps)
-    tau_bounce = (core_profiles.q_face * g.R_major /
+    tau_bounce = (q_face * g.R_major /
                   (epsilon**1.5 * jnp.sqrt(T_e_face * g.keV_to_J / g.m_e)))
     tau_bounce = tau_bounce.at[0].set(tau_bounce[1])
     nu_star = nu_e * tau_bounce
@@ -994,7 +988,7 @@ def calculate_transport_coeffs(core_profiles):
     )
     normni = n_i_face / n_e_face
     qualikiz_inputs = QualikizInputs(
-        Z_eff_face=core_profiles.Z_eff_face,
+        Z_eff_face=Z_eff_face,
         lref_over_lti=lref_over_lti,
         lref_over_lte=lref_over_lte,
         lref_over_lne=lref_over_lne,
@@ -1179,9 +1173,9 @@ def calculate_transport_coeffs(core_profiles):
     return jax.tree_util.tree_map(smooth_single_coeff, transport_coeffs)
 
 
-def calculate_total_transport_coeffs(core_profiles):
+def calculate_total_transport_coeffs(T_i, T_e, n_e, psi, n_i, n_i_bc, n_impurity, n_impurity_bc, q_face, A_i, Z_eff_face, Z_i_face):
     turbulent_transport = calculate_transport_coeffs(
-        core_profiles=core_profiles)
+        T_i, T_e, n_e, psi, n_i, n_i_bc, n_impurity, n_impurity_bc, q_face, A_i, Z_eff_face, Z_i_face)
     return CoreTransport(**dataclasses.asdict(turbulent_transport))
 
 
@@ -1480,7 +1474,12 @@ def coeffs_callback(core_profiles,
         tic_psi = jnp.ones_like(toc_psi)
         toc_dens_el = jnp.ones_like(g.geo_vpr)
         tic_dens_el = g.geo_vpr
-        turbulent_transport = calculate_transport_coeffs(core_profiles)
+        turbulent_transport = calculate_transport_coeffs(
+            core_profiles.T_i, core_profiles.T_e, core_profiles.n_e, core_profiles.psi,
+            core_profiles.n_i, core_profiles.n_i_bc,
+            core_profiles.n_impurity, core_profiles.n_impurity_bc,
+            core_profiles.q_face, core_profiles.A_i,
+            core_profiles.Z_eff_face, core_profiles.Z_i_face)
         chi_face_ion_total = turbulent_transport.chi_face_ion
         chi_face_el_total = turbulent_transport.chi_face_el
         d_face_el_total = turbulent_transport.d_face_el
@@ -2067,7 +2066,13 @@ initial_core_sources = build_source_profiles1(
     explicit_source_profiles=explicit_source_profiles,
     conductivity=conductivity,
 )
-core_transport = calculate_total_transport_coeffs(initial_core_profiles, )
+core_transport = calculate_total_transport_coeffs(
+    initial_core_profiles.T_i, initial_core_profiles.T_e,
+    initial_core_profiles.n_e, initial_core_profiles.psi,
+    initial_core_profiles.n_i, initial_core_profiles.n_i_bc,
+    initial_core_profiles.n_impurity, initial_core_profiles.n_impurity_bc,
+    initial_core_profiles.q_face, initial_core_profiles.A_i,
+    initial_core_profiles.Z_eff_face, initial_core_profiles.Z_i_face)
 current_t = np.array(g.t_initial)
 current_core_profiles = initial_core_profiles
 state_history = [(current_t, current_core_profiles)]
@@ -2351,7 +2356,13 @@ while True:
         psidot=psidot_value,
         psidot_bc=psidot_bc,
     )
-    core_transport = calculate_total_transport_coeffs(final_core_profiles, )
+    core_transport = calculate_total_transport_coeffs(
+        final_core_profiles.T_i, final_core_profiles.T_e,
+        final_core_profiles.n_e, final_core_profiles.psi,
+        final_core_profiles.n_i, final_core_profiles.n_i_bc,
+        final_core_profiles.n_impurity, final_core_profiles.n_impurity_bc,
+        final_core_profiles.q_face, final_core_profiles.A_i,
+        final_core_profiles.Z_eff_face, final_core_profiles.Z_i_face)
     current_t = current_t + result[1]
     current_core_profiles = final_core_profiles
     state_history.append((current_t, current_core_profiles))
