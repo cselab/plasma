@@ -2206,21 +2206,23 @@ while current_t < (g.t_final - g.tolerance):
             explicit_call=True,
         )
 
-        def solver_loop_body(i, x_new_guess):
+        x_new = x_new_guess
+        for _ in range(0, g.n_corrector_steps + 1):
+            x_input = x_new
             coeffs_new = coeffs_callback(
                 core_profiles_t_plus_dt,
-                x_new_guess,
+                x_input,
                 explicit_source_profiles=explicit_source_profiles,
             )
             x_old_vec = jnp.concatenate([x.value for x in x_old])
-            x_new_guess_vec = jnp.concatenate([x.value for x in x_new_guess])
+            x_new_guess_vec = jnp.concatenate([x.value for x in x_input])
             theta_exp = 1.0 - g.theta_implicit
             tc_in_old = jnp.concatenate(coeffs_exp.transient_in_cell)
             tc_out_new = jnp.concatenate(coeffs_new.transient_out_cell)
             tc_in_new = jnp.concatenate(coeffs_new.transient_in_cell)
             left_transient = jnp.identity(len(x_new_guess_vec))
             right_transient = jnp.diag(jnp.squeeze(tc_in_old / tc_in_new))
-            x = x_new_guess
+            x = x_input
             coeffs = coeffs_new
             d_face = coeffs.d_face
             v_face = coeffs.v_face
@@ -2284,14 +2286,9 @@ while current_t < (g.t_final - g.tolerance):
             x_new = jnp.split(x_new, len(x_old))
             out = [
                 SolverVariable(value=value, dr=var.dr, bc=var.bc)
-                for var, value in zip(x_new_guess, x_new)
+                for var, value in zip(x_input, x_new)
             ]
-            out = tuple(out)
-            return out
-
-        x_new = x_new_guess
-        for i in range(0, g.n_corrector_steps + 1):
-            x_new = solver_loop_body(i, x_new)
+            x_new = tuple(out)
         solver_numeric_outputs = 0
         loop_output = (
             x_new,
