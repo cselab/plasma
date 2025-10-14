@@ -120,11 +120,7 @@ class TimeVaryingArray(BaseModelFrozen):
     grid: Any = None
 
     def get_value(self, t, grid_type="cell"):
-        match grid_type:
-            case "cell":
-                return self._get_cached_interpolated_param_cell.get_value(t)
-            case "face":
-                return self._get_cached_interpolated_param_face.get_value(t)
+        return self._get_cached_interpolated_param_cell.get_value(t)
 
     @pydantic.field_validator("value", mode="after")
     @classmethod
