@@ -2134,7 +2134,11 @@ core_transport = calculate_total_transport_coeffs(
     initial_core_profiles.Z_eff_face, initial_core_profiles.Z_i_face)
 current_t = np.array(g.t_initial)
 current_core_profiles = initial_core_profiles
-state_history = [(current_t, current_core_profiles)]
+state_history_t = [current_t]
+state_history_T_i = [initial_core_profiles.T_i]
+state_history_T_e = [initial_core_profiles.T_e]
+state_history_psi = [initial_core_profiles.psi]
+state_history_n_e = [initial_core_profiles.n_e]
 while True:
     explicit_source_profiles = build_source_profiles0(
         current_core_profiles.T_i, current_core_profiles.T_e,
@@ -2439,21 +2443,29 @@ while True:
         final_core_profiles.Z_eff_face, final_core_profiles.Z_i_face)
     current_t = current_t + result[1]
     current_core_profiles = final_core_profiles
-    state_history.append((current_t, current_core_profiles))
+    state_history_t.append(current_t)
+    state_history_T_i.append(final_core_profiles.T_i)
+    state_history_T_e.append(final_core_profiles.T_e)
+    state_history_psi.append(final_core_profiles.psi)
+    state_history_n_e.append(final_core_profiles.n_e)
     if current_t >= (g.t_final - g.tolerance):
         break
-t = np.array([state_t for state_t, _ in state_history])
+t = np.array(state_history_t)
 rho = np.concatenate([[0.0], np.asarray(g.cell_centers), [1.0]])
 (nt, ) = np.shape(t)
+state_history_dict = {
+    "T_i": state_history_T_i,
+    "T_e": state_history_T_e,
+    "psi": state_history_psi,
+    "n_e": state_history_n_e,
+}
 evolving_data = {}
 for var_name in g.evolving_names:
-    var_data = []
     var_bc = getattr(g, f"{var_name}_bc")
-    for state_t, state_core_profiles in state_history:
-        var_value = getattr(state_core_profiles, var_name)
-        data = compute_cell_plus_boundaries_bc(var_value, jnp.array(g.dx),
-                                               var_bc)
-        var_data.append(data)
+    var_data = [
+        compute_cell_plus_boundaries_bc(var_value, jnp.array(g.dx), var_bc)
+        for var_value in state_history_dict[var_name]
+    ]
     evolving_data[var_name] = np.stack(var_data)
 with open("run.raw", "wb") as f:
     t.tofile(f)
