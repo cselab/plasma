@@ -1262,7 +1262,7 @@ def get_updated_electron_density():
     C = (target_nbar - 0.5 * n_e_face[-1] * dr_edge / a_minor_out) / (
         nbar_from_n_e_face_inner + 0.5 * n_e_face[-2] * dr_edge / a_minor_out)
     n_e_value = C * n_e_value
-    return n_e_value, g.n_e_bc
+    return n_e_value
 
 
 @jax.jit
@@ -1990,7 +1990,7 @@ g.boundary_conditions = {
 Ip_scale_factor = g.Ip / g.geo_Ip_profile_face_base[-1]
 T_i = g.T_i
 T_e = g.T_e
-n_e, _ = get_updated_electron_density()  # BC already in g.n_e_bc
+n_e = get_updated_electron_density()
 ions = get_updated_ions(n_e, g.n_e_bc, T_e, g.T_e_bc)
 v_loop_lcfs = np.array(0.0, dtype=jnp.float64)
 psidot = np.zeros_like(g.geo_rho)
@@ -2144,8 +2144,7 @@ while current_t < (g.t_final - g.tolerance):
         dt = loop_dt
         output = loop_output
         core_profiles_t = current_core_profiles
-        n_e, n_e_bc_temp = get_updated_electron_density()
-        n_e_right_bc = n_e_bc_temp["right_face_constraint"]
+        n_e = get_updated_electron_density()
         n_e_bc_edge = {
             **core_profiles_t.boundary_conditions["n_e"], "right_face_constraint":
             g.n_e_right_bc
@@ -2166,8 +2165,8 @@ while current_t < (g.t_final - g.tolerance):
         dilution_factor_edge = (Z_impurity_edge -
                                 Z_eff_edge) / (Z_i_edge *
                                                (Z_impurity_edge - Z_i_edge))
-        n_i_bound_right = n_e_right_bc * dilution_factor_edge
-        n_impurity_bound_right = (n_e_right_bc -
+        n_i_bound_right = g.n_e_right_bc * dilution_factor_edge
+        n_impurity_bound_right = (g.n_e_right_bc -
                                   n_i_bound_right * Z_i_edge) / Z_impurity_edge
         # Evolving variables use precomputed g.boundary_conditions (constant)
         # Only n_i and n_impurity BCs vary based on edge ions
