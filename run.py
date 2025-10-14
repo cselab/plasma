@@ -502,22 +502,16 @@ def gaussian_profile(geo, *, center, width, total):
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class QeiInfo:
-    qei_coef: jax.Array
     implicit_ii: jax.Array
-    explicit_i: jax.Array
     implicit_ee: jax.Array
-    explicit_e: jax.Array
     implicit_ie: jax.Array
     implicit_ei: jax.Array
 
     @classmethod
     def zeros(cls, geo):
         return QeiInfo(
-            qei_coef=jnp.zeros_like(g.geo_rho),
             implicit_ii=jnp.zeros_like(g.geo_rho),
-            explicit_i=jnp.zeros_like(g.geo_rho),
             implicit_ee=jnp.zeros_like(g.geo_rho),
-            explicit_e=jnp.zeros_like(g.geo_rho),
             implicit_ie=jnp.zeros_like(g.geo_rho),
             implicit_ei=jnp.zeros_like(g.geo_rho),
         )
@@ -746,20 +740,11 @@ def build_source_profiles1(core_profiles,
                     jnp.log(g.keV_to_J / g.m_amu) + jnp.log(2 * g.m_e) +
                     jnp.log(weighted_Z_eff) - log_tau_e_Z1)
     qei_coef = jnp.exp(log_Qei_coef)
-    implicit_ii = -qei_coef
-    implicit_ee = -qei_coef
-    explicit_i = zeros
-    explicit_e = zeros
-    implicit_ie = qei_coef
-    implicit_ei = qei_coef
     qei = QeiInfo(
-        qei_coef=qei_coef,
-        implicit_ii=implicit_ii,
-        explicit_i=explicit_i,
-        implicit_ee=implicit_ee,
-        explicit_e=explicit_e,
-        implicit_ie=implicit_ie,
-        implicit_ei=implicit_ei,
+        implicit_ii=-qei_coef,
+        implicit_ee=-qei_coef,
+        implicit_ie=qei_coef,
+        implicit_ei=qei_coef,
     )
     result = _calculate_bootstrap_current(
         Z_eff_face=core_profiles.Z_eff_face,
@@ -1556,9 +1541,7 @@ def _calc_coeffs_full(geo, core_profiles,
     source_e = merged_source_profiles.total_sources("T_e", geo)
     qei = merged_source_profiles.qei
     source_mat_ii = qei.implicit_ii * g.geo_vpr
-    source_i += qei.explicit_i * g.geo_vpr
     source_mat_ee = qei.implicit_ee * g.geo_vpr
-    source_e += qei.explicit_e * g.geo_vpr
     source_mat_ie = qei.implicit_ie * g.geo_vpr
     source_mat_ei = qei.implicit_ei * g.geo_vpr
     source_i += mask * g.adaptive_T_source_prefactor * g.T_i_ped
