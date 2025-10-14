@@ -2086,28 +2086,9 @@ while current_t < (g.t_final - g.tolerance):
         initial_dt,
     )
     loop_dt = initial_dt
-    loop_output = (
-        core_profiles_to_solver_x_tuple(current_core_profiles),
-        initial_dt,
-        1,
-        current_core_profiles,
-    )
 
     while True:
-        solver_outputs = loop_output[2]
-        is_nan_next_dt = jnp.isnan(loop_dt)
-        solver_did_not_converge = solver_outputs == 1
-        at_exact_t_final = jnp.allclose(
-            current_t + loop_dt,
-            g.t_final,
-        )
-        next_dt_too_small = loop_dt < g.min_dt
-        take_another_step = solver_did_not_converge & (at_exact_t_final
-                                                       | ~next_dt_too_small)
-        if not (take_another_step & ~is_nan_next_dt):
-            break
         dt = loop_dt
-        output = loop_output
         core_profiles_t = current_core_profiles
         n_e = get_updated_electron_density()
         n_e_bc_edge = {**g.n_e_bc, "right_face_constraint": g.n_e_right_bc}
@@ -2321,6 +2302,18 @@ while current_t < (g.t_final - g.tolerance):
             solver_numeric_outputs,
             core_profiles_t_plus_dt,
         )
+        solver_outputs = loop_output[2]
+        is_nan_next_dt = jnp.isnan(loop_dt)
+        solver_did_not_converge = solver_outputs == 1
+        at_exact_t_final = jnp.allclose(
+            current_t + loop_dt,
+            g.t_final,
+        )
+        next_dt_too_small = loop_dt < g.min_dt
+        take_another_step = solver_did_not_converge & (at_exact_t_final
+                                                       | ~next_dt_too_small)
+        if not (take_another_step & ~is_nan_next_dt):
+            break
     result = loop_output
     updated_core_profiles_t_plus_dt = solver_x_tuple_to_core_profiles(
         result[0], result[3])
