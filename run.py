@@ -749,23 +749,14 @@ def calculate_generic_current(
     unused_calculated_source_profiles,
     unused_conductivity,
 ):
-    source_params = runtime_params.sources[source_name]
-    I_generic = _calculate_I_generic(
-        runtime_params,
-        source_params,
-    )
+    I_generic = runtime_params.profile_conditions.Ip * g.generic_current_fraction
     generic_current_form = jnp.exp(
-        -((g.cell_centers - source_params.gaussian_location)**2) /
-        (2 * source_params.gaussian_width**2))
+        -((g.cell_centers - g.generic_current_location)**2) /
+        (2 * g.generic_current_width**2))
     Cext = I_generic / jnp.sum(
         generic_current_form * g.geo_spr * jnp.array(g.dx))
     generic_current_profile = Cext * generic_current_form
     return (generic_current_profile, )
-
-
-def _calculate_I_generic(runtime_params, source_params):
-    return (runtime_params.profile_conditions.Ip *
-            source_params.fraction_of_total_current)
 
 
 @jax.tree_util.register_dataclass
@@ -780,14 +771,13 @@ class RuntimeParamsGeIO(RuntimeParamsSrc):
 
 def default_formula(runtime_params, geo, source_name, unused_core_profiles,
                     unused_calculated_source_profiles, unused_conductivity):
-    source_params = runtime_params.sources[source_name]
-    absorbed_power = source_params.P_total * source_params.absorption_fraction
+    absorbed_power = g.generic_heat_P_total * 1.0  # absorption_fraction is always 1.0
     profile = gaussian_profile(geo,
-                               center=source_params.gaussian_location,
-                               width=source_params.gaussian_width,
+                               center=g.generic_heat_location,
+                               width=g.generic_heat_width,
                                total=absorbed_power)
-    ion = profile * (1 - source_params.electron_heat_fraction)
-    el = profile * source_params.electron_heat_fraction
+    ion = profile * (1 - g.generic_heat_electron_fraction)
+    el = profile * g.generic_heat_electron_fraction
     return (ion, el)
 
 
@@ -799,11 +789,10 @@ def calc_generic_particle_source(
     unused_calculated_source_profiles,
     unused_conductivity,
 ):
-    source_params = runtime_params.sources[source_name]
     return (gaussian_profile(
-        center=source_params.deposition_location,
-        width=source_params.particle_width,
-        total=source_params.S_total,
+        center=g.generic_particle_location,
+        width=g.generic_particle_width,
+        total=g.generic_particle_S_total,
         geo=geo,
     ), )
 
@@ -824,11 +813,10 @@ def calc_pellet_source(
     unused_calculated_source_profiles,
     unused_conductivity,
 ):
-    source_params = runtime_params.sources[source_name]
     return (gaussian_profile(
-        center=source_params.pellet_deposition_location,
-        width=source_params.pellet_width,
-        total=source_params.S_total,
+        center=g.pellet_location,
+        width=g.pellet_width,
+        total=g.pellet_S_total,
         geo=geo,
     ), )
 
@@ -919,11 +907,10 @@ def calc_puff_source(
     unused_calculated_source_profiles,
     unused_conductivity,
 ):
-    source_params = runtime_params.sources[source_name]
     return (exponential_profile(
         decay_start=1.0,
-        width=source_params.puff_decay_length,
-        total=source_params.S_total,
+        width=g.gas_puff_decay_length,
+        total=g.gas_puff_S_total,
         geo=geo,
     ), )
 
@@ -1037,8 +1024,8 @@ def build_standard_source_profiles(*,
 
     def calculate_source(source_name):
         handler = g.source_registry[source_name]
-        source_params = runtime_params.sources[source_name]
-        if (explicit == source_params.is_explicit) | calculate_anyway:
+        # All sources have is_explicit=False, so check: (explicit == False) | calculate_anyway
+        if (not explicit) | calculate_anyway:
             value = handler.eval_fn(
                 runtime_params,
                 geo,
@@ -1960,57 +1947,8 @@ MIN_DELTA: Final[float] = 1e-7
 
 @jax.jit
 def build_runtime_params_slice(t):
-    # Pre-compute all source runtime params directly (all constants except I_generic)
-    Ip_t = g.profile_conditions.Ip.get_value(t)
-    sources_runtime_params = {
-        "generic_current": RuntimeParamsGcS(
-            mode=Mode.MODEL_BASED,
-            is_explicit=False,
-            I_generic=Ip_t * g.generic_current_fraction,
-            fraction_of_total_current=g.generic_current_fraction,
-            gaussian_width=g.generic_current_width,
-            gaussian_location=g.generic_current_location,
-        ),
-        "generic_particle": RuntimeParamsPaSo(
-            mode=Mode.MODEL_BASED,
-            is_explicit=False,
-            particle_width=g.generic_particle_width,
-            deposition_location=g.generic_particle_location,
-            S_total=g.generic_particle_S_total,
-        ),
-        "gas_puff": RuntimeParamsPS(
-            mode=Mode.MODEL_BASED,
-            is_explicit=False,
-            puff_decay_length=g.gas_puff_decay_length,
-            S_total=g.gas_puff_S_total,
-        ),
-        "pellet": RuntimeParamsPE(
-            mode=Mode.MODEL_BASED,
-            is_explicit=False,
-            pellet_width=g.pellet_width,
-            pellet_deposition_location=g.pellet_location,
-            S_total=g.pellet_S_total,
-        ),
-        "generic_heat": RuntimeParamsGeIO(
-            mode=Mode.MODEL_BASED,
-            is_explicit=False,
-            gaussian_width=g.generic_heat_width,
-            gaussian_location=g.generic_heat_location,
-            P_total=g.generic_heat_P_total,
-            electron_heat_fraction=g.generic_heat_electron_fraction,
-            absorption_fraction=1.0,
-        ),
-        "fusion": RuntimeParamsSrc(
-            mode=Mode.MODEL_BASED,
-            is_explicit=False,
-        ),
-        "ei_exchange": RuntimeParamsSrc(
-            mode=Mode.ZERO,
-            is_explicit=False,
-        ),
-    }
     return RuntimeParamsSlice(
-        sources=sources_runtime_params,
+        sources={},  # Source params now accessed directly from g.*
         profile_conditions=g.profile_conditions.build_runtime_params(t),
     )
 
