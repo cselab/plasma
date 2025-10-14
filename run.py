@@ -307,13 +307,13 @@ def make_diffusion_terms(d_face, var):
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True, eq=False)
 class CoreProfiles:
-    T_i: Any
-    T_e: Any
-    psi: Any
-    psidot: Any
-    n_e: Any
-    n_i: Any
-    n_impurity: Any
+    T_i: Any  # CellVariable (to be migrated)
+    T_e: Any  # CellVariable (to be migrated)
+    psi: Any  # CellVariable (to be migrated)
+    psidot: Any  # jax.Array (migrated from CellVariable)
+    n_e: Any  # CellVariable (to be migrated)
+    n_i: Any  # CellVariable (to be migrated)
+    n_impurity: Any  # CellVariable (to be migrated)
     impurity_fractions: Any
     q_face: Any
     v_loop_lcfs: Any
@@ -328,6 +328,10 @@ class CoreProfiles:
     Z_eff_face: Any
     sigma: Any
     sigma_face: Any
+    # Boundary conditions for variables that have been migrated from CellVariable
+    psidot_bc: BoundaryConditions = dataclasses.field(
+        default_factory=lambda: BoundaryConditions()
+    )
 
 
 @jax.tree_util.register_dataclass
@@ -2022,10 +2026,9 @@ ions = get_updated_ions(n_e, T_e)
 v_loop_lcfs = np.array(
     0.0,
     dtype=jnp.float64)  # use_v_loop_lcfs_boundary_condition is always False
-psidot = CellVariable(
-    value=np.zeros_like(g.geo_rho),
-    dr=jnp.array(g.dx),
-)
+# psidot migrated from CellVariable to plain array
+psidot = np.zeros_like(g.geo_rho)
+psidot_bc = BoundaryConditions()  # Default BCs (no constraints)
 psi = CellVariable(value=np.zeros_like(g.geo_rho), dr=jnp.array(g.dx))
 core_profiles = CoreProfiles(
     T_i=T_i,
@@ -2045,6 +2048,7 @@ core_profiles = CoreProfiles(
     Z_eff_face=ions.Z_eff_face,
     psi=psi,
     psidot=psidot,
+    psidot_bc=psidot_bc,
     q_face=np.zeros_like(g.geo_rho_face),
     v_loop_lcfs=v_loop_lcfs,
     sigma=np.zeros_like(g.geo_rho),
@@ -2101,15 +2105,16 @@ psidot_value = calculate_psidot_from_psi_sources(psi_sources=psi_sources,
                                                  sigma=conductivity.sigma,
                                                  psi=psi)
 v_loop_lcfs = psidot_value[-1]
-psidot = dataclasses.replace(
-    core_profiles.psidot,
-    value=psidot_value,
+# psidot is now a plain array, update BC separately
+psidot_bc = dataclasses.replace(
+    core_profiles.psidot_bc,
     right_face_constraint=v_loop_lcfs,
     right_face_grad_constraint=None,
 )
 initial_core_profiles = dataclasses.replace(
     core_profiles,
-    psidot=psidot,
+    psidot=psidot_value,
+    psidot_bc=psidot_bc,
     sigma=conductivity.sigma,
     sigma_face=conductivity.sigma_face,
 )
@@ -2441,6 +2446,7 @@ while current_t < (g.t_final - g.tolerance):
         Z_impurity=ions.Z_impurity,
         Z_impurity_face=ions.Z_impurity_face,
         psidot=result[3].psidot,
+        psidot_bc=result[3].psidot_bc,
         q_face=jnp.concatenate([
             jnp.expand_dims(
                 jnp.abs(
@@ -2475,15 +2481,16 @@ while current_t < (g.t_final - g.tolerance):
         sigma=intermediate_core_profiles.sigma,
         psi=intermediate_core_profiles.psi,
     )
-    psidot = dataclasses.replace(
-        result[3].psidot,
-        value=psidot_value,
+    # psidot is now a plain array, update BC separately
+    psidot_bc = dataclasses.replace(
+        result[3].psidot_bc,
         right_face_constraint=v_loop_lcfs,
         right_face_grad_constraint=None,
     )
     final_core_profiles = dataclasses.replace(
         intermediate_core_profiles,
-        psidot=psidot,
+        psidot=psidot_value,
+        psidot_bc=psidot_bc,
     )
     core_transport = calculate_total_transport_coeffs(final_core_profiles, )
     current_t = current_t + result[1]
