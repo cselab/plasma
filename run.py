@@ -1408,12 +1408,6 @@ def evolving_vars_to_solver_x_tuple(T_i, T_e, psi, n_e):
     return tuple(x_tuple_for_solver_list)
 
 
-def core_profiles_to_solver_x_tuple(core_profiles, ):
-    """Legacy wrapper - converts CoreProfiles to solver tuple."""
-    return evolving_vars_to_solver_x_tuple(
-        core_profiles.T_i, core_profiles.T_e, core_profiles.psi, core_profiles.n_e)
-
-
 def solver_x_tuple_to_evolving_vars(x_new):
     """Convert solver tuple to dict of evolving variables."""
     updated_vars = {}
@@ -1423,12 +1417,6 @@ def solver_x_tuple_to_evolving_vars(x_new):
         operation = lambda x, factor: x * factor if x is not None else None
         updated_vars[var_name] = operation(solver_var.value, scaling_factor)
     return updated_vars
-
-
-def solver_x_tuple_to_core_profiles(x_new, core_profiles):
-    """Legacy wrapper - updates CoreProfiles with solver results."""
-    updated_vars = solver_x_tuple_to_evolving_vars(x_new)
-    return dataclasses.replace(core_profiles, **updated_vars)
 
 
 OptionalTupleMatrix: TypeAlias = tuple[tuple[jax.Array | None, ...],
