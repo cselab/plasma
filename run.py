@@ -53,10 +53,7 @@ class InterpolatedVarSingleAxis:
         match self.ys.ndim:
             case 1:
                 if self.ys.size == 1:
-                    if x_shape == ():
-                        return self.ys[0]
-                    else:
-                        return full(x_shape, self.ys[0], dtype=self.ys.dtype)
+                    return self.ys[0]
                 else:
                     return interp(x, self.xs, self.ys)
             case 2:
