@@ -2350,26 +2350,6 @@ MIN_DELTA: Final[float] = 1e-7
 
 
 @jax.jit
-def next_dt(t, core_transport):
-    chi_max = core_transport.chi_max()
-    basic_dt = (3.0 / 4.0) * (jnp.array(g.dx)**2) / chi_max
-    dt = jnp.minimum(
-        g.chi_timestep_prefactor * basic_dt,
-        g.max_dt,
-    )
-    crosses_t_final = (t < g.t_final) * (t + dt > g.t_final)
-    dt = jax.lax.select(
-        jnp.logical_and(
-            True,
-            crosses_t_final,
-        ),
-        g.t_final - t,
-        dt,
-    )
-    return dt
-
-
-@jax.jit
 def build_runtime_params_slice(t):
     return RuntimeParamsSlice(
         sources={
@@ -2897,7 +2877,22 @@ while current_state.t < (g.t_final - g.tolerance):
         runtime_params=runtime_params_t,
         core_profiles=current_state.core_profiles,
     )
-    initial_dt = next_dt(current_state.t, core_transport)
+    # Inlined next_dt
+    chi_max = core_transport.chi_max()
+    basic_dt = (3.0 / 4.0) * (jnp.array(g.dx)**2) / chi_max
+    initial_dt = jnp.minimum(
+        g.chi_timestep_prefactor * basic_dt,
+        g.max_dt,
+    )
+    crosses_t_final = (current_state.t < g.t_final) * (current_state.t + initial_dt > g.t_final)
+    initial_dt = jax.lax.select(
+        jnp.logical_and(
+            True,
+            crosses_t_final,
+        ),
+        g.t_final - current_state.t,
+        initial_dt,
+    )
     loop_dt = initial_dt
     loop_output = (
         core_profiles_to_solver_x_tuple(current_state.core_profiles),
