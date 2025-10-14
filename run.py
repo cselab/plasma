@@ -200,12 +200,6 @@ g.z = dict(zip(g.sym, [1.0, 1.0, 10.0]))
 g.A = dict(zip(g.sym, [2.0141, 3.0160, 20.180]))
 
 
-@jax.tree_util.register_dataclass
-@dataclasses.dataclass(frozen=True)
-class RuntimeParamsSlice:
-    profile_conditions: Any
-
-
 IonMapping: TypeAlias = Mapping[str, TimeVaryingScalar]
 
 
@@ -732,7 +726,7 @@ def calculate_generic_current(
     unused_calculated_source_profiles,
     unused_conductivity,
 ):
-    I_generic = runtime_params.profile_conditions.Ip * g.generic_current_fraction
+    I_generic = runtime_params.Ip * g.generic_current_fraction
     generic_current_form = jnp.exp(
         -((g.cell_centers - g.generic_current_location)**2) /
         (2 * g.generic_current_width**2))
@@ -1897,9 +1891,7 @@ MIN_DELTA: Final[float] = 1e-7
 
 @jax.jit
 def build_runtime_params_slice(t):
-    return RuntimeParamsSlice(
-        profile_conditions=g.profile_conditions.build_runtime_params(t),
-    )
+    return g.profile_conditions.build_runtime_params(t)
 
 
 g.generic_current_fraction = 0.46
@@ -2229,24 +2221,24 @@ g.transport_rho_max = 1.0
 # Pre-compute source modes (constant values)
 g.qei_mode = "ZERO"  # ei_exchange mode
 runtime_params = build_runtime_params_slice(g.t_initial)
-Ip_scale_factor = runtime_params.profile_conditions.Ip / g.geo_Ip_profile_face_base[
+Ip_scale_factor = runtime_params.Ip / g.geo_Ip_profile_face_base[
     -1]
 geo = None
 T_i = CellVariable(
-    value=runtime_params.profile_conditions.T_i,
+    value=runtime_params.T_i,
     left_face_grad_constraint=jnp.zeros(()),
     right_face_grad_constraint=None,
-    right_face_constraint=runtime_params.profile_conditions.T_i_right_bc,
+    right_face_constraint=runtime_params.T_i_right_bc,
     dr=jnp.array(g.dx),
 )
 T_e = CellVariable(
-    value=runtime_params.profile_conditions.T_e,
+    value=runtime_params.T_e,
     left_face_grad_constraint=jnp.zeros(()),
     right_face_grad_constraint=None,
-    right_face_constraint=runtime_params.profile_conditions.T_e_right_bc,
+    right_face_constraint=runtime_params.T_e_right_bc,
     dr=jnp.array(g.dx),
 )
-n_e = get_updated_electron_density(runtime_params.profile_conditions)
+n_e = get_updated_electron_density(runtime_params)
 ions = get_updated_ions(runtime_params, n_e, T_e)
 v_loop_lcfs = np.array(0.0, dtype=jnp.float64)  # use_v_loop_lcfs_boundary_condition is always False
 psidot = CellVariable(
@@ -2279,7 +2271,7 @@ core_profiles = CoreProfiles(
 )
 source_profiles = SourceProfiles(
     bootstrap_current=BootstrapCurrent.zeros(None), qei=QeiInfo.zeros(None))
-dpsi_drhonorm_edge = (runtime_params.profile_conditions.Ip *
+dpsi_drhonorm_edge = (runtime_params.Ip *
                       (16 * jnp.pi**3 * g.mu_0 * g.geo_Phi_b) /
                       (g.geo_g2g3_over_rhon_face[-1] * g.geo_F_face[-1]))
 # Compute scaled psi values using the Ip scale factor
@@ -2426,7 +2418,7 @@ while current_t < (g.t_final - g.tolerance):
         geo_t_with_phibdot = None
         geo_t_plus_dt = None
         core_profiles_t = current_core_profiles
-        profile_conditions_t_plus_dt = runtime_params_t_plus_dt.profile_conditions
+        profile_conditions_t_plus_dt = runtime_params_t_plus_dt
         n_e = get_updated_electron_density(profile_conditions_t_plus_dt)
         n_e_right_bc = n_e.right_face_constraint
         ions_edge = get_updated_ions(
