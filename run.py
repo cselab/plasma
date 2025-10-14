@@ -202,17 +202,7 @@ OpenUnitInterval: TypeAlias = Annotated[float, pydantic.Field(gt=0.0, lt=1.0)]
 ValidatedDefault = functools.partial(pydantic.Field, validate_default=True)
 BooleanNumeric = Any
 thread_context = threading.local()
-
 _TOLERANCE: Final[float] = 1e-6
-
-
-@jax.tree_util.register_dataclass
-@dataclasses.dataclass(frozen=True)
-class IonProperties:
-    symbol: Any
-    A: Any
-    Z: Any
-
 
 g.keV_to_J = 1e3 * 1.602176634e-19
 g.eV_to_J = 1.602176634e-19
@@ -223,16 +213,10 @@ g.epsilon_0 = 8.85418782e-12
 g.mu_0 = 4 * jnp.pi * 1e-7
 g.k_B = 1.380649e-23
 g.eps = 1e-7
-ION_PROPERTIES: Final[tuple[IonProperties, ...]] = (
-    IonProperties(symbol="D", A=2.0141, Z=1.0),
-    IonProperties(symbol="T", A=3.0160, Z=1.0),
-    IonProperties(symbol="Ne", A=20.180, Z=10.0),
-)
-ION_PROPERTIES_DICT: Final[Mapping[
-    str, IonProperties]] = immutabledict.immutabledict(
-        {v.symbol: v
-         for v in ION_PROPERTIES})
-ION_SYMBOLS = "D", "T", "Ne"
+g.sym = "D", "T", "Ne"
+g.z = dict(zip(g.sym, [1.0, 1.0, 10.0]))
+g.A = dict(zip(g.sym, [2.0141, 3.0160, 20.180]))
+
 
 
 @jax.tree_util.register_dataclass
@@ -554,7 +538,7 @@ _TEMPERATURE_INTERVALS = immutabledict.immutabledict({
 
 def calculate_average_charge_state_single_species(T_e, ion_symbol):
     if ion_symbol not in _MAVRIN_Z_COEFFS:
-        return jnp.ones_like(T_e) * ION_PROPERTIES_DICT[ion_symbol].Z
+        return jnp.ones_like(T_e) * g.z[ion_symbol]
     T_e_allowed_range = (0.1, 100.0)
     T_e = jnp.clip(T_e, *T_e_allowed_range)
     interval_indices = jnp.searchsorted(_TEMPERATURE_INTERVALS[ion_symbol],
@@ -1580,7 +1564,7 @@ class IonMixture(BaseModelFrozen):
     def build_runtime_params(self, t):
         ions = self.species.keys()
         fractions = jnp.array([self.species[ion].get_value(t) for ion in ions])
-        As = jnp.array([ION_PROPERTIES_DICT[ion].A for ion in ions])
+        As = jnp.array([g.A[ion] for ion in ions])
         A_avg = jnp.sum(As * fractions)
         return RuntimeParamsIM(fractions=fractions, A_avg=A_avg)
 
@@ -1612,7 +1596,7 @@ class ImpurityFractions(BaseModelFrozen):
         fractions = jnp.array([self.species[ion].get_value(t) for ion in ions])
         fractions_face = jnp.array(
             [self.species[ion].get_value(t, grid_type="face") for ion in ions])
-        As = jnp.array([ION_PROPERTIES_DICT[ion].A for ion in ions])
+        As = jnp.array([g.A[ion] for ion in ions])
         A_avg = jnp.sum(As[..., jnp.newaxis] * fractions, axis=0)
         A_avg_face = jnp.sum(As[..., jnp.newaxis] * fractions_face, axis=0)
         return RuntimeParamsIF(
