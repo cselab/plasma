@@ -12,11 +12,9 @@ import immutabledict
 import inspect
 import itertools
 import jax
-import jaxtyping as jt
 import logging
 import numpy as np
 import os
-import pydantic
 import scipy
 import threading
 import typing
@@ -35,15 +33,8 @@ os.environ["XLA_FLAGS"] = (
 jax.config.update("jax_enable_x64", True)
 T = TypeVar("T")
 Array: TypeAlias = jax.Array | np.ndarray
-FloatScalar: TypeAlias = jt.Float[Array | float, ""]
 JAX_STATIC: Final[str] = "_pydantic_jax_static_field"
 _interp_fn = jax.jit(jnp.interp)
-
-
-UnitInterval: TypeAlias = Annotated[float, pydantic.Field(ge=0.0, le=1.0)]
-OpenUnitInterval: TypeAlias = Annotated[float, pydantic.Field(gt=0.0, lt=1.0)]
-ValidatedDefault = functools.partial(pydantic.Field, validate_default=True)
-BooleanNumeric = Any
 thread_context = threading.local()
 _TOLERANCE: Final[float] = 1e-6
 
