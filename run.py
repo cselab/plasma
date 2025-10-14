@@ -1191,15 +1191,11 @@ class QeiSource(Source):
     SOURCE_NAME: typing.ClassVar[str] = "ei_exchange"
 
     def get_qei(self, runtime_params, geo, core_profiles):
-        assert runtime_params.sources[self.SOURCE_NAME].mode == Mode.MODEL_BASED
-        return jax.lax.cond(
-            runtime_params.sources[self.SOURCE_NAME].mode == Mode.MODEL_BASED,
-            lambda: _model_based_qei(
-                runtime_params,
-                geo,
-                core_profiles,
-            ),
-            lambda: QeiInfo.zeros(geo),
+        # Mode is always MODEL_BASED (asserted), so directly call _model_based_qei
+        return _model_based_qei(
+            runtime_params,
+            geo,
+            core_profiles,
         )
 
 
