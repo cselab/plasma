@@ -261,8 +261,6 @@ class CoreProfiles:
     Z_eff_face: Any
     sigma: Any
     sigma_face: Any
-    boundary_conditions: dict[str,
-                              dict] = dataclasses.field(default_factory=dict)
     psidot_bc: dict = dataclasses.field(default_factory=make_bc)
     n_i_bc: dict = dataclasses.field(default_factory=make_bc)
     n_impurity_bc: dict = dataclasses.field(default_factory=make_bc)
@@ -1363,7 +1361,7 @@ def core_profiles_to_solver_x_tuple(core_profiles, ):
     x_tuple_for_solver_list = []
     for name in g.evolving_names:
         original_value = getattr(core_profiles, name)
-        original_bc = core_profiles.boundary_conditions[name]
+        original_bc = getattr(g, f"{name}_bc")
         scaling_factor = 1 / SCALING_FACTORS[name]
         operation = lambda x, factor: x * factor if x is not None else None
         scaled_bc = make_bc(
@@ -1387,25 +1385,12 @@ def core_profiles_to_solver_x_tuple(core_profiles, ):
 
 def solver_x_tuple_to_core_profiles(x_new, core_profiles):
     updated_vars = {}
-    updated_bcs = {}
     for i, var_name in enumerate(g.evolving_names):
         solver_var = x_new[i]
         scaling_factor = SCALING_FACTORS[var_name]
         operation = lambda x, factor: x * factor if x is not None else None
         updated_vars[var_name] = operation(solver_var.value, scaling_factor)
-        updated_bcs[var_name] = make_bc(
-            left_face_constraint=operation(
-                solver_var.bc["left_face_constraint"], scaling_factor),
-            left_face_grad_constraint=operation(
-                solver_var.bc["left_face_grad_constraint"], scaling_factor),
-            right_face_constraint=operation(
-                solver_var.bc["right_face_constraint"], scaling_factor),
-            right_face_grad_constraint=operation(
-                solver_var.bc["right_face_grad_constraint"], scaling_factor),
-        )
-    return dataclasses.replace(core_profiles,
-                               boundary_conditions=updated_bcs,
-                               **updated_vars)
+    return dataclasses.replace(core_profiles, **updated_vars)
 
 
 OptionalTupleMatrix: TypeAlias = tuple[tuple[jax.Array | None, ...],
@@ -1988,12 +1973,6 @@ g.psi_bc = make_bc(
     right_face_grad_constraint=g.dpsi_drhonorm_edge,
     right_face_constraint=None,
 )
-g.boundary_conditions = {
-    "T_i": g.T_i_bc,
-    "T_e": g.T_e_bc,
-    "psi": g.psi_bc,
-    "n_e": g.n_e_bc,
-}
 Ip_scale_factor = g.Ip / g.geo_Ip_profile_face_base[-1]
 T_i = g.T_i
 T_e = g.T_e
@@ -2003,13 +1982,11 @@ v_loop_lcfs = np.array(0.0, dtype=jnp.float64)
 psidot = np.zeros_like(g.geo_rho)
 psidot_bc = make_bc()
 psi = np.zeros_like(g.geo_rho)
-boundary_conditions = g.boundary_conditions
 core_profiles = CoreProfiles(
     T_i=T_i,
     T_e=T_e,
     n_e=n_e,
     n_i=ions.n_i,
-    boundary_conditions=boundary_conditions,
     Z_i=ions.Z_i,
     Z_i_face=ions.Z_i_face,
     A_i=ions.A_i,
@@ -2056,15 +2033,15 @@ result = _calculate_bootstrap_current(
     Z_eff_face=core_profiles.Z_eff_face,
     Z_i_face=core_profiles.Z_i_face,
     n_e=core_profiles.n_e,
-    n_e_bc=core_profiles.boundary_conditions["n_e"],
+    n_e_bc=g.n_e_bc,
     n_i=core_profiles.n_i,
     n_i_bc=core_profiles.n_i_bc,
     T_e=core_profiles.T_e,
-    T_e_bc=core_profiles.boundary_conditions["T_e"],
+    T_e_bc=g.T_e_bc,
     T_i=core_profiles.T_i,
-    T_i_bc=core_profiles.boundary_conditions["T_i"],
+    T_i_bc=g.T_i_bc,
     psi=core_profiles.psi,
-    psi_bc=core_profiles.boundary_conditions["psi"],
+    psi_bc=g.psi_bc,
     q_face=core_profiles.q_face,
 )
 bootstrap_current = BootstrapCurrent(
@@ -2147,11 +2124,11 @@ while current_t < (g.t_final - g.tolerance):
         core_profiles_t = current_core_profiles
         n_e = get_updated_electron_density()
         n_e_bc_edge = {
-            **core_profiles_t.boundary_conditions["n_e"], "right_face_constraint":
+            **g.n_e_bc, "right_face_constraint":
             g.n_e_right_bc
         }
         T_e_bc_edge = {
-            **core_profiles_t.boundary_conditions["T_e"], "right_face_constraint":
+            **g.T_e_bc, "right_face_constraint":
             g.T_e_right_bc
         }
         ions_edge = get_updated_ions(
@@ -2230,12 +2207,6 @@ while current_t < (g.t_final - g.tolerance):
         n_i_bc_updated = updated_boundary_conditions["n_i"]
         n_impurity = n_impurity_value
         n_impurity_bc_updated = updated_boundary_conditions["n_impurity"]
-        boundary_conditions_updated = {
-            "T_i": T_i_bc_updated,
-            "T_e": T_e_bc_updated,
-            "psi": psi_bc_updated,
-            "n_e": n_e_bc_updated,
-        }
         Z_i_face = jnp.concatenate([
             Z_i_face_value[:-1],
             jnp.array([updated_boundary_conditions["Z_i_edge"]]),
@@ -2250,7 +2221,6 @@ while current_t < (g.t_final - g.tolerance):
             T_e=T_e,
             psi=psi,
             n_e=n_e,
-            boundary_conditions=boundary_conditions_updated,
             n_i=n_i,
             n_i_bc=n_i_bc_updated,
             n_impurity=n_impurity,
@@ -2392,8 +2362,6 @@ while current_t < (g.t_final - g.tolerance):
         T_e=updated_core_profiles_t_plus_dt.T_e,
         psi=updated_core_profiles_t_plus_dt.psi,
         n_e=updated_core_profiles_t_plus_dt.n_e,
-        boundary_conditions=updated_core_profiles_t_plus_dt.
-        boundary_conditions,
         n_i=ions.n_i,
         n_i_bc=ions.n_i_bc,
         n_impurity=ions.n_impurity,
@@ -2457,9 +2425,9 @@ rho = np.concatenate([[0.0], np.asarray(g.cell_centers), [1.0]])
 evolving_data = {}
 for var_name in g.evolving_names:
     var_data = []
+    var_bc = getattr(g, f"{var_name}_bc")
     for state_t, state_core_profiles in state_history:
         var_value = getattr(state_core_profiles, var_name)
-        var_bc = state_core_profiles.boundary_conditions[var_name]
         data = compute_cell_plus_boundaries_bc(var_value, jnp.array(g.dx),
                                                var_bc)
         var_data.append(data)
