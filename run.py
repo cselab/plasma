@@ -1613,7 +1613,6 @@ class RuntimeParamsIF:
 
 
 class ImpurityFractions(BaseModelFrozen):
-    impurity_mode: Annotated[Literal["fractions"], JAX_STATIC] = "fractions"
     species: ImpurityMapping = ValidatedDefault({"Ne": 1.0})
 
     def build_runtime_params(self, t):
@@ -2647,7 +2646,6 @@ g.plasma_composition = PlasmaComposition(
         "T": 0.5
     },
     impurity={
-        'impurity_mode': 'fractions',
         'species': 'Ne'
     },
     Z_eff=1.6,
