@@ -739,6 +739,11 @@ class AffectedCoreProfile(enum.IntEnum):
     TEMP_EL = 4
 
 
+class SourceHandler(typing.NamedTuple):
+    affects: tuple[AffectedCoreProfile, ...]
+    eval_fn: typing.Callable
+
+
 @dataclasses.dataclass(kw_only=True, frozen=True, eq=True)
 class Source:
     SOURCE_NAME: typing.ClassVar[str] = "source"
