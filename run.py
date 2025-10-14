@@ -204,7 +204,6 @@ g.A = dict(zip(g.sym, [2.0141, 3.0160, 20.180]))
 @dataclasses.dataclass(frozen=True)
 class RuntimeParamsSlice:
     profile_conditions: Any
-    sources: Any
 
 
 IonMapping: TypeAlias = Mapping[str, TimeVaryingScalar]
@@ -712,13 +711,6 @@ class Mode(enum.Enum):
     MODEL_BASED = "MODEL_BASED"
 
 
-@jax.tree_util.register_dataclass
-@dataclasses.dataclass(frozen=True)
-class RuntimeParamsSrc:
-    mode: Mode = dataclasses.field(metadata={"static": True})
-    is_explicit: bool = dataclasses.field(metadata={"static": True})
-
-
 @enum.unique
 class AffectedCoreProfile(enum.IntEnum):
     PSI = 1
@@ -730,15 +722,6 @@ class AffectedCoreProfile(enum.IntEnum):
 class SourceHandler(typing.NamedTuple):
     affects: tuple[AffectedCoreProfile, ...]
     eval_fn: typing.Callable
-
-
-@jax.tree_util.register_dataclass
-@dataclasses.dataclass(frozen=True)
-class RuntimeParamsGcS(RuntimeParamsSrc):
-    I_generic: Any
-    fraction_of_total_current: Any
-    gaussian_width: Any
-    gaussian_location: Any
 
 
 def calculate_generic_current(
@@ -757,16 +740,6 @@ def calculate_generic_current(
         generic_current_form * g.geo_spr * jnp.array(g.dx))
     generic_current_profile = Cext * generic_current_form
     return (generic_current_profile, )
-
-
-@jax.tree_util.register_dataclass
-@dataclasses.dataclass(frozen=True)
-class RuntimeParamsGeIO(RuntimeParamsSrc):
-    gaussian_width: Any
-    gaussian_location: Any
-    P_total: Any
-    electron_heat_fraction: Any
-    absorption_fraction: Any
 
 
 def default_formula(runtime_params, geo, source_name, unused_core_profiles,
@@ -797,14 +770,6 @@ def calc_generic_particle_source(
     ), )
 
 
-@jax.tree_util.register_dataclass
-@dataclasses.dataclass(frozen=True)
-class RuntimeParamsPaSo(RuntimeParamsSrc):
-    particle_width: Any
-    deposition_location: Any
-    S_total: Any
-
-
 def calc_pellet_source(
     runtime_params,
     geo,
@@ -819,14 +784,6 @@ def calc_pellet_source(
         total=g.pellet_S_total,
         geo=geo,
     ), )
-
-
-@jax.tree_util.register_dataclass
-@dataclasses.dataclass(frozen=True)
-class RuntimeParamsPE(RuntimeParamsSrc):
-    pellet_width: Any
-    pellet_deposition_location: Any
-    S_total: Any
 
 
 def calc_fusion(geo, core_profiles, runtime_params):
@@ -890,13 +847,6 @@ def fusion_heat_model_func(
 ):
     _, Pfus_i, Pfus_e = calc_fusion(geo, core_profiles, runtime_params)
     return (Pfus_i, Pfus_e)
-
-
-@jax.tree_util.register_dataclass
-@dataclasses.dataclass(frozen=True)
-class RuntimeParamsPS(RuntimeParamsSrc):
-    puff_decay_length: Any
-    S_total: Any
 
 
 def calc_puff_source(
@@ -1948,7 +1898,6 @@ MIN_DELTA: Final[float] = 1e-7
 @jax.jit
 def build_runtime_params_slice(t):
     return RuntimeParamsSlice(
-        sources={},  # Source params now accessed directly from g.*
         profile_conditions=g.profile_conditions.build_runtime_params(t),
     )
 
