@@ -1,24 +1,16 @@
-from collections.abc import Sequence, Set
 from fusion_surrogates.qlknn import qlknn_model
 from jax import numpy as jnp
-from typing import Annotated, Any, Final, Literal, Mapping, Sequence, TypeAlias, TypeVar
-from typing_extensions import override
+from typing import Any, Final, Mapping, Sequence, TypeAlias, TypeVar
 import chex
-import copy
 import dataclasses
 import enum
-import functools
 import immutabledict
-import inspect
-import itertools
 import jax
-import logging
 import numpy as np
 import os
 import scipy
 import threading
 import typing
-import typing_extensions
 import matplotlib.pyplot as plt
 
 
