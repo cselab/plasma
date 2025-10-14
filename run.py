@@ -2069,7 +2069,7 @@ core_transport = calculate_total_transport_coeffs(initial_core_profiles, )
 current_t = np.array(g.t_initial)
 current_core_profiles = initial_core_profiles
 state_history = [(current_t, current_core_profiles)]
-while current_t < (g.t_final - g.tolerance):
+while True:
     explicit_source_profiles = build_source_profiles0(
         core_profiles=current_core_profiles, )
     chi_max = core_transport.chi_max()
@@ -2385,6 +2385,8 @@ while current_t < (g.t_final - g.tolerance):
     current_t = current_t + result[1]
     current_core_profiles = final_core_profiles
     state_history.append((current_t, current_core_profiles))
+    if current_t >= (g.t_final - g.tolerance):
+        break
 t = np.array([state_t for state_t, _ in state_history])
 rho = np.concatenate([[0.0], np.asarray(g.cell_centers), [1.0]])
 (nt, ) = np.shape(t)
