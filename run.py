@@ -37,22 +37,25 @@ g.eps = 1e-7
 g.sym = "D", "T", "Ne"
 g.z = dict(zip(g.sym, [1.0, 1.0, 10.0]))
 g.A = dict(zip(g.sym, [2.0141, 3.0160, 20.180]))
-@chex.dataclass(frozen=True)
-class BoundaryConditions:
-    left_face_constraint: Any = None
-    right_face_constraint: Any = None
-    left_face_grad_constraint: Any = dataclasses.field(
-        default_factory=lambda: jnp.zeros(()))
-    right_face_grad_constraint: Any = dataclasses.field(
-        default_factory=lambda: jnp.zeros(()))
-    @classmethod
-    def from_cell_variable(cls, cell_var):
-        return cls(
-            left_face_constraint=cell_var.left_face_constraint,
-            right_face_constraint=cell_var.right_face_constraint,
-            left_face_grad_constraint=cell_var.left_face_grad_constraint,
-            right_face_grad_constraint=cell_var.right_face_grad_constraint,
-        )
+# Helper function to create default boundary condition dict
+def make_bc(left_face_constraint=None, right_face_constraint=None,
+            left_face_grad_constraint=None, right_face_grad_constraint=None):
+    """Create boundary conditions dict with defaults."""
+    return {
+        "left_face_constraint": left_face_constraint,
+        "right_face_constraint": right_face_constraint,
+        "left_face_grad_constraint": left_face_grad_constraint if left_face_grad_constraint is not None else jnp.zeros(()),
+        "right_face_grad_constraint": right_face_grad_constraint if right_face_grad_constraint is not None else jnp.zeros(()),
+    }
+
+def bc_from_cell_variable(cell_var):
+    """Extract boundary conditions dict from a CellVariable."""
+    return make_bc(
+        left_face_constraint=cell_var.left_face_constraint,
+        right_face_constraint=cell_var.right_face_constraint,
+        left_face_grad_constraint=cell_var.left_face_grad_constraint,
+        right_face_grad_constraint=cell_var.right_face_grad_constraint,
+    )
 def compute_face_grad(value, dr, left_face_constraint, right_face_constraint,
                       left_face_grad_constraint, right_face_grad_constraint, x=None):
     if x is None:
@@ -106,21 +109,24 @@ def compute_cell_plus_boundaries(value, dr, right_face_constraint, right_face_gr
     right_value = compute_right_face_value(value, dr, right_face_constraint, right_face_grad_constraint)
     return jnp.concatenate([left_value, value, right_value], axis=-1)
 def compute_face_grad_bc(value, dr, bc, x=None):
+    """Compute face grad from bc dict."""
     return compute_face_grad(
         value, dr,
-        bc.left_face_constraint, bc.right_face_constraint,
-        bc.left_face_grad_constraint, bc.right_face_grad_constraint,
+        bc["left_face_constraint"], bc["right_face_constraint"],
+        bc["left_face_grad_constraint"], bc["right_face_grad_constraint"],
         x=x
     )
 def compute_face_value_bc(value, dr, bc):
+    """Compute face value from bc dict."""
     return compute_face_value(
         value, dr,
-        bc.right_face_constraint, bc.right_face_grad_constraint
+        bc["right_face_constraint"], bc["right_face_grad_constraint"]
     )
 def compute_cell_plus_boundaries_bc(value, dr, bc):
+    """Compute cell plus boundaries from bc dict."""
     return compute_cell_plus_boundaries(
         value, dr,
-        bc.right_face_constraint, bc.right_face_grad_constraint
+        bc["right_face_constraint"], bc["right_face_grad_constraint"]
     )
 @chex.dataclass(frozen=True)
 class CellVariable:
@@ -133,8 +139,10 @@ class CellVariable:
     right_face_grad_constraint: Any = dataclasses.field(
         default_factory=lambda: jnp.zeros(()))
     def get_boundary_conditions(self):
-        return BoundaryConditions.from_cell_variable(self)
+        """Extract boundary conditions as a dict."""
+        return bc_from_cell_variable(self)
 def make_convection_terms(v_face, d_face, value, dr, bc):
+    """bc is a dict with boundary condition keys."""
     eps = 1e-20
     is_neg = d_face < 0.0
     nonzero_sign = jnp.ones_like(is_neg) - 2 * is_neg
@@ -173,35 +181,36 @@ def make_convection_terms(v_face, d_face, value, dr, bc):
     vec = jnp.zeros_like(diag)
     mat_value = (v_face[0] - right_alpha[0] * v_face[1]) / dr
     vec_value = -v_face[0] * (1.0 -
-                              left_alpha[0]) * bc.left_face_grad_constraint
+                              left_alpha[0]) * bc["left_face_grad_constraint"]
     mat = mat.at[0, 0].set(mat_value)
     vec = vec.at[0].set(vec_value)
-    if bc.right_face_constraint is not None:
+    if bc["right_face_constraint"] is not None:
         mat_value = (v_face[-2] * left_alpha[-1] + v_face[-1] *
                      (1.0 - 2.0 * right_alpha[-1])) / dr
         vec_value = (-2.0 * v_face[-1] * (1.0 - right_alpha[-1]) *
-                     bc.right_face_constraint) / dr
+                     bc["right_face_constraint"]) / dr
     else:
         mat_value = -(v_face[-1] - v_face[-2] * left_alpha[-1]) / dr
         vec_value = (-v_face[-1] * (1.0 - right_alpha[-1]) *
-                     bc.right_face_grad_constraint)
+                     bc["right_face_grad_constraint"])
     mat = mat.at[-1, -1].set(mat_value)
     vec = vec.at[-1].set(vec_value)
     return mat, vec
 def make_diffusion_terms(d_face, value, dr, bc):
+    """bc is a dict with boundary condition keys."""
     denom = dr**2
     diag = jnp.asarray(-d_face[1:] - d_face[:-1])
     off = d_face[1:-1]
     vec = jnp.zeros_like(diag)
     diag = diag.at[0].set(-d_face[1])
-    vec = vec.at[0].set(-d_face[0] * bc.left_face_grad_constraint / dr)
-    if bc.right_face_constraint is not None:
+    vec = vec.at[0].set(-d_face[0] * bc["left_face_grad_constraint"] / dr)
+    if bc["right_face_constraint"] is not None:
         diag = diag.at[-1].set(-2 * d_face[-1] - d_face[-2])
-        vec = vec.at[-1].set(2 * d_face[-1] * bc.right_face_constraint /
+        vec = vec.at[-1].set(2 * d_face[-1] * bc["right_face_constraint"] /
                              denom)
     else:
         diag = diag.at[-1].set(-d_face[-2])
-        vec = vec.at[-1].set(d_face[-1] * bc.right_face_grad_constraint /
+        vec = vec.at[-1].set(d_face[-1] * bc["right_face_grad_constraint"] /
                              dr)
     mat = (jnp.diag(diag) + jnp.diag(off, 1) + jnp.diag(off, -1)) / denom
     return mat, vec
@@ -229,17 +238,17 @@ class CoreProfiles:
     Z_eff_face: Any
     sigma: Any
     sigma_face: Any
-    boundary_conditions: dict[str, BoundaryConditions] = dataclasses.field(
+    boundary_conditions: dict[str, dict] = dataclasses.field(
         default_factory=dict
     )
-    psidot_bc: BoundaryConditions = dataclasses.field(
-        default_factory=lambda: BoundaryConditions()
+    psidot_bc: dict = dataclasses.field(
+        default_factory=make_bc
     )
-    n_i_bc: BoundaryConditions = dataclasses.field(
-        default_factory=lambda: BoundaryConditions()
+    n_i_bc: dict = dataclasses.field(
+        default_factory=make_bc
     )
-    n_impurity_bc: BoundaryConditions = dataclasses.field(
-        default_factory=lambda: BoundaryConditions()
+    n_impurity_bc: dict = dataclasses.field(
+        default_factory=make_bc
     )
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass
@@ -1106,11 +1115,11 @@ class Ions:
     A_impurity_face: Any
     Z_eff: Any
     Z_eff_face: Any
-    n_i_bc: BoundaryConditions = dataclasses.field(
-        default_factory=lambda: BoundaryConditions()
+    n_i_bc: dict = dataclasses.field(
+        default_factory=make_bc
     )
-    n_impurity_bc: BoundaryConditions = dataclasses.field(
-        default_factory=lambda: BoundaryConditions()
+    n_impurity_bc: dict = dataclasses.field(
+        default_factory=make_bc
     )
 def get_updated_electron_density():
     nGW = g.Ip / 1e6 / (jnp.pi * g.geo_a_minor**2) * 1e20
@@ -1134,7 +1143,7 @@ def get_updated_electron_density():
     C = (target_nbar - 0.5 * n_e_face[-1] * dr_edge / a_minor_out) / (
         nbar_from_n_e_face_inner + 0.5 * n_e_face[-2] * dr_edge / a_minor_out)
     n_e_value = C * n_e_value
-    n_e_bc = BoundaryConditions(
+    n_e_bc = make_bc(
         right_face_grad_constraint=None,
         right_face_constraint=n_e_right_bc,
     )
@@ -1180,9 +1189,9 @@ def get_updated_ions(n_e, n_e_bc, T_e, T_e_bc):
         (Z_i_face[-1] * (Z_impurity_face[-1] - Z_i_face[-1])),
     )
     n_i = n_e * dilution_factor
-    n_i_bc = BoundaryConditions(
+    n_i_bc = make_bc(
         right_face_grad_constraint=None,
-        right_face_constraint=n_e_bc.right_face_constraint * dilution_factor_edge,
+        right_face_constraint=n_e_bc["right_face_constraint"] * dilution_factor_edge,
     )
     n_impurity_value = jnp.where(
         dilution_factor == 1.0,
@@ -1192,11 +1201,11 @@ def get_updated_ions(n_e, n_e_bc, T_e, T_e_bc):
     n_impurity_right_face_constraint = jnp.where(
         dilution_factor_edge == 1.0,
         0.0,
-        (n_e_bc.right_face_constraint - n_i_bc.right_face_constraint * Z_i_face[-1])
+        (n_e_bc["right_face_constraint"] - n_i_bc["right_face_constraint"] * Z_i_face[-1])
         / Z_impurity_face[-1],
     )
     n_impurity = n_impurity_value
-    n_impurity_bc = BoundaryConditions(
+    n_impurity_bc = make_bc(
         right_face_grad_constraint=None,
         right_face_constraint=n_impurity_right_face_constraint,
     )
@@ -1235,13 +1244,13 @@ def core_profiles_to_solver_x_tuple(core_profiles, ):
         solver_x_tuple_cv = CellVariable(
             value=operation(original_value, scaling_factor),
             left_face_constraint=operation(
-                original_bc.left_face_constraint, scaling_factor),
+                original_bc["left_face_constraint"], scaling_factor),
             left_face_grad_constraint=operation(
-                original_bc.left_face_grad_constraint, scaling_factor),
+                original_bc["left_face_grad_constraint"], scaling_factor),
             right_face_constraint=operation(
-                original_bc.right_face_constraint, scaling_factor),
+                original_bc["right_face_constraint"], scaling_factor),
             right_face_grad_constraint=operation(
-                original_bc.right_face_grad_constraint, scaling_factor),
+                original_bc["right_face_grad_constraint"], scaling_factor),
             dr=jnp.array(g.dx),
         )
         x_tuple_for_solver_list.append(solver_x_tuple_cv)
@@ -1254,7 +1263,7 @@ def solver_x_tuple_to_core_profiles(x_new, core_profiles):
         scaling_factor = SCALING_FACTORS[var_name]
         operation = lambda x, factor: x * factor if x is not None else None
         updated_vars[var_name] = operation(solver_x_tuple_cv.value, scaling_factor)
-        updated_bcs[var_name] = BoundaryConditions(
+        updated_bcs[var_name] = make_bc(
             left_face_constraint=operation(
                 solver_x_tuple_cv.left_face_constraint, scaling_factor),
             left_face_grad_constraint=operation(
@@ -1821,13 +1830,13 @@ g.transport_rho_max = 1.0
 g.qei_mode = "ZERO"  
 Ip_scale_factor = g.Ip / g.geo_Ip_profile_face_base[-1]
 T_i = g.T_i
-T_i_bc = BoundaryConditions(
+T_i_bc = make_bc(
     left_face_grad_constraint=jnp.zeros(()),
     right_face_grad_constraint=None,
     right_face_constraint=g.T_i_right_bc,
 )
 T_e = g.T_e
-T_e_bc = BoundaryConditions(
+T_e_bc = make_bc(
     left_face_grad_constraint=jnp.zeros(()),
     right_face_grad_constraint=None,
     right_face_constraint=g.T_e_right_bc,
@@ -1838,9 +1847,9 @@ v_loop_lcfs = np.array(
     0.0,
     dtype=jnp.float64)  
 psidot = np.zeros_like(g.geo_rho)
-psidot_bc = BoundaryConditions()  
+psidot_bc = make_bc()  
 psi = np.zeros_like(g.geo_rho)
-psi_bc = BoundaryConditions()  
+psi_bc = make_bc()  
 boundary_conditions = {
     "T_i": T_i_bc,
     "T_e": T_e_bc,
@@ -1879,7 +1888,7 @@ dpsi_drhonorm_edge = (g.Ip * g.pi16cubed_mu0_Phib /
 geo_psi_from_Ip_scaled = g.geo_psi_from_Ip_base * Ip_scale_factor
 geo_psi_from_Ip_face_scaled = g.geo_psi_from_Ip_face_base * Ip_scale_factor
 psi = geo_psi_from_Ip_scaled
-psi_bc = BoundaryConditions(
+psi_bc = make_bc(
     right_face_grad_constraint=dpsi_drhonorm_edge,
     right_face_constraint=None,
 )
@@ -1931,11 +1940,9 @@ psidot_value = calculate_psidot_from_psi_sources(psi_sources=psi_sources,
                                                  psi=psi,
                                                  psi_bc=psi_bc)
 v_loop_lcfs = psidot_value[-1]
-psidot_bc = dataclasses.replace(
-    core_profiles.psidot_bc,
-    right_face_constraint=v_loop_lcfs,
-    right_face_grad_constraint=None,
-)
+psidot_bc = {**core_profiles.psidot_bc,
+             "right_face_constraint": v_loop_lcfs,
+             "right_face_grad_constraint": None}
 initial_core_profiles = dataclasses.replace(
     core_profiles,
     psidot=psidot_value,
@@ -2002,15 +2009,11 @@ while current_t < (g.t_final - g.tolerance):
         output = loop_output
         core_profiles_t = current_core_profiles
         n_e, n_e_bc_temp = get_updated_electron_density()
-        n_e_right_bc = n_e_bc_temp.right_face_constraint
-        n_e_bc_edge = dataclasses.replace(
-            core_profiles_t.boundary_conditions["n_e"],
-            right_face_constraint=g.n_e_right_bc,
-        )
-        T_e_bc_edge = dataclasses.replace(
-            core_profiles_t.boundary_conditions["T_e"],
-            right_face_constraint=g.T_e_right_bc,
-        )
+        n_e_right_bc = n_e_bc_temp["right_face_constraint"]
+        n_e_bc_edge = {**core_profiles_t.boundary_conditions["n_e"], 
+                       "right_face_constraint": g.n_e_right_bc}
+        T_e_bc_edge = {**core_profiles_t.boundary_conditions["T_e"], 
+                       "right_face_constraint": g.T_e_right_bc}
         ions_edge = get_updated_ions(
             core_profiles_t.n_e,
             n_e_bc_edge,
@@ -2027,38 +2030,32 @@ while current_t < (g.t_final - g.tolerance):
         n_impurity_bound_right = (n_e_right_bc -
                                   n_i_bound_right * Z_i_edge) / Z_impurity_edge
         updated_boundary_conditions = {
-            "T_i":
-            dict(
+            "T_i": make_bc(
                 left_face_grad_constraint=jnp.zeros(()),
                 right_face_grad_constraint=None,
                 right_face_constraint=g.T_i_right_bc,
             ),
-            "T_e":
-            dict(
+            "T_e": make_bc(
                 left_face_grad_constraint=jnp.zeros(()),
                 right_face_grad_constraint=None,
                 right_face_constraint=g.T_e_right_bc,
             ),
-            "n_e":
-            dict(
+            "n_e": make_bc(
                 left_face_grad_constraint=jnp.zeros(()),
                 right_face_grad_constraint=None,
                 right_face_constraint=jnp.array(n_e_right_bc),
             ),
-            "n_i":
-            dict(
+            "n_i": make_bc(
                 left_face_grad_constraint=jnp.zeros(()),
                 right_face_grad_constraint=None,
                 right_face_constraint=jnp.array(n_i_bound_right),
             ),
-            "n_impurity":
-            dict(
+            "n_impurity": make_bc(
                 left_face_grad_constraint=jnp.zeros(()),
                 right_face_grad_constraint=None,
                 right_face_constraint=jnp.array(n_impurity_bound_right),
             ),
-            "psi":
-            dict(
+            "psi": make_bc(
                 right_face_grad_constraint=(
                     g.Ip * (16 * jnp.pi**3 * g.mu_0 * g.geo_Phi_b) /
                     (g.geo_g2g3_over_rhon_face[-1] * g.geo_F_face[-1])),
@@ -2093,17 +2090,17 @@ while current_t < (g.t_final - g.tolerance):
         Z_eff_value = ions.Z_eff
         Z_eff_face_value = ions.Z_eff_face
         T_i = T_i_value
-        T_i_bc_updated = BoundaryConditions(**updated_boundary_conditions["T_i"])
+        T_i_bc_updated = updated_boundary_conditions["T_i"]
         T_e = T_e_value
-        T_e_bc_updated = BoundaryConditions(**updated_boundary_conditions["T_e"])
+        T_e_bc_updated = updated_boundary_conditions["T_e"]
         psi = core_profiles_t.psi  
-        psi_bc_updated = BoundaryConditions(**updated_boundary_conditions["psi"])
+        psi_bc_updated = updated_boundary_conditions["psi"]
         n_e = n_e_value
-        n_e_bc_updated = BoundaryConditions(**updated_boundary_conditions["n_e"])
+        n_e_bc_updated = updated_boundary_conditions["n_e"]
         n_i = n_i_value
-        n_i_bc_updated = BoundaryConditions(**updated_boundary_conditions["n_i"])
+        n_i_bc_updated = updated_boundary_conditions["n_i"]
         n_impurity = n_impurity_value
-        n_impurity_bc_updated = BoundaryConditions(**updated_boundary_conditions["n_impurity"])
+        n_impurity_bc_updated = updated_boundary_conditions["n_impurity"]
         boundary_conditions_updated = {
             "T_i": T_i_bc_updated,
             "T_e": T_e_bc_updated,
@@ -2310,11 +2307,9 @@ while current_t < (g.t_final - g.tolerance):
         psi=intermediate_core_profiles.psi,
         psi_bc=intermediate_core_profiles.boundary_conditions["psi"],
     )
-    psidot_bc = dataclasses.replace(
-        result[3].psidot_bc,
-        right_face_constraint=v_loop_lcfs,
-        right_face_grad_constraint=None,
-    )
+    psidot_bc = {**result[3].psidot_bc,
+                 "right_face_constraint": v_loop_lcfs,
+                 "right_face_grad_constraint": None}
     final_core_profiles = dataclasses.replace(
         intermediate_core_profiles,
         psidot=psidot_value,
