@@ -715,7 +715,6 @@ class Mode(enum.Enum):
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class RuntimeParamsSrc:
-    prescribed_values: Any
     mode: Mode = dataclasses.field(metadata={"static": True})
     is_explicit: bool = dataclasses.field(metadata={"static": True})
 
@@ -723,12 +722,6 @@ class RuntimeParamsSrc:
 class SourceModelBase(BaseModelFrozen):
     mode: Annotated[Mode, JAX_STATIC] = Mode.ZERO
     is_explicit: Annotated[bool, JAX_STATIC] = False
-    prescribed_values: tuple[TimeVaryingArray, ...] = ValidatedDefault(({
-        0: {
-            0: 0,
-            1: 0
-        }
-    }, ))
 
 
 @enum.unique
@@ -828,8 +821,6 @@ class GenericCurrentSourceConfig(SourceModelBase):
 
     def build_runtime_params(self, t):
         return RuntimeParamsGcS(
-            prescribed_values=tuple(
-                [v.get_value(t) for v in self.prescribed_values]),
             mode=self.mode,
             is_explicit=self.is_explicit,
             I_generic=self.I_generic.get_value(t),
@@ -894,8 +885,6 @@ class GenericIonElHeatSourceConfig(SourceModelBase):
 
     def build_runtime_params(self, t):
         return RuntimeParamsGeIO(
-            prescribed_values=tuple(
-                [v.get_value(t) for v in self.prescribed_values]),
             mode=self.mode,
             is_explicit=self.is_explicit,
             gaussian_width=self.gaussian_width.get_value(t),
@@ -957,8 +946,6 @@ class GenericParticleSourceConfig(SourceModelBase):
 
     def build_runtime_params(self, t):
         return RuntimeParamsPaSo(
-            prescribed_values=tuple(
-                [v.get_value(t) for v in self.prescribed_values]),
             mode=self.mode,
             is_explicit=self.is_explicit,
             particle_width=self.particle_width.get_value(t),
@@ -1018,8 +1005,6 @@ class PelletSourceConfig(SourceModelBase):
 
     def build_runtime_params(self, t):
         return RuntimeParamsPE(
-            prescribed_values=tuple(
-                [v.get_value(t) for v in self.prescribed_values]),
             mode=self.mode,
             is_explicit=self.is_explicit,
             pellet_width=self.pellet_width.get_value(t),
@@ -1118,8 +1103,6 @@ class FusionHeatSourceConfig(SourceModelBase):
 
     def build_runtime_params(self, t):
         return RuntimeParamsSrc(
-            prescribed_values=tuple(
-                [v.get_value(t) for v in self.prescribed_values]),
             mode=self.mode,
             is_explicit=self.is_explicit,
         )
@@ -1174,8 +1157,6 @@ class GasPuffSourceConfig(SourceModelBase):
 
     def build_runtime_params(self, t):
         return RuntimeParamsPS(
-            prescribed_values=tuple(
-                [v.get_value(t) for v in self.prescribed_values]),
             mode=self.mode,
             is_explicit=self.is_explicit,
             puff_decay_length=self.puff_decay_length.get_value(t),
@@ -1214,8 +1195,6 @@ class QeiSourceConfig(SourceModelBase):
 
     def build_runtime_params(self, t):
         return RuntimeParamsSrc(
-            prescribed_values=tuple(
-                [v.get_value(t) for v in self.prescribed_values]),
             mode=self.mode,
             is_explicit=self.is_explicit,
         )
