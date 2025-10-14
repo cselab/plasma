@@ -2368,26 +2368,6 @@ class ToraxSimState:
     core_profiles: Any
 
 
-def cond_fun(inputs):
-    next_dt, output = inputs
-    solver_outputs = output[2]
-    is_nan_next_dt = jnp.isnan(next_dt)
-    solver_did_not_converge = solver_outputs == 1
-    at_exact_t_final = jnp.allclose(
-        current_state.t + next_dt,
-        g.t_final,
-    )
-    next_dt_too_small = next_dt < g.min_dt
-    if solver_did_not_converge:
-        if at_exact_t_final:
-            take_another_step = True
-        else:
-            take_another_step = ~next_dt_too_small
-    else:
-        take_another_step = False
-    return take_another_step & ~is_nan_next_dt
-
-
 g.generic_current_fraction = 0.46
 g.generic_current_width = 0.075
 g.generic_current_location = 0.36
@@ -2902,7 +2882,26 @@ while current_state.t < (g.t_final - g.tolerance):
         None,
         current_state.core_profiles,
     )
-    while cond_fun((loop_dt, loop_output)):
+    # Inlined cond_fun
+    def should_continue(loop_dt, loop_output):
+        solver_outputs = loop_output[2]
+        is_nan_next_dt = jnp.isnan(loop_dt)
+        solver_did_not_converge = solver_outputs == 1
+        at_exact_t_final = jnp.allclose(
+            current_state.t + loop_dt,
+            g.t_final,
+        )
+        next_dt_too_small = loop_dt < g.min_dt
+        if solver_did_not_converge:
+            if at_exact_t_final:
+                take_another_step = True
+            else:
+                take_another_step = ~next_dt_too_small
+        else:
+            take_another_step = False
+        return take_another_step & ~is_nan_next_dt
+    
+    while should_continue(loop_dt, loop_output):
         dt = loop_dt
         output = loop_output
         runtime_params_t_plus_dt = build_runtime_params_slice(current_state.t +
