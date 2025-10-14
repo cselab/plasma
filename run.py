@@ -409,7 +409,7 @@ class BootstrapCurrent:
     j_bootstrap_face: jax.Array
 
     @classmethod
-    def zeros(cls, geometry):
+    def zeros(cls):
         return cls(
             j_bootstrap=jnp.zeros_like(g.cell_centers),
             j_bootstrap_face=jnp.zeros_like(g.face_centers),
@@ -508,7 +508,7 @@ class QeiInfo:
     implicit_ei: jax.Array
 
     @classmethod
-    def zeros(cls, geo):
+    def zeros(cls):
         return QeiInfo(
             implicit_ii=jnp.zeros_like(g.geo_rho),
             implicit_ee=jnp.zeros_like(g.geo_rho),
@@ -699,8 +699,8 @@ def calc_puff_source(
 def build_source_profiles0(core_profiles,
                            explicit_source_profiles=None,
                            conductivity=None):
-    qei = QeiInfo.zeros(geo)
-    bootstrap_current = BootstrapCurrent.zeros(geo)
+    qei = QeiInfo.zeros()
+    bootstrap_current = BootstrapCurrent.zeros()
     profiles = SourceProfiles(
         bootstrap_current=bootstrap_current,
         qei=qei,
@@ -1996,7 +1996,7 @@ core_profiles = CoreProfiles(
     sigma_face=np.zeros_like(g.geo_rho_face),
 )
 source_profiles = SourceProfiles(
-    bootstrap_current=BootstrapCurrent.zeros(None), qei=QeiInfo.zeros(None))
+    bootstrap_current=BootstrapCurrent.zeros(), qei=QeiInfo.zeros())
 dpsi_drhonorm_edge = (g.Ip * g.pi16cubed_mu0_Phib /
                       (g.geo_g2g3_over_rhon_face[-1] * g.geo_F_face[-1]))
 # Compute scaled psi values using the Ip scale factor
