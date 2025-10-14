@@ -2687,10 +2687,7 @@ T_e = CellVariable(
 )
 n_e = get_updated_electron_density(runtime_params.profile_conditions)
 ions = get_updated_ions(runtime_params, n_e, T_e)
-v_loop_lcfs = (
-    np.array(runtime_params.profile_conditions.v_loop_lcfs)
-    if runtime_params.profile_conditions.use_v_loop_lcfs_boundary_condition
-    else np.array(0.0, dtype=jnp.float64))
+v_loop_lcfs = np.array(0.0, dtype=jnp.float64)  # use_v_loop_lcfs_boundary_condition is always False
 psidot = CellVariable(
     value=np.zeros_like(g.geo_rho),
     dr=jnp.array(g.dx),
@@ -2941,21 +2938,10 @@ while current_t < (g.t_final - g.tolerance):
             "psi":
             dict(
                 right_face_grad_constraint=(
-                    (profile_conditions_t_plus_dt.Ip *
-                     (16 * jnp.pi**3 * g.mu_0 * g.geo_Phi_b) /
-                     (g.geo_g2g3_over_rhon_face[-1] * g.geo_F_face[-1]))
-                    if not runtime_params_t.profile_conditions.
-                    use_v_loop_lcfs_boundary_condition else None),
-                right_face_constraint=(
-                    _calculate_psi_value_constraint_from_v_loop(
-                        dt=dt,
-                        v_loop_lcfs_t=runtime_params_t.profile_conditions.
-                        v_loop_lcfs,
-                        v_loop_lcfs_t_plus_dt=profile_conditions_t_plus_dt.
-                        v_loop_lcfs,
-                        psi_lcfs_t=core_profiles_t.psi.right_face_constraint,
-                    ) if runtime_params_t.profile_conditions.
-                    use_v_loop_lcfs_boundary_condition else None),
+                    profile_conditions_t_plus_dt.Ip *
+                    (16 * jnp.pi**3 * g.mu_0 * g.geo_Phi_b) /
+                    (g.geo_g2g3_over_rhon_face[-1] * g.geo_F_face[-1])),
+                right_face_constraint=None,
             ),
             "Z_i_edge":
             Z_i_edge,
