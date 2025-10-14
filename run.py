@@ -12,12 +12,8 @@ import scipy
 import threading
 import typing
 import matplotlib.pyplot as plt
-
-
 class g:
     pass
-
-
 g.evolving_names = "T_i", "T_e", "psi", "n_e"
 os.environ["XLA_FLAGS"] = (
     os.environ.get("XLA_FLAGS", "") +
@@ -41,42 +37,28 @@ g.eps = 1e-7
 g.sym = "D", "T", "Ne"
 g.z = dict(zip(g.sym, [1.0, 1.0, 10.0]))
 g.A = dict(zip(g.sym, [2.0141, 3.0160, 20.180]))
-
-
 @chex.dataclass(frozen=True)
 class BoundaryConditions:
-    """Encapsulates boundary conditions for a cell-centered variable."""
     left_face_constraint: Any = None
     right_face_constraint: Any = None
     left_face_grad_constraint: Any = dataclasses.field(
         default_factory=lambda: jnp.zeros(()))
     right_face_grad_constraint: Any = dataclasses.field(
         default_factory=lambda: jnp.zeros(()))
-    
     @classmethod
     def from_cell_variable(cls, cell_var):
-        """Extract boundary conditions from a CellVariable."""
         return cls(
             left_face_constraint=cell_var.left_face_constraint,
             right_face_constraint=cell_var.right_face_constraint,
             left_face_grad_constraint=cell_var.left_face_grad_constraint,
             right_face_grad_constraint=cell_var.right_face_grad_constraint,
         )
-
-
-# Standalone functions for cell variable operations
 def compute_face_grad(value, dr, left_face_constraint, right_face_constraint,
                       left_face_grad_constraint, right_face_grad_constraint, x=None):
-    """Compute face gradients with boundary conditions.
-    
-    This function computes gradients at cell faces using finite differences,
-    with special handling for boundary conditions.
-    """
     if x is None:
         forward_difference = jnp.diff(value) / dr
     else:
         forward_difference = jnp.diff(value) / jnp.diff(x)
-
     def constrained_grad(face, grad, cell, right):
         if face is not None:
             if x is None:
@@ -87,7 +69,6 @@ def compute_face_grad(value, dr, left_face_constraint, right_face_constraint,
             return sign * (cell - face) / (0.5 * dx)
         else:
             return grad
-
     left_grad = constrained_grad(
         left_face_constraint,
         left_face_grad_constraint,
@@ -103,15 +84,9 @@ def compute_face_grad(value, dr, left_face_constraint, right_face_constraint,
     left = jnp.expand_dims(left_grad, axis=0)
     right = jnp.expand_dims(right_grad, axis=0)
     return jnp.concatenate([left, forward_difference, right])
-
-
 def compute_left_face_value(value):
-    """Get left boundary face value."""
     return value[..., 0:1]
-
-
 def compute_right_face_value(value, dr, right_face_constraint, right_face_grad_constraint):
-    """Get right boundary face value with constraint."""
     if right_face_constraint is not None:
         face_value = right_face_constraint
         face_value = jnp.expand_dims(face_value, axis=-1)
@@ -121,57 +96,34 @@ def compute_right_face_value(value, dr, right_face_constraint, right_face_grad_c
             jnp.expand_dims(right_face_grad_constraint, axis=-1) *
             jnp.expand_dims(dr, axis=-1) / 2)
     return face_value
-
-
 def compute_face_value(value, dr, right_face_constraint, right_face_grad_constraint):
-    """Interpolate cell values to face values with boundary conditions."""
     left_face = compute_left_face_value(value)
     inner = (value[..., :-1] + value[..., 1:]) / 2.0
     right_face = compute_right_face_value(value, dr, right_face_constraint, right_face_grad_constraint)
     return jnp.concatenate([left_face, inner, right_face], axis=-1)
-
-
 def compute_cell_plus_boundaries(value, dr, right_face_constraint, right_face_grad_constraint):
-    """Return cell values concatenated with boundary values."""
     left_value = compute_left_face_value(value)
     right_value = compute_right_face_value(value, dr, right_face_constraint, right_face_grad_constraint)
     return jnp.concatenate([left_value, value, right_value], axis=-1)
-
-
-# Convenience functions that accept BoundaryConditions
 def compute_face_grad_bc(value, dr, bc, x=None):
-    """Compute face gradients using a BoundaryConditions object."""
     return compute_face_grad(
         value, dr,
         bc.left_face_constraint, bc.right_face_constraint,
         bc.left_face_grad_constraint, bc.right_face_grad_constraint,
         x=x
     )
-
-
 def compute_face_value_bc(value, dr, bc):
-    """Compute face values using a BoundaryConditions object."""
     return compute_face_value(
         value, dr,
         bc.right_face_constraint, bc.right_face_grad_constraint
     )
-
-
 def compute_cell_plus_boundaries_bc(value, dr, bc):
-    """Compute cell plus boundaries using a BoundaryConditions object."""
     return compute_cell_plus_boundaries(
         value, dr,
         bc.right_face_constraint, bc.right_face_grad_constraint
     )
-
-
 @chex.dataclass(frozen=True)
 class CellVariable:
-    """Temporary wrapper for solver conversion. Will be eliminated in future refactoring.
-    
-    This class is only used internally by core_profiles_to_solver_x_tuple() to create
-    solver-compatible structures. All storage in CoreProfiles uses plain arrays + BoundaryConditions.
-    """
     value: Any
     dr: Any
     left_face_constraint: Any = None
@@ -180,22 +132,9 @@ class CellVariable:
         default_factory=lambda: jnp.zeros(()))
     right_face_grad_constraint: Any = dataclasses.field(
         default_factory=lambda: jnp.zeros(()))
-
     def get_boundary_conditions(self):
-        """Extract boundary conditions as a BoundaryConditions object."""
         return BoundaryConditions.from_cell_variable(self)
-
-
 def make_convection_terms(v_face, d_face, value, dr, bc):
-    """Compute convection terms using plain arrays and boundary conditions.
-    
-    Args:
-        v_face: Face-centered velocities
-        d_face: Face-centered diffusion coefficients
-        value: Cell-centered variable values
-        dr: Cell spacing
-        bc: BoundaryConditions object
-    """
     eps = 1e-20
     is_neg = d_face < 0.0
     nonzero_sign = jnp.ones_like(is_neg) - 2 * is_neg
@@ -206,7 +145,6 @@ def make_convection_terms(v_face, d_face, value, dr, bc):
     ratio = scale * dr * v_face / d_face
     left_peclet = -ratio[:-1]
     right_peclet = ratio[1:]
-
     def peclet_to_alpha(p):
         eps = 1e-3
         p = jnp.where(jnp.abs(p) < eps, eps, p)
@@ -222,7 +160,6 @@ def make_convection_terms(v_face, d_face, value, dr, bc):
                           alpha)
         alpha = jnp.where(p < -10.0, alpha_plneg10, alpha)
         return alpha
-
     left_alpha = peclet_to_alpha(left_peclet)
     right_alpha = peclet_to_alpha(right_peclet)
     left_v = v_face[:-1]
@@ -251,17 +188,7 @@ def make_convection_terms(v_face, d_face, value, dr, bc):
     mat = mat.at[-1, -1].set(mat_value)
     vec = vec.at[-1].set(vec_value)
     return mat, vec
-
-
 def make_diffusion_terms(d_face, value, dr, bc):
-    """Compute diffusion terms using plain arrays and boundary conditions.
-    
-    Args:
-        d_face: Face-centered diffusion coefficients
-        value: Cell-centered variable values (not used in computation, but kept for compatibility)
-        dr: Cell spacing
-        bc: BoundaryConditions object
-    """
     denom = dr**2
     diag = jnp.asarray(-d_face[1:] - d_face[:-1])
     off = d_face[1:-1]
@@ -278,20 +205,16 @@ def make_diffusion_terms(d_face, value, dr, bc):
                              dr)
     mat = (jnp.diag(diag) + jnp.diag(off, 1) + jnp.diag(off, -1)) / denom
     return mat, vec
-
-
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True, eq=False)
 class CoreProfiles:
-    # All evolving variables migrated from CellVariable to plain arrays
-    T_i: Any  # jax.Array (migrated from CellVariable)
-    T_e: Any  # jax.Array (migrated from CellVariable)
-    psi: Any  # jax.Array (migrated from CellVariable)
-    n_e: Any  # jax.Array (migrated from CellVariable)
-    # Non-evolving variables (still CellVariable or plain arrays)
-    psidot: Any  # jax.Array (migrated from CellVariable)
-    n_i: Any  # jax.Array (migrated from CellVariable)
-    n_impurity: Any  # jax.Array (migrated from CellVariable)
+    T_i: Any  
+    T_e: Any  
+    psi: Any  
+    n_e: Any  
+    psidot: Any  
+    n_i: Any  
+    n_impurity: Any  
     impurity_fractions: Any
     q_face: Any
     v_loop_lcfs: Any
@@ -306,7 +229,6 @@ class CoreProfiles:
     Z_eff_face: Any
     sigma: Any
     sigma_face: Any
-    # Boundary conditions for all migrated variables (dict for evolving vars)
     boundary_conditions: dict[str, BoundaryConditions] = dataclasses.field(
         default_factory=dict
     )
@@ -319,8 +241,6 @@ class CoreProfiles:
     n_impurity_bc: BoundaryConditions = dataclasses.field(
         default_factory=lambda: BoundaryConditions()
     )
-
-
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass
 class CoreTransport:
@@ -337,21 +257,16 @@ class CoreTransport:
     D_neo_e: Any = None
     V_neo_e: Any = None
     V_neo_ware_e: Any = None
-
     def chi_max(self):
         return jnp.maximum(
             jnp.max(self.chi_face_ion * g.geo_g1_over_vpr2_face),
             jnp.max(self.chi_face_el * g.geo_g1_over_vpr2_face),
         )
-
-
 def calculate_psidot_from_psi_sources(*, psi_sources, sigma, psi, psi_bc):
-    """Calculate psidot from psi sources using plain array and BC."""
     toc_psi = (1.0 / g.resistivity_multiplier * g.cell_centers * sigma *
                g.mu_0 * 16 * jnp.pi**2 * g.geo_Phi_b**2 / g.geo_F**2)
     d_face_psi = g.geo_g2g3_over_rhon_face
     v_face_psi = jnp.zeros_like(d_face_psi)
-    # Use updated functions with plain arrays and BCs
     diffusion_mat, diffusion_vec = make_diffusion_terms(d_face_psi, psi, jnp.array(g.dx), psi_bc)
     conv_mat, conv_vec = make_convection_terms(v_face_psi, d_face_psi, psi, jnp.array(g.dx), psi_bc)
     c_mat = diffusion_mat + conv_mat
@@ -359,14 +274,10 @@ def calculate_psidot_from_psi_sources(*, psi_sources, sigma, psi, psi_bc):
     c += psi_sources
     psidot = (jnp.dot(c_mat, psi) + c) / toc_psi
     return psidot
-
-
 def _calculate_log_tau_e_Z1(T_e, n_e, log_lambda_ei):
     return (jnp.log(12 * jnp.pi**1.5 / (n_e * log_lambda_ei)) -
             4 * jnp.log(g.q_e) + 0.5 * jnp.log(g.m_e / 2.0) +
             2 * jnp.log(g.epsilon_0) + 1.5 * jnp.log(T_e * g.keV_to_J))
-
-
 _MAVRIN_Z_COEFFS = immutabledict.immutabledict({
     "Ne":
     np.array([
@@ -379,8 +290,6 @@ _TEMPERATURE_INTERVALS = immutabledict.immutabledict({
     "Ne":
     np.array([0.5, 2.0]),
 })
-
-
 def calculate_average_charge_state_single_species(T_e, ion_symbol):
     if ion_symbol not in _MAVRIN_Z_COEFFS:
         return jnp.ones_like(T_e) * g.z[ion_symbol]
@@ -394,8 +303,6 @@ def calculate_average_charge_state_single_species(T_e, ion_symbol):
     X = jnp.log10(T_e)
     Zavg = jnp.polyval(Zavg_coeffs_in_range, X)
     return Zavg
-
-
 def get_average_charge_state(ion_symbols, T_e, fractions):
     Z_per_species = jnp.stack([
         calculate_average_charge_state_single_species(T_e, ion_symbol)
@@ -405,8 +312,6 @@ def get_average_charge_state(ion_symbols, T_e, fractions):
     Z_avg = jnp.sum(fractions * Z_per_species, axis=0)
     Z2_avg = jnp.sum(fractions * Z_per_species**2, axis=0)
     return Z_avg, Z2_avg, Z_per_species
-
-
 def calculate_f_trap():
     epsilon_effective = (
         0.67 * (1.0 - 1.4 * jnp.abs(g.geo_delta_face) * g.geo_delta_face) *
@@ -414,8 +319,6 @@ def calculate_f_trap():
     aa = (1.0 - g.geo_epsilon_face) / (1.0 + g.geo_epsilon_face)
     return 1.0 - jnp.sqrt(aa) * (1.0 - epsilon_effective) / (
         1.0 + 2.0 * jnp.sqrt(epsilon_effective))
-
-
 def calculate_L31(f_trap, nu_e_star, Z_eff):
     denom = (1.0 + (1 - 0.1 * f_trap) * jnp.sqrt(nu_e_star) + 0.5 *
              (1.0 - f_trap) * nu_e_star / Z_eff)
@@ -425,8 +328,6 @@ def calculate_L31(f_trap, nu_e_star, Z_eff):
     term_2 = 0.3 / (Z_eff + 1) * ft31**3
     term_3 = 0.2 / (Z_eff + 1) * ft31**4
     return term_0 + term_1 + term_2 + term_3
-
-
 def calculate_L32(f_trap, nu_e_star, Z_eff):
     ft32ee = f_trap / (1 + 0.26 * (1 - f_trap) * jnp.sqrt(nu_e_star) + 0.18 *
                        (1 - 0.37 * f_trap) * nu_e_star / jnp.sqrt(Z_eff))
@@ -441,28 +342,18 @@ def calculate_L32(f_trap, nu_e_star, Z_eff):
              (ft32ei**2 - ft32ei**4 - 0.55 *
               (ft32ei**3 - ft32ei**4)) - 1.2 / (1 + 0.5 * Z_eff) * ft32ei**4)
     return F32ee + F32ei
-
-
 def calculate_nu_e_star(q, n_e, T_e, Z_eff, log_lambda_ei):
     return (6.921e-18 * q * g.R_major * n_e * Z_eff * log_lambda_ei /
             (((T_e * 1e3)**2) * (g.geo_epsilon_face + g.eps)**1.5))
-
-
 def calculate_nu_i_star(q, n_i, T_i, Z_eff, log_lambda_ii):
     return (4.9e-18 * q * g.R_major * n_i * Z_eff**4 * log_lambda_ii /
             (((T_i * 1e3)**2) * (g.geo_epsilon_face + g.eps)**1.5))
-
-
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(kw_only=True, frozen=True)
 class Conductivity:
     sigma: Any
     sigma_face: Any
-
-
 def calculate_conductivity(core_profiles):
-    # Inlined _calculate_conductivity0
-    # Compute face values for migrated variables
     n_e_face = compute_face_value_bc(core_profiles.n_e, jnp.array(g.dx), core_profiles.boundary_conditions["n_e"])
     T_e_face = compute_face_value_bc(core_profiles.T_e, jnp.array(g.dx), core_profiles.boundary_conditions["T_e"])
     f_trap = calculate_f_trap()
@@ -490,28 +381,21 @@ def calculate_conductivity(core_profiles):
         sigma=sigmaneo_cell,
         sigma_face=sigma_face,
     )
-
-
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(kw_only=True, frozen=True)
 class BootstrapCurrent:
     j_bootstrap: jax.Array
     j_bootstrap_face: jax.Array
-
     @classmethod
     def zeros(cls):
         return cls(
             j_bootstrap=jnp.zeros_like(g.cell_centers),
             j_bootstrap_face=jnp.zeros_like(g.face_centers),
         )
-
-
 @jax.jit
 def _calculate_bootstrap_current(*, Z_eff_face, Z_i_face, n_e, n_e_bc, n_i, n_i_bc, 
                                  T_e, T_e_bc, T_i, T_i_bc, psi, psi_bc, q_face):
-    """Calculate bootstrap current using plain arrays and BC objects."""
     f_trap = calculate_f_trap()
-    # All variables are now plain arrays, compute face values and gradients
     n_e_face = compute_face_value_bc(n_e, jnp.array(g.dx), n_e_bc)
     n_e_face_grad = compute_face_grad_bc(n_e, jnp.array(g.dx), n_e_bc)
     T_e_face = compute_face_value_bc(T_e, jnp.array(g.dx), T_e_bc)
@@ -567,30 +451,22 @@ def _calculate_bootstrap_current(*, Z_eff_face, Z_i_face, n_e, n_e_bc, n_i, n_i_
         j_bootstrap=j_bootstrap,
         j_bootstrap_face=j_bootstrap_face,
     )
-
-
 def _calculate_L34(f_trap, nu_e_star, Z_eff):
     ft34 = f_trap / (1.0 + (1 - 0.1 * f_trap) * jnp.sqrt(nu_e_star) + 0.5 *
                      (1.0 - 0.5 * f_trap) * nu_e_star / Z_eff)
     return ((1 + 1.4 / (Z_eff + 1)) * ft34 - 1.9 / (Z_eff + 1) * ft34**2 +
             0.3 / (Z_eff + 1) * ft34**3 + 0.2 / (Z_eff + 1) * ft34**4)
-
-
 def _calculate_alpha(f_trap, nu_i_star):
     alpha0 = -1.17 * (1 - f_trap) / (1 - 0.22 * f_trap - 0.19 * f_trap**2)
     alpha = ((alpha0 + 0.25 * (1 - f_trap**2) * jnp.sqrt(nu_i_star)) /
              (1 + 0.5 * jnp.sqrt(nu_i_star)) + 0.315 * nu_i_star**2 *
              f_trap**6) / (1 + 0.15 * nu_i_star**2 * f_trap**6)
     return alpha
-
-
 def gaussian_profile(*, center, width, total):
     r = g.cell_centers
     S = jnp.exp(-((r - center)**2) / (2 * width**2))
     C = total / jnp.sum(S * g.geo_vpr * jnp.array(g.dx))
     return C * S
-
-
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class QeiInfo:
@@ -598,7 +474,6 @@ class QeiInfo:
     implicit_ee: jax.Array
     implicit_ie: jax.Array
     implicit_ei: jax.Array
-
     @classmethod
     def zeros(cls):
         return QeiInfo(
@@ -607,8 +482,6 @@ class QeiInfo:
             implicit_ie=jnp.zeros_like(g.geo_rho),
             implicit_ei=jnp.zeros_like(g.geo_rho),
         )
-
-
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class SourceProfiles:
@@ -618,39 +491,29 @@ class SourceProfiles:
     T_i: dict[str, jax.Array] = dataclasses.field(default_factory=dict)
     n_e: dict[str, jax.Array] = dataclasses.field(default_factory=dict)
     psi: dict[str, jax.Array] = dataclasses.field(default_factory=dict)
-
     def total_psi_sources(self):
         total = self.bootstrap_current.j_bootstrap
         total += sum(self.psi.values())
         mu0 = g.mu_0
         prefactor = 8 * g.geo_vpr * jnp.pi**2 * g.geo_B_0 * mu0 * g.geo_Phi_b / g.geo_F**2
         return -total * prefactor
-
     def total_sources(self, source_type):
         source = getattr(self, source_type)
         total = sum(source.values())
         return total * g.geo_vpr
-
-
 @enum.unique
 class Mode(enum.Enum):
     ZERO = "ZERO"
     MODEL_BASED = "MODEL_BASED"
-
-
 @enum.unique
 class AffectedCoreProfile(enum.IntEnum):
     PSI = 1
     NE = 2
     TEMP_ION = 3
     TEMP_EL = 4
-
-
 class SourceHandler(typing.NamedTuple):
     affects: tuple[AffectedCoreProfile, ...]
     eval_fn: typing.Callable
-
-
 def calculate_generic_current(
     source_name,
     unused_state,
@@ -665,19 +528,15 @@ def calculate_generic_current(
         generic_current_form * g.geo_spr * jnp.array(g.dx))
     generic_current_profile = Cext * generic_current_form
     return (generic_current_profile, )
-
-
 def default_formula(source_name, unused_core_profiles,
                     unused_calculated_source_profiles, unused_conductivity):
-    absorbed_power = g.generic_heat_P_total * 1.0  # absorption_fraction is always 1.0
+    absorbed_power = g.generic_heat_P_total * 1.0  
     profile = gaussian_profile(center=g.generic_heat_location,
                                width=g.generic_heat_width,
                                total=absorbed_power)
     ion = profile * (1 - g.generic_heat_electron_fraction)
     el = profile * g.generic_heat_electron_fraction
     return (ion, el)
-
-
 def calc_generic_particle_source(
     source_name,
     unused_state,
@@ -689,8 +548,6 @@ def calc_generic_particle_source(
         width=g.generic_particle_width,
         total=g.generic_particle_S_total,
     ), )
-
-
 def calc_pellet_source(
     source_name,
     unused_state,
@@ -702,15 +559,12 @@ def calc_pellet_source(
         width=g.pellet_width,
         total=g.pellet_S_total,
     ), )
-
-
 def fusion_heat_model_func(
     unused_source_name,
     core_profiles,
     unused_calculated_source_profiles,
     unused_conductivity,
 ):
-    # Inlined calc_fusion
     product = 1.0
     for fraction, symbol in zip(g.main_ion_fractions, g.main_ion_names):
         if symbol == "D" or symbol == "T":
@@ -756,21 +610,16 @@ def fusion_heat_model_func(
             Pfus_i = Pfus_cell * frac_i * alpha_fraction
             Pfus_e = Pfus_cell * frac_e * alpha_fraction
     return (Pfus_i, Pfus_e)
-
-
 def calc_puff_source(
     source_name,
     unused_state,
     unused_calculated_source_profiles,
     unused_conductivity,
 ):
-    # Inlined exponential_profile
     r = g.cell_centers
     S = jnp.exp(-(1.0 - r) / g.gas_puff_decay_length)
     C = g.gas_puff_S_total / jnp.sum(S * g.geo_vpr * jnp.array(g.dx))
     return (C * S, )
-
-
 @jax.jit
 def build_source_profiles0(core_profiles,
                            explicit_source_profiles=None,
@@ -792,8 +641,6 @@ def build_source_profiles0(core_profiles,
         conductivity=conductivity,
     )
     return profiles
-
-
 @jax.jit
 def build_source_profiles1(core_profiles,
                            explicit_source_profiles=None,
@@ -853,8 +700,6 @@ def build_source_profiles1(core_profiles,
         conductivity=conductivity,
     )
     return profiles
-
-
 def build_standard_source_profiles(*,
                                    calculated_source_profiles,
                                    core_profiles,
@@ -862,10 +707,8 @@ def build_standard_source_profiles(*,
                                    conductivity=None,
                                    calculate_anyway=False,
                                    psi_only=False):
-
     def calculate_source(source_name):
         handler = g.source_registry[source_name]
-        # All sources have is_explicit=False, so check: (explicit == False) | calculate_anyway
         if (not explicit) | calculate_anyway:
             value = handler.eval_fn(
                 source_name,
@@ -885,18 +728,13 @@ def build_standard_source_profiles(*,
                         calculated_source_profiles.T_i[source_name] = profile
                     case AffectedCoreProfile.TEMP_EL:
                         calculated_source_profiles.T_e[source_name] = profile
-
-    # Calculate PSI sources first
     for source_name in g.psi_source_names:
         calculate_source(source_name)
     if psi_only:
         return
-    # Calculate non-PSI sources
     for source_name in g.source_registry.keys():
         if source_name not in g.psi_source_names:
             calculate_source(source_name)
-
-
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass
 class TurbulentTransport:
@@ -908,8 +746,6 @@ class TurbulentTransport:
     chi_face_el_gyrobohm: jax.Array | None = None
     chi_face_ion_bohm: jax.Array | None = None
     chi_face_ion_gyrobohm: jax.Array | None = None
-
-
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class QualikizInputs:
@@ -930,8 +766,6 @@ class QualikizInputs:
     normni: Any
     alpha: Any
     epsilon_lcfs: Any
-
-
 _FLUX_NAME_MAP: Final[Mapping[str, str]] = immutabledict.immutabledict({
     "efiITG":
     "qi_itg",
@@ -949,11 +783,7 @@ _FLUX_NAME_MAP: Final[Mapping[str, str]] = immutabledict.immutabledict({
     "qe_etg",
 })
 _EPSILON_NN: Final[float] = 1 / 3
-
-
 def calculate_transport_coeffs(core_profiles):
-    # Inlined call_qlknn_implementation and prepare_qualikiz_inputs
-    # Compute face values and gradients for migrated evolving variables
     T_i_face = compute_face_value_bc(core_profiles.T_i, jnp.array(g.dx), core_profiles.boundary_conditions["T_i"])
     T_i_face_grad_rmid = compute_face_grad_bc(core_profiles.T_i, jnp.array(g.dx), core_profiles.boundary_conditions["T_i"], x=(g.geo_R_out - g.geo_R_in) * 0.5)
     T_e_face = compute_face_value_bc(core_profiles.T_e, jnp.array(g.dx), core_profiles.boundary_conditions["T_e"])
@@ -962,13 +792,11 @@ def calculate_transport_coeffs(core_profiles):
     n_e_face_grad_rmid = compute_face_grad_bc(core_profiles.n_e, jnp.array(g.dx), core_profiles.boundary_conditions["n_e"], x=(g.geo_R_out - g.geo_R_in) * 0.5)
     n_e_face_grad = compute_face_grad_bc(core_profiles.n_e, jnp.array(g.dx), core_profiles.boundary_conditions["n_e"])
     psi_face_grad = compute_face_grad_bc(core_profiles.psi, jnp.array(g.dx), core_profiles.boundary_conditions["psi"])
-    
     rmid = (g.geo_R_out - g.geo_R_in) * 0.5
     rmid_face = (g.geo_R_out_face - g.geo_R_in_face) * 0.5
     chiGB = ((core_profiles.A_i * g.m_amu)**0.5 / (g.geo_B_0 * g.q_e)**2 *
              (T_i_face * g.keV_to_J)**1.5 /
              g.geo_a_minor)
-    # Inlined NormalizedLogarithmicGradients.from_profiles
     lref_over_lti_result = jnp.where(
         jnp.abs(T_i_face) < g.eps,
         g.eps,
@@ -993,7 +821,6 @@ def calculate_transport_coeffs(core_profiles):
     )
     lref_over_lne = jnp.where(
         jnp.abs(lref_over_lne_result) < g.eps, g.eps, lref_over_lne_result)
-    # n_i now uses standalone functions
     n_i_face = compute_face_value_bc(core_profiles.n_i, jnp.array(g.dx), core_profiles.n_i_bc)
     n_i_face_grad = compute_face_grad_bc(core_profiles.n_i, jnp.array(g.dx), core_profiles.n_i_bc, x=rmid)
     lref_over_lni0_result = jnp.where(
@@ -1003,7 +830,6 @@ def calculate_transport_coeffs(core_profiles):
     )
     lref_over_lni0 = jnp.where(
         jnp.abs(lref_over_lni0_result) < g.eps, g.eps, lref_over_lni0_result)
-    # n_impurity now uses standalone functions
     n_impurity_face = compute_face_value_bc(core_profiles.n_impurity, jnp.array(g.dx), core_profiles.n_impurity_bc)
     n_impurity_face_grad = compute_face_grad_bc(core_profiles.n_impurity, jnp.array(g.dx), core_profiles.n_impurity_bc, x=rmid)
     lref_over_lni1_result = jnp.where(
@@ -1050,9 +876,7 @@ def calculate_transport_coeffs(core_profiles):
         (lref_over_lti + lref_over_lni0) +
         n_impurity_face *
         T_i_face * (lref_over_lti + lref_over_lni1))
-    # smag_alpha_correction is always True, so always apply correction
     smag = smag - alpha / 2
-    # q_sawtooth_proxy is always True, so simplify to just q < 1 condition
     smag = jnp.where(q < 1, 0.1, smag)
     q = jnp.where(q < 1, 1, q)
     smag = jnp.where(
@@ -1084,8 +908,6 @@ def calculate_transport_coeffs(core_profiles):
         qualikiz_inputs,
         x=qualikiz_inputs.x * qualikiz_inputs.epsilon_lcfs / _EPSILON_NN,
     )
-    # Inlined get_model_inputs_from_qualikiz_inputs
-    # Map model input names to QualikizInputs attributes
     input_map = {
         "Ati": lambda x: x.lref_over_lti,
         "Ate": lambda x: x.lref_over_lte,
@@ -1093,13 +915,11 @@ def calculate_transport_coeffs(core_profiles):
         "Ani": lambda x: x.lref_over_lni0,
         "LogNuStar": lambda x: x.log_nu_star_face,
     }
-
     def _get_input(key):
         return jnp.array(
             input_map.get(key, lambda x: getattr(x, key))(qualikiz_inputs),
             dtype=jnp.float64,
         )
-
     feature_scan = jnp.array(
         [_get_input(key) for key in g.model.inputs_and_ranges.keys()],
         dtype=jnp.float64,
@@ -1115,7 +935,6 @@ def calculate_transport_coeffs(core_profiles):
           model_output["qe_tem"].squeeze() +
           model_output["qe_etg"].squeeze() * g.ETG_correction_factor)
     pfe = model_output["pfe_itg"].squeeze() + model_output["pfe_tem"].squeeze()
-    # Inline make_core_transport
     gradient_reference_length = g.R_major
     gyrobohm_flux_reference_length = g.geo_a_minor
     pfe_SI = (pfe * n_e_face * qualikiz_inputs.chiGB /
@@ -1126,7 +945,6 @@ def calculate_transport_coeffs(core_profiles):
     chi_face_el = ((
         (gradient_reference_length / gyrobohm_flux_reference_length) * qe) /
                    qualikiz_inputs.lref_over_lte) * qualikiz_inputs.chiGB
-    # DV_effective_approach (only branch used)
     Deff = -pfe_SI / (n_e_face_grad * g.geo_g1_over_vpr2_face *
                       g.geo_rho_b + g.eps)
     Veff = pfe_SI / (n_e_face * g.geo_g0_over_vpr_face *
@@ -1143,7 +961,6 @@ def calculate_transport_coeffs(core_profiles):
         d_face_el=d_face_el,
         v_face_el=v_face_el,
     )
-    # Inlined apply_domain_restriction_transport
     active_mask = ((g.face_centers > g.transport_rho_min)
                    & (g.face_centers <= g.transport_rho_max)
                    & (g.face_centers <= g.rho_norm_ped_top))
@@ -1160,7 +977,6 @@ def calculate_transport_coeffs(core_profiles):
         d_face_el=d_face_el,
         v_face_el=v_face_el,
     )
-    # Inlined apply_clipping_transport
     chi_face_ion = jnp.clip(
         transport_coeffs.chi_face_ion,
         g.chi_min,
@@ -1188,7 +1004,6 @@ def calculate_transport_coeffs(core_profiles):
         d_face_el=d_face_el,
         v_face_el=v_face_el,
     )
-    # Inlined apply_transport_patches
     chi_face_ion = jnp.where(
         g.face_centers < g.rho_inner + g.eps,
         g.chi_i_inner,
@@ -1216,7 +1031,6 @@ def calculate_transport_coeffs(core_profiles):
         d_face_el=d_face_el,
         v_face_el=v_face_el,
     )
-    # Inlined smooth_coeffs_transport
     lower_cutoff = 0.01
     kernel = jnp.exp(-jnp.log(2) *
                      (g.face_centers[:, jnp.newaxis] - g.face_centers)**2 /
@@ -1245,28 +1059,20 @@ def calculate_transport_coeffs(core_profiles):
     row_sums = jnp.sum(kernel, axis=1)
     kernel /= row_sums[:, jnp.newaxis]
     smoothing_matrix = kernel
-
     def smooth_single_coeff(coeff):
         return jax.lax.cond(
             jnp.all(coeff == 0.0),
             lambda: coeff,
             lambda: jnp.dot(smoothing_matrix, coeff),
         )
-
     return jax.tree_util.tree_map(smooth_single_coeff, transport_coeffs)
-
-
 @jax.jit
 def calculate_total_transport_coeffs(core_profiles):
     turbulent_transport = calculate_transport_coeffs(
         core_profiles=core_profiles
     )
     return CoreTransport(**dataclasses.asdict(turbulent_transport))
-
-
 g.rho_smoothing_limit = 0.1
-
-
 def _smooth_savgol(data, idx_limit, polyorder):
     window_length = 5
     smoothed_data = scipy.signal.savgol_filter(data,
@@ -1275,8 +1081,6 @@ def _smooth_savgol(data, idx_limit, polyorder):
                                                mode="nearest")
     return np.concatenate(
         [np.array([data[0]]), smoothed_data[1:idx_limit], data[idx_limit:]])
-
-
 SCALING_FACTORS: Final[Mapping[str, float]] = immutabledict.immutabledict({
     "T_i":
     1.0,
@@ -1287,13 +1091,11 @@ SCALING_FACTORS: Final[Mapping[str, float]] = immutabledict.immutabledict({
     "psi":
     1.0,
 })
-
-
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class Ions:
-    n_i: Any  # jax.Array (migrated from CellVariable)
-    n_impurity: Any  # jax.Array (migrated from CellVariable)
+    n_i: Any  
+    n_impurity: Any  
     impurity_fractions: Any
     Z_i: Any
     Z_i_face: Any
@@ -1310,10 +1112,7 @@ class Ions:
     n_impurity_bc: BoundaryConditions = dataclasses.field(
         default_factory=lambda: BoundaryConditions()
     )
-
-
 def get_updated_electron_density():
-    """Returns n_e value (plain array) and BC object."""
     nGW = g.Ip / 1e6 / (jnp.pi * g.geo_a_minor**2) * 1e20
     n_e_value = g.n_e * nGW
     n_e_right_bc = g.n_e_right_bc
@@ -1335,18 +1134,13 @@ def get_updated_electron_density():
     C = (target_nbar - 0.5 * n_e_face[-1] * dr_edge / a_minor_out) / (
         nbar_from_n_e_face_inner + 0.5 * n_e_face[-2] * dr_edge / a_minor_out)
     n_e_value = C * n_e_value
-    # n_e migrated from CellVariable to plain array
     n_e_bc = BoundaryConditions(
         right_face_grad_constraint=None,
         right_face_constraint=n_e_right_bc,
     )
     return n_e_value, n_e_bc
-
-
 @jax.jit
 def get_updated_ions(n_e, n_e_bc, T_e, T_e_bc):
-    """Calculate ion densities from electron density and temperature (now plain arrays)."""
-    # T_e and n_e are now plain arrays, compute face values
     T_e_face = compute_face_value_bc(T_e, jnp.array(g.dx), T_e_bc)
     Z_i_avg, Z_i_Z2_avg, _ = get_average_charge_state(
         ion_symbols=g.main_ion_names,
@@ -1385,7 +1179,6 @@ def get_updated_ions(n_e, n_e_bc, T_e, T_e_bc):
         (Z_impurity_face[-1] - Z_eff_edge) /
         (Z_i_face[-1] * (Z_impurity_face[-1] - Z_i_face[-1])),
     )
-    # n_i migrated from CellVariable to plain array
     n_i = n_e * dilution_factor
     n_i_bc = BoundaryConditions(
         right_face_grad_constraint=None,
@@ -1402,13 +1195,11 @@ def get_updated_ions(n_e, n_e_bc, T_e, T_e_bc):
         (n_e_bc.right_face_constraint - n_i_bc.right_face_constraint * Z_i_face[-1])
         / Z_impurity_face[-1],
     )
-    # n_impurity migrated from CellVariable to plain array
     n_impurity = n_impurity_value
     n_impurity_bc = BoundaryConditions(
         right_face_grad_constraint=None,
         right_face_constraint=n_impurity_right_face_constraint,
     )
-    # Compute face values using standalone functions
     n_e_face = compute_face_value_bc(n_e, jnp.array(g.dx), n_e_bc)
     n_i_face = compute_face_value_bc(n_i, jnp.array(g.dx), n_i_bc)
     n_impurity_face = compute_face_value_bc(n_impurity, jnp.array(g.dx), n_impurity_bc)
@@ -1434,16 +1225,11 @@ def get_updated_ions(n_e, n_e_bc, T_e, T_e_bc):
         Z_eff=Z_eff,
         Z_eff_face=Z_eff_face,
     )
-
-
 def core_profiles_to_solver_x_tuple(core_profiles, ):
-    """Convert CoreProfiles (plain arrays + BC dict) to solver tuple (CellVariables)."""
     x_tuple_for_solver_list = []
     for name in g.evolving_names:
-        # Get plain array value and BC from dict
         original_value = getattr(core_profiles, name)
         original_bc = core_profiles.boundary_conditions[name]
-        # Scale for solver
         scaling_factor = 1 / SCALING_FACTORS[name]
         operation = lambda x, factor: x * factor if x is not None else None
         solver_x_tuple_cv = CellVariable(
@@ -1460,20 +1246,14 @@ def core_profiles_to_solver_x_tuple(core_profiles, ):
         )
         x_tuple_for_solver_list.append(solver_x_tuple_cv)
     return tuple(x_tuple_for_solver_list)
-
-
 def solver_x_tuple_to_core_profiles(x_new, core_profiles):
-    """Convert solver tuple (CellVariables) back to CoreProfiles (plain arrays + BC dict)."""
     updated_vars = {}
     updated_bcs = {}
     for i, var_name in enumerate(g.evolving_names):
         solver_x_tuple_cv = x_new[i]
-        # Scale back from solver units
         scaling_factor = SCALING_FACTORS[var_name]
         operation = lambda x, factor: x * factor if x is not None else None
-        # Extract scaled value (plain array)
         updated_vars[var_name] = operation(solver_x_tuple_cv.value, scaling_factor)
-        # Extract and scale boundary conditions
         updated_bcs[var_name] = BoundaryConditions(
             left_face_constraint=operation(
                 solver_x_tuple_cv.left_face_constraint, scaling_factor),
@@ -1487,13 +1267,9 @@ def solver_x_tuple_to_core_profiles(x_new, core_profiles):
     return dataclasses.replace(core_profiles, 
                               boundary_conditions=updated_bcs,
                               **updated_vars)
-
-
 OptionalTupleMatrix: TypeAlias = tuple[tuple[jax.Array | None, ...],
                                        ...] | None
 AuxiliaryOutput: TypeAlias = Any
-
-
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class Block1DCoeffs:
@@ -1504,13 +1280,10 @@ class Block1DCoeffs:
     source_mat_cell: OptionalTupleMatrix = None
     source_cell: tuple[jax.Array | None, ...] | None = None
     auxiliary_outputs: AuxiliaryOutput | None = None
-
-
 def coeffs_callback(core_profiles,
                     x,
                     explicit_source_profiles,
                     explicit_call=False):
-    # Inlined update_core_profiles_during_step
     updated_core_profiles = solver_x_tuple_to_core_profiles(x, core_profiles)
     ions = get_updated_ions(
         updated_core_profiles.n_e,
@@ -1543,7 +1316,6 @@ def coeffs_callback(core_profiles,
                                 updated_core_profiles.boundary_conditions["psi"])
         ),
     )
-    # Inlined calc_coeffs
     if explicit_call and g.theta_implicit == 1.0:
         tic_T_i = core_profiles.n_i * g.geo_vpr**(5.0 / 3.0)
         tic_T_e = core_profiles.n_e * g.geo_vpr**(5.0 / 3.0)
@@ -1559,8 +1331,6 @@ def coeffs_callback(core_profiles,
         coeffs = Block1DCoeffs(transient_in_cell=transient_in_cell, )
         return coeffs
     else:
-        # Inlined _calc_coeffs_full
-        # Pre-compute face values and gradients for evolving variables
         T_i_face = compute_face_value_bc(core_profiles.T_i, jnp.array(g.dx), core_profiles.boundary_conditions["T_i"])
         T_i_face_grad = compute_face_grad_bc(core_profiles.T_i, jnp.array(g.dx), core_profiles.boundary_conditions["T_i"])
         T_e_face = compute_face_value_bc(core_profiles.T_e, jnp.array(g.dx), core_profiles.boundary_conditions["T_e"])
@@ -1608,7 +1378,6 @@ def coeffs_callback(core_profiles,
         source_n_e = merged_source_profiles.total_sources("n_e")
         source_n_e += mask * g.adaptive_n_source_prefactor * g.n_e_ped
         source_mat_nn += -(mask * g.adaptive_n_source_prefactor)
-        # Inlined _calculate_pereverzev_flux
         geo_factor = jnp.concatenate(
             [jnp.ones(1), g.geo_g1_over_vpr_face[1:] / g.geo_g0_face[1:]])
         chi_face_per_ion = (g.geo_g1_over_vpr_face *
@@ -1722,8 +1491,6 @@ def coeffs_callback(core_profiles,
             ),
         )
         return coeffs
-
-
 MIN_DELTA: Final[float] = 1e-7
 g.generic_current_fraction = 0.46
 g.generic_current_width = 0.075
@@ -1749,12 +1516,10 @@ g.n_corrector_steps = 1
 g.Z_eff = 1.6
 g.impurity_names = ('Ne', )
 g.main_ion_names = 'D', 'T'
-# Pre-compute impurity parameters (constant values for 'Ne')
 g.impurity_fractions = jnp.array([1.0])
 g.impurity_fractions_face = jnp.array([1.0])
 g.impurity_A_avg = g.A['Ne']
 g.impurity_A_avg_face = g.A['Ne']
-# Pre-compute main ion parameters (constant values for D:0.5, T:0.5)
 g.main_ion_fractions = jnp.array([0.5, 0.5])
 g.main_ion_A_avg = 0.5 * g.A['D'] + 0.5 * g.A['T']
 g.t_initial = 0.0
@@ -1767,18 +1532,15 @@ g.T_i_right_bc = jnp.array(0.2)
 g.T_e_right_bc = jnp.array(0.2)
 g.n_e_right_bc = jnp.array(0.25e20)
 g.nbar = 0.8
-# Pre-compute constant profile values for t=0.0
 g.T_i_profile_dict = {0.0: 15.0, 1.0: 0.2}
 g.T_e_profile_dict = {0.0: 15.0, 1.0: 0.2}
 g.n_e_profile_dict = {0.0: 1.5, 1.0: 1.0}
-# Convert to arrays at t=0.0
 g.T_i_profile_x = np.array(list(g.T_i_profile_dict.keys()))
 g.T_i_profile_y = np.array(list(g.T_i_profile_dict.values()))
 g.T_e_profile_x = np.array(list(g.T_e_profile_dict.keys()))
 g.T_e_profile_y = np.array(list(g.T_e_profile_dict.values()))
 g.n_e_profile_x = np.array(list(g.n_e_profile_dict.keys()))
 g.n_e_profile_y = np.array(list(g.n_e_profile_dict.values()))
-# Pre-compute profile values (constant, not time-varying)
 g.T_i = jnp.interp(g.cell_centers, g.T_i_profile_x, g.T_i_profile_y)
 g.T_e = jnp.interp(g.cell_centers, g.T_e_profile_x, g.T_e_profile_y)
 g.n_e = jnp.interp(g.cell_centers, g.n_e_profile_x, g.n_e_profile_y)
@@ -2013,13 +1775,11 @@ bulk = g.geo_g1_face[..., 1:] / g.geo_vpr_face[..., 1:]**2
 first_element = jnp.ones_like(g.geo_rho_b) / g.geo_rho_b**2
 g.geo_g1_over_vpr2_face = jnp.concatenate(
     [jnp.expand_dims(first_element, axis=-1), bulk], axis=-1)
-# Pre-compute frequently used mathematical constants
 g.pi_16_squared = 16 * jnp.pi**2
 g.pi_16_cubed = 16 * jnp.pi**3
 g.toc_temperature_factor = 1.5 * g.geo_vpr**(-2.0 / 3.0) * g.keV_to_J
 g.mu0_pi16sq_Phib_sq_over_F_sq = g.mu_0 * g.pi_16_squared * g.geo_Phi_b**2 / g.geo_F**2
 g.pi16cubed_mu0_Phib = g.pi_16_cubed * g.mu_0 * g.geo_Phi_b
-# Simplified source registry using SourceHandler - replaces entire Source class hierarchy
 g.source_registry = {
     "generic_current":
     SourceHandler(
@@ -2056,13 +1816,10 @@ g.psi_source_names = {"generic_current"}
 g.ETG_correction_factor = 1.0 / 3.0
 g.collisionality_multiplier = 1.0
 g.smoothing_width = 0.1
-# Pre-compute transport parameters (constant values)
 g.transport_rho_min = 0.0
 g.transport_rho_max = 1.0
-# Pre-compute source modes (constant values)
-g.qei_mode = "ZERO"  # ei_exchange mode
+g.qei_mode = "ZERO"  
 Ip_scale_factor = g.Ip / g.geo_Ip_profile_face_base[-1]
-# Evolving variables migrated from CellVariable to plain arrays
 T_i = g.T_i
 T_i_bc = BoundaryConditions(
     left_face_grad_constraint=jnp.zeros(()),
@@ -2079,13 +1836,11 @@ n_e, n_e_bc = get_updated_electron_density()
 ions = get_updated_ions(n_e, n_e_bc, T_e, T_e_bc)
 v_loop_lcfs = np.array(
     0.0,
-    dtype=jnp.float64)  # use_v_loop_lcfs_boundary_condition is always False
-# psidot migrated from CellVariable to plain array
+    dtype=jnp.float64)  
 psidot = np.zeros_like(g.geo_rho)
-psidot_bc = BoundaryConditions()  # Default BCs (no constraints)
+psidot_bc = BoundaryConditions()  
 psi = np.zeros_like(g.geo_rho)
-psi_bc = BoundaryConditions()  # Default BCs (no constraints)
-# Create boundary_conditions dict for all evolving variables
+psi_bc = BoundaryConditions()  
 boundary_conditions = {
     "T_i": T_i_bc,
     "T_e": T_e_bc,
@@ -2121,17 +1876,14 @@ source_profiles = SourceProfiles(bootstrap_current=BootstrapCurrent.zeros(),
                                  qei=QeiInfo.zeros())
 dpsi_drhonorm_edge = (g.Ip * g.pi16cubed_mu0_Phib /
                       (g.geo_g2g3_over_rhon_face[-1] * g.geo_F_face[-1]))
-# Compute scaled psi values using the Ip scale factor
 geo_psi_from_Ip_scaled = g.geo_psi_from_Ip_base * Ip_scale_factor
 geo_psi_from_Ip_face_scaled = g.geo_psi_from_Ip_face_base * Ip_scale_factor
-# psi migrated from CellVariable to plain array
 psi = geo_psi_from_Ip_scaled
 psi_bc = BoundaryConditions(
     right_face_grad_constraint=dpsi_drhonorm_edge,
     right_face_constraint=None,
 )
 psi_face_grad = compute_face_grad_bc(psi, jnp.array(g.dx), psi_bc)
-# Update boundary_conditions dict
 boundary_conditions_updated = core_profiles.boundary_conditions.copy()
 boundary_conditions_updated["psi"] = psi_bc
 core_profiles = dataclasses.replace(
@@ -2179,7 +1931,6 @@ psidot_value = calculate_psidot_from_psi_sources(psi_sources=psi_sources,
                                                  psi=psi,
                                                  psi_bc=psi_bc)
 v_loop_lcfs = psidot_value[-1]
-# psidot is now a plain array, update BC separately
 psidot_bc = dataclasses.replace(
     core_profiles.psidot_bc,
     right_face_constraint=v_loop_lcfs,
@@ -2209,7 +1960,6 @@ state_history = [(current_t, current_core_profiles)]
 while current_t < (g.t_final - g.tolerance):
     explicit_source_profiles = build_source_profiles0(
         core_profiles=current_core_profiles, )
-    # Inlined next_dt
     chi_max = core_transport.chi_max()
     basic_dt = (3.0 / 4.0) * (jnp.array(g.dx)**2) / chi_max
     initial_dt = jnp.minimum(
@@ -2218,7 +1968,6 @@ while current_t < (g.t_final - g.tolerance):
     )
     crosses_t_final = (current_t < g.t_final) * (current_t + initial_dt
                                                  > g.t_final)
-    # Simplified: logical_and with True is redundant
     initial_dt = jax.lax.select(
         crosses_t_final,
         g.t_final - current_t,
@@ -2231,8 +1980,6 @@ while current_t < (g.t_final - g.tolerance):
         1,
         current_core_profiles,
     )
-
-    # Inlined cond_fun
     def should_continue(loop_dt, loop_output):
         solver_outputs = loop_output[2]
         is_nan_next_dt = jnp.isnan(loop_dt)
@@ -2250,14 +1997,12 @@ while current_t < (g.t_final - g.tolerance):
         else:
             take_another_step = False
         return take_another_step & ~is_nan_next_dt
-
     while should_continue(loop_dt, loop_output):
         dt = loop_dt
         output = loop_output
         core_profiles_t = current_core_profiles
         n_e, n_e_bc_temp = get_updated_electron_density()
         n_e_right_bc = n_e_bc_temp.right_face_constraint
-        # Create temporary BCs with updated right face constraints for edge calculation
         n_e_bc_edge = dataclasses.replace(
             core_profiles_t.boundary_conditions["n_e"],
             right_face_constraint=g.n_e_right_bc,
@@ -2324,7 +2069,6 @@ while current_t < (g.t_final - g.tolerance):
             "Z_impurity_edge":
             Z_impurity_edge,
         }
-        # Inlined get_prescribed_core_profile_values
         T_i_value = core_profiles_t.T_i
         T_e_value = core_profiles_t.T_e
         n_e_value = core_profiles_t.n_e
@@ -2334,9 +2078,9 @@ while current_t < (g.t_final - g.tolerance):
             T_e_value,
             core_profiles_t.boundary_conditions["T_e"],
         )
-        n_i_value = ions.n_i  # Now a plain array
+        n_i_value = ions.n_i  
         n_i_bc = ions.n_i_bc
-        n_impurity_value = ions.n_impurity  # Now a plain array
+        n_impurity_value = ions.n_impurity  
         n_impurity_bc = ions.n_impurity_bc
         impurity_fractions_value = ions.impurity_fractions
         Z_i_value = ions.Z_i
@@ -2348,22 +2092,18 @@ while current_t < (g.t_final - g.tolerance):
         A_impurity_face_value = ions.A_impurity_face
         Z_eff_value = ions.Z_eff
         Z_eff_face_value = ions.Z_eff_face
-        # All evolving variables are now plain arrays, update BCs separately
         T_i = T_i_value
         T_i_bc_updated = BoundaryConditions(**updated_boundary_conditions["T_i"])
         T_e = T_e_value
         T_e_bc_updated = BoundaryConditions(**updated_boundary_conditions["T_e"])
-        psi = core_profiles_t.psi  # psi value doesn't change in prescribed profiles
+        psi = core_profiles_t.psi  
         psi_bc_updated = BoundaryConditions(**updated_boundary_conditions["psi"])
         n_e = n_e_value
         n_e_bc_updated = BoundaryConditions(**updated_boundary_conditions["n_e"])
-        # n_i is now a plain array, update BC separately
         n_i = n_i_value
         n_i_bc_updated = BoundaryConditions(**updated_boundary_conditions["n_i"])
-        # n_impurity is now a plain array, update BC separately
         n_impurity = n_impurity_value
         n_impurity_bc_updated = BoundaryConditions(**updated_boundary_conditions["n_impurity"])
-        # Update boundary_conditions dict for evolving variables
         boundary_conditions_updated = {
             "T_i": T_i_bc_updated,
             "T_e": T_e_bc_updated,
@@ -2408,7 +2148,6 @@ while current_t < (g.t_final - g.tolerance):
             explicit_source_profiles=explicit_source_profiles,
             explicit_call=True,
         )
-
         @jax.jit
         def solver_loop_body(i, x_new_guess):
             coeffs_new = coeffs_callback(
@@ -2440,7 +2179,6 @@ while current_t < (g.t_final - g.tolerance):
             c = zero_block_vec.copy()
             if d_face is not None:
                 for i in range(num_channels):
-                    # x[i] is a CellVariable from solver, extract value and BC
                     (
                         diffusion_mat,
                         diffusion_vec,
@@ -2457,7 +2195,6 @@ while current_t < (g.t_final - g.tolerance):
                     d_face_i = d_face[i] if d_face is not None else None
                     d_face_i = jnp.zeros_like(
                         v_face[i]) if d_face_i is None else d_face_i
-                    # x[i] is a CellVariable from solver, extract value and BC
                     (
                         conv_mat,
                         conv_vec,
@@ -2496,7 +2233,6 @@ while current_t < (g.t_final - g.tolerance):
             ]
             out = tuple(out)
             return out
-
         x_new = x_new_guess
         for i in range(0, g.n_corrector_steps + 1):
             x_new = solver_loop_body(i, x_new)
@@ -2518,7 +2254,6 @@ while current_t < (g.t_final - g.tolerance):
         updated_core_profiles_t_plus_dt.T_e,
         updated_core_profiles_t_plus_dt.boundary_conditions["T_e"],
     )
-    # Compute psi face values for v_loop_lcfs calculation
     psi_face_new = compute_face_value_bc(updated_core_profiles_t_plus_dt.psi, jnp.array(g.dx), updated_core_profiles_t_plus_dt.boundary_conditions["psi"])
     psi_face_old = compute_face_value_bc(current_core_profiles.psi, jnp.array(g.dx), current_core_profiles.boundary_conditions["psi"])
     v_loop_lcfs = ((psi_face_new[-1] - psi_face_old[-1]) / result[1])
@@ -2575,7 +2310,6 @@ while current_t < (g.t_final - g.tolerance):
         psi=intermediate_core_profiles.psi,
         psi_bc=intermediate_core_profiles.boundary_conditions["psi"],
     )
-    # psidot is now a plain array, update BC separately
     psidot_bc = dataclasses.replace(
         result[3].psidot_bc,
         right_face_constraint=v_loop_lcfs,
@@ -2597,7 +2331,6 @@ evolving_data = {}
 for var_name in g.evolving_names:
     var_data = []
     for state_t, state_core_profiles in state_history:
-        # Variables are now plain arrays, use standalone function
         var_value = getattr(state_core_profiles, var_name)
         var_bc = state_core_profiles.boundary_conditions[var_name]
         data = compute_cell_plus_boundaries_bc(var_value, jnp.array(g.dx), var_bc)
