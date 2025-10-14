@@ -906,19 +906,19 @@ def calculate_transport_coeffs(core_profiles):
     T_i_face = compute_face_value_bc(core_profiles.T_i, jnp.array(g.dx), g.T_i_bc)
     T_i_face_grad_rmid = compute_face_grad_bc(
         core_profiles.T_i, jnp.array(g.dx), g.T_i_bc,
-        x=(g.geo_R_out - g.geo_R_in) * 0.5)
+        x=g.geo_rmid)
     T_e_face = compute_face_value_bc(core_profiles.T_e, jnp.array(g.dx), g.T_e_bc)
     T_e_face_grad_rmid = compute_face_grad_bc(
         core_profiles.T_e, jnp.array(g.dx), g.T_e_bc,
-        x=(g.geo_R_out - g.geo_R_in) * 0.5)
+        x=g.geo_rmid)
     n_e_face = compute_face_value_bc(core_profiles.n_e, jnp.array(g.dx), g.n_e_bc)
     n_e_face_grad_rmid = compute_face_grad_bc(
         core_profiles.n_e, jnp.array(g.dx), g.n_e_bc,
-        x=(g.geo_R_out - g.geo_R_in) * 0.5)
+        x=g.geo_rmid)
     n_e_face_grad = compute_face_grad_bc(core_profiles.n_e, jnp.array(g.dx), g.n_e_bc)
     psi_face_grad = compute_face_grad_bc(core_profiles.psi, jnp.array(g.dx), g.psi_bc)
-    rmid = (g.geo_R_out - g.geo_R_in) * 0.5
-    rmid_face = (g.geo_R_out_face - g.geo_R_in_face) * 0.5
+    rmid = g.geo_rmid
+    rmid_face = g.geo_rmid_face
     chiGB = ((core_profiles.A_i * g.m_amu)**0.5 / (g.geo_B_0 * g.q_e)**2 *
              (T_i_face * g.keV_to_J)**1.5 / g.geo_a_minor)
     lref_over_lti_result = jnp.where(
@@ -974,7 +974,7 @@ def calculate_transport_coeffs(core_profiles):
     iota_scaled0 = jnp.expand_dims(jnp.abs(psi_face_grad[1] / jnp.array(g.dx)),
                                    axis=0)
     iota_scaled = jnp.concatenate([iota_scaled0, iota_scaled])
-    rmid_face = (g.geo_R_out_face - g.geo_R_in_face) * 0.5
+    rmid_face = g.geo_rmid_face
     smag = -rmid_face * jnp.gradient(iota_scaled, rmid_face) / iota_scaled
     epsilon_lcfs = rmid_face[-1] / g.R_major
     x = rmid_face / rmid_face[-1]
@@ -1891,6 +1891,8 @@ g.geo_R_in = Rin
 g.geo_R_in_face = Rin_face
 g.geo_R_out = Rout
 g.geo_R_out_face = Rout_face
+g.geo_rmid = (g.geo_R_out - g.geo_R_in) * 0.5
+g.geo_rmid_face = (g.geo_R_out_face - g.geo_R_in_face) * 0.5
 g.geo_Ip_profile_face_base = Ip_profile_face
 g.geo_psi = psi
 g.geo_psi_from_Ip_base = psi_from_Ip
