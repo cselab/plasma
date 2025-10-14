@@ -2579,16 +2579,34 @@ g.geo_g1_over_vpr2_face = jnp.concatenate(
     [jnp.expand_dims(first_element, axis=-1), bulk], axis=-1)
 
 g.pedestal_model = PedestalConfig().build_pedestal_model()
-# Simplified source models - direct function mapping
-g.source_functions = {
-    "generic_current": calculate_generic_current,
-    "generic_heat": default_formula,
-    "generic_particle": calc_generic_particle_source,
-    "pellet": calc_pellet_source,
-    "gas_puff": calc_puff_source,
-    "fusion": fusion_heat_model_func,
+# Simplified source registry using SourceHandler
+g.source_registry = {
+    "generic_current": SourceHandler(
+        affects=(AffectedCoreProfile.PSI,),
+        eval_fn=calculate_generic_current,
+    ),
+    "generic_heat": SourceHandler(
+        affects=(AffectedCoreProfile.TEMP_ION, AffectedCoreProfile.TEMP_EL),
+        eval_fn=default_formula,
+    ),
+    "generic_particle": SourceHandler(
+        affects=(AffectedCoreProfile.NE,),
+        eval_fn=calc_generic_particle_source,
+    ),
+    "pellet": SourceHandler(
+        affects=(AffectedCoreProfile.NE,),
+        eval_fn=calc_pellet_source,
+    ),
+    "gas_puff": SourceHandler(
+        affects=(AffectedCoreProfile.NE,),
+        eval_fn=calc_puff_source,
+    ),
+    "fusion": SourceHandler(
+        affects=(AffectedCoreProfile.TEMP_ION, AffectedCoreProfile.TEMP_EL),
+        eval_fn=fusion_heat_model_func,
+    ),
 }
-g.psi_source_names = {"generic_current"}  # Sources that affect PSI
+g.psi_source_names = {"generic_current"}
 g.source_models = build_models()
 g.ETG_correction_factor = 1.0 / 3.0
 g.collisionality_multiplier = 1.0
