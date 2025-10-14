@@ -2107,32 +2107,16 @@ while True:
         n_i_bound_right = g.n_e_right_bc * dilution_factor_edge
         n_impurity_bound_right = (g.n_e_right_bc -
                                   n_i_bound_right * Z_i_edge) / Z_impurity_edge
-        updated_boundary_conditions = {
-            "T_i":
-            g.T_i_bc,
-            "T_e":
-            g.T_e_bc,
-            "n_e":
-            g.n_e_bc,
-            "psi":
-            g.psi_bc,
-            "n_i":
-            make_bc(
-                left_face_grad_constraint=jnp.zeros(()),
-                right_face_grad_constraint=None,
-                right_face_constraint=jnp.array(n_i_bound_right),
-            ),
-            "n_impurity":
-            make_bc(
-                left_face_grad_constraint=jnp.zeros(()),
-                right_face_grad_constraint=None,
-                right_face_constraint=jnp.array(n_impurity_bound_right),
-            ),
-            "Z_i_edge":
-            Z_i_edge,
-            "Z_impurity_edge":
-            Z_impurity_edge,
-        }
+        n_i_bc_updated = make_bc(
+            left_face_grad_constraint=jnp.zeros(()),
+            right_face_grad_constraint=None,
+            right_face_constraint=jnp.array(n_i_bound_right),
+        )
+        n_impurity_bc_updated = make_bc(
+            left_face_grad_constraint=jnp.zeros(()),
+            right_face_grad_constraint=None,
+            right_face_constraint=jnp.array(n_impurity_bound_right),
+        )
         T_i_value = core_profiles_t.T_i
         T_e_value = core_profiles_t.T_e
         n_e_value = core_profiles_t.n_e
@@ -2157,24 +2141,18 @@ while True:
         Z_eff_value = ions.Z_eff
         Z_eff_face_value = ions.Z_eff_face
         T_i = T_i_value
-        T_i_bc_updated = updated_boundary_conditions["T_i"]
         T_e = T_e_value
-        T_e_bc_updated = updated_boundary_conditions["T_e"]
         psi = core_profiles_t.psi
-        psi_bc_updated = updated_boundary_conditions["psi"]
         n_e = n_e_value
-        n_e_bc_updated = updated_boundary_conditions["n_e"]
         n_i = n_i_value
-        n_i_bc_updated = updated_boundary_conditions["n_i"]
         n_impurity = n_impurity_value
-        n_impurity_bc_updated = updated_boundary_conditions["n_impurity"]
         Z_i_face = jnp.concatenate([
             Z_i_face_value[:-1],
-            jnp.array([updated_boundary_conditions["Z_i_edge"]]),
+            jnp.array([Z_i_edge]),
         ], )
         Z_impurity_face = jnp.concatenate([
             Z_impurity_face_value[:-1],
-            jnp.array([updated_boundary_conditions["Z_impurity_edge"]]),
+            jnp.array([Z_impurity_edge]),
         ], )
         core_profiles_t_plus_dt = dataclasses.replace(
             core_profiles_t,
