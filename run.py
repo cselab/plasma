@@ -309,12 +309,6 @@ def calculate_psidot_from_psi_sources(*, psi_sources, sigma, psi, psi_bc):
 
 
 def calculate_log_lambda_ei(n_e, T_e_keV):
-    """Calculate Coulomb logarithm for electron-ion collisions.
-    
-    Args:
-        n_e: electron density [m^-3]
-        T_e_keV: electron temperature [keV]
-    """
     return 31.3 - 0.5 * jnp.log(n_e) + jnp.log(T_e_keV * 1e3)
 
 
@@ -417,9 +411,10 @@ class Conductivity:
 
 
 def calculate_conductivity(core_profiles):
-    # Use precomputed constant BCs from g.*
-    n_e_face = compute_face_value_bc(core_profiles.n_e, jnp.array(g.dx), g.n_e_bc)
-    T_e_face = compute_face_value_bc(core_profiles.T_e, jnp.array(g.dx), g.T_e_bc)
+    n_e_face = compute_face_value_bc(core_profiles.n_e, jnp.array(g.dx),
+                                     g.n_e_bc)
+    T_e_face = compute_face_value_bc(core_profiles.T_e, jnp.array(g.dx),
+                                     g.T_e_bc)
     f_trap = calculate_f_trap()
     NZ = 0.58 + 0.74 / (0.76 + core_profiles.Z_eff_face)
     log_lambda_ei = calculate_log_lambda_ei(n_e_face, T_e_face)
@@ -669,7 +664,8 @@ def fusion_heat_model_func(
         if symbol == "D" or symbol == "T":
             product *= fraction
             DT_fraction_product = product
-            t_face = compute_face_value_bc(core_profiles.T_i, jnp.array(g.dx), g.T_i_bc)
+            t_face = compute_face_value_bc(core_profiles.T_i, jnp.array(g.dx),
+                                           g.T_i_bc)
             Efus = 17.6 * 1e3 * g.keV_to_J
             mrc2 = 1124656
             BG = 34.3827
@@ -752,7 +748,8 @@ def build_source_profiles0(core_profiles,
 def build_source_profiles1(core_profiles,
                            explicit_source_profiles=None,
                            conductivity=None):
-    log_lambda_ei = calculate_log_lambda_ei(core_profiles.n_e, core_profiles.T_e)
+    log_lambda_ei = calculate_log_lambda_ei(core_profiles.n_e,
+                                            core_profiles.T_e)
     log_tau_e_Z1 = _calculate_log_tau_e_Z1(
         core_profiles.T_e,
         core_profiles.n_e,
@@ -883,40 +880,40 @@ class QualikizInputs:
 
 
 g.FLUX_NAME_MAP = immutabledict.immutabledict({
-    "efiITG":
-    "qi_itg",
-    "efeITG":
-    "qe_itg",
-    "pfeITG":
-    "pfe_itg",
-    "efeTEM":
-    "qe_tem",
-    "efiTEM":
-    "qi_tem",
-    "pfeTEM":
-    "pfe_tem",
-    "efeETG":
-    "qe_etg",
+    "efiITG": "qi_itg",
+    "efeITG": "qe_itg",
+    "pfeITG": "pfe_itg",
+    "efeTEM": "qe_tem",
+    "efiTEM": "qi_tem",
+    "pfeTEM": "pfe_tem",
+    "efeETG": "qe_etg",
 })
 g.EPSILON_NN = 1 / 3
 
 
 def calculate_transport_coeffs(core_profiles):
-    # Use precomputed constant BCs from g.*
-    T_i_face = compute_face_value_bc(core_profiles.T_i, jnp.array(g.dx), g.T_i_bc)
-    T_i_face_grad_rmid = compute_face_grad_bc(
-        core_profiles.T_i, jnp.array(g.dx), g.T_i_bc,
-        x=g.geo_rmid)
-    T_e_face = compute_face_value_bc(core_profiles.T_e, jnp.array(g.dx), g.T_e_bc)
-    T_e_face_grad_rmid = compute_face_grad_bc(
-        core_profiles.T_e, jnp.array(g.dx), g.T_e_bc,
-        x=g.geo_rmid)
-    n_e_face = compute_face_value_bc(core_profiles.n_e, jnp.array(g.dx), g.n_e_bc)
-    n_e_face_grad_rmid = compute_face_grad_bc(
-        core_profiles.n_e, jnp.array(g.dx), g.n_e_bc,
-        x=g.geo_rmid)
-    n_e_face_grad = compute_face_grad_bc(core_profiles.n_e, jnp.array(g.dx), g.n_e_bc)
-    psi_face_grad = compute_face_grad_bc(core_profiles.psi, jnp.array(g.dx), g.psi_bc)
+    T_i_face = compute_face_value_bc(core_profiles.T_i, jnp.array(g.dx),
+                                     g.T_i_bc)
+    T_i_face_grad_rmid = compute_face_grad_bc(core_profiles.T_i,
+                                              jnp.array(g.dx),
+                                              g.T_i_bc,
+                                              x=g.geo_rmid)
+    T_e_face = compute_face_value_bc(core_profiles.T_e, jnp.array(g.dx),
+                                     g.T_e_bc)
+    T_e_face_grad_rmid = compute_face_grad_bc(core_profiles.T_e,
+                                              jnp.array(g.dx),
+                                              g.T_e_bc,
+                                              x=g.geo_rmid)
+    n_e_face = compute_face_value_bc(core_profiles.n_e, jnp.array(g.dx),
+                                     g.n_e_bc)
+    n_e_face_grad_rmid = compute_face_grad_bc(core_profiles.n_e,
+                                              jnp.array(g.dx),
+                                              g.n_e_bc,
+                                              x=g.geo_rmid)
+    n_e_face_grad = compute_face_grad_bc(core_profiles.n_e, jnp.array(g.dx),
+                                         g.n_e_bc)
+    psi_face_grad = compute_face_grad_bc(core_profiles.psi, jnp.array(g.dx),
+                                         g.psi_bc)
     rmid = g.geo_rmid
     rmid_face = g.geo_rmid_face
     chiGB = ((core_profiles.A_i * g.m_amu)**0.5 / (g.geo_B_0 * g.q_e)**2 *
@@ -1477,13 +1474,18 @@ def coeffs_callback(core_profiles,
         coeffs = Block1DCoeffs(transient_in_cell=transient_in_cell, )
         return coeffs
     else:
-        # Use precomputed constant BCs from g.*
-        T_i_face = compute_face_value_bc(core_profiles.T_i, jnp.array(g.dx), g.T_i_bc)
-        T_i_face_grad = compute_face_grad_bc(core_profiles.T_i, jnp.array(g.dx), g.T_i_bc)
-        T_e_face = compute_face_value_bc(core_profiles.T_e, jnp.array(g.dx), g.T_e_bc)
-        T_e_face_grad = compute_face_grad_bc(core_profiles.T_e, jnp.array(g.dx), g.T_e_bc)
-        n_e_face = compute_face_value_bc(core_profiles.n_e, jnp.array(g.dx), g.n_e_bc)
-        n_e_face_grad = compute_face_grad_bc(core_profiles.n_e, jnp.array(g.dx), g.n_e_bc)
+        T_i_face = compute_face_value_bc(core_profiles.T_i, jnp.array(g.dx),
+                                         g.T_i_bc)
+        T_i_face_grad = compute_face_grad_bc(core_profiles.T_i,
+                                             jnp.array(g.dx), g.T_i_bc)
+        T_e_face = compute_face_value_bc(core_profiles.T_e, jnp.array(g.dx),
+                                         g.T_e_bc)
+        T_e_face_grad = compute_face_grad_bc(core_profiles.T_e,
+                                             jnp.array(g.dx), g.T_e_bc)
+        n_e_face = compute_face_value_bc(core_profiles.n_e, jnp.array(g.dx),
+                                         g.n_e_bc)
+        n_e_face_grad = compute_face_grad_bc(core_profiles.n_e,
+                                             jnp.array(g.dx), g.n_e_bc)
         rho_norm_ped_top_idx = jnp.abs(g.cell_centers -
                                        g.rho_norm_ped_top).argmin()
         mask = (jnp.zeros_like(g.geo_rho,
@@ -1966,7 +1968,6 @@ g.smoothing_width = 0.1
 g.transport_rho_min = 0.0
 g.transport_rho_max = 1.0
 g.qei_mode = "ZERO"
-# Precompute constant boundary conditions for evolving variables
 g.T_i_bc = make_bc(
     left_face_grad_constraint=jnp.zeros(()),
     right_face_grad_constraint=None,
@@ -1977,19 +1978,16 @@ g.T_e_bc = make_bc(
     right_face_grad_constraint=None,
     right_face_constraint=g.T_e_right_bc,
 )
-# n_e_bc computed from get_updated_electron_density but uses constant g.n_e_right_bc
 g.n_e_bc = make_bc(
     right_face_grad_constraint=None,
     right_face_constraint=g.n_e_right_bc,
 )
-# psi_bc gradient depends on constant Ip formula
 g.dpsi_drhonorm_edge = (g.Ip * 16 * jnp.pi**3 * g.mu_0 * g.geo_Phi_b /
                         (g.geo_g2g3_over_rhon_face[-1] * g.geo_F_face[-1]))
 g.psi_bc = make_bc(
     right_face_grad_constraint=g.dpsi_drhonorm_edge,
     right_face_constraint=None,
 )
-# Precompute boundary_conditions dict for all evolving variables
 g.boundary_conditions = {
     "T_i": g.T_i_bc,
     "T_e": g.T_e_bc,
@@ -2036,7 +2034,6 @@ source_profiles = SourceProfiles(bootstrap_current=BootstrapCurrent.zeros(),
 geo_psi_from_Ip_scaled = g.geo_psi_from_Ip_base * Ip_scale_factor
 geo_psi_from_Ip_face_scaled = g.geo_psi_from_Ip_face_base * Ip_scale_factor
 psi = geo_psi_from_Ip_scaled
-# psi_bc is already precomputed in g.psi_bc
 psi_face_grad = compute_face_grad_bc(psi, jnp.array(g.dx), g.psi_bc)
 core_profiles = dataclasses.replace(
     core_profiles,
@@ -2140,8 +2137,8 @@ while current_t < (g.t_final - g.tolerance):
             g.t_final,
         )
         next_dt_too_small = loop_dt < g.min_dt
-        # Continue if: solver didn't converge AND (at final time OR dt is not too small)
-        take_another_step = solver_did_not_converge & (at_exact_t_final | ~next_dt_too_small)
+        take_another_step = solver_did_not_converge & (at_exact_t_final
+                                                       | ~next_dt_too_small)
         return take_another_step & ~is_nan_next_dt
 
     while should_continue(loop_dt, loop_output):
@@ -2172,13 +2169,15 @@ while current_t < (g.t_final - g.tolerance):
         n_i_bound_right = g.n_e_right_bc * dilution_factor_edge
         n_impurity_bound_right = (g.n_e_right_bc -
                                   n_i_bound_right * Z_i_edge) / Z_impurity_edge
-        # Evolving variables use precomputed g.boundary_conditions (constant)
-        # Only n_i and n_impurity BCs vary based on edge ions
         updated_boundary_conditions = {
-            "T_i": g.T_i_bc,  # Constant, precomputed in g.*
-            "T_e": g.T_e_bc,  # Constant, precomputed in g.*
-            "n_e": g.n_e_bc,  # Constant, precomputed in g.*
-            "psi": g.psi_bc,  # Constant, precomputed in g.*
+            "T_i":
+            g.T_i_bc,
+            "T_e":
+            g.T_e_bc,
+            "n_e":
+            g.n_e_bc,
+            "psi":
+            g.psi_bc,
             "n_i":
             make_bc(
                 left_face_grad_constraint=jnp.zeros(()),
@@ -2383,11 +2382,10 @@ while current_t < (g.t_final - g.tolerance):
         updated_core_profiles_t_plus_dt.T_e,
         g.T_e_bc,
     )
-    # Use precomputed constant psi_bc from g.*
-    psi_face_new = compute_face_value_bc(
-        updated_core_profiles_t_plus_dt.psi, jnp.array(g.dx), g.psi_bc)
-    psi_face_old = compute_face_value_bc(
-        current_core_profiles.psi, jnp.array(g.dx), g.psi_bc)
+    psi_face_new = compute_face_value_bc(updated_core_profiles_t_plus_dt.psi,
+                                         jnp.array(g.dx), g.psi_bc)
+    psi_face_old = compute_face_value_bc(current_core_profiles.psi,
+                                         jnp.array(g.dx), g.psi_bc)
     v_loop_lcfs = ((psi_face_new[-1] - psi_face_old[-1]) / result[1])
     intermediate_core_profiles = CoreProfiles(
         T_i=updated_core_profiles_t_plus_dt.T_i,
