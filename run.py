@@ -43,6 +43,27 @@ g.z = dict(zip(g.sym, [1.0, 1.0, 10.0]))
 g.A = dict(zip(g.sym, [2.0141, 3.0160, 20.180]))
 
 
+@chex.dataclass(frozen=True)
+class BoundaryConditions:
+    """Encapsulates boundary conditions for a cell-centered variable."""
+    left_face_constraint: Any = None
+    right_face_constraint: Any = None
+    left_face_grad_constraint: Any = dataclasses.field(
+        default_factory=lambda: jnp.zeros(()))
+    right_face_grad_constraint: Any = dataclasses.field(
+        default_factory=lambda: jnp.zeros(()))
+    
+    @classmethod
+    def from_cell_variable(cls, cell_var):
+        """Extract boundary conditions from a CellVariable."""
+        return cls(
+            left_face_constraint=cell_var.left_face_constraint,
+            right_face_constraint=cell_var.right_face_constraint,
+            left_face_grad_constraint=cell_var.left_face_grad_constraint,
+            right_face_grad_constraint=cell_var.right_face_grad_constraint,
+        )
+
+
 # Standalone functions for cell variable operations
 def compute_face_grad(value, dr, left_face_constraint, right_face_constraint,
                       left_face_grad_constraint, right_face_grad_constraint, x=None):
@@ -117,6 +138,33 @@ def compute_cell_plus_boundaries(value, dr, right_face_constraint, right_face_gr
     return jnp.concatenate([left_value, value, right_value], axis=-1)
 
 
+# Convenience functions that accept BoundaryConditions
+def compute_face_grad_bc(value, dr, bc, x=None):
+    """Compute face gradients using a BoundaryConditions object."""
+    return compute_face_grad(
+        value, dr,
+        bc.left_face_constraint, bc.right_face_constraint,
+        bc.left_face_grad_constraint, bc.right_face_grad_constraint,
+        x=x
+    )
+
+
+def compute_face_value_bc(value, dr, bc):
+    """Compute face values using a BoundaryConditions object."""
+    return compute_face_value(
+        value, dr,
+        bc.right_face_constraint, bc.right_face_grad_constraint
+    )
+
+
+def compute_cell_plus_boundaries_bc(value, dr, bc):
+    """Compute cell plus boundaries using a BoundaryConditions object."""
+    return compute_cell_plus_boundaries(
+        value, dr,
+        bc.right_face_constraint, bc.right_face_grad_constraint
+    )
+
+
 @chex.dataclass(frozen=True)
 class CellVariable:
     value: Any
@@ -127,6 +175,22 @@ class CellVariable:
         default_factory=lambda: jnp.zeros(()))
     right_face_grad_constraint: Any = dataclasses.field(
         default_factory=lambda: jnp.zeros(()))
+
+    def get_boundary_conditions(self):
+        """Extract boundary conditions as a BoundaryConditions object."""
+        return BoundaryConditions.from_cell_variable(self)
+
+    @classmethod
+    def from_value_and_bc(cls, value, dr, bc):
+        """Create a CellVariable from value, dr, and BoundaryConditions."""
+        return cls(
+            value=value,
+            dr=dr,
+            left_face_constraint=bc.left_face_constraint,
+            right_face_constraint=bc.right_face_constraint,
+            left_face_grad_constraint=bc.left_face_grad_constraint,
+            right_face_grad_constraint=bc.right_face_grad_constraint,
+        )
 
     def face_grad(self, x=None):
         """Delegate to standalone function."""
