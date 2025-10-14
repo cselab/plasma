@@ -45,7 +45,6 @@ class InterpolatedVarSingleAxis:
     def __init__(self, value, interpolation_mode):
         self.xs, self.ys = value
 
-
     def get_value(self, x):
         x_shape = getattr(x, "shape", ())
         is_jax = isinstance(x, jax.Array)
@@ -1141,8 +1140,7 @@ def calc_fusion(geo, core_profiles, runtime_params):
     product = 1.0
     for fraction, symbol in zip(
             runtime_params.plasma_composition.main_ion.fractions,
-            runtime_params.plasma_composition.main_ion_names,
-    ):
+            g.main_ion_names):
         if symbol == "D" or symbol == "T":
             product *= fraction
             DT_fraction_product = product
@@ -1685,10 +1683,6 @@ class ProfileConditions(BaseModelFrozen):
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass
 class RuntimeParamsP:
-    main_ion_names: tuple[str,
-                          ...] = dataclasses.field(metadata={"static": True})
-    impurity_names: tuple[str,
-                          ...] = dataclasses.field(metadata={"static": True})
     main_ion: Any
     impurity: Any
     Z_eff: Any
@@ -1702,19 +1696,10 @@ class PlasmaComposition(BaseModelFrozen):
 
     @functools.cached_property
     def _main_ion_mixture(self):
-        print(f"preved: {self.impurity=}")
         return IonMixture.model_construct(species=self.main_ion, )
-
-    def get_main_ion_names(self):
-        return tuple(self._main_ion_mixture.species.keys())
-
-    def get_impurity_names(self):
-        return tuple(self.impurity.species.keys())
 
     def build_runtime_params(self, t):
         return RuntimeParamsP(
-            main_ion_names=self.get_main_ion_names(),
-            impurity_names=self.get_impurity_names(),
             main_ion=self._main_ion_mixture.build_runtime_params(t),
             impurity=self.impurity.build_runtime_params(t),
             Z_eff=self.Z_eff.get_value(t),
@@ -2211,26 +2196,26 @@ def get_updated_electron_density(profile_conditions_params):
 @jax.jit
 def get_updated_ions(runtime_params, n_e, T_e):
     Z_i_avg, Z_i_Z2_avg, _ = get_average_charge_state(
-        ion_symbols=runtime_params.plasma_composition.main_ion_names,
+        ion_symbols=g.main_ion_names,
         T_e=T_e.value,
         fractions=runtime_params.plasma_composition.main_ion.fractions,
     )
     Z_i = Z_i_Z2_avg / Z_i_avg
     Z_i_face_avg, Z_i_face_Z2_avg, _ = get_average_charge_state(
-        ion_symbols=runtime_params.plasma_composition.main_ion_names,
+        ion_symbols=g.main_ion_names,
         T_e=T_e.face_value(),
         fractions=runtime_params.plasma_composition.main_ion.fractions,
     )
     Z_i_face = Z_i_face_Z2_avg / Z_i_face_avg
     impurity_params = runtime_params.plasma_composition.impurity
     Z_impurity_avg, Z_impurity_Z2_avg, _ = get_average_charge_state(
-        ion_symbols=runtime_params.plasma_composition.impurity_names,
+        ion_symbols=g.impurity_names,
         T_e=T_e.value,
         fractions=impurity_params.fractions,
     )
     Z_impurity = Z_impurity_Z2_avg / Z_impurity_avg
     Z_impurity_face_avg, Z_impurity_face_Z2_avg, _ = get_average_charge_state(
-        ion_symbols=runtime_params.plasma_composition.impurity_names,
+        ion_symbols=g.impurity_names,
         T_e=T_e.face_value(),
         fractions=impurity_params.fractions_face,
     )
@@ -2274,8 +2259,7 @@ def get_updated_ions(runtime_params, n_e, T_e):
     Z_eff_face = (Z_i_face**2 * n_i.face_value() + Z_impurity_face**2 *
                   n_impurity.face_value()) / n_e.face_value()
     impurity_fractions_dict = {}
-    for i, symbol in enumerate(
-            runtime_params.plasma_composition.impurity_names):
+    for i, symbol in enumerate(g.impurity_names):
         fraction = impurity_params.fractions[i]
         impurity_fractions_dict[symbol] = fraction
     return Ions(
@@ -2668,6 +2652,9 @@ g.plasma_composition = PlasmaComposition(
     },
     Z_eff=1.6,
 )
+g.impurity_names = ('Ne', )
+g.main_ion_names = 'D', 'T'
+
 g.Ip = 10.5e6
 g.T_i_initial = {0.0: {0.0: 15.0, 1.0: 0.2}}
 g.T_i_right_bc = 0.2
