@@ -332,6 +332,9 @@ class CoreProfiles:
     psidot_bc: BoundaryConditions = dataclasses.field(
         default_factory=lambda: BoundaryConditions()
     )
+    n_impurity_bc: BoundaryConditions = dataclasses.field(
+        default_factory=lambda: BoundaryConditions()
+    )
 
 
 @jax.tree_util.register_dataclass
@@ -805,7 +808,7 @@ def build_source_profiles1(core_profiles,
     )
     weighted_Z_eff = (
         core_profiles.n_i.value * core_profiles.Z_i**2 / core_profiles.A_i +
-        core_profiles.n_impurity.value * core_profiles.Z_impurity**2 /
+        core_profiles.n_impurity * core_profiles.Z_impurity**2 /
         core_profiles.A_impurity) / core_profiles.n_e.value
     log_Qei_coef = (jnp.log(g.Qei_multiplier * 1.5 * core_profiles.n_e.value) +
                     jnp.log(g.keV_to_J / g.m_amu) + jnp.log(2 * g.m_e) +
@@ -984,11 +987,13 @@ def calculate_transport_coeffs(core_profiles):
     )
     lref_over_lni0 = jnp.where(
         jnp.abs(lref_over_lni0_result) < g.eps, g.eps, lref_over_lni0_result)
+    # n_impurity now uses standalone functions
+    n_impurity_face = compute_face_value_bc(core_profiles.n_impurity, jnp.array(g.dx), core_profiles.n_impurity_bc)
+    n_impurity_face_grad = compute_face_grad_bc(core_profiles.n_impurity, jnp.array(g.dx), core_profiles.n_impurity_bc, x=rmid)
     lref_over_lni1_result = jnp.where(
-        jnp.abs(core_profiles.n_impurity.face_value()) < g.eps,
+        jnp.abs(n_impurity_face) < g.eps,
         g.eps,
-        -g.R_major * core_profiles.n_impurity.face_grad(rmid) /
-        core_profiles.n_impurity.face_value(),
+        -g.R_major * n_impurity_face_grad / n_impurity_face,
     )
     lref_over_lni1 = jnp.where(
         jnp.abs(lref_over_lni1_result) < g.eps, g.eps, lref_over_lni1_result)
@@ -1028,7 +1033,7 @@ def calculate_transport_coeffs(core_profiles):
         (lref_over_lte + lref_over_lne) +
         core_profiles.n_i.face_value() * core_profiles.T_i.face_value() *
         (lref_over_lti + lref_over_lni0) +
-        core_profiles.n_impurity.face_value() *
+        n_impurity_face *
         core_profiles.T_i.face_value() * (lref_over_lti + lref_over_lni1))
     # smag_alpha_correction is always True, so always apply correction
     smag = smag - alpha / 2
@@ -1272,8 +1277,8 @@ SCALING_FACTORS: Final[Mapping[str, float]] = immutabledict.immutabledict({
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class Ions:
-    n_i: Any
-    n_impurity: Any
+    n_i: Any  # CellVariable (to be migrated)
+    n_impurity: Any  # jax.Array (migrated from CellVariable)
     impurity_fractions: Any
     Z_i: Any
     Z_i_face: Any
@@ -1284,6 +1289,9 @@ class Ions:
     A_impurity_face: Any
     Z_eff: Any
     Z_eff_face: Any
+    n_impurity_bc: BoundaryConditions = dataclasses.field(
+        default_factory=lambda: BoundaryConditions()
+    )
 
 
 def get_updated_electron_density():
@@ -1373,14 +1381,16 @@ def get_updated_ions(n_e, T_e):
         (n_e.right_face_constraint - n_i.right_face_constraint * Z_i_face[-1])
         / Z_impurity_face[-1],
     )
-    n_impurity = CellVariable(
-        value=n_impurity_value,
-        dr=jnp.array(g.dx),
+    # n_impurity migrated from CellVariable to plain array
+    n_impurity = n_impurity_value
+    n_impurity_bc = BoundaryConditions(
         right_face_grad_constraint=None,
         right_face_constraint=n_impurity_right_face_constraint,
     )
+    # Compute face values using standalone function
+    n_impurity_face = compute_face_value_bc(n_impurity, jnp.array(g.dx), n_impurity_bc)
     Z_eff_face = (Z_i_face**2 * n_i.face_value() + Z_impurity_face**2 *
-                  n_impurity.face_value()) / n_e.face_value()
+                  n_impurity_face) / n_e.face_value()
     impurity_fractions_dict = {}
     for i, symbol in enumerate(g.impurity_names):
         fraction = g.impurity_fractions[i]
@@ -1388,6 +1398,7 @@ def get_updated_ions(n_e, T_e):
     return Ions(
         n_i=n_i,
         n_impurity=n_impurity,
+        n_impurity_bc=n_impurity_bc,
         impurity_fractions=impurity_fractions_dict,
         Z_i=Z_i,
         Z_i_face=Z_i_face,
@@ -1478,6 +1489,7 @@ def coeffs_callback(core_profiles,
         updated_core_profiles,
         n_i=ions.n_i,
         n_impurity=ions.n_impurity,
+        n_impurity_bc=ions.n_impurity_bc,
         impurity_fractions=ions.impurity_fractions,
         Z_i=ions.Z_i,
         Z_i_face=ions.Z_i_face,
@@ -2256,7 +2268,8 @@ while current_t < (g.t_final - g.tolerance):
         )
         n_e_value = n_e_cell_variable.value
         n_i_value = ions.n_i.value
-        n_impurity_value = ions.n_impurity.value
+        n_impurity_value = ions.n_impurity  # Now a plain array
+        n_impurity_bc = ions.n_impurity_bc
         impurity_fractions_value = ions.impurity_fractions
         Z_i_value = ions.Z_i
         Z_i_face_value = ions.Z_i_face
@@ -2289,11 +2302,9 @@ while current_t < (g.t_final - g.tolerance):
             value=n_i_value,
             **updated_boundary_conditions["n_i"],
         )
-        n_impurity = dataclasses.replace(
-            core_profiles_t.n_impurity,
-            value=n_impurity_value,
-            **updated_boundary_conditions["n_impurity"],
-        )
+        # n_impurity is now a plain array, update BC separately
+        n_impurity = n_impurity_value
+        n_impurity_bc_updated = BoundaryConditions(**updated_boundary_conditions["n_impurity"])
         Z_i_face = jnp.concatenate([
             Z_i_face_value[:-1],
             jnp.array([updated_boundary_conditions["Z_i_edge"]]),
@@ -2310,6 +2321,7 @@ while current_t < (g.t_final - g.tolerance):
             n_e=n_e,
             n_i=n_i,
             n_impurity=n_impurity,
+            n_impurity_bc=n_impurity_bc_updated,
             impurity_fractions=impurity_fractions_value,
             Z_i=Z_i_value,
             Z_i_face=Z_i_face,
@@ -2440,6 +2452,7 @@ while current_t < (g.t_final - g.tolerance):
         n_e=updated_core_profiles_t_plus_dt.n_e,
         n_i=ions.n_i,
         n_impurity=ions.n_impurity,
+        n_impurity_bc=ions.n_impurity_bc,
         impurity_fractions=ions.impurity_fractions,
         Z_i=ions.Z_i,
         Z_i_face=ions.Z_i_face,
