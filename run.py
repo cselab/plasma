@@ -221,7 +221,6 @@ g.A = dict(zip(g.sym, [2.0141, 3.0160, 20.180]))
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class RuntimeParamsSlice:
-    plasma_composition: Any
     profile_conditions: Any
     sources: Any
     transport: Any
@@ -1600,23 +1599,6 @@ class ProfileConditions(BaseModelFrozen):
 
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass
-class RuntimeParamsP:
-    Z_eff: Any
-    Z_eff_face: Any
-
-
-class PlasmaComposition(BaseModelFrozen):
-    Z_eff: TimeVaryingArray
-
-    def build_runtime_params(self, t):
-        return RuntimeParamsP(
-            Z_eff=self.Z_eff.get_value(t),
-            Z_eff_face=self.Z_eff.get_value(t, grid_type="face"),
-        )
-
-
-@jax.tree_util.register_dataclass
-@dataclasses.dataclass
 class TurbulentTransport:
     chi_face_ion: jax.Array
     chi_face_el: jax.Array
@@ -2127,8 +2109,8 @@ def get_updated_ions(runtime_params, n_e, T_e):
         fractions=g.impurity_fractions_face,
     )
     Z_impurity_face = Z_impurity_face_Z2_avg / Z_impurity_face_avg
-    Z_eff = runtime_params.plasma_composition.Z_eff
-    Z_eff_edge = runtime_params.plasma_composition.Z_eff_face[-1]
+    Z_eff = g.Z_eff
+    Z_eff_edge = g.Z_eff
     dilution_factor = jnp.where(
         Z_eff == 1.0,
         1.0,
@@ -2495,7 +2477,6 @@ def build_runtime_params_slice(t):
             for source_name, source_config in dict(g.sources).items()
             if source_config is not None
         },
-        plasma_composition=g.plasma_composition.build_runtime_params(t),
         profile_conditions=g.profile_conditions.build_runtime_params(t),
     )
 
@@ -2548,7 +2529,7 @@ g.a_minor = 2.0
 g.B_0 = 5.3
 g.tolerance = 1e-7
 g.n_corrector_steps = 1
-g.plasma_composition = PlasmaComposition(Z_eff=1.6)
+g.Z_eff = 1.6
 g.impurity_names = ('Ne', )
 g.main_ion_names = 'D', 'T'
 # Pre-compute impurity parameters (constant values for 'Ne')
@@ -3045,7 +3026,7 @@ while current_state.t < (g.t_final - g.tolerance):
         )
         Z_i_edge = ions_edge.Z_i_face[-1]
         Z_impurity_edge = ions_edge.Z_impurity_face[-1]
-        Z_eff_edge = runtime_params_t_plus_dt.plasma_composition.Z_eff_face[-1]
+        Z_eff_edge = g.Z_eff
         dilution_factor_edge = (Z_impurity_edge -
                                 Z_eff_edge) / (Z_i_edge *
                                                (Z_impurity_edge - Z_i_edge))
