@@ -1712,10 +1712,10 @@ s.T_i = T_i
 s.T_e = T_e
 s.psi = psi
 s.n_e = n_e
-current_t = np.array(g.t_initial)
-history = [(current_t, current_T_i, current_T_e, current_psi, current_n_e)]
+s.t = np.array(g.t_initial)
+history = [(s.t, s.T_i, s.T_e, s.psi, s.n_e)]
 while True:
-    psi_face_grad = compute_face_grad_bc(current_psi, jnp.array(g.dx),
+    psi_face_grad = compute_face_grad_bc(s.psi, jnp.array(g.dx),
                                          g.psi_bc)
     current_q_face = (jnp.concatenate([
         jnp.expand_dims(
@@ -1723,13 +1723,13 @@ while True:
                 (2 * g.geo_Phi_b * jnp.array(g.dx)) / psi_face_grad[1]), 0),
         jnp.abs((2 * g.geo_Phi_b * g.face_centers[1:]) / psi_face_grad[1:]),
     ]) * g.geo_q_correction_factor)
-    ions_for_sources = get_updated_ions(current_n_e, g.n_e_bc, current_T_e,
+    ions_for_sources = get_updated_ions(s.n_e, g.n_e_bc, s.T_e,
                                         g.T_e_bc)
     core_transport = calculate_transport_coeffs(
-        current_T_i,
-        current_T_e,
-        current_n_e,
-        current_psi,
+        s.T_i,
+        s.T_e,
+        s.n_e,
+        s.psi,
         ions_for_sources.n_i,
         ions_for_sources.n_i_bc,
         ions_for_sources.n_impurity,
@@ -1739,8 +1739,8 @@ while True:
         ions_for_sources.Z_eff_face,
     )
     core_profiles_for_sources = CoreProfiles(
-        T_i=current_T_i,
-        T_e=current_T_e,
+        T_i=s.T_i,
+        T_e=s.T_e,
         n_i=ions_for_sources.n_i,
         n_i_bc=ions_for_sources.n_i_bc,
     )
@@ -1759,11 +1759,11 @@ while True:
         g.chi_timestep_prefactor * basic_dt,
         g.max_dt,
     )
-    crosses_t_final = (current_t < g.t_final) * (current_t + initial_dt
+    crosses_t_final = (s.t < g.t_final) * (s.t + initial_dt
                                                  > g.t_final)
     initial_dt = jax.lax.select(
         crosses_t_final,
-        g.t_final - current_t,
+        g.t_final - s.t,
         initial_dt,
     )
     dt = initial_dt
@@ -1776,11 +1776,11 @@ while True:
         n_i_bound_right = g.n_e_right_bc * dilution_factor_edge
         n_impurity_bound_right = (g.n_e_right_bc -
                                   n_i_bound_right * Z_i_edge) / Z_impurity_edge
-        x_initial = evolving_vars_to_solver_x_tuple(current_T_i, current_T_e,
-                                                    current_psi, current_n_e)
+        x_initial = evolving_vars_to_solver_x_tuple(s.T_i, s.T_e,
+                                                    s.psi, s.n_e)
         x_new = x_initial
         tc_in_old = None
-        for _ in range(0, g.n_corrector_steps + 1):
+        for _ in range(g.n_corrector_steps + 1):
             x_input = x_new
             evolved = solver_x_tuple_to_evolving_vars(x_input)
             T_i = evolved["T_i"]
@@ -2021,7 +2021,7 @@ while True:
         is_nan_next_dt = jnp.isnan(dt)
         solver_did_not_converge = solver_outputs == 1
         at_exact_t_final = jnp.allclose(
-            current_t + dt,
+            s.t + dt,
             g.t_final,
         )
         next_dt_too_small = dt < g.min_dt
@@ -2037,7 +2037,7 @@ while True:
     solved_n_e = solved["n_e"]
     ions_final = get_updated_ions(solved_n_e, g.n_e_bc, solved_T_e, g.T_e_bc)
     psi_face_new = compute_face_value_bc(solved_psi, jnp.array(g.dx), g.psi_bc)
-    psi_face_old = compute_face_value_bc(current_psi, jnp.array(g.dx),
+    psi_face_old = compute_face_value_bc(s.psi, jnp.array(g.dx),
                                          g.psi_bc)
     v_loop_lcfs = (psi_face_new[-1] - psi_face_old[-1]) / result[1]
     psi_face_grad_solved = compute_face_grad_bc(solved_psi, jnp.array(g.dx),
@@ -2081,13 +2081,13 @@ while True:
         psi_bc=g.psi_bc,
     )
     psidot_bc = make_bc(right_face_constraint=v_loop_lcfs)
-    current_t = current_t + result[1]
+    s.t = s.t + result[1]
     s.T_i = solved_T_i
     s.T_e = solved_T_e
     s.psi = solved_psi
     s.n_e = solved_n_e
-    history.append((current_t, solved_T_i, solved_T_e, solved_psi, solved_n_e))
-    if current_t >= (g.t_final - g.tolerance):
+    history.append((s.t, solved_T_i, solved_T_e, solved_psi, solved_n_e))
+    if s.t >= (g.t_final - g.tolerance):
         break
 t_history, *var_histories = zip(*history)
 t = np.array(t_history)
