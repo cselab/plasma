@@ -978,14 +978,6 @@ g.v_face_psi_zero = jnp.zeros_like(g.geo_g2g3_over_rhon_face)
 g.ones_like_vpr = jnp.ones_like(g.geo_vpr)
 g.qei_zero = (g.zero_vec, g.zero_vec, g.zero_vec, g.zero_vec)
 g.bootstrap_zero = (g.zero_vec, jnp.zeros_like(g.face_centers))
-g.explicit_source_profiles = (
-    g.bootstrap_zero,
-    g.qei_zero,
-    [],
-    [],
-    [],
-    [],
-)
 
 s.T_i = jnp.interp(g.cell_centers, g.T_i_profile_x, g.T_i_profile_y)
 s.T_e = jnp.interp(g.cell_centers, g.T_e_profile_x, g.T_e_profile_y)
@@ -1153,39 +1145,37 @@ while True:
                 necoeff * dlnne_drnorm + nicoeff * dlnni_drnorm +
                 tecoeff * dlnte_drnorm + ticoeff * dlnti_drnorm)
             j_bootstrap = 0.5 * (j_bootstrap_face[:-1] + j_bootstrap_face[1:])
-            bootstrap_current = (j_bootstrap, j_bootstrap_face)
-            merged_source_profiles = (
-                bootstrap_current,
-                qei,
-                list(g.explicit_source_profiles[2]),
-                list(g.explicit_source_profiles[3]),
-                list(g.explicit_source_profiles[4]),
-                list(g.explicit_source_profiles[5]),
-            )
+            qei_implicit_ii = qei[0]
+            qei_implicit_ee = qei[1]
+            qei_implicit_ie = qei[2]
+            qei_implicit_ei = qei[3]
+            source_T_i = jnp.zeros_like(T_i)
+            source_T_e = jnp.zeros_like(T_e)
+            source_psi_current = jnp.zeros_like(psi)
+            source_n_e = jnp.zeros_like(n_e)
             I_generic = g.Ip * g.generic_current_fraction
             generic_current_form = jnp.exp(
                 -((g.cell_centers - g.generic_current_location)**2) /
                 (2 * g.generic_current_width**2))
             Cext = I_generic / jnp.sum(generic_current_form * g.geo_spr * g.dx_array)
-            psi_source = Cext * generic_current_form
-            merged_source_profiles[4].append(psi_source)
+            source_psi_current += Cext * generic_current_form
             profile = gaussian_profile(center=g.generic_heat_location,
                                        width=g.generic_heat_width,
                                        total=g.generic_heat_P_total)
-            merged_source_profiles[2].append(profile * (1 - g.generic_heat_electron_fraction))
-            merged_source_profiles[3].append(profile * g.generic_heat_electron_fraction)
-            merged_source_profiles[5].append(gaussian_profile(
+            source_T_i += profile * (1 - g.generic_heat_electron_fraction)
+            source_T_e += profile * g.generic_heat_electron_fraction
+            source_n_e += gaussian_profile(
                 center=g.generic_particle_location,
                 width=g.generic_particle_width,
-                total=g.generic_particle_S_total))
-            merged_source_profiles[5].append(gaussian_profile(
+                total=g.generic_particle_S_total)
+            source_n_e += gaussian_profile(
                 center=g.pellet_location,
                 width=g.pellet_width,
-                total=g.pellet_S_total))
+                total=g.pellet_S_total)
             r = g.cell_centers
             S = jnp.exp(-(1.0 - r) / g.gas_puff_decay_length)
             C = g.gas_puff_S_total / jnp.sum(S * g.geo_vpr * g.dx_array)
-            merged_source_profiles[5].append(C * S)
+            source_n_e += C * S
             product = 1.0
             for fraction, symbol in zip(g.main_ion_fractions, g.main_ion_names):
                 if symbol == "D" or symbol == "T":
@@ -1216,10 +1206,9 @@ while True:
                     frac_e = 1.0 - frac_i
                     T_i_fusion = Pfus_cell * frac_i * g.fusion_alpha_fraction
                     T_e_fusion = Pfus_cell * frac_e * g.fusion_alpha_fraction
-            merged_source_profiles[2].append(T_i_fusion)
-            merged_source_profiles[3].append(T_e_fusion)
-            total = merged_source_profiles[0][0] + sum(merged_source_profiles[4])
-            source_psi = -total * g.source_psi_coeff
+            source_T_i += T_i_fusion
+            source_T_e += T_e_fusion
+            source_psi = -(j_bootstrap + source_psi_current) * g.source_psi_coeff
             tic_T_i = ions.n_i * g.vpr_5_3
             tic_T_e = n_e * g.vpr_5_3
             toc_psi = (1.0 / g.resistivity_multiplier * g.cell_centers *
@@ -1242,8 +1231,7 @@ while True:
             full_chi_face_el = g.geo_g1_keV * n_e_face * turbulent_transport[1]
             full_d_face_el = g.geo_g1_over_vpr_face * turbulent_transport[2]
             full_v_face_el = g.geo_g0_face * turbulent_transport[3]
-            source_n_e = sum(merged_source_profiles[5]) * g.geo_vpr
-            source_n_e += g.mask_adaptive_n * g.n_e_ped
+            source_n_e = source_n_e * g.geo_vpr + g.mask_adaptive_n * g.n_e_ped
             source_mat_nn = -g.mask_adaptive_n
             chi_face_per_ion = g.geo_g1_keV * n_i_face_chi * g.chi_pereverzev
             chi_face_per_el = g.geo_g1_keV * n_e_face * g.chi_pereverzev
@@ -1263,15 +1251,12 @@ while True:
             full_chi_face_el += chi_face_per_el
             full_d_face_el += d_face_per_el
             full_v_face_el += v_face_per_el
-            source_i = sum(merged_source_profiles[2]) * g.geo_vpr
-            source_e = sum(merged_source_profiles[3]) * g.geo_vpr
-            qei = merged_source_profiles[1]
-            source_mat_ii = qei[0] * g.geo_vpr
-            source_mat_ee = qei[1] * g.geo_vpr
-            source_mat_ie = qei[2] * g.geo_vpr
-            source_mat_ei = qei[3] * g.geo_vpr
-            source_i += g.mask_adaptive_T * g.T_i_ped
-            source_e += g.mask_adaptive_T * g.T_e_ped
+            source_i = source_T_i * g.geo_vpr + g.mask_adaptive_T * g.T_i_ped
+            source_e = source_T_e * g.geo_vpr + g.mask_adaptive_T * g.T_e_ped
+            source_mat_ii = qei_implicit_ii * g.geo_vpr
+            source_mat_ee = qei_implicit_ee * g.geo_vpr
+            source_mat_ie = qei_implicit_ie * g.geo_vpr
+            source_mat_ei = qei_implicit_ei * g.geo_vpr
             source_mat_ii -= g.mask_adaptive_T
             source_mat_ee -= g.mask_adaptive_T
             transient_out_cell = (g.toc_temperature_factor, g.toc_temperature_factor, toc_psi, g.ones_like_vpr)
