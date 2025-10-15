@@ -1,6 +1,6 @@
 from fusion_surrogates.qlknn import qlknn_model
 from jax import numpy as jnp
-from typing import Any, Final, Mapping, TypeAlias, TypeVar
+from typing import Any
 import dataclasses
 import enum
 import immutabledict
@@ -24,7 +24,6 @@ os.environ["XLA_FLAGS"] = (
     os.environ.get("XLA_FLAGS", "") +
     " --xla_backend_extra_options=xla_cpu_flatten_after_fusion")
 jax.config.update("jax_enable_x64", True)
-T = TypeVar("T")
 thread_context = threading.local()
 g.interp_fn = jax.jit(jnp.interp)
 g.TOLERANCE = 1e-6
@@ -1153,20 +1152,16 @@ def get_updated_ions(n_e, n_e_bc, T_e, T_e_bc):
     )
 
 
-OptionalTupleMatrix: TypeAlias = tuple[tuple[Any | None, ...], ...] | None
-AuxiliaryOutput: TypeAlias = Any
-
-
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class Block1DCoeffs:
-    transient_in_cell: tuple[Any, ...]
-    transient_out_cell: tuple[Any, ...] | None = None
-    d_face: tuple[Any, ...] | None = None
-    v_face: tuple[Any, ...] | None = None
-    source_mat_cell: OptionalTupleMatrix = None
-    source_cell: tuple[Any | None, ...] | None = None
-    auxiliary_outputs: AuxiliaryOutput | None = None
+    transient_in_cell: Any
+    transient_out_cell: Any = None
+    d_face: Any = None
+    v_face: Any = None
+    source_mat_cell: Any = None
+    source_cell: Any = None
+    auxiliary_outputs: Any = None
 
 
 g.MIN_DELTA = 1e-7
