@@ -534,27 +534,19 @@ class QeiInfo:
         )
 
 
-@jax.tree_util.register_dataclass
-@dataclasses.dataclass(frozen=True)
-class SourceProfiles:
-    bootstrap_current: BootstrapCurrent
-    qei: QeiInfo
-    T_e: dict[str, jax.Array] = dataclasses.field(default_factory=dict)
-    T_i: dict[str, jax.Array] = dataclasses.field(default_factory=dict)
-    n_e: dict[str, jax.Array] = dataclasses.field(default_factory=dict)
-    psi: dict[str, jax.Array] = dataclasses.field(default_factory=dict)
+def calculate_total_psi_sources(j_bootstrap, psi_sources_dict):
+    """Calculate total psi sources including bootstrap current."""
+    total = j_bootstrap
+    total += sum(psi_sources_dict.values())
+    mu0 = g.mu_0
+    prefactor = 8 * g.geo_vpr * jnp.pi**2 * g.geo_B_0 * mu0 * g.geo_Phi_b / g.geo_F**2
+    return -total * prefactor
 
-    def total_psi_sources(self):
-        total = self.bootstrap_current.j_bootstrap
-        total += sum(self.psi.values())
-        mu0 = g.mu_0
-        prefactor = 8 * g.geo_vpr * jnp.pi**2 * g.geo_B_0 * mu0 * g.geo_Phi_b / g.geo_F**2
-        return -total * prefactor
 
-    def total_sources(self, source_type):
-        source = getattr(self, source_type)
-        total = sum(source.values())
-        return total * g.geo_vpr
+def calculate_total_sources(sources_dict):
+    """Sum all sources in dict and multiply by volume."""
+    total = sum(sources_dict.values())
+    return total * g.geo_vpr
 
 
 @enum.unique
@@ -698,14 +690,14 @@ def build_source_profiles0(T_i, T_e, n_e, psi, n_i, n_i_bc, n_impurity, n_impuri
                            conductivity=None):
     qei = QeiInfo.zeros()
     bootstrap_current = BootstrapCurrent.zeros()
-    profiles = SourceProfiles(
-        bootstrap_current=bootstrap_current,
-        qei=qei,
-        T_e=explicit_source_profiles.T_e if explicit_source_profiles else {},
-        T_i=explicit_source_profiles.T_i if explicit_source_profiles else {},
-        n_e=explicit_source_profiles.n_e if explicit_source_profiles else {},
-        psi=explicit_source_profiles.psi if explicit_source_profiles else {},
-    )
+    profiles = {
+        "bootstrap_current": bootstrap_current,
+        "qei": qei,
+        "T_e": explicit_source_profiles["T_e"] if explicit_source_profiles else {},
+        "T_i": explicit_source_profiles["T_i"] if explicit_source_profiles else {},
+        "n_e": explicit_source_profiles["n_e"] if explicit_source_profiles else {},
+        "psi": explicit_source_profiles["psi"] if explicit_source_profiles else {},
+    }
     # Reconstruct minimal core_profiles for source registry (only fusion_heat_model_func needs it)
     core_profiles_for_sources = CoreProfiles(
         T_i=T_i, T_e=T_e,
@@ -763,14 +755,14 @@ def build_source_profiles1(T_i, T_e, n_e, psi, n_i, n_i_bc, n_impurity, n_impuri
         j_bootstrap=result.j_bootstrap,
         j_bootstrap_face=result.j_bootstrap_face,
     )
-    profiles = SourceProfiles(
-        bootstrap_current=bootstrap_current,
-        qei=qei,
-        T_e=explicit_source_profiles.T_e if explicit_source_profiles else {},
-        T_i=explicit_source_profiles.T_i if explicit_source_profiles else {},
-        n_e=explicit_source_profiles.n_e if explicit_source_profiles else {},
-        psi=explicit_source_profiles.psi if explicit_source_profiles else {},
-    )
+    profiles = {
+        "bootstrap_current": bootstrap_current,
+        "qei": qei,
+        "T_e": explicit_source_profiles["T_e"] if explicit_source_profiles else {},
+        "T_i": explicit_source_profiles["T_i"] if explicit_source_profiles else {},
+        "n_e": explicit_source_profiles["n_e"] if explicit_source_profiles else {},
+        "psi": explicit_source_profiles["psi"] if explicit_source_profiles else {},
+    }
     # Reconstruct minimal core_profiles for source registry (only fusion_heat_model_func needs it)
     core_profiles_for_sources = CoreProfiles(
         T_i=T_i, T_e=T_e,
@@ -806,13 +798,13 @@ def build_standard_source_profiles(*,
                                                       strict=True):
                 match affected_core_profile:
                     case AffectedCoreProfile.PSI:
-                        calculated_source_profiles.psi[source_name] = profile
+                        calculated_source_profiles["psi"][source_name] = profile
                     case AffectedCoreProfile.NE:
-                        calculated_source_profiles.n_e[source_name] = profile
+                        calculated_source_profiles["n_e"][source_name] = profile
                     case AffectedCoreProfile.TEMP_ION:
-                        calculated_source_profiles.T_i[source_name] = profile
+                        calculated_source_profiles["T_i"][source_name] = profile
                     case AffectedCoreProfile.TEMP_EL:
-                        calculated_source_profiles.T_e[source_name] = profile
+                        calculated_source_profiles["T_e"][source_name] = profile
 
     for source_name in g.psi_source_names:
         calculate_source(source_name)
@@ -1439,7 +1431,7 @@ def coeffs_callback(x,
             conductivity=conductivity,
         )
         source_mat_psi = jnp.zeros_like(g.geo_rho)
-        source_psi = merged_source_profiles.total_psi_sources()
+        source_psi = calculate_total_psi_sources(merged_source_profiles["bootstrap_current"].j_bootstrap, merged_source_profiles["psi"])
         toc_T_i = g.toc_temperature_factor
         tic_T_i = ions.n_i * g.geo_vpr**(5.0 / 3.0)
         toc_T_e = g.toc_temperature_factor
@@ -1471,7 +1463,7 @@ def coeffs_callback(x,
         full_d_face_el = g.geo_g1_over_vpr_face * d_face_el_total
         full_v_face_el = g.geo_g0_face * v_face_el_total
         source_mat_nn = jnp.zeros_like(g.geo_rho)
-        source_n_e = merged_source_profiles.total_sources("n_e")
+        source_n_e = calculate_total_sources(merged_source_profiles["n_e"])
         source_n_e += mask * g.adaptive_n_source_prefactor * g.n_e_ped
         source_mat_nn += -(mask * g.adaptive_n_source_prefactor)
         geo_factor = jnp.concatenate(
@@ -1510,9 +1502,9 @@ def coeffs_callback(x,
         full_chi_face_el += chi_face_per_el
         full_d_face_el += d_face_per_el
         full_v_face_el += v_face_per_el
-        source_i = merged_source_profiles.total_sources("T_i")
-        source_e = merged_source_profiles.total_sources("T_e")
-        qei = merged_source_profiles.qei
+        source_i = calculate_total_sources(merged_source_profiles["T_i"])
+        source_e = calculate_total_sources(merged_source_profiles["T_e"])
+        qei = merged_source_profiles["qei"]
         source_mat_ii = qei.implicit_ii * g.geo_vpr
         source_mat_ee = qei.implicit_ee * g.geo_vpr
         source_mat_ie = qei.implicit_ie * g.geo_vpr
@@ -1955,8 +1947,14 @@ current_Z_impurity = ions.Z_impurity
 current_A_impurity = ions.A_impurity
 current_q_face = np.zeros_like(g.geo_rho_face)
 current_Z_eff_face = ions.Z_eff_face
-source_profiles = SourceProfiles(bootstrap_current=BootstrapCurrent.zeros(),
-                                 qei=QeiInfo.zeros())
+source_profiles = {
+    "bootstrap_current": BootstrapCurrent.zeros(),
+    "qei": QeiInfo.zeros(),
+    "T_e": {},
+    "T_i": {},
+    "n_e": {},
+    "psi": {},
+}
 geo_psi_from_Ip_scaled = g.geo_psi_from_Ip_base * Ip_scale_factor
 geo_psi_from_Ip_face_scaled = g.geo_psi_from_Ip_face_base * Ip_scale_factor
 psi = geo_psi_from_Ip_scaled
@@ -1998,9 +1996,8 @@ bootstrap_current = BootstrapCurrent(
     j_bootstrap=result.j_bootstrap,
     j_bootstrap_face=result.j_bootstrap_face,
 )
-source_profiles = dataclasses.replace(source_profiles,
-                                      bootstrap_current=bootstrap_current)
-psi_sources = source_profiles.total_psi_sources()
+source_profiles["bootstrap_current"] = bootstrap_current
+psi_sources = calculate_total_psi_sources(source_profiles["bootstrap_current"].j_bootstrap, source_profiles["psi"])
 psidot_value = calculate_psidot_from_psi_sources(psi_sources=psi_sources,
                                                  sigma=conductivity.sigma,
                                                  psi=psi,
@@ -2220,7 +2217,7 @@ while True:
         explicit_source_profiles=explicit_source_profiles,
         conductivity=conductivity,
     )
-    psi_sources = final_source_profiles.total_psi_sources()
+    psi_sources = calculate_total_psi_sources(final_source_profiles["bootstrap_current"].j_bootstrap, final_source_profiles["psi"])
     psidot_value = calculate_psidot_from_psi_sources(
         psi_sources=psi_sources,
         sigma=sigma_solved,
