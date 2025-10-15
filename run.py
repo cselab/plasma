@@ -1944,39 +1944,34 @@ v_loop_lcfs = np.array(0.0, dtype=jnp.float64)
 psidot = np.zeros_like(g.geo_rho)
 psidot_bc = make_bc()
 psi = np.zeros_like(g.geo_rho)
-n_i_init = ions.n_i
-n_i_bc_init = ions.n_i_bc
-n_impurity_init = ions.n_impurity
-n_impurity_bc_init = ions.n_impurity_bc
-Z_i_init = ions.Z_i
-Z_i_face_init = ions.Z_i_face
-A_i_init = ions.A_i
-Z_impurity_init = ions.Z_impurity
-Z_impurity_face_init = ions.Z_impurity_face
-A_impurity_init = ions.A_impurity
-A_impurity_face_init = ions.A_impurity_face
-Z_eff_init = ions.Z_eff
-Z_eff_face_init = ions.Z_eff_face
-q_face_init = np.zeros_like(g.geo_rho_face)
-sigma_init = np.zeros_like(g.geo_rho)
-sigma_face_init = np.zeros_like(g.geo_rho_face)
+current_n_i = ions.n_i
+current_n_i_bc = ions.n_i_bc
+current_n_impurity = ions.n_impurity
+current_n_impurity_bc = ions.n_impurity_bc
+current_Z_i = ions.Z_i
+current_Z_i_face = ions.Z_i_face
+current_A_i = ions.A_i
+current_Z_impurity = ions.Z_impurity
+current_A_impurity = ions.A_impurity
+current_q_face = np.zeros_like(g.geo_rho_face)
+current_Z_eff_face = ions.Z_eff_face
 source_profiles = SourceProfiles(bootstrap_current=BootstrapCurrent.zeros(),
                                  qei=QeiInfo.zeros())
 geo_psi_from_Ip_scaled = g.geo_psi_from_Ip_base * Ip_scale_factor
 geo_psi_from_Ip_face_scaled = g.geo_psi_from_Ip_face_base * Ip_scale_factor
 psi = geo_psi_from_Ip_scaled
 psi_face_grad = compute_face_grad_bc(psi, jnp.array(g.dx), g.psi_bc)
-q_face_init = jnp.concatenate([
+current_q_face = jnp.concatenate([
     jnp.expand_dims(
         jnp.abs(
             (2 * g.geo_Phi_b * jnp.array(g.dx)) / psi_face_grad[1]), 0),
     jnp.abs((2 * g.geo_Phi_b * g.face_centers[1:]) / psi_face_grad[1:])
 ]) * g.geo_q_correction_factor
 conductivity = calculate_conductivity(
-    n_e, T_e, Z_eff_face_init, q_face_init)
+    n_e, T_e, current_Z_eff_face, current_q_face)
 core_profiles_for_init_sources = CoreProfiles(
     T_i=T_i, T_e=T_e,
-    n_i=n_i_init, n_i_bc=n_i_bc_init,
+    n_i=current_n_i, n_i_bc=current_n_i_bc,
 )
 build_standard_source_profiles(
     core_profiles=core_profiles_for_init_sources,
@@ -1985,19 +1980,19 @@ build_standard_source_profiles(
     calculated_source_profiles=source_profiles,
 )
 result = _calculate_bootstrap_current(
-    Z_eff_face=Z_eff_face_init,
-    Z_i_face=Z_i_face_init,
+    Z_eff_face=current_Z_eff_face,
+    Z_i_face=current_Z_i_face,
     n_e=n_e,
     n_e_bc=g.n_e_bc,
-    n_i=n_i_init,
-    n_i_bc=n_i_bc_init,
+    n_i=current_n_i,
+    n_i_bc=current_n_i_bc,
     T_e=T_e,
     T_e_bc=g.T_e_bc,
     T_i=T_i,
     T_i_bc=g.T_i_bc,
     psi=psi,
     psi_bc=g.psi_bc,
-    q_face=q_face_init,
+    q_face=current_q_face,
 )
 bootstrap_current = BootstrapCurrent(
     j_bootstrap=result.j_bootstrap,
@@ -2013,48 +2008,35 @@ psidot_value = calculate_psidot_from_psi_sources(psi_sources=psi_sources,
 v_loop_lcfs = psidot_value[-1]
 psidot_bc = make_bc(right_face_constraint=v_loop_lcfs)
 psidot = psidot_value
-sigma_init = conductivity.sigma
-sigma_face_init = conductivity.sigma_face
-explicit_source_profiles = build_source_profiles0(
-    T_i, T_e, n_e, psi,
-    n_i_init, n_i_bc_init,
-    n_impurity_init, n_impurity_bc_init,
-    Z_i_init, A_i_init,
-    Z_impurity_init, A_impurity_init,
-    q_face_init, Z_eff_face_init, Z_i_face_init,
-)
-initial_core_sources = build_source_profiles1(
-    T_i, T_e, n_e, psi,
-    n_i_init, n_i_bc_init,
-    n_impurity_init, n_impurity_bc_init,
-    Z_i_init, A_i_init,
-    Z_impurity_init, A_impurity_init,
-    q_face_init, Z_eff_face_init, Z_i_face_init,
-    explicit_source_profiles=explicit_source_profiles,
-    conductivity=conductivity,
-)
-core_transport = calculate_total_transport_coeffs(
-    T_i, T_e, n_e, psi,
-    n_i_init, n_i_bc_init,
-    n_impurity_init, n_impurity_bc_init,
-    q_face_init, A_i_init,
-    Z_eff_face_init, Z_i_face_init)
-current_t = np.array(g.t_initial)
 current_T_i = T_i
 current_T_e = T_e
 current_psi = psi
 current_n_e = n_e
-current_n_i = n_i_init
-current_n_i_bc = n_i_bc_init
-current_n_impurity = n_impurity_init
-current_n_impurity_bc = n_impurity_bc_init
-current_Z_i = Z_i_init
-current_Z_i_face = Z_i_face_init
-current_A_i = A_i_init
-current_Z_impurity = Z_impurity_init
-current_A_impurity = A_impurity_init
-current_q_face = q_face_init
-current_Z_eff_face = Z_eff_face_init
+explicit_source_profiles = build_source_profiles0(
+    current_T_i, current_T_e, current_n_e, current_psi,
+    current_n_i, current_n_i_bc,
+    current_n_impurity, current_n_impurity_bc,
+    current_Z_i, current_A_i,
+    current_Z_impurity, current_A_impurity,
+    current_q_face, current_Z_eff_face, current_Z_i_face,
+)
+initial_core_sources = build_source_profiles1(
+    current_T_i, current_T_e, current_n_e, current_psi,
+    current_n_i, current_n_i_bc,
+    current_n_impurity, current_n_impurity_bc,
+    current_Z_i, current_A_i,
+    current_Z_impurity, current_A_impurity,
+    current_q_face, current_Z_eff_face, current_Z_i_face,
+    explicit_source_profiles=explicit_source_profiles,
+    conductivity=conductivity,
+)
+core_transport = calculate_total_transport_coeffs(
+    current_T_i, current_T_e, current_n_e, current_psi,
+    current_n_i, current_n_i_bc,
+    current_n_impurity, current_n_impurity_bc,
+    current_q_face, current_A_i,
+    current_Z_eff_face, current_Z_i_face)
+current_t = np.array(g.t_initial)
 state_history_t = [current_t]
 state_history_T_i = [current_T_i]
 state_history_T_e = [current_T_e]
