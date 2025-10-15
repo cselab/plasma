@@ -2068,14 +2068,11 @@ while True:
     )
     dt = initial_dt
     while True:
-        n_e = get_updated_electron_density()
-        n_e_bc_edge = {**g.n_e_bc, "right_face_constraint": g.n_e_right_bc}
-        T_e_bc_edge = {**g.T_e_bc, "right_face_constraint": g.T_e_right_bc}
         ions_edge = get_updated_ions(
             current_n_e,
-            n_e_bc_edge,
+            {**g.n_e_bc, "right_face_constraint": g.n_e_right_bc},
             current_T_e,
-            T_e_bc_edge,
+            {**g.T_e_bc, "right_face_constraint": g.T_e_right_bc},
         )
         Z_i_edge = ions_edge.Z_i_face[-1]
         Z_impurity_edge = ions_edge.Z_impurity_face[-1]
