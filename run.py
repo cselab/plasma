@@ -660,8 +660,7 @@ def calc_puff_source(
     return (C * S, )
 
 
-def build_source_profiles0(T_i, T_e, n_e, psi, n_i, n_i_bc, n_impurity, n_impurity_bc,
-                           Z_i, A_i, Z_impurity, A_impurity, q_face, Z_eff_face, Z_i_face,
+def build_source_profiles0(T_i, T_e, n_i, n_i_bc,
                            explicit_source_profiles=None,
                            conductivity=None):
     qei = QeiInfo.zeros()
@@ -688,7 +687,7 @@ def build_source_profiles0(T_i, T_e, n_e, psi, n_i, n_i_bc, n_impurity, n_impuri
     return profiles
 
 
-def build_source_profiles1(T_i, T_e, n_e, psi, n_i, n_i_bc, n_impurity, n_impurity_bc, 
+def build_source_profiles1(T_i, T_e, n_e, psi, n_i, n_i_bc, n_impurity,
                            Z_i, A_i, Z_impurity, A_impurity, q_face, Z_eff_face, Z_i_face,
                            explicit_source_profiles=None,
                            conductivity=None):
@@ -838,7 +837,7 @@ g.FLUX_NAME_MAP = immutabledict.immutabledict({
 g.EPSILON_NN = 1 / 3
 
 
-def calculate_transport_coeffs(T_i, T_e, n_e, psi, n_i, n_i_bc, n_impurity, n_impurity_bc, q_face, A_i, Z_eff_face, Z_i_face):
+def calculate_transport_coeffs(T_i, T_e, n_e, psi, n_i, n_i_bc, n_impurity, n_impurity_bc, q_face, A_i, Z_eff_face):
     T_i_face = compute_face_value_bc(T_i, jnp.array(g.dx), g.T_i_bc)
     T_i_face_grad_rmid = compute_face_grad_bc(T_i,
                                               jnp.array(g.dx),
@@ -1134,9 +1133,10 @@ def calculate_transport_coeffs(T_i, T_e, n_e, psi, n_i, n_i_bc, n_impurity, n_im
     return jax.tree_util.tree_map(smooth_single_coeff, transport_coeffs)
 
 
-def calculate_total_transport_coeffs(T_i, T_e, n_e, psi, n_i, n_i_bc, n_impurity, n_impurity_bc, q_face, A_i, Z_eff_face, Z_i_face):
+def calculate_total_transport_coeffs(T_i, T_e, n_e, psi, n_i, n_i_bc, n_impurity, n_impurity_bc, q_face, A_i, Z_eff_face):
     turbulent_transport = calculate_transport_coeffs(
-        T_i, T_e, n_e, psi, n_i, n_i_bc, n_impurity, n_impurity_bc, q_face, A_i, Z_eff_face, Z_i_face)
+
+        T_i, T_e, n_e, psi, n_i, n_i_bc, n_impurity, n_impurity_bc, q_face, A_i, Z_eff_face)
     return turbulent_transport
 
 
@@ -1399,7 +1399,7 @@ def coeffs_callback(x,
         merged_source_profiles = build_source_profiles1(
             T_i, T_e, n_e, psi,
             ions.n_i, ions.n_i_bc,
-            ions.n_impurity, ions.n_impurity_bc,
+            ions.n_impurity,
             ions.Z_i, ions.A_i,
             ions.Z_impurity, ions.A_impurity,
             q_face, ions.Z_eff_face, ions.Z_i_face,
@@ -1422,7 +1422,7 @@ def coeffs_callback(x,
             ions.n_i, ions.n_i_bc,
             ions.n_impurity, ions.n_impurity_bc,
             q_face, ions.A_i,
-            ions.Z_eff_face, ions.Z_i_face)
+            ions.Z_eff_face)
         chi_face_ion_total = turbulent_transport.chi_face_ion
         chi_face_el_total = turbulent_transport.chi_face_el
         d_face_el_total = turbulent_transport.d_face_el
@@ -1986,17 +1986,13 @@ current_T_e = T_e
 current_psi = psi
 current_n_e = n_e
 explicit_source_profiles = build_source_profiles0(
-    current_T_i, current_T_e, current_n_e, current_psi,
-    current_n_i, current_n_i_bc,
-    current_n_impurity, current_n_impurity_bc,
-    current_Z_i, current_A_i,
-    current_Z_impurity, current_A_impurity,
-    current_q_face, current_Z_eff_face, current_Z_i_face,
-)
+        current_T_i, current_T_e,
+        current_n_i, current_n_i_bc,
+    )
 initial_core_sources = build_source_profiles1(
     current_T_i, current_T_e, current_n_e, current_psi,
     current_n_i, current_n_i_bc,
-    current_n_impurity, current_n_impurity_bc,
+    current_n_impurity,
     current_Z_i, current_A_i,
     current_Z_impurity, current_A_impurity,
     current_q_face, current_Z_eff_face, current_Z_i_face,
@@ -2008,19 +2004,13 @@ core_transport = calculate_total_transport_coeffs(
     current_n_i, current_n_i_bc,
     current_n_impurity, current_n_impurity_bc,
     current_q_face, current_A_i,
-    current_Z_eff_face, current_Z_i_face)
+    current_Z_eff_face)
 current_t = np.array(g.t_initial)
 history = [(current_t, current_T_i, current_T_e, current_psi, current_n_e)]
 while True:
     explicit_source_profiles = build_source_profiles0(
         current_T_i, current_T_e,
-        current_n_e, current_psi,
         current_n_i, current_n_i_bc,
-        current_n_impurity, current_n_impurity_bc,
-        current_Z_i, current_A_i,
-        current_Z_impurity, current_A_impurity,
-        current_q_face, current_Z_eff_face,
-        current_Z_i_face,
     )
     chi_max = jnp.maximum(
         jnp.max(core_transport.chi_face_ion * g.geo_g1_over_vpr2_face),
@@ -2185,7 +2175,7 @@ while True:
     final_source_profiles = build_source_profiles1(
         solved_T_i, solved_T_e, solved_n_e, solved_psi,
         ions_final.n_i, ions_final.n_i_bc,
-        ions_final.n_impurity, ions_final.n_impurity_bc,
+        ions_final.n_impurity,
         ions_final.Z_i, ions_final.A_i,
         ions_final.Z_impurity, ions_final.A_impurity,
         q_face_solved, ions_final.Z_eff_face, ions_final.Z_i_face,
@@ -2205,7 +2195,7 @@ while True:
         ions_final.n_i, ions_final.n_i_bc,
         ions_final.n_impurity, ions_final.n_impurity_bc,
         q_face_solved, ions_final.A_i,
-        ions_final.Z_eff_face, ions_final.Z_i_face)
+        ions_final.Z_eff_face)
     current_t = current_t + result[1]
     current_T_i = solved_T_i
     current_T_e = solved_T_e
