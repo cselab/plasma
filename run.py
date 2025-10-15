@@ -997,7 +997,7 @@ C = (g.nbar * nGW - 0.5 * n_e_face[-1] * dr_edge / a_minor_out) / (
 s = s.at[l.ne].set(C * n_e_value)
 s = s.at[l.psi].set(g.geo_psi_from_Ip_base * (g.Ip / g.geo_Ip_profile_face_base[-1]))
 t = 0.0
-history = [(t, s[l.Ti], s[l.Te], s[l.psi], s[l.ne])]
+history = [(t, s)]
 while True:
     psi_face_grad = compute_face_grad(s[l.psi], g.psi_bc[0], g.psi_bc[1], g.psi_bc[2], g.psi_bc[3])
     current_q_face = jnp.concatenate([
@@ -1313,21 +1313,23 @@ while True:
                       for i, value in enumerate(x_new_split))
     t = t + dt
     s = jnp.concatenate([x_new[0][0], x_new[1][0], x_new[2][0], x_new[3][0]])
-    history.append((t, s[l.Ti], s[l.Te], s[l.psi], s[l.ne]))
+    history.append((t, s))
     if t >= (g.t_final - g.tolerance):
         break
 
 
-t_history, *var_histories = zip(*history)
+t_history, s_history = zip(*history)
 var_names = ("T_i", "T_e", "psi", "n_e")
 var_bcs = (g.T_i_bc, g.T_e_bc, g.psi_bc, g.n_e_bc)
+var_slices = (l.Ti, l.Te, l.psi, l.ne)
 t_out = np.array(t_history)
 rho = np.concatenate([[0.0], np.asarray(g.cell_centers), [1.0]])
 (nt, ) = np.shape(t_out)
 with open("run.raw", "wb") as f:
     t_out.tofile(f)
     rho.tofile(f)
-    for var_name, var_bc, var_history in zip(var_names, var_bcs, var_histories):
+    for var_name, var_bc, var_slice in zip(var_names, var_bcs, var_slices):
+        var_history = [s[var_slice] for s in s_history]
         var_data = []
         for var_value in var_history:
             left_value = var_value[..., 0:1]
