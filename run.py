@@ -153,12 +153,6 @@ def compute_cell_plus_boundaries_bc(value, dr, bc):
                                         bc["right_face_grad_constraint"])
 
 
-class SolverVariable(typing.NamedTuple):
-    value: jax.Array
-    dr: jax.Array
-    bc: dict
-
-
 def make_convection_terms(v_face, d_face, dr, bc):
     eps = g.EPS_CONVECTION
     is_neg = d_face < 0.0
@@ -1317,10 +1311,10 @@ def evolving_vars_to_solver_x_tuple(T_i, T_e, psi, n_e):
             right_face_grad_constraint=operation(
                 original_bc["right_face_grad_constraint"], scaling_factor),
         )
-        solver_var = SolverVariable(
-            value=operation(original_value, scaling_factor),
-            dr=jnp.array(g.dx),
-            bc=scaled_bc,
+        solver_var = (
+            operation(original_value, scaling_factor),  # value
+            jnp.array(g.dx),  # dr
+            scaled_bc,  # bc
         )
         x_tuple_for_solver_list.append(solver_var)
     return tuple(x_tuple_for_solver_list)
@@ -1333,7 +1327,7 @@ def solver_x_tuple_to_evolving_vars(x_new):
         solver_var = x_new[i]
         scaling_factor = SCALING_FACTORS[var_name]
         operation = lambda x, factor: x * factor if x is not None else None
-        updated_vars[var_name] = operation(solver_var.value, scaling_factor)
+        updated_vars[var_name] = operation(solver_var[0], scaling_factor)  # value
     return updated_vars
 
 
@@ -2070,8 +2064,8 @@ while True:
                 x_input,
                 explicit_source_profiles=explicit_source_profiles,
             )
-            x_old_vec = jnp.concatenate([x.value for x in x_initial])
-            x_new_guess_vec = jnp.concatenate([x.value for x in x_input])
+            x_old_vec = jnp.concatenate([x[0] for x in x_initial])
+            x_new_guess_vec = jnp.concatenate([x[0] for x in x_input])
             theta_exp = 1.0 - g.theta_implicit
             tc_in_old = jnp.concatenate(coeffs_exp.transient_in_cell)
             tc_out_new = jnp.concatenate(coeffs_new.transient_out_cell)
@@ -2084,7 +2078,7 @@ while True:
             v_face = coeffs.v_face
             source_mat_cell = coeffs.source_mat_cell
             source_cell = coeffs.source_cell
-            num_cells = x[0].value.shape[0]
+            num_cells = x[0][0].shape[0]  # x[0] is first var, [0] is value
             num_channels = len(x)
             zero_block = jnp.zeros((num_cells, num_cells))
             zero_row_of_blocks = [zero_block] * num_channels
@@ -2095,7 +2089,7 @@ while True:
             if d_face is not None:
                 for i in range(num_channels):
                     (diffusion_mat, diffusion_vec) = make_diffusion_terms(
-                        d_face[i], x[i].dr, x[i].bc)
+                        d_face[i], x[i][1], x[i][2])  # dr, bc
                     c_mat[i][i] += diffusion_mat
                     c[i] += diffusion_vec
             if v_face is not None:
@@ -2105,7 +2099,7 @@ while True:
                         v_face[i]) if d_face_i is None else d_face_i
                     (conv_mat,
                      conv_vec) = make_convection_terms(v_face[i], d_face_i,
-                                                       x[i].dr, x[i].bc)
+                                                       x[i][1], x[i][2])  # dr, bc
                     c_mat[i][i] += conv_mat
                     c[i] += conv_vec
             if source_mat_cell is not None:
@@ -2129,7 +2123,7 @@ while True:
             x_new = jnp.linalg.solve(lhs_mat, rhs)
             x_new = jnp.split(x_new, len(x_initial))
             out = [
-                SolverVariable(value=value, dr=var.dr, bc=var.bc)
+                (value, var[1], var[2])  # (value, dr, bc)
                 for var, value in zip(x_input, x_new)
             ]
             x_new = tuple(out)
