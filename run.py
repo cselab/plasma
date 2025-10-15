@@ -23,9 +23,7 @@ os.environ["XLA_FLAGS"] = (
     " --xla_backend_extra_options=xla_cpu_flatten_after_fusion")
 jax.config.update("jax_enable_x64", True)
 T = TypeVar("T")
-Array: TypeAlias = jax.Array | np.ndarray
 thread_context = threading.local()
-g.JAX_STATIC = "_pydantic_jax_static_field"
 g.interp_fn = jax.jit(jnp.interp)
 g.TOLERANCE = 1e-6
 g.keV_to_J = 1e3 * 1.602176634e-19
@@ -392,8 +390,8 @@ def calculate_conductivity(n_e, T_e, Z_eff_face, q_face):
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(kw_only=True, frozen=True)
 class BootstrapCurrent:
-    j_bootstrap: jax.Array
-    j_bootstrap_face: jax.Array
+    j_bootstrap: Any
+    j_bootstrap_face: Any
 
     @classmethod
     def zeros(cls):
@@ -489,10 +487,10 @@ def gaussian_profile(*, center, width, total):
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class QeiInfo:
-    implicit_ii: jax.Array
-    implicit_ee: jax.Array
-    implicit_ie: jax.Array
-    implicit_ei: jax.Array
+    implicit_ii: Any
+    implicit_ee: Any
+    implicit_ie: Any
+    implicit_ei: Any
 
     @classmethod
     def zeros(cls):
@@ -787,14 +785,14 @@ def build_standard_source_profiles(*,
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass
 class TurbulentTransport:
-    chi_face_ion: jax.Array
-    chi_face_el: jax.Array
-    d_face_el: jax.Array
-    v_face_el: jax.Array
-    chi_face_el_bohm: jax.Array | None = None
-    chi_face_el_gyrobohm: jax.Array | None = None
-    chi_face_ion_bohm: jax.Array | None = None
-    chi_face_ion_gyrobohm: jax.Array | None = None
+    chi_face_ion: Any
+    chi_face_el: Any
+    d_face_el: Any
+    v_face_el: Any
+    chi_face_el_bohm: Any | None = None
+    chi_face_el_gyrobohm: Any | None = None
+    chi_face_ion_bohm: Any | None = None
+    chi_face_ion_gyrobohm: Any | None = None
 
 
 @jax.tree_util.register_dataclass
@@ -1331,7 +1329,7 @@ def solver_x_tuple_to_evolving_vars(x_new):
     return updated_vars
 
 
-OptionalTupleMatrix: TypeAlias = tuple[tuple[jax.Array | None, ...],
+OptionalTupleMatrix: TypeAlias = tuple[tuple[Any | None, ...],
                                        ...] | None
 AuxiliaryOutput: TypeAlias = Any
 
@@ -1339,12 +1337,12 @@ AuxiliaryOutput: TypeAlias = Any
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class Block1DCoeffs:
-    transient_in_cell: tuple[jax.Array, ...]
-    transient_out_cell: tuple[jax.Array, ...] | None = None
-    d_face: tuple[jax.Array, ...] | None = None
-    v_face: tuple[jax.Array, ...] | None = None
+    transient_in_cell: tuple[Any, ...]
+    transient_out_cell: tuple[Any, ...] | None = None
+    d_face: tuple[Any, ...] | None = None
+    v_face: tuple[Any, ...] | None = None
     source_mat_cell: OptionalTupleMatrix = None
-    source_cell: tuple[jax.Array | None, ...] | None = None
+    source_cell: tuple[Any | None, ...] | None = None
     auxiliary_outputs: AuxiliaryOutput | None = None
 
 
