@@ -1776,10 +1776,6 @@ while True:
         n_i_bound_right = g.n_e_right_bc * dilution_factor_edge
         n_impurity_bound_right = (g.n_e_right_bc -
                                   n_i_bound_right * Z_i_edge) / Z_impurity_edge
-        n_i_bc_updated = make_bc(
-            right_face_constraint=jnp.array(n_i_bound_right))
-        n_impurity_bc_updated = make_bc(
-            right_face_constraint=jnp.array(n_impurity_bound_right))
         x_initial = evolving_vars_to_solver_x_tuple(current_T_i, current_T_e,
                                                     current_psi, current_n_e)
         x_new = x_initial
