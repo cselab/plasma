@@ -1439,216 +1439,6 @@ class Block1DCoeffs:
     auxiliary_outputs: AuxiliaryOutput | None = None
 
 
-def coeffs_callback(x, explicit_source_profiles):
-    evolved = solver_x_tuple_to_evolving_vars(x)
-    T_i = evolved["T_i"]
-    T_e = evolved["T_e"]
-    psi = evolved["psi"]
-    n_e = evolved["n_e"]
-    ions = get_updated_ions(n_e, g.n_e_bc, T_e, g.T_e_bc)
-    psi_face_grad = compute_face_grad_bc(psi, jnp.array(g.dx), g.psi_bc)
-    q_face = (
-        jnp.concatenate(
-            [
-                jnp.expand_dims(
-                    jnp.abs((2 * g.geo_Phi_b * jnp.array(g.dx)) / psi_face_grad[1]), 0
-                ),
-                jnp.abs((2 * g.geo_Phi_b * g.face_centers[1:]) / psi_face_grad[1:]),
-            ]
-        )
-        * g.geo_q_correction_factor
-    )
-    T_i_face = compute_face_value_bc(T_i, jnp.array(g.dx), g.T_i_bc)
-    T_i_face_grad = compute_face_grad_bc(T_i, jnp.array(g.dx), g.T_i_bc)
-    T_e_face = compute_face_value_bc(T_e, jnp.array(g.dx), g.T_e_bc)
-    T_e_face_grad = compute_face_grad_bc(T_e, jnp.array(g.dx), g.T_e_bc)
-    n_e_face = compute_face_value_bc(n_e, jnp.array(g.dx), g.n_e_bc)
-    n_e_face_grad = compute_face_grad_bc(n_e, jnp.array(g.dx), g.n_e_bc)
-    rho_norm_ped_top_idx = jnp.abs(g.cell_centers - g.rho_norm_ped_top).argmin()
-    mask = jnp.zeros_like(g.geo_rho, dtype=bool).at[rho_norm_ped_top_idx].set(True)
-    sigma, sigma_face = calculate_conductivity(n_e, T_e, ions.Z_eff_face, q_face)
-    merged_source_profiles = build_source_profiles1(
-            T_i,
-            T_e,
-            n_e,
-            psi,
-            ions.n_i,
-            ions.n_i_bc,
-            ions.n_impurity,
-            ions.Z_i,
-            ions.A_i,
-            ions.Z_impurity,
-            ions.A_impurity,
-            q_face,
-            ions.Z_eff_face,
-            ions.Z_i_face,
-            explicit_source_profiles=explicit_source_profiles,
-            conductivity=(sigma, sigma_face),
-    )
-    source_mat_psi = jnp.zeros_like(g.geo_rho)
-    source_psi = calculate_total_psi_sources(
-            merged_source_profiles["bootstrap_current"].j_bootstrap,
-            merged_source_profiles["psi"],
-    )
-    toc_T_i = g.toc_temperature_factor
-    tic_T_i = ions.n_i * g.geo_vpr ** (5.0 / 3.0)
-    toc_T_e = g.toc_temperature_factor
-    tic_T_e = n_e * g.geo_vpr ** (5.0 / 3.0)
-    toc_psi = (
-            1.0
-            / g.resistivity_multiplier
-            * g.cell_centers
-            * sigma
-            * g.mu0_pi16sq_Phib_sq_over_F_sq
-    )
-    tic_psi = jnp.ones_like(toc_psi)
-    toc_dens_el = jnp.ones_like(g.geo_vpr)
-    tic_dens_el = g.geo_vpr
-    turbulent_transport = calculate_transport_coeffs(
-            T_i,
-            T_e,
-            n_e,
-            psi,
-            ions.n_i,
-            ions.n_i_bc,
-            ions.n_impurity,
-            ions.n_impurity_bc,
-            q_face,
-            ions.A_i,
-            ions.Z_eff_face,
-    )
-    chi_face_ion_total = turbulent_transport.chi_face_ion
-    chi_face_el_total = turbulent_transport.chi_face_el
-    d_face_el_total = turbulent_transport.d_face_el
-    v_face_el_total = turbulent_transport.v_face_el
-    d_face_psi = g.geo_g2g3_over_rhon_face
-    v_face_psi = jnp.zeros_like(d_face_psi)
-    n_i_face_chi = compute_face_value_bc(ions.n_i, jnp.array(g.dx), ions.n_i_bc)
-    full_chi_face_ion = (
-            g.geo_g1_over_vpr_face * n_i_face_chi * g.keV_to_J * chi_face_ion_total
-    )
-    full_chi_face_el = (
-            g.geo_g1_over_vpr_face * n_e_face * g.keV_to_J * chi_face_el_total
-    )
-    full_d_face_el = g.geo_g1_over_vpr_face * d_face_el_total
-    full_v_face_el = g.geo_g0_face * v_face_el_total
-    source_mat_nn = jnp.zeros_like(g.geo_rho)
-    source_n_e = calculate_total_sources(merged_source_profiles["n_e"])
-    source_n_e += mask * g.adaptive_n_source_prefactor * g.n_e_ped
-    source_mat_nn += -(mask * g.adaptive_n_source_prefactor)
-    geo_factor = jnp.concatenate(
-            [jnp.ones(1), g.geo_g1_over_vpr_face[1:] / g.geo_g0_face[1:]]
-    )
-    chi_face_per_ion = (
-            g.geo_g1_over_vpr_face * n_i_face_chi * g.keV_to_J * g.chi_pereverzev
-    )
-    chi_face_per_el = (
-            g.geo_g1_over_vpr_face * n_e_face * g.keV_to_J * g.chi_pereverzev
-    )
-    d_face_per_el = g.D_pereverzev
-    v_face_per_el = n_e_face_grad / n_e_face * d_face_per_el * geo_factor
-    chi_face_per_ion = jnp.where(
-            g.face_centers > g.rho_norm_ped_top,
-            0.0,
-            chi_face_per_ion,
-    )
-    chi_face_per_el = jnp.where(
-            g.face_centers > g.rho_norm_ped_top,
-            0.0,
-            chi_face_per_el,
-    )
-    v_heat_face_ion = T_i_face_grad / T_i_face * chi_face_per_ion
-    v_heat_face_el = T_e_face_grad / T_e_face * chi_face_per_el
-    d_face_per_el = jnp.where(
-            g.face_centers > g.rho_norm_ped_top,
-            0.0,
-            d_face_per_el * g.geo_g1_over_vpr_face,
-    )
-    v_face_per_el = jnp.where(
-            g.face_centers > g.rho_norm_ped_top,
-            0.0,
-            v_face_per_el * g.geo_g0_face,
-    )
-    chi_face_per_ion = chi_face_per_ion.at[0].set(chi_face_per_ion[1])
-    chi_face_per_el = chi_face_per_el.at[0].set(chi_face_per_el[1])
-    full_chi_face_ion += chi_face_per_ion
-    full_chi_face_el += chi_face_per_el
-    full_d_face_el += d_face_per_el
-    full_v_face_el += v_face_per_el
-    source_i = calculate_total_sources(merged_source_profiles["T_i"])
-    source_e = calculate_total_sources(merged_source_profiles["T_e"])
-    qei = merged_source_profiles["qei"]
-    source_mat_ii = qei.implicit_ii * g.geo_vpr
-    source_mat_ee = qei.implicit_ee * g.geo_vpr
-    source_mat_ie = qei.implicit_ie * g.geo_vpr
-    source_mat_ei = qei.implicit_ei * g.geo_vpr
-    source_i += mask * g.adaptive_T_source_prefactor * g.T_i_ped
-    source_e += mask * g.adaptive_T_source_prefactor * g.T_e_ped
-    source_mat_ii -= mask * g.adaptive_T_source_prefactor
-    source_mat_ee -= mask * g.adaptive_T_source_prefactor
-    var_to_toc = {
-            "T_i": toc_T_i,
-            "T_e": toc_T_e,
-            "psi": toc_psi,
-            "n_e": toc_dens_el,
-    }
-    var_to_tic = {
-            "T_i": tic_T_i,
-            "T_e": tic_T_e,
-            "psi": tic_psi,
-            "n_e": tic_dens_el,
-    }
-    transient_out_cell = tuple(var_to_toc[var] for var in g.evolving_names)
-    transient_in_cell = tuple(var_to_tic[var] for var in g.evolving_names)
-    var_to_d_face = {
-            "T_i": full_chi_face_ion,
-            "T_e": full_chi_face_el,
-            "psi": d_face_psi,
-            "n_e": full_d_face_el,
-    }
-    d_face = tuple(var_to_d_face[var] for var in g.evolving_names)
-    var_to_v_face = {
-            "T_i": v_heat_face_ion,
-            "T_e": v_heat_face_el,
-            "psi": v_face_psi,
-            "n_e": full_v_face_el,
-    }
-    v_face = tuple(var_to_v_face.get(var) for var in g.evolving_names)
-    d = {
-            ("T_i", "T_i"): source_mat_ii,
-            ("T_i", "T_e"): source_mat_ie,
-            ("T_e", "T_i"): source_mat_ei,
-            ("T_e", "T_e"): source_mat_ee,
-            ("n_e", "n_e"): source_mat_nn,
-            ("psi", "psi"): source_mat_psi,
-    }
-    source_mat_cell = tuple(
-            tuple(d.get((row_block, col_block)) for col_block in g.evolving_names)
-            for row_block in g.evolving_names
-    )
-    var_to_source = {
-            "T_i": source_i / SCALING_FACTORS["T_i"],
-            "T_e": source_e / SCALING_FACTORS["T_e"],
-            "psi": source_psi / SCALING_FACTORS["psi"],
-            "n_e": source_n_e / SCALING_FACTORS["n_e"],
-    }
-    source_cell = tuple(var_to_source.get(var) for var in g.evolving_names)
-    coeffs = Block1DCoeffs(
-            transient_out_cell=transient_out_cell,
-            transient_in_cell=transient_in_cell,
-            d_face=d_face,
-            v_face=v_face,
-            source_mat_cell=source_mat_cell,
-            source_cell=source_cell,
-            auxiliary_outputs=(
-                merged_source_profiles,
-                (sigma, sigma_face),
-                turbulent_transport,
-            ),
-    )
-    return coeffs
-
-
 g.MIN_DELTA = 1e-7
 g.generic_current_fraction = 0.46
 g.generic_current_width = 0.075
@@ -2166,26 +1956,145 @@ while True:
         tc_in_old = None  # Will be set on first iteration
         for _ in range(0, g.n_corrector_steps + 1):
             x_input = x_new
-            coeffs_new = coeffs_callback(
-                x_input,
-                explicit_source_profiles=explicit_source_profiles,
+            # Inlined coeffs_callback body
+            evolved = solver_x_tuple_to_evolving_vars(x_input)
+            T_i = evolved["T_i"]
+            T_e = evolved["T_e"]
+            psi = evolved["psi"]
+            n_e = evolved["n_e"]
+            ions = get_updated_ions(n_e, g.n_e_bc, T_e, g.T_e_bc)
+            psi_face_grad = compute_face_grad_bc(psi, jnp.array(g.dx), g.psi_bc)
+            q_face = (
+                jnp.concatenate([
+                    jnp.expand_dims(
+                        jnp.abs((2 * g.geo_Phi_b * jnp.array(g.dx)) / psi_face_grad[1]), 0
+                    ),
+                    jnp.abs((2 * g.geo_Phi_b * g.face_centers[1:]) / psi_face_grad[1:]),
+                ])
+                * g.geo_q_correction_factor
             )
+            T_i_face = compute_face_value_bc(T_i, jnp.array(g.dx), g.T_i_bc)
+            T_i_face_grad = compute_face_grad_bc(T_i, jnp.array(g.dx), g.T_i_bc)
+            T_e_face = compute_face_value_bc(T_e, jnp.array(g.dx), g.T_e_bc)
+            T_e_face_grad = compute_face_grad_bc(T_e, jnp.array(g.dx), g.T_e_bc)
+            n_e_face = compute_face_value_bc(n_e, jnp.array(g.dx), g.n_e_bc)
+            n_e_face_grad = compute_face_grad_bc(n_e, jnp.array(g.dx), g.n_e_bc)
+            rho_norm_ped_top_idx = jnp.abs(g.cell_centers - g.rho_norm_ped_top).argmin()
+            mask = jnp.zeros_like(g.geo_rho, dtype=bool).at[rho_norm_ped_top_idx].set(True)
+            sigma, sigma_face = calculate_conductivity(n_e, T_e, ions.Z_eff_face, q_face)
+            merged_source_profiles = build_source_profiles1(
+                T_i, T_e, n_e, psi,
+                ions.n_i, ions.n_i_bc,
+                ions.n_impurity,
+                ions.Z_i, ions.A_i,
+                ions.Z_impurity, ions.A_impurity,
+                q_face, ions.Z_eff_face, ions.Z_i_face,
+                explicit_source_profiles=explicit_source_profiles,
+                conductivity=(sigma, sigma_face),
+            )
+            source_mat_psi = jnp.zeros_like(g.geo_rho)
+            source_psi = calculate_total_psi_sources(
+                merged_source_profiles["bootstrap_current"].j_bootstrap,
+                merged_source_profiles["psi"],
+            )
+            toc_T_i = g.toc_temperature_factor
+            tic_T_i = ions.n_i * g.geo_vpr ** (5.0 / 3.0)
+            toc_T_e = g.toc_temperature_factor
+            tic_T_e = n_e * g.geo_vpr ** (5.0 / 3.0)
+            toc_psi = (
+                1.0 / g.resistivity_multiplier * g.cell_centers * sigma * g.mu0_pi16sq_Phib_sq_over_F_sq
+            )
+            tic_psi = jnp.ones_like(toc_psi)
+            toc_dens_el = jnp.ones_like(g.geo_vpr)
+            tic_dens_el = g.geo_vpr
+            turbulent_transport = calculate_transport_coeffs(
+                T_i, T_e, n_e, psi,
+                ions.n_i, ions.n_i_bc,
+                ions.n_impurity, ions.n_impurity_bc,
+                q_face, ions.A_i, ions.Z_eff_face,
+            )
+            chi_face_ion_total = turbulent_transport.chi_face_ion
+            chi_face_el_total = turbulent_transport.chi_face_el
+            d_face_el_total = turbulent_transport.d_face_el
+            v_face_el_total = turbulent_transport.v_face_el
+            d_face_psi = g.geo_g2g3_over_rhon_face
+            v_face_psi = jnp.zeros_like(d_face_psi)
+            n_i_face_chi = compute_face_value_bc(ions.n_i, jnp.array(g.dx), ions.n_i_bc)
+            full_chi_face_ion = g.geo_g1_over_vpr_face * n_i_face_chi * g.keV_to_J * chi_face_ion_total
+            full_chi_face_el = g.geo_g1_over_vpr_face * n_e_face * g.keV_to_J * chi_face_el_total
+            full_d_face_el = g.geo_g1_over_vpr_face * d_face_el_total
+            full_v_face_el = g.geo_g0_face * v_face_el_total
+            source_mat_nn = jnp.zeros_like(g.geo_rho)
+            source_n_e = calculate_total_sources(merged_source_profiles["n_e"])
+            source_n_e += mask * g.adaptive_n_source_prefactor * g.n_e_ped
+            source_mat_nn += -(mask * g.adaptive_n_source_prefactor)
+            geo_factor = jnp.concatenate([jnp.ones(1), g.geo_g1_over_vpr_face[1:] / g.geo_g0_face[1:]])
+            chi_face_per_ion = g.geo_g1_over_vpr_face * n_i_face_chi * g.keV_to_J * g.chi_pereverzev
+            chi_face_per_el = g.geo_g1_over_vpr_face * n_e_face * g.keV_to_J * g.chi_pereverzev
+            d_face_per_el = g.D_pereverzev
+            v_face_per_el = n_e_face_grad / n_e_face * d_face_per_el * geo_factor
+            chi_face_per_ion = jnp.where(g.face_centers > g.rho_norm_ped_top, 0.0, chi_face_per_ion)
+            chi_face_per_el = jnp.where(g.face_centers > g.rho_norm_ped_top, 0.0, chi_face_per_el)
+            v_heat_face_ion = T_i_face_grad / T_i_face * chi_face_per_ion
+            v_heat_face_el = T_e_face_grad / T_e_face * chi_face_per_el
+            d_face_per_el = jnp.where(g.face_centers > g.rho_norm_ped_top, 0.0, d_face_per_el * g.geo_g1_over_vpr_face)
+            v_face_per_el = jnp.where(g.face_centers > g.rho_norm_ped_top, 0.0, v_face_per_el * g.geo_g0_face)
+            chi_face_per_ion = chi_face_per_ion.at[0].set(chi_face_per_ion[1])
+            chi_face_per_el = chi_face_per_el.at[0].set(chi_face_per_el[1])
+            full_chi_face_ion += chi_face_per_ion
+            full_chi_face_el += chi_face_per_el
+            full_d_face_el += d_face_per_el
+            full_v_face_el += v_face_per_el
+            source_i = calculate_total_sources(merged_source_profiles["T_i"])
+            source_e = calculate_total_sources(merged_source_profiles["T_e"])
+            qei = merged_source_profiles["qei"]
+            source_mat_ii = qei.implicit_ii * g.geo_vpr
+            source_mat_ee = qei.implicit_ee * g.geo_vpr
+            source_mat_ie = qei.implicit_ie * g.geo_vpr
+            source_mat_ei = qei.implicit_ei * g.geo_vpr
+            source_i += mask * g.adaptive_T_source_prefactor * g.T_i_ped
+            source_e += mask * g.adaptive_T_source_prefactor * g.T_e_ped
+            source_mat_ii -= mask * g.adaptive_T_source_prefactor
+            source_mat_ee -= mask * g.adaptive_T_source_prefactor
+            var_to_toc = {"T_i": toc_T_i, "T_e": toc_T_e, "psi": toc_psi, "n_e": toc_dens_el}
+            var_to_tic = {"T_i": tic_T_i, "T_e": tic_T_e, "psi": tic_psi, "n_e": tic_dens_el}
+            transient_out_cell = tuple(var_to_toc[var] for var in g.evolving_names)
+            transient_in_cell = tuple(var_to_tic[var] for var in g.evolving_names)
+            var_to_d_face = {"T_i": full_chi_face_ion, "T_e": full_chi_face_el, "psi": d_face_psi, "n_e": full_d_face_el}
+            d_face = tuple(var_to_d_face[var] for var in g.evolving_names)
+            var_to_v_face = {"T_i": v_heat_face_ion, "T_e": v_heat_face_el, "psi": v_face_psi, "n_e": full_v_face_el}
+            v_face = tuple(var_to_v_face.get(var) for var in g.evolving_names)
+            d_mat = {
+                ("T_i", "T_i"): source_mat_ii,
+                ("T_i", "T_e"): source_mat_ie,
+                ("T_e", "T_i"): source_mat_ei,
+                ("T_e", "T_e"): source_mat_ee,
+                ("n_e", "n_e"): source_mat_nn,
+                ("psi", "psi"): source_mat_psi,
+            }
+            source_mat_cell = tuple(
+                tuple(d_mat.get((row_block, col_block)) for col_block in g.evolving_names)
+                for row_block in g.evolving_names
+            )
+            var_to_source = {
+                "T_i": source_i / SCALING_FACTORS["T_i"],
+                "T_e": source_e / SCALING_FACTORS["T_e"],
+                "psi": source_psi / SCALING_FACTORS["psi"],
+                "n_e": source_n_e / SCALING_FACTORS["n_e"],
+            }
+            source_cell = tuple(var_to_source.get(var) for var in g.evolving_names)
+            # End of inlined coeffs_callback
             if tc_in_old is None:
                 # First iteration: save transient_in from initial state
-                tc_in_old = jnp.concatenate(coeffs_new.transient_in_cell)
+                tc_in_old = jnp.concatenate(transient_in_cell)
             x_old_vec = jnp.concatenate([x[0] for x in x_initial])
             x_new_guess_vec = jnp.concatenate([x[0] for x in x_input])
             theta_exp = 1.0 - g.theta_implicit
-            tc_out_new = jnp.concatenate(coeffs_new.transient_out_cell)
-            tc_in_new = jnp.concatenate(coeffs_new.transient_in_cell)
+            tc_out_new = jnp.concatenate(transient_out_cell)
+            tc_in_new = jnp.concatenate(transient_in_cell)
             left_transient = jnp.identity(len(x_new_guess_vec))
             right_transient = jnp.diag(jnp.squeeze(tc_in_old / tc_in_new))
             x = x_input
-            coeffs = coeffs_new
-            d_face = coeffs.d_face
-            v_face = coeffs.v_face
-            source_mat_cell = coeffs.source_mat_cell
-            source_cell = coeffs.source_cell
             num_cells = x[0][0].shape[0]
             num_channels = len(x)
             zero_block = jnp.zeros((num_cells, num_cells))
