@@ -938,6 +938,7 @@ g.ones_like_vpr = jnp.ones_like(g.geo_vpr)
 g.identity_matrix = jnp.identity(g.state_size)
 g.zero_row_of_blocks = [g.zero_block] * g.num_channels
 g.zero_block_vec = [g.zero_vec] * g.num_channels
+g.bcs = (g.T_i_bc, g.T_e_bc, g.psi_bc, g.n_e_bc)
 
 s = jnp.zeros(g.state_size)
 s = s.at[l.Ti].set(jnp.interp(g.cell_centers, g.T_i_profile_x, g.T_i_profile_y))
@@ -1258,15 +1259,14 @@ while True:
         tc_in_new = jnp.concatenate(transient_in_cell)
         left_transient = g.identity_matrix
         right_transient = jnp.diag(jnp.squeeze(tc_in_old / tc_in_new))
-        bcs = (g.T_i_bc, g.T_e_bc, g.psi_bc, g.n_e_bc)
         c_mat = [g.zero_row_of_blocks.copy() for _ in range(g.num_channels)]
         c = g.zero_block_vec.copy()
         for i in range(g.num_channels):
-            diffusion_mat, diffusion_vec = make_diffusion_terms(d_face[i], g.dx_array, bcs[i])
+            diffusion_mat, diffusion_vec = make_diffusion_terms(d_face[i], g.dx_array, g.bcs[i])
             c_mat[i][i] += diffusion_mat
             c[i] += diffusion_vec
         for i in range(g.num_channels):
-            conv_mat, conv_vec = make_convection_terms(v_face[i], d_face[i], g.dx_array, bcs[i])
+            conv_mat, conv_vec = make_convection_terms(v_face[i], d_face[i], g.dx_array, g.bcs[i])
             c_mat[i][i] += conv_mat
             c[i] += conv_vec
         for i in range(g.num_channels):
