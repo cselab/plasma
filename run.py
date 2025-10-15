@@ -977,6 +977,9 @@ g.zero_vec = jnp.zeros(g.num_cells)
 g.ones_vec = jnp.ones(g.num_cells)
 g.v_face_psi_zero = jnp.zeros_like(g.geo_g2g3_over_rhon_face)
 g.ones_like_vpr = jnp.ones_like(g.geo_vpr)
+g.identity_matrix = jnp.identity(g.state_size)
+g.zero_row_of_blocks = [g.zero_block] * g.num_channels
+g.zero_block_vec = [g.zero_vec] * g.num_channels
 
 s = jnp.zeros(g.state_size)
 s = s.at[l.Ti].set(jnp.interp(g.cell_centers, g.T_i_profile_x, g.T_i_profile_y))
@@ -1273,13 +1276,11 @@ while True:
             x_old = s
         tc_out_new = jnp.concatenate(transient_out_cell)
         tc_in_new = jnp.concatenate(transient_in_cell)
-        left_transient = jnp.identity(g.state_size)
+        left_transient = g.identity_matrix
         right_transient = jnp.diag(jnp.squeeze(tc_in_old / tc_in_new))
         bcs = (g.T_i_bc, g.T_e_bc, g.psi_bc, g.n_e_bc)
-        zero_row_of_blocks = [g.zero_block] * g.num_channels
-        zero_block_vec = [g.zero_vec] * g.num_channels
-        c_mat = [zero_row_of_blocks.copy() for _ in range(g.num_channels)]
-        c = zero_block_vec.copy()
+        c_mat = [g.zero_row_of_blocks.copy() for _ in range(g.num_channels)]
+        c = g.zero_block_vec.copy()
         for i in range(g.num_channels):
             diffusion_mat, diffusion_vec = make_diffusion_terms(d_face[i], g.dx_array, bcs[i])
             c_mat[i][i] += diffusion_mat
