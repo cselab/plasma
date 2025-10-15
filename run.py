@@ -1566,7 +1566,7 @@ C = (g.nbar * nGW - 0.5 * n_e_face[-1] * dr_edge / a_minor_out) / (
     nbar_from_n_e_face_inner + 0.5 * n_e_face[-2] * dr_edge / a_minor_out)
 s.n_e = C * n_e_value
 s.psi = g.geo_psi_from_Ip_base * (g.Ip / g.geo_Ip_profile_face_base[-1])
-s.t = np.array(0.0)
+s.t = 0.0
 history = [(s.t, s.T_i, s.T_e, s.psi, s.n_e)]
 while True:
     psi_face_grad = compute_face_grad_bc(s.psi, jnp.array(g.dx), g.psi_bc)
