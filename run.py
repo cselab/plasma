@@ -1312,23 +1312,19 @@ while True:
             x_new_split = jnp.split(x_new_vec, g.num_channels)
             x_new = tuple((value, x_input[i][1], x_input[i][2])
                           for i, value in enumerate(x_new_split))
-        solver_numeric_outputs = 0
         loop_output = (
             x_new,
             dt,
-            solver_numeric_outputs,
         )
         dt = dt / g.dt_reduction_factor
-        solver_outputs = loop_output[2]
         is_nan_next_dt = jnp.isnan(dt)
-        solver_did_not_converge = solver_outputs == 1
         at_exact_t_final = jnp.allclose(
             t + dt,
             g.t_final,
         )
         next_dt_too_small = dt < g.min_dt
-        take_another_step = solver_did_not_converge & (at_exact_t_final
-                                                       | ~next_dt_too_small)
+        take_another_step = False & (at_exact_t_final
+                                     | ~next_dt_too_small)
         if not (take_another_step & ~is_nan_next_dt):
             break
     t = t + loop_output[1]
