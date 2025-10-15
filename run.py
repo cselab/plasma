@@ -642,12 +642,11 @@ def build_standard_source_profiles(*,
                         calculated_source_profiles[3][
                             source_name] = profile
 
-    for source_name in g.psi_source_names:
-        calculate_source(source_name)
+    calculate_source("generic_current")
     if psi_only:
         return
     for source_name in g.source_registry.keys():
-        if source_name not in g.psi_source_names:
+        if source_name != "generic_current":
             calculate_source(source_name)
 
 
@@ -1368,7 +1367,6 @@ g.source_registry = {
         eval_fn=fusion_heat_model_func,
     ),
 }
-g.psi_source_names = {"generic_current"}
 g.ETG_correction_factor = 1.0 / 3.0
 g.collisionality_multiplier = 1.0
 g.smoothing_width = 0.1
