@@ -689,13 +689,13 @@ def build_source_profiles1(
         "bootstrap_current": bootstrap_current,
         "qei": qei,
         "T_e":
-        explicit_source_profiles["T_e"] if explicit_source_profiles else {},
+        explicit_source_profiles["T_e"],
         "T_i":
-        explicit_source_profiles["T_i"] if explicit_source_profiles else {},
+        explicit_source_profiles["T_i"],
         "n_e":
-        explicit_source_profiles["n_e"] if explicit_source_profiles else {},
+        explicit_source_profiles["n_e"],
         "psi":
-        explicit_source_profiles["psi"] if explicit_source_profiles else {},
+        explicit_source_profiles["psi"],
     }
     core_profiles_for_sources = CoreProfiles(
         T_i=T_i,
