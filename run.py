@@ -1047,7 +1047,6 @@ def _smooth_savgol(data, idx_limit, polyorder):
         [np.array([data[0]]), smoothed_data[1:idx_limit], data[idx_limit:]])
 
 
-g.evolving_names = ("T_i", "T_e", "psi", "n_e")
 g.scaling_T_i = 1.0
 g.scaling_T_e = 1.0
 g.scaling_n_e = 1e20
@@ -1201,7 +1200,6 @@ g.impurity_A_avg = g.A["Ne"]
 g.impurity_A_avg_face = g.A["Ne"]
 g.main_ion_fractions = jnp.array([0.5, 0.5])
 g.main_ion_A_avg = 0.5 * g.A["D"] + 0.5 * g.A["T"]
-g.t_initial = 0.0
 g.n_rho = 25
 g.dx = 1 / g.n_rho
 g.face_centers = np.linspace(0, g.n_rho * g.dx, g.n_rho + 1)
@@ -1568,7 +1566,7 @@ C = (g.nbar * nGW - 0.5 * n_e_face[-1] * dr_edge / a_minor_out) / (
     nbar_from_n_e_face_inner + 0.5 * n_e_face[-2] * dr_edge / a_minor_out)
 s.n_e = C * n_e_value
 s.psi = g.geo_psi_from_Ip_base * (g.Ip / g.geo_Ip_profile_face_base[-1])
-s.t = np.array(g.t_initial)
+s.t = np.array(0.0)
 history = [(s.t, s.T_i, s.T_e, s.psi, s.n_e)]
 while True:
     psi_face_grad = compute_face_grad_bc(s.psi, jnp.array(g.dx), g.psi_bc)
@@ -1858,13 +1856,14 @@ while True:
 
 
 t_history, *var_histories = zip(*history)
+var_names = ("T_i", "T_e", "psi", "n_e")
 t = np.array(t_history)
 rho = np.concatenate([[0.0], np.asarray(g.cell_centers), [1.0]])
 (nt, ) = np.shape(t)
 with open("run.raw", "wb") as f:
     t.tofile(f)
     rho.tofile(f)
-    for var_name, var_history in zip(g.evolving_names, var_histories):
+    for var_name, var_history in zip(var_names, var_histories):
         var_bc = getattr(g, f"{var_name}_bc")
         var_data = [
             compute_cell_plus_boundaries_bc(var_value, jnp.array(g.dx), var_bc)
