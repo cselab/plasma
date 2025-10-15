@@ -310,31 +310,6 @@ def calculate_nu_i_star(q, n_i, T_i, Z_eff, log_lambda_ii):
             (((T_i * 1e3)**2) * (g.geo_epsilon_face + g.eps)**1.5))
 
 
-def calculate_conductivity(n_e, T_e, Z_eff_face, q_face):
-    n_e_face = compute_face_value_bc(n_e, g.n_e_bc)
-    T_e_face = compute_face_value_bc(T_e, g.T_e_bc)
-    f_trap = calculate_f_trap()
-    NZ = 0.58 + 0.74 / (0.76 + Z_eff_face)
-    log_lambda_ei = calculate_log_lambda_ei(n_e_face, T_e_face)
-    sigsptz = 1.9012e04 * (T_e_face *
-                           1e3)**1.5 / Z_eff_face / NZ / log_lambda_ei
-    nu_e_star_face = calculate_nu_e_star(
-        q=q_face,
-        n_e=n_e_face,
-        T_e=T_e_face,
-        Z_eff=Z_eff_face,
-        log_lambda_ei=log_lambda_ei,
-    )
-    ft33 = f_trap / (1.0 +
-                     (0.55 - 0.1 * f_trap) * jnp.sqrt(nu_e_star_face) + 0.45 *
-                     (1.0 - f_trap) * nu_e_star_face / (Z_eff_face**1.5))
-    signeo_face = 1.0 - ft33 * (1.0 + 0.36 / Z_eff_face - ft33 *
-                                (0.59 / Z_eff_face - 0.23 / Z_eff_face * ft33))
-    sigma_face = sigsptz * signeo_face
-    sigma = 0.5 * (sigma_face[:-1] + sigma_face[1:])
-    return (sigma, sigma_face)
-
-
 def _calculate_bootstrap_current(*, Z_eff_face, Z_i_face, n_e, n_e_bc, n_i,
                                  n_i_bc, T_e, T_e_bc, T_i, T_i_bc, psi, psi_bc,
                                  q_face):
@@ -544,60 +519,6 @@ def calc_puff_source(unused_state, unused_calculated_source_profiles,
     S = jnp.exp(-(1.0 - r) / g.gas_puff_decay_length)
     C = g.gas_puff_S_total / jnp.sum(S * g.geo_vpr * g.dx_array)
     return (C * S, )
-
-
-def build_source_profiles1(T_i, T_e, n_e, psi, n_i, n_i_bc, n_impurity, Z_i,
-                           A_i, Z_impurity, A_impurity, q_face, Z_eff_face,
-                           Z_i_face, conductivity):
-    log_lambda_ei = calculate_log_lambda_ei(n_e, T_e)
-    log_tau_e_Z1 = _calculate_log_tau_e_Z1(
-        T_e,
-        n_e,
-        log_lambda_ei,
-    )
-    weighted_Z_eff = (n_i * Z_i**2 / A_i +
-                      n_impurity * Z_impurity**2 / A_impurity) / n_e
-    log_Qei_coef = (jnp.log(g.Qei_multiplier * 1.5 * n_e) +
-                    jnp.log(g.keV_to_J / g.m_amu) + jnp.log(2 * g.m_e) +
-                    jnp.log(weighted_Z_eff) - log_tau_e_Z1)
-    qei_coef = jnp.exp(log_Qei_coef)
-    qei = (-qei_coef, -qei_coef, qei_coef, qei_coef)
-    bootstrap_current = _calculate_bootstrap_current(
-        Z_eff_face=Z_eff_face,
-        Z_i_face=Z_i_face,
-        n_e=n_e,
-        n_e_bc=g.n_e_bc,
-        n_i=n_i,
-        n_i_bc=n_i_bc,
-        T_e=T_e,
-        T_e_bc=g.T_e_bc,
-        T_i=T_i,
-        T_i_bc=g.T_i_bc,
-        psi=psi,
-        psi_bc=g.psi_bc,
-        q_face=q_face,
-    )
-    profiles = (
-        bootstrap_current,
-        qei,
-        dict(g.explicit_source_profiles[2]),
-        dict(g.explicit_source_profiles[3]),
-        dict(g.explicit_source_profiles[4]),
-        dict(g.explicit_source_profiles[5]),
-    )
-    core_profiles_for_sources = CoreProfiles(
-        T_i=T_i,
-        T_e=T_e,
-        n_i=n_i,
-        n_i_bc=n_i_bc,
-    )
-    build_standard_source_profiles(
-        calculated_source_profiles=profiles,
-        core_profiles=core_profiles_for_sources,
-        explicit=False,
-        conductivity=conductivity,
-    )
-    return profiles
 
 
 def build_standard_source_profiles(*,
@@ -1487,23 +1408,66 @@ while True:
             T_e_face_grad = compute_face_grad_bc(T_e, g.T_e_bc)
             n_e_face = compute_face_value_bc(n_e, g.n_e_bc)
             n_e_face_grad = compute_face_grad_bc(n_e, g.n_e_bc)
-            sigma, sigma_face = calculate_conductivity(n_e, T_e,
-                                                       ions.Z_eff_face, q_face)
-            merged_source_profiles = build_source_profiles1(
-                T_i,
-                T_e,
-                n_e,
-                psi,
-                ions.n_i,
-                ions.n_i_bc,
-                ions.n_impurity,
-                ions.Z_i,
-                ions.A_i,
-                ions.Z_impurity,
-                ions.A_impurity,
-                q_face,
-                ions.Z_eff_face,
-                ions.Z_i_face,
+            f_trap = calculate_f_trap()
+            NZ = 0.58 + 0.74 / (0.76 + ions.Z_eff_face)
+            log_lambda_ei = calculate_log_lambda_ei(n_e_face, T_e_face)
+            sigsptz = 1.9012e04 * (T_e_face * 1e3)**1.5 / ions.Z_eff_face / NZ / log_lambda_ei
+            nu_e_star_face = calculate_nu_e_star(
+                q=q_face,
+                n_e=n_e_face,
+                T_e=T_e_face,
+                Z_eff=ions.Z_eff_face,
+                log_lambda_ei=log_lambda_ei,
+            )
+            ft33 = f_trap / (1.0 +
+                             (0.55 - 0.1 * f_trap) * jnp.sqrt(nu_e_star_face) + 0.45 *
+                             (1.0 - f_trap) * nu_e_star_face / (ions.Z_eff_face**1.5))
+            signeo_face = 1.0 - ft33 * (1.0 + 0.36 / ions.Z_eff_face - ft33 *
+                                        (0.59 / ions.Z_eff_face - 0.23 / ions.Z_eff_face * ft33))
+            sigma_face = sigsptz * signeo_face
+            sigma = 0.5 * (sigma_face[:-1] + sigma_face[1:])
+            log_lambda_ei = calculate_log_lambda_ei(n_e, T_e)
+            log_tau_e_Z1 = _calculate_log_tau_e_Z1(T_e, n_e, log_lambda_ei)
+            weighted_Z_eff = (ions.n_i * ions.Z_i**2 / ions.A_i +
+                              ions.n_impurity * ions.Z_impurity**2 / ions.A_impurity) / n_e
+            log_Qei_coef = (jnp.log(g.Qei_multiplier * 1.5 * n_e) +
+                            jnp.log(g.keV_to_J / g.m_amu) + jnp.log(2 * g.m_e) +
+                            jnp.log(weighted_Z_eff) - log_tau_e_Z1)
+            qei_coef = jnp.exp(log_Qei_coef)
+            qei = (-qei_coef, -qei_coef, qei_coef, qei_coef)
+            bootstrap_current = _calculate_bootstrap_current(
+                Z_eff_face=ions.Z_eff_face,
+                Z_i_face=ions.Z_i_face,
+                n_e=n_e,
+                n_e_bc=g.n_e_bc,
+                n_i=ions.n_i,
+                n_i_bc=ions.n_i_bc,
+                T_e=T_e,
+                T_e_bc=g.T_e_bc,
+                T_i=T_i,
+                T_i_bc=g.T_i_bc,
+                psi=psi,
+                psi_bc=g.psi_bc,
+                q_face=q_face,
+            )
+            merged_source_profiles = (
+                bootstrap_current,
+                qei,
+                dict(g.explicit_source_profiles[2]),
+                dict(g.explicit_source_profiles[3]),
+                dict(g.explicit_source_profiles[4]),
+                dict(g.explicit_source_profiles[5]),
+            )
+            core_profiles_for_sources = CoreProfiles(
+                T_i=T_i,
+                T_e=T_e,
+                n_i=ions.n_i,
+                n_i_bc=ions.n_i_bc,
+            )
+            build_standard_source_profiles(
+                calculated_source_profiles=merged_source_profiles,
+                core_profiles=core_profiles_for_sources,
+                explicit=False,
                 conductivity=(sigma, sigma_face),
             )
             source_psi = calculate_total_psi_sources(
