@@ -1152,18 +1152,6 @@ def get_updated_ions(n_e, n_e_bc, T_e, T_e_bc):
     )
 
 
-@jax.tree_util.register_dataclass
-@dataclasses.dataclass(frozen=True)
-class Block1DCoeffs:
-    transient_in_cell: Any
-    transient_out_cell: Any = None
-    d_face: Any = None
-    v_face: Any = None
-    source_mat_cell: Any = None
-    source_cell: Any = None
-    auxiliary_outputs: Any = None
-
-
 g.MIN_DELTA = 1e-7
 g.generic_current_fraction = 0.46
 g.generic_current_width = 0.075
