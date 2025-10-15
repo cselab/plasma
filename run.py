@@ -1333,10 +1333,7 @@ while True:
             break
     result = loop_output
     t = t + result[1]
-    s = s.at[l.Ti].set(result[0][0][0])
-    s = s.at[l.Te].set(result[0][1][0])
-    s = s.at[l.psi].set(result[0][2][0])
-    s = s.at[l.ne].set(result[0][3][0])
+    s = jnp.concatenate([result[0][0][0], result[0][1][0], result[0][2][0], result[0][3][0]])
     history.append((t, s[l.Ti], s[l.Te], s[l.psi], s[l.ne]))
     if t >= (g.t_final - g.tolerance):
         break
