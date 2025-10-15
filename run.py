@@ -1,6 +1,3 @@
-# ============================================================================
-# IMPORTS
-# ============================================================================
 from fusion_surrogates.qlknn import qlknn_model
 from jax import numpy as jnp
 from typing import Any, Final, Mapping, TypeAlias, TypeVar
@@ -16,9 +13,6 @@ import typing
 import matplotlib.pyplot as plt
 
 
-# ============================================================================
-# GLOBAL NAMESPACE CLASSES
-# ============================================================================
 class g:
     pass
 
@@ -26,10 +20,6 @@ class g:
 class s:
     pass
 
-
-# ============================================================================
-# CONFIGURATION
-# ============================================================================
 os.environ["XLA_FLAGS"] = (
     os.environ.get("XLA_FLAGS", "") +
     " --xla_backend_extra_options=xla_cpu_flatten_after_fusion")
@@ -37,11 +27,6 @@ jax.config.update("jax_enable_x64", True)
 T = TypeVar("T")
 thread_context = threading.local()
 g.interp_fn = jax.jit(jnp.interp)
-
-
-# ============================================================================
-# PHYSICAL CONSTANTS
-# ============================================================================
 g.TOLERANCE = 1e-6
 g.keV_to_J = 1e3 * 1.602176634e-19
 g.eV_to_J = 1.602176634e-19
@@ -52,11 +37,6 @@ g.epsilon_0 = 8.85418782e-12
 g.mu_0 = 4 * jnp.pi * 1e-7
 g.k_B = 1.380649e-23
 g.eps = 1e-7
-
-
-# ============================================================================
-# NUMERICAL CONSTANTS
-# ============================================================================
 g.EPS_CONVECTION = 1e-20
 g.EPS_PECLET = 1e-3
 g.SAVGOL_WINDOW_LENGTH = 5
@@ -66,9 +46,6 @@ g.z = dict(zip(g.sym, [1.0, 1.0, 10.0]))
 g.A = dict(zip(g.sym, [2.0141, 3.0160, 20.180]))
 
 
-# ============================================================================
-# NUMERICAL DISCRETIZATION FUNCTIONS
-# ============================================================================
 def compute_face_grad(value,
                       dr,
                       left_face_constraint,
@@ -222,9 +199,6 @@ def make_diffusion_terms(d_face, dr, bc):
     return mat, vec
 
 
-# ============================================================================
-# DATA CLASSES
-# ============================================================================
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True, eq=False)
 class CoreProfiles:
@@ -234,9 +208,6 @@ class CoreProfiles:
     n_i_bc: tuple
 
 
-# ============================================================================
-# PHYSICS FUNCTIONS
-# ============================================================================
 def calculate_psidot_from_psi_sources(*, psi_sources, sigma, psi, psi_bc):
     toc_psi = (1.0 / g.resistivity_multiplier * g.cell_centers * sigma *
                g.mu_0 * 16 * jnp.pi**2 * g.geo_Phi_b**2 / g.geo_F**2)
@@ -262,9 +233,6 @@ def _calculate_log_tau_e_Z1(T_e, n_e, log_lambda_ei):
             2 * jnp.log(g.epsilon_0) + 1.5 * jnp.log(T_e * g.keV_to_J))
 
 
-# ============================================================================
-# CHARGE STATE CALCULATIONS
-# ============================================================================
 g.MAVRIN_Z_COEFFS = immutabledict.immutabledict({
     "Ne":
     np.array([
@@ -304,9 +272,6 @@ def get_average_charge_state(ion_symbols, T_e, fractions):
     return Z_avg, Z2_avg, Z_per_species
 
 
-# ============================================================================
-# NEOCLASSICAL PHYSICS (COLLISIONALITY, TRAPPED PARTICLES, BOOTSTRAP)
-# ============================================================================
 def calculate_f_trap():
     epsilon_effective = (
         0.67 * (1.0 - 1.4 * jnp.abs(g.geo_delta_face) * g.geo_delta_face) *
@@ -468,9 +433,6 @@ def _calculate_alpha(f_trap, nu_i_star):
     return alpha
 
 
-# ============================================================================
-# SOURCE TERMS
-# ============================================================================
 def gaussian_profile(*, center, width, total):
     r = g.cell_centers
     S = jnp.exp(-((r - center)**2) / (2 * width**2))
@@ -509,9 +471,6 @@ def calculate_total_sources(sources_dict):
     return total * g.geo_vpr
 
 
-# ============================================================================
-# TYPE DEFINITIONS AND ENUMS
-# ============================================================================
 @enum.unique
 class Mode(enum.Enum):
     ZERO = "ZERO"
@@ -773,9 +732,6 @@ class QualikizInputs:
     epsilon_lcfs: Any
 
 
-# ============================================================================
-# TURBULENT TRANSPORT COEFFICIENTS
-# ============================================================================
 g.FLUX_NAME_MAP = immutabledict.immutabledict({
     "efiITG": "qi_itg",
     "efeITG": "qe_itg",
@@ -1091,9 +1047,6 @@ def _smooth_savgol(data, idx_limit, polyorder):
         [np.array([data[0]]), smoothed_data[1:idx_limit], data[idx_limit:]])
 
 
-# ============================================================================
-# SCALING FACTORS
-# ============================================================================
 g.evolving_names = ("T_i", "T_e", "psi", "n_e")
 g.scaling_T_i = 1.0
 g.scaling_T_e = 1.0
@@ -1101,9 +1054,6 @@ g.scaling_n_e = 1e20
 g.scaling_psi = 1.0
 
 
-# ============================================================================
-# ION CALCULATIONS
-# ============================================================================
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class Ions:
@@ -1220,9 +1170,6 @@ class Block1DCoeffs:
     auxiliary_outputs: AuxiliaryOutput | None = None
 
 
-# ============================================================================
-# SIMULATION PARAMETERS
-# ============================================================================
 g.MIN_DELTA = 1e-7
 g.generic_current_fraction = 0.46
 g.generic_current_width = 0.075
@@ -1313,9 +1260,6 @@ g.V_e_max = 50.0
 g.An_min = 0.05
 
 
-# ============================================================================
-# GEOMETRY LOADING
-# ============================================================================
 file_path = os.path.join("geo", "ITER_hybrid_citrin_equil_cheasedata.mat2cols")
 with open(file_path, "r") as file:
     chease_data = {}
@@ -1524,9 +1468,6 @@ g.geo_factor_pereverzev = jnp.concatenate(
     [jnp.ones(1), g.geo_g1_over_vpr_face[1:] / g.geo_g0_face[1:]])
 
 
-# ============================================================================
-# SOURCE REGISTRY AND CONFIGURATION
-# ============================================================================
 g.source_registry = {
     "generic_current":
     SourceHandler(
@@ -1572,12 +1513,6 @@ g.pedestal_mask_face = g.face_centers > g.rho_norm_ped_top
 g.mask_adaptive_T = g.mask * g.adaptive_T_source_prefactor
 g.mask_adaptive_n = g.mask * g.adaptive_n_source_prefactor
 g.qei_mode = "ZERO"
-
-
-# ============================================================================
-# BOUNDARY CONDITIONS
-# ============================================================================
-# BC tuple format: (left_face, right_face, left_grad, right_grad)
 g.T_i_bc = (None, g.T_i_right_bc, 0.0, 0.0)
 g.T_e_bc = (None, g.T_e_right_bc, 0.0, 0.0)
 g.n_e_bc = (None, g.n_e_right_bc, 0.0, 0.0)
@@ -1590,9 +1525,6 @@ g.psi_bc_scaled = (None, None, 0.0, g.dpsi_drhonorm_edge / g.scaling_psi)
 g.n_e_bc_scaled = (None, g.n_e_right_bc / g.scaling_n_e, 0.0, 0.0)
 
 
-# ============================================================================
-# PRECOMPUTED SOLVER CONSTANTS
-# ============================================================================
 g.num_cells = g.n_rho
 g.num_channels = 4
 g.zero_block = jnp.zeros((g.num_cells, g.num_cells))
@@ -1619,14 +1551,8 @@ g.explicit_source_profiles = {
     "psi": {},
 }
 
-
-# ============================================================================
-# MAIN SIMULATION
-# ============================================================================
-# Initialize state
 s.T_i = jnp.interp(g.cell_centers, g.T_i_profile_x, g.T_i_profile_y)
 s.T_e = jnp.interp(g.cell_centers, g.T_e_profile_x, g.T_e_profile_y)
-# Inline get_updated_electron_density
 nGW = g.Ip / 1e6 / (jnp.pi * g.geo_a_minor**2) * 1e20
 n_e_value = g.n_e * nGW
 n_e_face = jnp.concatenate([
@@ -1931,9 +1857,6 @@ while True:
         break
 
 
-# ============================================================================
-# OUTPUT AND VISUALIZATION
-# ============================================================================
 t_history, *var_histories = zip(*history)
 t = np.array(t_history)
 rho = np.concatenate([[0.0], np.asarray(g.cell_centers), [1.0]])
