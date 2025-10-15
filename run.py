@@ -1520,14 +1520,14 @@ while True:
 
 t_history, *var_histories = zip(*history)
 var_names = ("T_i", "T_e", "psi", "n_e")
+var_bcs = (g.T_i_bc, g.T_e_bc, g.psi_bc, g.n_e_bc)
 t = np.array(t_history)
 rho = np.concatenate([[0.0], np.asarray(g.cell_centers), [1.0]])
 (nt, ) = np.shape(t)
 with open("run.raw", "wb") as f:
     t.tofile(f)
     rho.tofile(f)
-    for var_name, var_history in zip(var_names, var_histories):
-        var_bc = getattr(g, f"{var_name}_bc")
+    for var_name, var_bc, var_history in zip(var_names, var_bcs, var_histories):
         var_data = []
         for var_value in var_history:
             left_value = var_value[..., 0:1]
