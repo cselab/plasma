@@ -44,12 +44,10 @@ g.z = dict(zip(g.sym, [1.0, 1.0, 10.0]))
 g.A = dict(zip(g.sym, [2.0141, 3.0160, 20.180]))
 
 
-def make_bc(
-    left_face_constraint=None,
-    right_face_constraint=None,
-    left_face_grad_constraint=None,
-    right_face_grad_constraint=None,
-):
+def make_bc(left_face_constraint=None,
+            right_face_constraint=None,
+            left_face_grad_constraint=None,
+            right_face_grad_constraint=None):
     return {
         "left_face_constraint":
         left_face_constraint,
@@ -64,15 +62,13 @@ def make_bc(
     }
 
 
-def compute_face_grad(
-    value,
-    dr,
-    left_face_constraint,
-    right_face_constraint,
-    left_face_grad_constraint,
-    right_face_grad_constraint,
-    x=None,
-):
+def compute_face_grad(value,
+                      dr,
+                      left_face_constraint,
+                      right_face_constraint,
+                      left_face_grad_constraint,
+                      right_face_grad_constraint,
+                      x=None):
     if x is None:
         forward_difference = jnp.diff(value) / dr
     else:
@@ -393,22 +389,9 @@ class BootstrapCurrent:
         )
 
 
-def _calculate_bootstrap_current(
-    *,
-    Z_eff_face,
-    Z_i_face,
-    n_e,
-    n_e_bc,
-    n_i,
-    n_i_bc,
-    T_e,
-    T_e_bc,
-    T_i,
-    T_i_bc,
-    psi,
-    psi_bc,
-    q_face,
-):
+def _calculate_bootstrap_current(*, Z_eff_face, Z_i_face, n_e, n_e_bc, n_i,
+                                 n_i_bc, T_e, T_e_bc, T_i, T_i_bc, psi, psi_bc,
+                                 q_face):
     f_trap = calculate_f_trap()
     n_e_face = compute_face_value_bc(n_e, jnp.array(g.dx), n_e_bc)
     n_e_face_grad = compute_face_grad_bc(n_e, jnp.array(g.dx), n_e_bc)
@@ -539,11 +522,8 @@ class SourceHandler(typing.NamedTuple):
     eval_fn: typing.Callable
 
 
-def calculate_generic_current(
-    unused_state,
-    unused_calculated_source_profiles,
-    unused_conductivity,
-):
+def calculate_generic_current(unused_state, unused_calculated_source_profiles,
+                              unused_conductivity):
     I_generic = g.Ip * g.generic_current_fraction
     generic_current_form = jnp.exp(
         -((g.cell_centers - g.generic_current_location)**2) /
@@ -565,11 +545,9 @@ def default_formula(unused_core_profiles, unused_calculated_source_profiles,
     return (ion, el)
 
 
-def calc_generic_particle_source(
-    unused_state,
-    unused_calculated_source_profiles,
-    unused_conductivity,
-):
+def calc_generic_particle_source(unused_state,
+                                 unused_calculated_source_profiles,
+                                 unused_conductivity):
     return (gaussian_profile(
         center=g.generic_particle_location,
         width=g.generic_particle_width,
@@ -577,11 +555,8 @@ def calc_generic_particle_source(
     ), )
 
 
-def calc_pellet_source(
-    unused_state,
-    unused_calculated_source_profiles,
-    unused_conductivity,
-):
+def calc_pellet_source(unused_state, unused_calculated_source_profiles,
+                       unused_conductivity):
     return (gaussian_profile(
         center=g.pellet_location,
         width=g.pellet_width,
@@ -592,7 +567,7 @@ def calc_pellet_source(
 def fusion_heat_model_func(
     core_profiles,
     unused_calculated_source_profiles,
-    unused_conductivity,
+    unused_conductivity
 ):
     product = 1.0
     for fraction, symbol in zip(g.main_ion_fractions, g.main_ion_names):
@@ -647,7 +622,7 @@ def fusion_heat_model_func(
 def calc_puff_source(
     unused_state,
     unused_calculated_source_profiles,
-    unused_conductivity,
+    unused_conductivity
 ):
     r = g.cell_centers
     S = jnp.exp(-(1.0 - r) / g.gas_puff_decay_length)
@@ -671,7 +646,7 @@ def build_source_profiles1(
     Z_eff_face,
     Z_i_face,
     explicit_source_profiles=None,
-    conductivity=None,
+    conductivity=None
 ):
     log_lambda_ei = calculate_log_lambda_ei(n_e, T_e)
     log_tau_e_Z1 = _calculate_log_tau_e_Z1(
@@ -744,7 +719,7 @@ def build_standard_source_profiles(
     explicit=True,
     conductivity=None,
     calculate_anyway=False,
-    psi_only=False,
+    psi_only=False
 ):
 
     def calculate_source(source_name):
