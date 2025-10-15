@@ -1042,15 +1042,15 @@ while True:
     n_i_bound_right = g.n_e_right_bc * dilution_factor_edge
     n_impurity_bound_right = (g.n_e_right_bc -
                               n_i_bound_right * Z_i_edge) / Z_impurity_edge
-    x_initial = (s[l.Ti], s[l.Te], s[l.psi], s[l.ne])
+    x_initial = s
     x_new = x_initial
     tc_in_old = None
     for _ in range(g.n_corrector_steps + 1):
         x_input = x_new
-        T_i = x_input[0]
-        T_e = x_input[1]
-        psi = x_input[2]
-        n_e = x_input[3]
+        T_i = x_input[l.Ti]
+        T_e = x_input[l.Te]
+        psi = x_input[l.psi]
+        n_e = x_input[l.ne]
         ions = get_updated_ions(n_e, T_e)
         psi_face_grad = compute_face_grad(psi, g.psi_bc[0], g.psi_bc[1], g.psi_bc[2], g.psi_bc[3])
         q_face = jnp.concatenate([
@@ -1272,8 +1272,8 @@ while True:
         )
         if tc_in_old is None:
             tc_in_old = jnp.concatenate(transient_in_cell)
-        x_old_vec = jnp.concatenate(x_initial)
-        x_new_guess_vec = jnp.concatenate(x_input)
+        x_old_vec = x_initial
+        x_new_guess_vec = x_input
         tc_out_new = jnp.concatenate(transient_out_cell)
         tc_in_new = jnp.concatenate(transient_in_cell)
         left_transient = jnp.identity(len(x_new_guess_vec))
@@ -1303,10 +1303,9 @@ while True:
         lhs_mat = left_transient - dt * g.theta_implicit * broadcasted * c_mat_new
         lhs_vec = -g.theta_implicit * dt * (1 / (tc_out_new * tc_in_new)) * c_new
         rhs = jnp.dot(right_transient, x_old_vec) - lhs_vec
-        x_new_vec = jnp.linalg.solve(lhs_mat, rhs)
-        x_new = jnp.split(x_new_vec, g.num_channels)
+        x_new = jnp.linalg.solve(lhs_mat, rhs)
     t = t + dt
-    s = jnp.concatenate(x_new)
+    s = x_new
     history.append((t, s))
     if t >= (g.t_final - g.tolerance):
         break
