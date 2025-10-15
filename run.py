@@ -1094,6 +1094,7 @@ def _smooth_savgol(data, idx_limit, polyorder):
 # ============================================================================
 # SCALING FACTORS
 # ============================================================================
+g.evolving_names = ("T_i", "T_e", "psi", "n_e")
 g.scaling_T_i = 1.0
 g.scaling_T_e = 1.0
 g.scaling_n_e = 1e20
@@ -1622,8 +1623,6 @@ g.explicit_source_profiles = {
 # ============================================================================
 # MAIN SIMULATION
 # ============================================================================
-g.evolving_names = ("T_i", "T_e", "psi", "n_e")
-
 # Initialize state
 s.T_i = jnp.interp(g.cell_centers, g.T_i_profile_x, g.T_i_profile_y)
 s.T_e = jnp.interp(g.cell_centers, g.T_e_profile_x, g.T_e_profile_y)
