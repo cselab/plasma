@@ -342,13 +342,6 @@ def calculate_conductivity(n_e, T_e, Z_eff_face, q_face):
     return (sigma, sigma_face)
 
 
-@jax.tree_util.register_dataclass
-@dataclasses.dataclass(kw_only=True, frozen=True)
-class BootstrapCurrent:
-    j_bootstrap: Any
-    j_bootstrap_face: Any
-
-
 def _calculate_bootstrap_current(*, Z_eff_face, Z_i_face, n_e, n_e_bc, n_i,
                                  n_i_bc, T_e, T_e_bc, T_i, T_i_bc, psi, psi_bc,
                                  q_face):
@@ -404,10 +397,7 @@ def _calculate_bootstrap_current(*, Z_eff_face, Z_i_face, n_e, n_e_bc, n_i,
         necoeff * dlnne_drnorm + nicoeff * dlnni_drnorm +
         tecoeff * dlnte_drnorm + ticoeff * dlnti_drnorm)
     j_bootstrap = 0.5 * (j_bootstrap_face[:-1] + j_bootstrap_face[1:])
-    return BootstrapCurrent(
-        j_bootstrap=j_bootstrap,
-        j_bootstrap_face=j_bootstrap_face,
-    )
+    return (j_bootstrap, j_bootstrap_face)
 
 
 def _calculate_L34(f_trap, nu_e_star, Z_eff):
@@ -582,7 +572,7 @@ def build_source_profiles1(T_i, T_e, n_e, psi, n_i, n_i_bc, n_impurity, Z_i,
                     jnp.log(weighted_Z_eff) - log_tau_e_Z1)
     qei_coef = jnp.exp(log_Qei_coef)
     qei = (-qei_coef, -qei_coef, qei_coef, qei_coef)
-    result = _calculate_bootstrap_current(
+    bootstrap_current = _calculate_bootstrap_current(
         Z_eff_face=Z_eff_face,
         Z_i_face=Z_i_face,
         n_e=n_e,
@@ -596,10 +586,6 @@ def build_source_profiles1(T_i, T_e, n_e, psi, n_i, n_i_bc, n_impurity, Z_i,
         psi=psi,
         psi_bc=g.psi_bc,
         q_face=q_face,
-    )
-    bootstrap_current = BootstrapCurrent(
-        j_bootstrap=result.j_bootstrap,
-        j_bootstrap_face=result.j_bootstrap_face,
     )
     profiles = {
         "bootstrap_current": bootstrap_current,
@@ -1484,10 +1470,7 @@ g.ones_vec = jnp.ones(g.num_cells)
 g.v_face_psi_zero = jnp.zeros_like(g.geo_g2g3_over_rhon_face)
 g.ones_like_vpr = jnp.ones_like(g.geo_vpr)
 g.qei_zero = (g.zero_vec, g.zero_vec, g.zero_vec, g.zero_vec)
-g.bootstrap_zero = BootstrapCurrent(
-    j_bootstrap=g.zero_vec,
-    j_bootstrap_face=jnp.zeros_like(g.face_centers),
-)
+g.bootstrap_zero = (g.zero_vec, jnp.zeros_like(g.face_centers))
 g.explicit_source_profiles = {
     "bootstrap_current": g.bootstrap_zero,
     "qei": g.qei_zero,
@@ -1621,7 +1604,7 @@ while True:
                 conductivity=(sigma, sigma_face),
             )
             source_psi = calculate_total_psi_sources(
-                merged_source_profiles["bootstrap_current"].j_bootstrap,
+                merged_source_profiles["bootstrap_current"][0],
                 merged_source_profiles["psi"],
             )
             tic_T_i = ions.n_i * g.vpr_5_3
@@ -1784,7 +1767,7 @@ while True:
         conductivity=(sigma_solved, sigma_face_solved),
     )
     psi_sources = calculate_total_psi_sources(
-        final_source_profiles["bootstrap_current"].j_bootstrap,
+        final_source_profiles["bootstrap_current"][0],
         final_source_profiles["psi"],
     )
     psidot_value = calculate_psidot_from_psi_sources(
