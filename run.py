@@ -3,7 +3,6 @@ from jax import numpy as jnp
 from typing import Any
 import dataclasses
 import enum
-import immutabledict
 import jax
 import numpy as np
 import os
@@ -20,11 +19,7 @@ class g:
 class s:
     pass
 
-os.environ["XLA_FLAGS"] = (
-    os.environ.get("XLA_FLAGS", "") +
-    " --xla_backend_extra_options=xla_cpu_flatten_after_fusion")
 jax.config.update("jax_enable_x64", True)
-thread_context = threading.local()
 g.interp_fn = jax.jit(jnp.interp)
 g.TOLERANCE = 1e-6
 g.keV_to_J = 1e3 * 1.602176634e-19
@@ -231,18 +226,18 @@ def _calculate_log_tau_e_Z1(T_e, n_e, log_lambda_ei):
             2 * jnp.log(g.epsilon_0) + 1.5 * jnp.log(T_e * g.keV_to_J))
 
 
-g.MAVRIN_Z_COEFFS = immutabledict.immutabledict({
+g.MAVRIN_Z_COEFFS = {
     "Ne":
     np.array([
         [-2.5303e01, -6.4696e01, -5.3631e01, -1.3242e01, 8.9737e00],
         [-7.0678e00, 3.6868e00, -8.0723e-01, 2.1413e-01, 9.9532e00],
         [0.0000e00, 0.0000e00, 0.0000e00, 0.0000e00, 1.0000e01],
     ]),
-})
-g.TEMPERATURE_INTERVALS = immutabledict.immutabledict({
+}
+g.TEMPERATURE_INTERVALS = {
     "Ne":
     np.array([0.5, 2.0]),
-})
+}
 
 
 def calculate_average_charge_state_single_species(T_e, ion_symbol):
