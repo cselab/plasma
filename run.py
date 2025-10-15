@@ -375,8 +375,8 @@ def gaussian_profile(*, center, width, total):
     return C * S
 
 
-def calculate_total_sources(sources_dict):
-    total = sum(sources_dict.values())
+def calculate_total_sources(sources_list):
+    total = sum(sources_list)
     return total * g.geo_vpr
 
 
@@ -506,8 +506,8 @@ def build_standard_source_profiles(*,
                                    calculate_anyway=False,
                                    psi_only=False):
 
-    def calculate_source(source_name):
-        handler = g.source_registry[source_name]
+    def calculate_source(source_idx):
+        handler = g.source_handlers[source_idx]
         if (not explicit) | calculate_anyway:
             value = handler.eval_fn(
                 core_profiles,
@@ -519,24 +519,19 @@ def build_standard_source_profiles(*,
                                                       strict=True):
                 match affected_core_profile:
                     case AffectedCoreProfile.PSI:
-                        calculated_source_profiles[4][
-                            source_name] = profile
+                        calculated_source_profiles[4].append(profile)
                     case AffectedCoreProfile.NE:
-                        calculated_source_profiles[5][
-                            source_name] = profile
+                        calculated_source_profiles[5].append(profile)
                     case AffectedCoreProfile.TEMP_ION:
-                        calculated_source_profiles[2][
-                            source_name] = profile
+                        calculated_source_profiles[2].append(profile)
                     case AffectedCoreProfile.TEMP_EL:
-                        calculated_source_profiles[3][
-                            source_name] = profile
+                        calculated_source_profiles[3].append(profile)
 
-    calculate_source("generic_current")
+    calculate_source(0)
     if psi_only:
         return
-    for source_name in g.source_registry.keys():
-        if source_name != "generic_current":
-            calculate_source(source_name)
+    for source_idx in range(1, len(g.source_handlers)):
+        calculate_source(source_idx)
 
 
 @jax.tree_util.register_dataclass
@@ -1211,38 +1206,32 @@ g.geo_factor_pereverzev = jnp.concatenate(
     [jnp.ones(1), g.geo_g1_over_vpr_face[1:] / g.geo_g0_face[1:]])
 
 
-g.source_registry = {
-    "generic_current":
+g.source_handlers = [
     SourceHandler(
         affects=(AffectedCoreProfile.PSI, ),
         eval_fn=calculate_generic_current,
     ),
-    "generic_heat":
     SourceHandler(
         affects=(AffectedCoreProfile.TEMP_ION, AffectedCoreProfile.TEMP_EL),
         eval_fn=default_formula,
     ),
-    "generic_particle":
     SourceHandler(
         affects=(AffectedCoreProfile.NE, ),
         eval_fn=calc_generic_particle_source,
     ),
-    "pellet":
     SourceHandler(
         affects=(AffectedCoreProfile.NE, ),
         eval_fn=calc_pellet_source,
     ),
-    "gas_puff":
     SourceHandler(
         affects=(AffectedCoreProfile.NE, ),
         eval_fn=calc_puff_source,
     ),
-    "fusion":
     SourceHandler(
         affects=(AffectedCoreProfile.TEMP_ION, AffectedCoreProfile.TEMP_EL),
         eval_fn=fusion_heat_model_func,
     ),
-}
+]
 g.ETG_correction_factor = 1.0 / 3.0
 g.collisionality_multiplier = 1.0
 g.smoothing_width = 0.1
@@ -1278,10 +1267,10 @@ g.bootstrap_zero = (g.zero_vec, jnp.zeros_like(g.face_centers))
 g.explicit_source_profiles = (
     g.bootstrap_zero,
     g.qei_zero,
-    {},
-    {},
-    {},
-    {},
+    [],
+    [],
+    [],
+    [],
 )
 
 s.T_i = jnp.interp(g.cell_centers, g.T_i_profile_x, g.T_i_profile_y)
@@ -1430,10 +1419,10 @@ while True:
             merged_source_profiles = (
                 bootstrap_current,
                 qei,
-                dict(g.explicit_source_profiles[2]),
-                dict(g.explicit_source_profiles[3]),
-                dict(g.explicit_source_profiles[4]),
-                dict(g.explicit_source_profiles[5]),
+                list(g.explicit_source_profiles[2]),
+                list(g.explicit_source_profiles[3]),
+                list(g.explicit_source_profiles[4]),
+                list(g.explicit_source_profiles[5]),
             )
             core_profiles_for_sources = CoreProfiles(
                 T_i=T_i,
@@ -1447,7 +1436,7 @@ while True:
                 explicit=False,
                 conductivity=(sigma, sigma_face),
             )
-            total = merged_source_profiles[0][0] + sum(merged_source_profiles[4].values())
+            total = merged_source_profiles[0][0] + sum(merged_source_profiles[4])
             source_psi = -total * 8 * g.geo_vpr * jnp.pi**2 * g.geo_B_0 * g.mu_0 * g.geo_Phi_b / g.geo_F**2
             tic_T_i = ions.n_i * g.vpr_5_3
             tic_T_e = n_e * g.vpr_5_3
