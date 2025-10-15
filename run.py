@@ -205,15 +205,6 @@ def get_average_charge_state(ion_symbols, T_e, fractions):
     return Z_avg, Z2_avg, Z_per_species
 
 
-def calculate_f_trap():
-    epsilon_effective = (
-        0.67 * (1.0 - 1.4 * jnp.abs(g.geo_delta_face) * g.geo_delta_face) *
-        g.geo_epsilon_face)
-    aa = (1.0 - g.geo_epsilon_face) / (1.0 + g.geo_epsilon_face)
-    return 1.0 - jnp.sqrt(aa) * (1.0 - epsilon_effective) / (
-        1.0 + 2.0 * jnp.sqrt(epsilon_effective))
-
-
 def calculate_L31(f_trap, nu_e_star, Z_eff):
     denom = (1.0 + (1 - 0.1 * f_trap) * jnp.sqrt(nu_e_star) + 0.5 *
              (1.0 - f_trap) * nu_e_star / Z_eff)
@@ -271,18 +262,6 @@ def gaussian_profile(*, center, width, total):
     S = jnp.exp(-((r - center)**2) / (2 * width**2))
     C = total / jnp.sum(S * g.geo_vpr * g.dx_array)
     return C * S
-
-
-def calculate_generic_current(unused_state, unused_calculated_source_profiles,
-                              unused_conductivity):
-    I_generic = g.Ip * g.generic_current_fraction
-    generic_current_form = jnp.exp(
-        -((g.cell_centers - g.generic_current_location)**2) /
-        (2 * g.generic_current_width**2))
-    Cext = I_generic / jnp.sum(
-        generic_current_form * g.geo_spr * g.dx_array)
-    generic_current_profile = Cext * generic_current_form
-    return (generic_current_profile, )
 
 
 def default_formula(unused_core_profiles, unused_calculated_source_profiles,
@@ -1042,6 +1021,12 @@ g.pi16cubed_mu0_Phib = g.pi_16_cubed * g.mu_0 * g.geo_Phi_b
 g.geo_g1_keV = g.geo_g1_over_vpr_face * g.keV_to_J
 g.geo_factor_pereverzev = jnp.concatenate(
     [jnp.ones(1), g.geo_g1_over_vpr_face[1:] / g.geo_g0_face[1:]])
+epsilon_effective = (
+    0.67 * (1.0 - 1.4 * jnp.abs(g.geo_delta_face) * g.geo_delta_face) *
+    g.geo_epsilon_face)
+aa = (1.0 - g.geo_epsilon_face) / (1.0 + g.geo_epsilon_face)
+g.f_trap = 1.0 - jnp.sqrt(aa) * (1.0 - epsilon_effective) / (
+    1.0 + 2.0 * jnp.sqrt(epsilon_effective))
 
 
 g.ETG_correction_factor = 1.0 / 3.0
@@ -1180,7 +1165,7 @@ while True:
             T_e_face_grad = compute_face_grad(T_e, g.T_e_bc[0], g.T_e_bc[1], g.T_e_bc[2], g.T_e_bc[3])
             n_e_face = compute_face_value(n_e, g.n_e_bc[1], g.n_e_bc[3])
             n_e_face_grad = compute_face_grad(n_e, g.n_e_bc[0], g.n_e_bc[1], g.n_e_bc[2], g.n_e_bc[3])
-            f_trap = calculate_f_trap()
+            f_trap = g.f_trap
             NZ = 0.58 + 0.74 / (0.76 + ions.Z_eff_face)
             log_lambda_ei = calculate_log_lambda_ei(n_e_face, T_e_face)
             sigsptz = 1.9012e04 * (T_e_face * 1e3)**1.5 / ions.Z_eff_face / NZ / log_lambda_ei
@@ -1207,7 +1192,7 @@ while True:
                             jnp.log(weighted_Z_eff) - log_tau_e_Z1)
             qei_coef = jnp.exp(log_Qei_coef)
             qei = (-qei_coef, -qei_coef, qei_coef, qei_coef)
-            f_trap = calculate_f_trap()
+            f_trap = g.f_trap
             n_e_face_bootstrap = compute_face_value(n_e, g.n_e_bc[1], g.n_e_bc[3])
             n_e_face_grad_bootstrap = compute_face_grad(n_e, g.n_e_bc[0], g.n_e_bc[1], g.n_e_bc[2], g.n_e_bc[3])
             T_e_face_bootstrap = compute_face_value(T_e, g.T_e_bc[1], g.T_e_bc[3])
@@ -1272,7 +1257,12 @@ while True:
                 n_i=ions.n_i,
                 n_i_bc=ions.n_i_bc,
             )
-            psi_source, = calculate_generic_current(core_profiles_for_sources, merged_source_profiles, (sigma, sigma_face))
+            I_generic = g.Ip * g.generic_current_fraction
+            generic_current_form = jnp.exp(
+                -((g.cell_centers - g.generic_current_location)**2) /
+                (2 * g.generic_current_width**2))
+            Cext = I_generic / jnp.sum(generic_current_form * g.geo_spr * g.dx_array)
+            psi_source = Cext * generic_current_form
             merged_source_profiles[4].append(psi_source)
             T_i_source, T_e_source = default_formula(core_profiles_for_sources, merged_source_profiles, (sigma, sigma_face))
             merged_source_profiles[2].append(T_i_source)
