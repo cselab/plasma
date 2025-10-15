@@ -200,21 +200,6 @@ class CoreProfiles:
     n_i_bc: Any
 
 
-def calculate_psidot_from_psi_sources(*, psi_sources, sigma, psi, psi_bc):
-    toc_psi = (1.0 / g.resistivity_multiplier * g.cell_centers * sigma *
-               g.mu_0 * 16 * jnp.pi**2 * g.geo_Phi_b**2 / g.geo_F**2)
-    diffusion_mat, diffusion_vec = make_diffusion_terms(
-        g.geo_g2g3_over_rhon_face, g.dx_array, psi_bc)
-    conv_mat, conv_vec = make_convection_terms(
-        g.v_face_psi_zero, g.geo_g2g3_over_rhon_face,
-        g.dx_array, psi_bc)
-    c_mat = diffusion_mat + conv_mat
-    c = diffusion_vec + conv_vec
-    c += psi_sources
-    psidot = (jnp.dot(c_mat, psi) + c) / toc_psi
-    return psidot
-
-
 def calculate_log_lambda_ei(n_e, T_e_keV):
     return 31.3 - 0.5 * jnp.log(n_e) + jnp.log(T_e_keV * 1e3)
 
@@ -388,14 +373,6 @@ def gaussian_profile(*, center, width, total):
     S = jnp.exp(-((r - center)**2) / (2 * width**2))
     C = total / jnp.sum(S * g.geo_vpr * g.dx_array)
     return C * S
-
-
-def calculate_total_psi_sources(j_bootstrap, psi_sources_dict):
-    total = j_bootstrap
-    total += sum(psi_sources_dict.values())
-    mu0 = g.mu_0
-    prefactor = 8 * g.geo_vpr * jnp.pi**2 * g.geo_B_0 * mu0 * g.geo_Phi_b / g.geo_F**2
-    return -total * prefactor
 
 
 def calculate_total_sources(sources_dict):
@@ -1470,10 +1447,8 @@ while True:
                 explicit=False,
                 conductivity=(sigma, sigma_face),
             )
-            source_psi = calculate_total_psi_sources(
-                merged_source_profiles[0][0],
-                merged_source_profiles[4],
-            )
+            total = merged_source_profiles[0][0] + sum(merged_source_profiles[4].values())
+            source_psi = -total * 8 * g.geo_vpr * jnp.pi**2 * g.geo_B_0 * g.mu_0 * g.geo_Phi_b / g.geo_F**2
             tic_T_i = ions.n_i * g.vpr_5_3
             tic_T_e = n_e * g.vpr_5_3
             toc_psi = (1.0 / g.resistivity_multiplier * g.cell_centers *
