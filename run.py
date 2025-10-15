@@ -1225,6 +1225,7 @@ g.n_e = jnp.interp(g.cell_centers, g.n_e_profile_x, g.n_e_profile_y)
 g.chi_pereverzev = 30
 g.D_pereverzev = 15
 g.theta_implicit = 1.0
+g.theta_explicit = 0.0
 g.t_final = 5
 g.resistivity_multiplier = 200
 g.max_dt = 0.5
@@ -1517,6 +1518,12 @@ g.T_i_bc_scaled = (None, g.T_i_right_bc / g.scaling_T_i, 0.0, 0.0)
 g.T_e_bc_scaled = (None, g.T_e_right_bc / g.scaling_T_e, 0.0, 0.0)
 g.psi_bc_scaled = (None, None, 0.0, g.dpsi_drhonorm_edge / g.scaling_psi)
 g.n_e_bc_scaled = (None, g.n_e_right_bc / g.scaling_n_e, 0.0, 0.0)
+
+# Precompute solver matrix construction constants
+g.num_cells = g.n_rho
+g.num_channels = 4
+g.zero_block = jnp.zeros((g.num_cells, g.num_cells))
+g.zero_vec = jnp.zeros(g.num_cells)
 g.explicit_source_profiles = {
     "bootstrap_current": BootstrapCurrent.zeros(),
     "qei": QeiInfo.zeros(),
@@ -1728,60 +1735,39 @@ while True:
                 tc_in_old = jnp.concatenate(transient_in_cell)
             x_old_vec = jnp.concatenate([x[0] for x in x_initial])
             x_new_guess_vec = jnp.concatenate([x[0] for x in x_input])
-            theta_exp = 1.0 - g.theta_implicit
             tc_out_new = jnp.concatenate(transient_out_cell)
             tc_in_new = jnp.concatenate(transient_in_cell)
             left_transient = jnp.identity(len(x_new_guess_vec))
             right_transient = jnp.diag(jnp.squeeze(tc_in_old / tc_in_new))
             x = x_input
-            num_cells = x[0][0].shape[0]
-            num_channels = len(x)
-            zero_block = jnp.zeros((num_cells, num_cells))
-            zero_row_of_blocks = [zero_block] * num_channels
-            zero_vec = jnp.zeros((num_cells))
-            zero_block_vec = [zero_vec] * num_channels
-            c_mat = [zero_row_of_blocks.copy() for _ in range(num_channels)]
+            zero_row_of_blocks = [g.zero_block] * g.num_channels
+            zero_block_vec = [g.zero_vec] * g.num_channels
+            c_mat = [zero_row_of_blocks.copy() for _ in range(g.num_channels)]
             c = zero_block_vec.copy()
-            assert d_face
-            for i in range(num_channels):
-                (diffusion_mat,
-                 diffusion_vec) = make_diffusion_terms(d_face[i], x[i][1],
-                                                       x[i][2])
+            for i in range(g.num_channels):
+                diffusion_mat, diffusion_vec = make_diffusion_terms(d_face[i], x[i][1], x[i][2])
                 c_mat[i][i] += diffusion_mat
                 c[i] += diffusion_vec
-            if v_face is not None:
-                for i in range(num_channels):
-                    d_face_i = d_face[i] if d_face is not None else None
-                    d_face_i = (jnp.zeros_like(v_face[i])
-                                if d_face_i is None else d_face_i)
-                    (conv_mat,
-                     conv_vec) = make_convection_terms(v_face[i], d_face_i,
-                                                       x[i][1], x[i][2])
-                    c_mat[i][i] += conv_mat
-                    c[i] += conv_vec
-            if source_mat_cell is not None:
-                for i in range(num_channels):
-                    for j in range(num_channels):
-                        source = source_mat_cell[i][j]
-                        if source is not None:
-                            c_mat[i][j] += jnp.diag(source)
-            if source_cell is not None:
-                c = [(c_i + source_i) for c_i, source_i in zip(c, source_cell)]
+            for i in range(g.num_channels):
+                conv_mat, conv_vec = make_convection_terms(v_face[i], d_face[i], x[i][1], x[i][2])
+                c_mat[i][i] += conv_mat
+                c[i] += conv_vec
+            for i in range(g.num_channels):
+                for j in range(g.num_channels):
+                    source = source_mat_cell[i][j]
+                    if source is not None:
+                        c_mat[i][j] += jnp.diag(source)
+            c = [(c_i + source_i) for c_i, source_i in zip(c, source_cell)]
             c_mat_new = jnp.block(c_mat)
             c_new = jnp.block(c)
             broadcasted = jnp.expand_dims(1 / (tc_out_new * tc_in_new), 1)
             lhs_mat = left_transient - dt * g.theta_implicit * broadcasted * c_mat_new
-            lhs_vec = -g.theta_implicit * dt * (
-                1 / (tc_out_new * tc_in_new)) * c_new
-            assert theta_exp <= 0.0
-            rhs_mat = right_transient
-            rhs_vec = jnp.zeros_like(x_new_guess_vec)
-            rhs = jnp.dot(rhs_mat, x_old_vec) + rhs_vec - lhs_vec
-            x_new = jnp.linalg.solve(lhs_mat, rhs)
-            x_new = jnp.split(x_new, len(x_initial))
-            out = [(value, var[1], var[2])
-                   for var, value in zip(x_input, x_new)]
-            x_new = tuple(out)
+            lhs_vec = -g.theta_implicit * dt * (1 / (tc_out_new * tc_in_new)) * c_new
+            rhs = jnp.dot(right_transient, x_old_vec) - lhs_vec
+            x_new_vec = jnp.linalg.solve(lhs_mat, rhs)
+            x_new_split = jnp.split(x_new_vec, g.num_channels)
+            x_new = tuple((value, x_input[i][1], x_input[i][2])
+                          for i, value in enumerate(x_new_split))
         solver_numeric_outputs = 0
         loop_output = (
             x_new,
