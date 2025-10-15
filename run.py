@@ -348,13 +348,6 @@ class BootstrapCurrent:
     j_bootstrap: Any
     j_bootstrap_face: Any
 
-    @classmethod
-    def zeros(cls):
-        return cls(
-            j_bootstrap=jnp.zeros_like(g.cell_centers),
-            j_bootstrap_face=jnp.zeros_like(g.face_centers),
-        )
-
 
 def _calculate_bootstrap_current(*, Z_eff_face, Z_i_face, n_e, n_e_bc, n_i,
                                  n_i_bc, T_e, T_e_bc, T_i, T_i_bc, psi, psi_bc,
@@ -446,15 +439,6 @@ class QeiInfo:
     implicit_ee: Any
     implicit_ie: Any
     implicit_ei: Any
-
-    @classmethod
-    def zeros(cls):
-        return QeiInfo(
-            implicit_ii=jnp.zeros_like(g.geo_rho),
-            implicit_ee=jnp.zeros_like(g.geo_rho),
-            implicit_ie=jnp.zeros_like(g.geo_rho),
-            implicit_ei=jnp.zeros_like(g.geo_rho),
-        )
 
 
 def calculate_total_psi_sources(j_bootstrap, psi_sources_dict):
