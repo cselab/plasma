@@ -216,7 +216,7 @@ def calculate_psidot_from_psi_sources(*, psi_sources, sigma, psi, psi_bc):
     diffusion_mat, diffusion_vec = make_diffusion_terms(
         g.geo_g2g3_over_rhon_face, jnp.array(g.dx), psi_bc)
     conv_mat, conv_vec = make_convection_terms(
-        jnp.zeros_like(g.geo_g2g3_over_rhon_face), g.geo_g2g3_over_rhon_face,
+        g.v_face_psi_zero, g.geo_g2g3_over_rhon_face,
         jnp.array(g.dx), psi_bc)
     c_mat = diffusion_mat + conv_mat
     c = diffusion_vec + conv_vec
@@ -1524,9 +1524,22 @@ g.num_cells = g.n_rho
 g.num_channels = 4
 g.zero_block = jnp.zeros((g.num_cells, g.num_cells))
 g.zero_vec = jnp.zeros(g.num_cells)
+g.ones_vec = jnp.ones(g.num_cells)
+g.v_face_psi_zero = jnp.zeros_like(g.geo_g2g3_over_rhon_face)
+g.ones_like_vpr = jnp.ones_like(g.geo_vpr)
+g.qei_zero = QeiInfo(
+    implicit_ii=g.zero_vec,
+    implicit_ee=g.zero_vec,
+    implicit_ie=g.zero_vec,
+    implicit_ei=g.zero_vec,
+)
+g.bootstrap_zero = BootstrapCurrent(
+    j_bootstrap=g.zero_vec,
+    j_bootstrap_face=jnp.zeros_like(g.face_centers),
+)
 g.explicit_source_profiles = {
-    "bootstrap_current": BootstrapCurrent.zeros(),
-    "qei": QeiInfo.zeros(),
+    "bootstrap_current": g.bootstrap_zero,
+    "qei": g.qei_zero,
     "T_e": {},
     "T_i": {},
     "n_e": {},
@@ -1715,10 +1728,10 @@ while True:
             source_e += g.mask * g.adaptive_T_source_prefactor * g.T_e_ped
             source_mat_ii -= g.mask * g.adaptive_T_source_prefactor
             source_mat_ee -= g.mask * g.adaptive_T_source_prefactor
-            transient_out_cell = (g.toc_temperature_factor, g.toc_temperature_factor, toc_psi, jnp.ones_like(g.geo_vpr))
-            transient_in_cell = (tic_T_i, tic_T_e, jnp.ones_like(toc_psi), g.geo_vpr)
+            transient_out_cell = (g.toc_temperature_factor, g.toc_temperature_factor, toc_psi, g.ones_like_vpr)
+            transient_in_cell = (tic_T_i, tic_T_e, g.ones_vec, g.geo_vpr)
             d_face = (full_chi_face_ion, full_chi_face_el, g.geo_g2g3_over_rhon_face, full_d_face_el)
-            v_face = (v_heat_face_ion, v_heat_face_el, jnp.zeros_like(g.geo_g2g3_over_rhon_face), full_v_face_el)
+            v_face = (v_heat_face_ion, v_heat_face_el, g.v_face_psi_zero, full_v_face_el)
             source_mat_cell = (
                 (source_mat_ii, source_mat_ie, None, None),
                 (source_mat_ei, source_mat_ee, None, None),
