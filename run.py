@@ -626,7 +626,7 @@ def calc_puff_source(unused_state, unused_calculated_source_profiles,
 
 def build_source_profiles1(T_i, T_e, n_e, psi, n_i, n_i_bc, n_impurity, Z_i,
                            A_i, Z_impurity, A_impurity, q_face, Z_eff_face,
-                           Z_i_face, explicit_source_profiles, conductivity):
+                           Z_i_face, conductivity):
     log_lambda_ei = calculate_log_lambda_ei(n_e, T_e)
     log_tau_e_Z1 = _calculate_log_tau_e_Z1(
         T_e,
@@ -667,10 +667,10 @@ def build_source_profiles1(T_i, T_e, n_e, psi, n_i, n_i_bc, n_impurity, Z_i,
     profiles = {
         "bootstrap_current": bootstrap_current,
         "qei": qei,
-        "T_e": explicit_source_profiles["T_e"],
-        "T_i": explicit_source_profiles["T_i"],
-        "n_e": explicit_source_profiles["n_e"],
-        "psi": explicit_source_profiles["psi"],
+        "T_e": g.explicit_source_profiles["T_e"],
+        "T_i": g.explicit_source_profiles["T_i"],
+        "n_e": g.explicit_source_profiles["n_e"],
+        "psi": g.explicit_source_profiles["psi"],
     }
     core_profiles_for_sources = CoreProfiles(
         T_i=T_i,
@@ -1630,6 +1630,15 @@ g.psi_bc = make_bc(
     right_face_grad_constraint=g.dpsi_drhonorm_edge,
     right_face_constraint=None,
 )
+g.explicit_source_profiles = {
+    "bootstrap_current": BootstrapCurrent.zeros(),
+    "qei": QeiInfo.zeros(),
+    "T_e": {},
+    "T_i": {},
+    "n_e": {},
+    "psi": {},
+}
+
 Ip_scale_factor = g.Ip / g.geo_Ip_profile_face_base[-1]
 T_i = g.T_i
 T_e = g.T_e
@@ -1732,15 +1741,6 @@ while True:
         ions_for_sources.A_i,
         ions_for_sources.Z_eff_face,
     )
-    # Build empty source profiles for explicit (predictor) step
-    explicit_source_profiles = {
-        "bootstrap_current": BootstrapCurrent.zeros(),
-        "qei": QeiInfo.zeros(),
-        "T_e": {},
-        "T_i": {},
-        "n_e": {},
-        "psi": {},
-    }
     core_profiles_for_sources = CoreProfiles(
         T_i=current_T_i,
         T_e=current_T_e,
@@ -1748,7 +1748,7 @@ while True:
         n_i_bc=ions_for_sources.n_i_bc,
     )
     build_standard_source_profiles(
-        calculated_source_profiles=explicit_source_profiles,
+        calculated_source_profiles=g.explicit_source_profiles,
         core_profiles=core_profiles_for_sources,
         explicit=True,
         conductivity=None,
@@ -1827,7 +1827,6 @@ while True:
                 q_face,
                 ions.Z_eff_face,
                 ions.Z_i_face,
-                explicit_source_profiles=explicit_source_profiles,
                 conductivity=(sigma, sigma_face),
             )
             source_mat_psi = jnp.zeros_like(g.geo_rho)
@@ -2075,7 +2074,6 @@ while True:
         q_face_solved,
         ions_final.Z_eff_face,
         ions_final.Z_i_face,
-        explicit_source_profiles=explicit_source_profiles,
         conductivity=(sigma_solved, sigma_face_solved),
     )
     psi_sources = calculate_total_psi_sources(
