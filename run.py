@@ -712,6 +712,19 @@ g.chi_e_outer = 2.0
 g.rho_outer = 0.9
 g.chi_min = 0.05
 g.chi_max = 100
+g.fusion_Efus = 17.6 * 1e3 * g.keV_to_J
+g.fusion_mrc2 = 1124656
+g.fusion_BG = 34.3827
+g.fusion_C1 = 1.17302e-9
+g.fusion_C2 = 1.51361e-2
+g.fusion_C3 = 7.51886e-2
+g.fusion_C4 = 4.60643e-3
+g.fusion_C5 = 1.35e-2
+g.fusion_C6 = -1.0675e-4
+g.fusion_C7 = 1.366e-5
+g.fusion_alpha_fraction = 3.5 / 17.6
+g.fusion_birth_energy = 3520
+g.fusion_alpha_mass = 4.002602
 g.D_e_min = 0.05
 g.D_e_max = 100.0
 g.V_e_min = -50.0
@@ -1179,34 +1192,21 @@ while True:
                     product *= fraction
                     DT_fraction_product = product
                     t_face = compute_face_value(T_i, g.T_i_bc[1], g.T_i_bc[3])
-                    Efus = 17.6 * 1e3 * g.keV_to_J
-                    mrc2 = 1124656
-                    BG = 34.3827
-                    C1 = 1.17302e-9
-                    C2 = 1.51361e-2
-                    C3 = 7.51886e-2
-                    C4 = 4.60643e-3
-                    C5 = 1.35e-2
-                    C6 = -1.0675e-4
-                    C7 = 1.366e-5
-                    theta = t_face / (1.0 - (t_face * (C2 + t_face *
-                                                       (C4 + t_face * C6))) /
-                                      (1.0 + t_face * (C3 + t_face *
-                                                       (C5 + t_face * C7))))
-                    xi = (BG**2 / (4 * theta))**(1 / 3)
-                    logsigmav = (jnp.log(C1 * theta) +
-                                 0.5 * jnp.log(xi / (mrc2 * t_face**3)) - 3 * xi -
+                    theta = t_face / (1.0 - (t_face * (g.fusion_C2 + t_face *
+                                                       (g.fusion_C4 + t_face * g.fusion_C6))) /
+                                      (1.0 + t_face * (g.fusion_C3 + t_face *
+                                                       (g.fusion_C5 + t_face * g.fusion_C7))))
+                    xi = (g.fusion_BG**2 / (4 * theta))**(1 / 3)
+                    logsigmav = (jnp.log(g.fusion_C1 * theta) +
+                                 0.5 * jnp.log(xi / (g.fusion_mrc2 * t_face**3)) - 3 * xi -
                                  jnp.log(1e6))
                     n_i_face_fusion = compute_face_value(ions.n_i, ions.n_i_bc[1], ions.n_i_bc[3])
-                    logPfus = (jnp.log(DT_fraction_product * Efus) +
+                    logPfus = (jnp.log(DT_fraction_product * g.fusion_Efus) +
                                2 * jnp.log(n_i_face_fusion) + logsigmav)
                     Pfus_face = jnp.exp(logPfus)
                     Pfus_cell = 0.5 * (Pfus_face[:-1] + Pfus_face[1:])
-                    alpha_fraction = 3.5 / 17.6
-                    birth_energy = 3520
-                    alpha_mass = 4.002602
-                    critical_energy = 10 * alpha_mass * T_e
-                    energy_ratio = birth_energy / critical_energy
+                    critical_energy = 10 * g.fusion_alpha_mass * T_e
+                    energy_ratio = g.fusion_birth_energy / critical_energy
                     x_squared = energy_ratio
                     x = jnp.sqrt(x_squared)
                     frac_i = (2 * ((1 / 6) * jnp.log(
@@ -1215,8 +1215,8 @@ while True:
                             (2.0 * x - 1.0) / jnp.sqrt(3)) + jnp.pi / 6) / jnp.sqrt(3))
                               / x_squared)
                     frac_e = 1.0 - frac_i
-                    T_i_fusion = Pfus_cell * frac_i * alpha_fraction
-                    T_e_fusion = Pfus_cell * frac_e * alpha_fraction
+                    T_i_fusion = Pfus_cell * frac_i * g.fusion_alpha_fraction
+                    T_e_fusion = Pfus_cell * frac_e * g.fusion_alpha_fraction
             merged_source_profiles[2].append(T_i_fusion)
             merged_source_profiles[3].append(T_e_fusion)
             total = merged_source_profiles[0][0] + sum(merged_source_profiles[4])
