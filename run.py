@@ -2257,18 +2257,13 @@ while True:
 t = np.array(state_history_t)
 rho = np.concatenate([[0.0], np.asarray(g.cell_centers), [1.0]])
 (nt, ) = np.shape(t)
-state_history_dict = {
-    "T_i": state_history_T_i,
-    "T_e": state_history_T_e,
-    "psi": state_history_psi,
-    "n_e": state_history_n_e,
-}
+state_histories = [state_history_T_i, state_history_T_e, state_history_psi, state_history_n_e]
 evolving_data = {}
-for var_name in g.evolving_names:
+for var_name, var_history in zip(g.evolving_names, state_histories):
     var_bc = getattr(g, f"{var_name}_bc")
     var_data = [
         compute_cell_plus_boundaries_bc(var_value, jnp.array(g.dx), var_bc)
-        for var_value in state_history_dict[var_name]
+        for var_value in var_history
     ]
     evolving_data[var_name] = np.stack(var_data)
 with open("run.raw", "wb") as f:
