@@ -1637,26 +1637,26 @@ while True:
         if not (take_another_step & ~is_nan_next_dt):
             break
     result = loop_output
+    solved_T_i = result[0][0][0] * g.scaling_T_i
+    solved_T_e = result[0][1][0] * g.scaling_T_e
+    solved_psi = result[0][2][0] * g.scaling_psi
+    solved_n_e = result[0][3][0] * g.scaling_n_e
+    ions_final = get_updated_ions(solved_n_e, g.n_e_bc, solved_T_e, g.T_e_bc)
+    psi_face_new = compute_face_value_bc(solved_psi, g.psi_bc)
     psi_face_old = compute_face_value_bc(s.psi, g.psi_bc)
-    s.T_i = result[0][0][0] * g.scaling_T_i
-    s.T_e = result[0][1][0] * g.scaling_T_e
-    s.psi = result[0][2][0] * g.scaling_psi
-    s.n_e = result[0][3][0] * g.scaling_n_e
-    ions_final = get_updated_ions(s.n_e, g.n_e_bc, s.T_e, g.T_e_bc)
-    psi_face_new = compute_face_value_bc(s.psi, g.psi_bc)
     v_loop_lcfs = (psi_face_new[-1] - psi_face_old[-1]) / result[1]
-    psi_face_grad_solved = compute_face_grad_bc(s.psi, g.psi_bc)
+    psi_face_grad_solved = compute_face_grad_bc(solved_psi, g.psi_bc)
     q_face_solved = jnp.concatenate([
         jnp.expand_dims(jnp.abs(g.q_factor_axis * g.dx_array / psi_face_grad_solved[1]), 0),
         jnp.abs(g.q_factor_bulk * g.face_centers[1:] / psi_face_grad_solved[1:]),
     ])
     sigma_solved, sigma_face_solved = calculate_conductivity(
-        s.n_e, s.T_e, ions_final.Z_eff_face, q_face_solved)
+        solved_n_e, solved_T_e, ions_final.Z_eff_face, q_face_solved)
     final_source_profiles = build_source_profiles1(
-        s.T_i,
-        s.T_e,
-        s.n_e,
-        s.psi,
+        solved_T_i,
+        solved_T_e,
+        solved_n_e,
+        solved_psi,
         ions_final.n_i,
         ions_final.n_i_bc,
         ions_final.n_impurity,
@@ -1676,10 +1676,14 @@ while True:
     psidot_value = calculate_psidot_from_psi_sources(
         psi_sources=psi_sources,
         sigma=sigma_solved,
-        psi=s.psi,
+        psi=solved_psi,
         psi_bc=g.psi_bc,
     )
     s.t = s.t + result[1]
+    s.T_i = solved_T_i
+    s.T_e = solved_T_e
+    s.psi = solved_psi
+    s.n_e = solved_n_e
     history.append((s.t, s.T_i, s.T_e, s.psi, s.n_e))
     if s.t >= (g.t_final - g.tolerance):
         break
