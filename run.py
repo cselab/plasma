@@ -940,9 +940,8 @@ g.zero_row_of_blocks = [g.zero_block] * g.num_channels
 g.zero_block_vec = [g.zero_vec] * g.num_channels
 g.bcs = (g.T_i_bc, g.T_e_bc, g.psi_bc, g.n_e_bc)
 
-s = jnp.zeros(g.state_size)
-s = s.at[l.Ti].set(jnp.interp(g.cell_centers, g.T_i_profile_x, g.T_i_profile_y))
-s = s.at[l.Te].set(jnp.interp(g.cell_centers, g.T_e_profile_x, g.T_e_profile_y))
+T_i_initial = jnp.interp(g.cell_centers, g.T_i_profile_x, g.T_i_profile_y)
+T_e_initial = jnp.interp(g.cell_centers, g.T_e_profile_x, g.T_e_profile_y)
 nGW = g.Ip / 1e6 / (jnp.pi * g.geo_a_minor**2) * g.scaling_n_e
 n_e_value = g.n_e * nGW
 n_e_face = jnp.concatenate([
@@ -956,8 +955,9 @@ nbar_from_n_e_face_inner = (
 dr_edge = g.geo_R_out_face[-1] - g.geo_R_out_face[-2]
 C = (g.nbar * nGW - 0.5 * n_e_face[-1] * dr_edge / a_minor_out) / (
     nbar_from_n_e_face_inner + 0.5 * n_e_face[-2] * dr_edge / a_minor_out)
-s = s.at[l.ne].set(C * n_e_value)
-s = s.at[l.psi].set(g.geo_psi_from_Ip_base * (g.Ip / g.geo_Ip_profile_face_base[-1]))
+n_e_initial = C * n_e_value
+psi_initial = g.geo_psi_from_Ip_base * (g.Ip / g.geo_Ip_profile_face_base[-1])
+s = jnp.concatenate([T_i_initial, T_e_initial, psi_initial, n_e_initial])
 t = 0.0
 history = [(t, s)]
 while True:
