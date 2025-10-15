@@ -299,12 +299,6 @@ def calculate_total_sources(sources_list):
 
 
 @enum.unique
-class Mode(enum.Enum):
-    ZERO = "ZERO"
-    MODEL_BASED = "MODEL_BASED"
-
-
-@enum.unique
 class AffectedCoreProfile(enum.IntEnum):
     PSI = 1
     NE = 2
