@@ -16,6 +16,8 @@ import matplotlib.pyplot as plt
 class g:
     pass
 
+class s:
+    pass
 
 g.evolving_names = "T_i", "T_e", "psi", "n_e"
 os.environ["XLA_FLAGS"] = (
