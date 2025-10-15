@@ -213,12 +213,11 @@ class CoreProfiles:
 def calculate_psidot_from_psi_sources(*, psi_sources, sigma, psi, psi_bc):
     toc_psi = (1.0 / g.resistivity_multiplier * g.cell_centers * sigma *
                g.mu_0 * 16 * jnp.pi**2 * g.geo_Phi_b**2 / g.geo_F**2)
-    d_face_psi = g.geo_g2g3_over_rhon_face
-    v_face_psi = jnp.zeros_like(d_face_psi)
     diffusion_mat, diffusion_vec = make_diffusion_terms(
-        d_face_psi, jnp.array(g.dx), psi_bc)
-    conv_mat, conv_vec = make_convection_terms(v_face_psi, d_face_psi,
-                                               jnp.array(g.dx), psi_bc)
+        g.geo_g2g3_over_rhon_face, jnp.array(g.dx), psi_bc)
+    conv_mat, conv_vec = make_convection_terms(
+        jnp.zeros_like(g.geo_g2g3_over_rhon_face), g.geo_g2g3_over_rhon_face,
+        jnp.array(g.dx), psi_bc)
     c_mat = diffusion_mat + conv_mat
     c = diffusion_vec + conv_vec
     c += psi_sources
@@ -1655,15 +1654,10 @@ while True:
                 merged_source_profiles["bootstrap_current"].j_bootstrap,
                 merged_source_profiles["psi"],
             )
-            toc_T_i = g.toc_temperature_factor
             tic_T_i = ions.n_i * g.geo_vpr**(5.0 / 3.0)
-            toc_T_e = g.toc_temperature_factor
             tic_T_e = n_e * g.geo_vpr**(5.0 / 3.0)
             toc_psi = (1.0 / g.resistivity_multiplier * g.cell_centers *
                        sigma * g.mu0_pi16sq_Phib_sq_over_F_sq)
-            tic_psi = jnp.ones_like(toc_psi)
-            toc_dens_el = jnp.ones_like(g.geo_vpr)
-            tic_dens_el = g.geo_vpr
             turbulent_transport = calculate_transport_coeffs(
                 T_i,
                 T_e,
@@ -1677,8 +1671,6 @@ while True:
                 ions.A_i,
                 ions.Z_eff_face,
             )
-            d_face_psi = g.geo_g2g3_over_rhon_face
-            v_face_psi = jnp.zeros_like(d_face_psi)
             n_i_face_chi = compute_face_value_bc(ions.n_i, jnp.array(g.dx), ions.n_i_bc)
             full_chi_face_ion = g.geo_g1_keV * n_i_face_chi * turbulent_transport.chi_face_ion
             full_chi_face_el = g.geo_g1_keV * n_e_face * turbulent_transport.chi_face_el
@@ -1716,12 +1708,10 @@ while True:
             source_e += g.mask * g.adaptive_T_source_prefactor * g.T_e_ped
             source_mat_ii -= g.mask * g.adaptive_T_source_prefactor
             source_mat_ee -= g.mask * g.adaptive_T_source_prefactor
-            transient_out_cell = (toc_T_i, toc_T_e, toc_psi, toc_dens_el)
-            transient_in_cell = (tic_T_i, tic_T_e, tic_psi, tic_dens_el)
-            d_face = (full_chi_face_ion, full_chi_face_el, d_face_psi,
-                      full_d_face_el)
-            v_face = (v_heat_face_ion, v_heat_face_el, v_face_psi,
-                      full_v_face_el)
+            transient_out_cell = (g.toc_temperature_factor, g.toc_temperature_factor, toc_psi, jnp.ones_like(g.geo_vpr))
+            transient_in_cell = (tic_T_i, tic_T_e, jnp.ones_like(toc_psi), g.geo_vpr)
+            d_face = (full_chi_face_ion, full_chi_face_el, g.geo_g2g3_over_rhon_face, full_d_face_el)
+            v_face = (v_heat_face_ion, v_heat_face_el, jnp.zeros_like(g.geo_g2g3_over_rhon_face), full_v_face_el)
             source_mat_cell = (
                 (source_mat_ii, source_mat_ie, None, None),
                 (source_mat_ei, source_mat_ee, None, None),
