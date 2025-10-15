@@ -976,8 +976,6 @@ g.zero_vec = jnp.zeros(g.num_cells)
 g.ones_vec = jnp.ones(g.num_cells)
 g.v_face_psi_zero = jnp.zeros_like(g.geo_g2g3_over_rhon_face)
 g.ones_like_vpr = jnp.ones_like(g.geo_vpr)
-g.qei_zero = (g.zero_vec, g.zero_vec, g.zero_vec, g.zero_vec)
-g.bootstrap_zero = (g.zero_vec, jnp.zeros_like(g.face_centers))
 
 s.T_i = jnp.interp(g.cell_centers, g.T_i_profile_x, g.T_i_profile_y)
 s.T_e = jnp.interp(g.cell_centers, g.T_e_profile_x, g.T_e_profile_y)
