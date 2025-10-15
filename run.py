@@ -252,10 +252,11 @@ g.EPSILON_NN = 1 / 3
 
 def calculate_transport_coeffs(state, n_i, n_i_bc, n_impurity,
                                n_impurity_bc, q_face, A_i, Z_eff_face):
-    T_i = state[l.Ti]
-    T_e = state[l.Te]
-    n_e = state[l.ne]
-    psi = state[l.psi]
+    state_reshaped = state.reshape((4, g.num_cells))
+    T_i = state_reshaped[0]
+    T_e = state_reshaped[1]
+    psi = state_reshaped[2]
+    n_e = state_reshaped[3]
     T_i_face = compute_face_value(T_i, g.T_i_bc[1], g.T_i_bc[3])
     T_i_face_grad_rmid = compute_face_grad(T_i, g.T_i_bc[0], g.T_i_bc[1], g.T_i_bc[2], g.T_i_bc[3], x=g.geo_rmid)
     T_e_face = compute_face_value(T_e, g.T_e_bc[1], g.T_e_bc[3])
@@ -920,10 +921,10 @@ g.mask_adaptive_T = g.mask * g.adaptive_T_source_prefactor
 g.mask_adaptive_n = g.mask * g.adaptive_n_source_prefactor
 g.T_i_bc = (None, g.T_i_right_bc, 0.0, 0.0)
 g.T_e_bc = (None, g.T_e_right_bc, 0.0, 0.0)
-g.n_e_bc = (None, g.n_e_right_bc, 0.0, 0.0)
 g.dpsi_drhonorm_edge = (g.Ip * g.pi_16_cubed * g.mu_0 * g.geo_Phi_b /
                         (g.geo_g2g3_over_rhon_face[-1] * g.geo_F_face[-1]))
 g.psi_bc = (None, None, 0.0, g.dpsi_drhonorm_edge)
+g.n_e_bc = (None, g.n_e_right_bc, 0.0, 0.0)
 
 
 g.num_cells = g.n_rho
