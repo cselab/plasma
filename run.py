@@ -52,18 +52,14 @@ def make_bc(left_face_constraint=None,
             right_face_constraint=None,
             left_face_grad_constraint=None,
             right_face_grad_constraint=None):
-    return {
-        "left_face_constraint":
+    return (
         left_face_constraint,
-        "right_face_constraint":
         right_face_constraint,
-        "left_face_grad_constraint":
-        (left_face_grad_constraint
-         if left_face_grad_constraint is not None else jnp.zeros(())),
-        "right_face_grad_constraint":
-        (right_face_grad_constraint
-         if right_face_grad_constraint is not None else jnp.zeros(())),
-    }
+        left_face_grad_constraint
+        if left_face_grad_constraint is not None else jnp.zeros(()),
+        right_face_grad_constraint
+        if right_face_grad_constraint is not None else jnp.zeros(()),
+    )
 
 
 def compute_face_grad(value,
@@ -136,25 +132,15 @@ def compute_cell_plus_boundaries(value, dr, right_face_constraint,
 
 
 def compute_face_grad_bc(value, dr, bc, x=None):
-    return compute_face_grad(
-        value,
-        dr,
-        bc["left_face_constraint"],
-        bc["right_face_constraint"],
-        bc["left_face_grad_constraint"],
-        bc["right_face_grad_constraint"],
-        x=x,
-    )
+    return compute_face_grad(value, dr, bc[0], bc[1], bc[2], bc[3], x=x)
 
 
 def compute_face_value_bc(value, dr, bc):
-    return compute_face_value(value, dr, bc["right_face_constraint"],
-                              bc["right_face_grad_constraint"])
+    return compute_face_value(value, dr, bc[1], bc[3])
 
 
 def compute_cell_plus_boundaries_bc(value, dr, bc):
-    return compute_cell_plus_boundaries(value, dr, bc["right_face_constraint"],
-                                        bc["right_face_grad_constraint"])
+    return compute_cell_plus_boundaries(value, dr, bc[1], bc[3])
 
 
 def make_convection_terms(v_face, d_face, dr, bc):
@@ -197,19 +183,16 @@ def make_convection_terms(v_face, d_face, dr, bc):
     mat = jnp.diag(diag) + jnp.diag(above, 1) + jnp.diag(below, -1)
     vec = jnp.zeros_like(diag)
     mat_value = (v_face[0] - right_alpha[0] * v_face[1]) / dr
-    vec_value = -v_face[0] * (1.0 -
-                              left_alpha[0]) * bc["left_face_grad_constraint"]
+    vec_value = -v_face[0] * (1.0 - left_alpha[0]) * bc[2]
     mat = mat.at[0, 0].set(mat_value)
     vec = vec.at[0].set(vec_value)
-    if bc["right_face_constraint"] is not None:
+    if bc[1] is not None:
         mat_value = (v_face[-2] * left_alpha[-1] + v_face[-1] *
                      (1.0 - 2.0 * right_alpha[-1])) / dr
-        vec_value = (-2.0 * v_face[-1] * (1.0 - right_alpha[-1]) *
-                     bc["right_face_constraint"]) / dr
+        vec_value = (-2.0 * v_face[-1] * (1.0 - right_alpha[-1]) * bc[1]) / dr
     else:
         mat_value = -(v_face[-1] - v_face[-2] * left_alpha[-1]) / dr
-        vec_value = (-v_face[-1] * (1.0 - right_alpha[-1]) *
-                     bc["right_face_grad_constraint"])
+        vec_value = (-v_face[-1] * (1.0 - right_alpha[-1]) * bc[3])
     mat = mat.at[-1, -1].set(mat_value)
     vec = vec.at[-1].set(vec_value)
     return mat, vec
@@ -221,15 +204,13 @@ def make_diffusion_terms(d_face, dr, bc):
     off = d_face[1:-1]
     vec = jnp.zeros_like(diag)
     diag = diag.at[0].set(-d_face[1])
-    vec = vec.at[0].set(-d_face[0] * bc["left_face_grad_constraint"] / dr)
-    if bc["right_face_constraint"] is not None:
+    vec = vec.at[0].set(-d_face[0] * bc[2] / dr)
+    if bc[1] is not None:
         diag = diag.at[-1].set(-2 * d_face[-1] - d_face[-2])
-        vec = vec.at[-1].set(2 * d_face[-1] * bc["right_face_constraint"] /
-                             denom)
+        vec = vec.at[-1].set(2 * d_face[-1] * bc[1] / denom)
     else:
         diag = diag.at[-1].set(-d_face[-2])
-        vec = vec.at[-1].set(d_face[-1] * bc["right_face_grad_constraint"] /
-                             dr)
+        vec = vec.at[-1].set(d_face[-1] * bc[3] / dr)
     mat = (jnp.diag(diag) + jnp.diag(off, 1) + jnp.diag(off, -1)) / denom
     return mat, vec
 
@@ -1175,8 +1156,7 @@ def get_updated_ions(n_e, n_e_bc, T_e, T_e_bc):
     n_i = n_e * dilution_factor
     n_i_bc = make_bc(
         right_face_grad_constraint=None,
-        right_face_constraint=n_e_bc["right_face_constraint"] *
-        dilution_factor_edge,
+        right_face_constraint=n_e_bc[1] * dilution_factor_edge,
     )
     n_impurity_value = jnp.where(
         dilution_factor == 1.0,
@@ -1186,8 +1166,7 @@ def get_updated_ions(n_e, n_e_bc, T_e, T_e_bc):
     n_impurity_right_face_constraint = jnp.where(
         dilution_factor_edge == 1.0,
         0.0,
-        (n_e_bc["right_face_constraint"] -
-         n_i_bc["right_face_constraint"] * Z_i_face[-1]) / Z_impurity_face[-1],
+        (n_e_bc[1] - n_i_bc[1] * Z_i_face[-1]) / Z_impurity_face[-1],
     )
     n_impurity = n_impurity_value
     n_impurity_bc = make_bc(
@@ -1589,38 +1568,10 @@ g.psi_bc = make_bc(
     right_face_grad_constraint=g.dpsi_drhonorm_edge,
     right_face_constraint=None,
 )
-
-# Precompute scaled BCs for solver (avoids make_bc calls in loop)
-operation = lambda x, factor: x * factor if x is not None else None
-
-g.T_i_bc_scaled = make_bc(
-    left_face_constraint=operation(g.T_i_bc["left_face_constraint"], 1/g.scaling_T_i),
-    left_face_grad_constraint=operation(g.T_i_bc["left_face_grad_constraint"], 1/g.scaling_T_i),
-    right_face_constraint=operation(g.T_i_bc["right_face_constraint"], 1/g.scaling_T_i),
-    right_face_grad_constraint=operation(g.T_i_bc["right_face_grad_constraint"], 1/g.scaling_T_i),
-)
-
-g.T_e_bc_scaled = make_bc(
-    left_face_constraint=operation(g.T_e_bc["left_face_constraint"], 1/g.scaling_T_e),
-    left_face_grad_constraint=operation(g.T_e_bc["left_face_grad_constraint"], 1/g.scaling_T_e),
-    right_face_constraint=operation(g.T_e_bc["right_face_constraint"], 1/g.scaling_T_e),
-    right_face_grad_constraint=operation(g.T_e_bc["right_face_grad_constraint"], 1/g.scaling_T_e),
-)
-
-g.psi_bc_scaled = make_bc(
-    left_face_constraint=operation(g.psi_bc["left_face_constraint"], 1/g.scaling_psi),
-    left_face_grad_constraint=operation(g.psi_bc["left_face_grad_constraint"], 1/g.scaling_psi),
-    right_face_constraint=operation(g.psi_bc["right_face_constraint"], 1/g.scaling_psi),
-    right_face_grad_constraint=operation(g.psi_bc["right_face_grad_constraint"], 1/g.scaling_psi),
-)
-
-g.n_e_bc_scaled = make_bc(
-    left_face_constraint=operation(g.n_e_bc["left_face_constraint"], 1/g.scaling_n_e),
-    left_face_grad_constraint=operation(g.n_e_bc["left_face_grad_constraint"], 1/g.scaling_n_e),
-    right_face_constraint=operation(g.n_e_bc["right_face_constraint"], 1/g.scaling_n_e),
-    right_face_grad_constraint=operation(g.n_e_bc["right_face_grad_constraint"], 1/g.scaling_n_e),
-)
-
+g.T_i_bc_scaled = (None, g.T_i_right_bc / g.scaling_T_i, 0.0, 0.0)
+g.T_e_bc_scaled = (None, g.T_e_right_bc / g.scaling_T_e, 0.0, 0.0)
+g.psi_bc_scaled = (None, None, 0.0, g.dpsi_drhonorm_edge / g.scaling_psi)
+g.n_e_bc_scaled = (None, g.n_e_right_bc / g.scaling_n_e, 0.0, 0.0)
 g.explicit_source_profiles = {
     "bootstrap_current": BootstrapCurrent.zeros(),
     "qei": QeiInfo.zeros(),
@@ -1704,16 +1655,14 @@ s.n_e = n_e
 s.t = np.array(g.t_initial)
 history = [(s.t, s.T_i, s.T_e, s.psi, s.n_e)]
 while True:
-    psi_face_grad = compute_face_grad_bc(s.psi, jnp.array(g.dx),
-                                         g.psi_bc)
+    psi_face_grad = compute_face_grad_bc(s.psi, jnp.array(g.dx), g.psi_bc)
     current_q_face = (jnp.concatenate([
         jnp.expand_dims(
             jnp.abs(
                 (2 * g.geo_Phi_b * jnp.array(g.dx)) / psi_face_grad[1]), 0),
         jnp.abs((2 * g.geo_Phi_b * g.face_centers[1:]) / psi_face_grad[1:]),
     ]) * g.geo_q_correction_factor)
-    ions_for_sources = get_updated_ions(s.n_e, g.n_e_bc, s.T_e,
-                                        g.T_e_bc)
+    ions_for_sources = get_updated_ions(s.n_e, g.n_e_bc, s.T_e, g.T_e_bc)
     core_transport = calculate_transport_coeffs(
         s.T_i,
         s.T_e,
@@ -1748,8 +1697,7 @@ while True:
         g.chi_timestep_prefactor * basic_dt,
         g.max_dt,
     )
-    crosses_t_final = (s.t < g.t_final) * (s.t + initial_dt
-                                                 > g.t_final)
+    crosses_t_final = (s.t < g.t_final) * (s.t + initial_dt > g.t_final)
     initial_dt = jax.lax.select(
         crosses_t_final,
         g.t_final - s.t,
@@ -1765,18 +1713,15 @@ while True:
         n_i_bound_right = g.n_e_right_bc * dilution_factor_edge
         n_impurity_bound_right = (g.n_e_right_bc -
                                   n_i_bound_right * Z_i_edge) / Z_impurity_edge
-        # Create initial solver tuples using precomputed scaled BCs
         x_T_i = (s.T_i / g.scaling_T_i, jnp.array(g.dx), g.T_i_bc_scaled)
         x_T_e = (s.T_e / g.scaling_T_e, jnp.array(g.dx), g.T_e_bc_scaled)
         x_psi = (s.psi / g.scaling_psi, jnp.array(g.dx), g.psi_bc_scaled)
         x_n_e = (s.n_e / g.scaling_n_e, jnp.array(g.dx), g.n_e_bc_scaled)
-        
         x_initial = (x_T_i, x_T_e, x_psi, x_n_e)
         x_new = x_initial
         tc_in_old = None
         for _ in range(g.n_corrector_steps + 1):
             x_input = x_new
-            # Inline solver_x_tuple_to_evolving_vars: unscale from x_input
             T_i = x_input[0][0] * g.scaling_T_i
             T_e = x_input[1][0] * g.scaling_T_e
             psi = x_input[2][0] * g.scaling_psi
@@ -1895,23 +1840,18 @@ while True:
             source_e += g.mask * g.adaptive_T_source_prefactor * g.T_e_ped
             source_mat_ii -= g.mask * g.adaptive_T_source_prefactor
             source_mat_ee -= g.mask * g.adaptive_T_source_prefactor
-            # Transient coefficients in order: T_i, T_e, psi, n_e
             transient_out_cell = (toc_T_i, toc_T_e, toc_psi, toc_dens_el)
             transient_in_cell = (tic_T_i, tic_T_e, tic_psi, tic_dens_el)
-            
-            # Diffusion and convection coefficients in order: T_i, T_e, psi, n_e
-            d_face = (full_chi_face_ion, full_chi_face_el, d_face_psi, full_d_face_el)
-            v_face = (v_heat_face_ion, v_heat_face_el, v_face_psi, full_v_face_el)
-            
-            # Source matrix coupling: 4x4 block matrix for T_i, T_e, psi, n_e
+            d_face = (full_chi_face_ion, full_chi_face_el, d_face_psi,
+                      full_d_face_el)
+            v_face = (v_heat_face_ion, v_heat_face_el, v_face_psi,
+                      full_v_face_el)
             source_mat_cell = (
-                (source_mat_ii, source_mat_ie, None, None),           # T_i row
-                (source_mat_ei, source_mat_ee, None, None),           # T_e row
-                (None, None, source_mat_psi, None),                   # psi row
-                (None, None, None, source_mat_nn),                    # n_e row
+                (source_mat_ii, source_mat_ie, None, None),
+                (source_mat_ei, source_mat_ee, None, None),
+                (None, None, source_mat_psi, None),
+                (None, None, None, source_mat_nn),
             )
-            
-            # Source terms in order: T_i, T_e, psi, n_e
             source_cell = (
                 source_i / g.scaling_T_i,
                 source_e / g.scaling_T_e,
@@ -1996,15 +1936,13 @@ while True:
         if not (take_another_step & ~is_nan_next_dt):
             break
     result = loop_output
-    # Inline solver_x_tuple_to_evolving_vars: unscale from result[0]
     solved_T_i = result[0][0][0] * g.scaling_T_i
     solved_T_e = result[0][1][0] * g.scaling_T_e
     solved_psi = result[0][2][0] * g.scaling_psi
     solved_n_e = result[0][3][0] * g.scaling_n_e
     ions_final = get_updated_ions(solved_n_e, g.n_e_bc, solved_T_e, g.T_e_bc)
     psi_face_new = compute_face_value_bc(solved_psi, jnp.array(g.dx), g.psi_bc)
-    psi_face_old = compute_face_value_bc(s.psi, jnp.array(g.dx),
-                                         g.psi_bc)
+    psi_face_old = compute_face_value_bc(s.psi, jnp.array(g.dx), g.psi_bc)
     v_loop_lcfs = (psi_face_new[-1] - psi_face_old[-1]) / result[1]
     psi_face_grad_solved = compute_face_grad_bc(solved_psi, jnp.array(g.dx),
                                                 g.psi_bc)
