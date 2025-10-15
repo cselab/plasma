@@ -652,19 +652,6 @@ def build_standard_source_profiles(*,
 
 
 @jax.tree_util.register_dataclass
-@dataclasses.dataclass
-class TurbulentTransport:
-    chi_face_ion: Any
-    chi_face_el: Any
-    d_face_el: Any
-    v_face_el: Any
-    chi_face_el_bohm: Any | None = None
-    chi_face_el_gyrobohm: Any | None = None
-    chi_face_ion_bohm: Any | None = None
-    chi_face_ion_gyrobohm: Any | None = None
-
-
-@jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class QualikizInputs:
     chiGB: Any
@@ -874,81 +861,22 @@ def calculate_transport_coeffs(T_i, T_e, n_e, psi, n_i, n_i_bc, n_impurity,
     Veff_mask = jnp.invert(Deff_mask)
     d_face_el = jnp.where(Veff_mask, 0.0, Deff)
     v_face_el = jnp.where(Deff_mask, 0.0, Veff)
-    transport_coeffs = TurbulentTransport(
-        chi_face_ion=chi_face_ion,
-        chi_face_el=chi_face_el,
-        d_face_el=d_face_el,
-        v_face_el=v_face_el,
-    )
     active_mask = ((g.face_centers > g.transport_rho_min)
                    & (g.face_centers <= g.transport_rho_max)
                    & (g.face_centers <= g.rho_norm_ped_top))
     active_mask = jnp.asarray(active_mask).at[0].set(g.transport_rho_min == 0)
-    chi_face_ion = jnp.where(active_mask, transport_coeffs.chi_face_ion, 0.0)
-    chi_face_el = jnp.where(active_mask, transport_coeffs.chi_face_el, 0.0)
-    d_face_el = jnp.where(active_mask, transport_coeffs.d_face_el, 0.0)
-    v_face_el = jnp.where(active_mask, transport_coeffs.v_face_el, 0.0)
-    transport_coeffs = dataclasses.replace(
-        transport_coeffs,
-        chi_face_ion=chi_face_ion,
-        chi_face_el=chi_face_el,
-        d_face_el=d_face_el,
-        v_face_el=v_face_el,
-    )
-    chi_face_ion = jnp.clip(
-        transport_coeffs.chi_face_ion,
-        g.chi_min,
-        g.chi_max,
-    )
-    chi_face_el = jnp.clip(
-        transport_coeffs.chi_face_el,
-        g.chi_min,
-        g.chi_max,
-    )
-    d_face_el = jnp.clip(
-        transport_coeffs.d_face_el,
-        g.D_e_min,
-        g.D_e_max,
-    )
-    v_face_el = jnp.clip(
-        transport_coeffs.v_face_el,
-        g.V_e_min,
-        g.V_e_max,
-    )
-    transport_coeffs = dataclasses.replace(
-        transport_coeffs,
-        chi_face_ion=chi_face_ion,
-        chi_face_el=chi_face_el,
-        d_face_el=d_face_el,
-        v_face_el=v_face_el,
-    )
-    chi_face_ion = jnp.where(
-        g.face_centers < g.rho_inner + g.eps,
-        g.chi_i_inner,
-        transport_coeffs.chi_face_ion,
-    )
-    chi_face_el = jnp.where(
-        g.face_centers < g.rho_inner + g.eps,
-        g.chi_e_inner,
-        transport_coeffs.chi_face_el,
-    )
-    d_face_el = jnp.where(
-        g.face_centers < g.rho_inner + g.eps,
-        g.D_e_inner,
-        transport_coeffs.d_face_el,
-    )
-    v_face_el = jnp.where(
-        g.face_centers < g.rho_inner + g.eps,
-        g.V_e_inner,
-        transport_coeffs.v_face_el,
-    )
-    transport_coeffs = dataclasses.replace(
-        transport_coeffs,
-        chi_face_ion=chi_face_ion,
-        chi_face_el=chi_face_el,
-        d_face_el=d_face_el,
-        v_face_el=v_face_el,
-    )
+    chi_face_ion = jnp.where(active_mask, chi_face_ion, 0.0)
+    chi_face_el = jnp.where(active_mask, chi_face_el, 0.0)
+    d_face_el = jnp.where(active_mask, d_face_el, 0.0)
+    v_face_el = jnp.where(active_mask, v_face_el, 0.0)
+    chi_face_ion = jnp.clip(chi_face_ion, g.chi_min, g.chi_max)
+    chi_face_el = jnp.clip(chi_face_el, g.chi_min, g.chi_max)
+    d_face_el = jnp.clip(d_face_el, g.D_e_min, g.D_e_max)
+    v_face_el = jnp.clip(v_face_el, g.V_e_min, g.V_e_max)
+    chi_face_ion = jnp.where(g.face_centers < g.rho_inner + g.eps, g.chi_i_inner, chi_face_ion)
+    chi_face_el = jnp.where(g.face_centers < g.rho_inner + g.eps, g.chi_e_inner, chi_face_el)
+    d_face_el = jnp.where(g.face_centers < g.rho_inner + g.eps, g.D_e_inner, d_face_el)
+    v_face_el = jnp.where(g.face_centers < g.rho_inner + g.eps, g.V_e_inner, v_face_el)
     lower_cutoff = 0.01
     kernel = jnp.exp(-jnp.log(2) *
                      (g.face_centers[:, jnp.newaxis] - g.face_centers)**2 /
@@ -985,7 +913,11 @@ def calculate_transport_coeffs(T_i, T_e, n_e, psi, n_i, n_i_bc, n_impurity,
             lambda: jnp.dot(smoothing_matrix, coeff),
         )
 
-    return jax.tree_util.tree_map(smooth_single_coeff, transport_coeffs)
+    chi_face_ion = smooth_single_coeff(chi_face_ion)
+    chi_face_el = smooth_single_coeff(chi_face_el)
+    d_face_el = smooth_single_coeff(d_face_el)
+    v_face_el = smooth_single_coeff(v_face_el)
+    return (chi_face_ion, chi_face_el, d_face_el, v_face_el)
 
 
 g.rho_smoothing_limit = 0.1
@@ -1530,8 +1462,8 @@ while True:
         conductivity=None,
     )
     chi_max = jnp.maximum(
-        jnp.max(core_transport.chi_face_ion * g.geo_g1_over_vpr2_face),
-        jnp.max(core_transport.chi_face_el * g.geo_g1_over_vpr2_face),
+        jnp.max(core_transport[0] * g.geo_g1_over_vpr2_face),
+        jnp.max(core_transport[1] * g.geo_g1_over_vpr2_face),
     )
     basic_dt = (3.0 / 4.0) * (jnp.array(g.dx)**2) / chi_max
     initial_dt = jnp.minimum(
@@ -1623,10 +1555,10 @@ while True:
                 ions.Z_eff_face,
             )
             n_i_face_chi = compute_face_value_bc(ions.n_i, jnp.array(g.dx), ions.n_i_bc)
-            full_chi_face_ion = g.geo_g1_keV * n_i_face_chi * turbulent_transport.chi_face_ion
-            full_chi_face_el = g.geo_g1_keV * n_e_face * turbulent_transport.chi_face_el
-            full_d_face_el = g.geo_g1_over_vpr_face * turbulent_transport.d_face_el
-            full_v_face_el = g.geo_g0_face * turbulent_transport.v_face_el
+            full_chi_face_ion = g.geo_g1_keV * n_i_face_chi * turbulent_transport[0]
+            full_chi_face_el = g.geo_g1_keV * n_e_face * turbulent_transport[1]
+            full_d_face_el = g.geo_g1_over_vpr_face * turbulent_transport[2]
+            full_v_face_el = g.geo_g0_face * turbulent_transport[3]
             source_n_e = calculate_total_sources(merged_source_profiles["n_e"])
             source_n_e += g.mask_adaptive_n * g.n_e_ped
             source_mat_nn = -g.mask_adaptive_n
