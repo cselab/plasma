@@ -293,11 +293,6 @@ def gaussian_profile(*, center, width, total):
     return C * S
 
 
-def calculate_total_sources(sources_list):
-    total = sum(sources_list)
-    return total * g.geo_vpr
-
-
 @enum.unique
 class AffectedCoreProfile(enum.IntEnum):
     PSI = 1
@@ -1408,7 +1403,7 @@ while True:
             full_chi_face_el = g.geo_g1_keV * n_e_face * turbulent_transport[1]
             full_d_face_el = g.geo_g1_over_vpr_face * turbulent_transport[2]
             full_v_face_el = g.geo_g0_face * turbulent_transport[3]
-            source_n_e = calculate_total_sources(merged_source_profiles[5])
+            source_n_e = sum(merged_source_profiles[5]) * g.geo_vpr
             source_n_e += g.mask_adaptive_n * g.n_e_ped
             source_mat_nn = -g.mask_adaptive_n
             chi_face_per_ion = g.geo_g1_keV * n_i_face_chi * g.chi_pereverzev
@@ -1429,8 +1424,8 @@ while True:
             full_chi_face_el += chi_face_per_el
             full_d_face_el += d_face_per_el
             full_v_face_el += v_face_per_el
-            source_i = calculate_total_sources(merged_source_profiles[2])
-            source_e = calculate_total_sources(merged_source_profiles[3])
+            source_i = sum(merged_source_profiles[2]) * g.geo_vpr
+            source_e = sum(merged_source_profiles[3]) * g.geo_vpr
             qei = merged_source_profiles[1]
             source_mat_ii = qei[0] * g.geo_vpr
             source_mat_ee = qei[1] * g.geo_vpr
