@@ -2116,38 +2116,20 @@ while True:
             "left_face_grad_constraint": jnp.zeros(()),
             "right_face_grad_constraint": jnp.zeros(()),
         }
-        T_i = current_T_i
-        T_e = current_T_e
-        n_e = current_n_e
-        psi = current_psi
-        ions = get_updated_ions(n_e, g.n_e_bc, T_e, g.T_e_bc)
-        n_i = ions.n_i
-        n_i_bc = ions.n_i_bc
-        n_impurity = ions.n_impurity
-        n_impurity_bc = ions.n_impurity_bc
-        Z_i_face = jnp.concatenate([
-            ions.Z_i_face[:-1],
-            jnp.array([Z_i_edge]),
-        ], )
-        Z_impurity_face = jnp.concatenate([
-            ions.Z_impurity_face[:-1],
-            jnp.array([Z_impurity_edge]),
-        ], )
-        x_old = evolving_vars_to_solver_x_tuple(current_T_i, current_T_e, current_psi, current_n_e)
-        x_new_guess = evolving_vars_to_solver_x_tuple(T_i, T_e, psi, n_e)
+        x_initial = evolving_vars_to_solver_x_tuple(current_T_i, current_T_e, current_psi, current_n_e)
         coeffs_exp = coeffs_callback(
-            x_old,
+            x_initial,
             explicit_source_profiles=explicit_source_profiles,
             explicit_call=True,
         )
-        x_new = x_new_guess
+        x_new = x_initial
         for _ in range(0, g.n_corrector_steps + 1):
             x_input = x_new
             coeffs_new = coeffs_callback(
                 x_input,
                 explicit_source_profiles=explicit_source_profiles,
             )
-            x_old_vec = jnp.concatenate([x.value for x in x_old])
+            x_old_vec = jnp.concatenate([x.value for x in x_initial])
             x_new_guess_vec = jnp.concatenate([x.value for x in x_input])
             theta_exp = 1.0 - g.theta_implicit
             tc_in_old = jnp.concatenate(coeffs_exp.transient_in_cell)
@@ -2204,7 +2186,7 @@ while True:
             rhs_vec = jnp.zeros_like(x_new_guess_vec)
             rhs = jnp.dot(rhs_mat, x_old_vec) + rhs_vec - lhs_vec
             x_new = jnp.linalg.solve(lhs_mat, rhs)
-            x_new = jnp.split(x_new, len(x_old))
+            x_new = jnp.split(x_new, len(x_initial))
             out = [
                 SolverVariable(value=value, dr=var.dr, bc=var.bc)
                 for var, value in zip(x_input, x_new)
