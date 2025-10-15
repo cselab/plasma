@@ -930,6 +930,7 @@ g.geo_g1_over_vpr2_face = jnp.concatenate(
 g.pi_16_squared = 16 * jnp.pi**2
 g.pi_16_cubed = 16 * jnp.pi**3
 g.toc_temperature_factor = 1.5 * g.geo_vpr**(-2.0 / 3.0) * g.keV_to_J
+g.source_psi_coeff = 8 * g.geo_vpr * jnp.pi**2 * g.geo_B_0 * g.mu_0 * g.geo_Phi_b / g.geo_F**2
 g.vpr_5_3 = g.geo_vpr**(5.0 / 3.0)
 g.mu0_pi16sq_Phib_sq_over_F_sq = g.mu_0 * g.pi_16_squared * g.geo_Phi_b**2 / g.geo_F**2
 g.pi16cubed_mu0_Phib = g.pi_16_cubed * g.mu_0 * g.geo_Phi_b
@@ -1218,7 +1219,7 @@ while True:
             merged_source_profiles[2].append(T_i_fusion)
             merged_source_profiles[3].append(T_e_fusion)
             total = merged_source_profiles[0][0] + sum(merged_source_profiles[4])
-            source_psi = -total * 8 * g.geo_vpr * jnp.pi**2 * g.geo_B_0 * g.mu_0 * g.geo_Phi_b / g.geo_F**2
+            source_psi = -total * g.source_psi_coeff
             tic_T_i = ions.n_i * g.vpr_5_3
             tic_T_e = n_e * g.vpr_5_3
             toc_psi = (1.0 / g.resistivity_multiplier * g.cell_centers *
