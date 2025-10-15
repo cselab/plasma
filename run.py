@@ -31,6 +31,7 @@ g.EPS_CONVECTION = 1e-20
 g.EPS_PECLET = 1e-3
 g.SAVGOL_WINDOW_LENGTH = 5
 g.T_E_ALLOWED_RANGE = (0.1, 100.0)
+g.scaling_n_e = 1e20
 g.sym = "D", "T", "Ne"
 g.z = dict(zip(g.sym, [1.0, 1.0, 10.0]))
 g.A = dict(zip(g.sym, [2.0141, 3.0160, 20.180]))
@@ -969,7 +970,7 @@ g.ones_like_vpr = jnp.ones_like(g.geo_vpr)
 
 s.T_i = jnp.interp(g.cell_centers, g.T_i_profile_x, g.T_i_profile_y)
 s.T_e = jnp.interp(g.cell_centers, g.T_e_profile_x, g.T_e_profile_y)
-nGW = g.Ip / 1e6 / (jnp.pi * g.geo_a_minor**2) * 1e20
+nGW = g.Ip / 1e6 / (jnp.pi * g.geo_a_minor**2) * g.scaling_n_e
 n_e_value = g.n_e * nGW
 n_e_face = jnp.concatenate([
     n_e_value[0:1],
