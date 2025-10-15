@@ -2031,17 +2031,19 @@ v_loop_lcfs = np.array(0.0, dtype=jnp.float64)
 psidot = np.zeros_like(g.geo_rho)
 psidot_bc = make_bc()
 psi = np.zeros_like(g.geo_rho)
-current_n_i = ions.n_i
-current_n_i_bc = ions.n_i_bc
-current_n_impurity = ions.n_impurity
-current_n_impurity_bc = ions.n_impurity_bc
-current_Z_i = ions.Z_i
-current_Z_i_face = ions.Z_i_face
-current_A_i = ions.A_i
-current_Z_impurity = ions.Z_impurity
-current_A_impurity = ions.A_impurity
-current_q_face = np.zeros_like(g.geo_rho_face)
-current_Z_eff_face = ions.Z_eff_face
+geo_psi_from_Ip_scaled = g.geo_psi_from_Ip_base * Ip_scale_factor
+geo_psi_from_Ip_face_scaled = g.geo_psi_from_Ip_face_base * Ip_scale_factor
+psi = geo_psi_from_Ip_scaled
+psi_face_grad_init = compute_face_grad_bc(psi, jnp.array(g.dx), g.psi_bc)
+q_face_init = (
+    jnp.concatenate([
+        jnp.expand_dims(
+            jnp.abs((2 * g.geo_Phi_b * jnp.array(g.dx)) / psi_face_grad_init[1]), 0
+        ),
+        jnp.abs((2 * g.geo_Phi_b * g.face_centers[1:]) / psi_face_grad_init[1:]),
+    ])
+    * g.geo_q_correction_factor
+)
 source_profiles = {
     "bootstrap_current": BootstrapCurrent.zeros(),
     "qei": QeiInfo.zeros(),
@@ -2050,27 +2052,11 @@ source_profiles = {
     "n_e": {},
     "psi": {},
 }
-geo_psi_from_Ip_scaled = g.geo_psi_from_Ip_base * Ip_scale_factor
-geo_psi_from_Ip_face_scaled = g.geo_psi_from_Ip_face_base * Ip_scale_factor
-psi = geo_psi_from_Ip_scaled
-psi_face_grad = compute_face_grad_bc(psi, jnp.array(g.dx), g.psi_bc)
-current_q_face = (
-    jnp.concatenate(
-        [
-            jnp.expand_dims(
-                jnp.abs((2 * g.geo_Phi_b * jnp.array(g.dx)) / psi_face_grad[1]), 0
-            ),
-            jnp.abs((2 * g.geo_Phi_b * g.face_centers[1:]) / psi_face_grad[1:]),
-        ]
-    )
-    * g.geo_q_correction_factor
-)
-sigma, sigma_face = calculate_conductivity(n_e, T_e, current_Z_eff_face, current_q_face)
 core_profiles_for_init_sources = CoreProfiles(
     T_i=T_i,
     T_e=T_e,
-    n_i=current_n_i,
-    n_i_bc=current_n_i_bc,
+    n_i=ions.n_i,
+    n_i_bc=ions.n_i_bc,
 )
 build_standard_source_profiles(
     core_profiles=core_profiles_for_init_sources,
@@ -2079,19 +2065,19 @@ build_standard_source_profiles(
     calculated_source_profiles=source_profiles,
 )
 result = _calculate_bootstrap_current(
-    Z_eff_face=current_Z_eff_face,
-    Z_i_face=current_Z_i_face,
+    Z_eff_face=ions.Z_eff_face,
+    Z_i_face=ions.Z_i_face,
     n_e=n_e,
     n_e_bc=g.n_e_bc,
-    n_i=current_n_i,
-    n_i_bc=current_n_i_bc,
+    n_i=ions.n_i,
+    n_i_bc=ions.n_i_bc,
     T_e=T_e,
     T_e_bc=g.T_e_bc,
     T_i=T_i,
     T_i_bc=g.T_i_bc,
     psi=psi,
     psi_bc=g.psi_bc,
-    q_face=current_q_face,
+    q_face=q_face_init,
 )
 bootstrap_current = BootstrapCurrent(
     j_bootstrap=result.j_bootstrap,
@@ -2101,8 +2087,9 @@ source_profiles["bootstrap_current"] = bootstrap_current
 psi_sources = calculate_total_psi_sources(
     source_profiles["bootstrap_current"].j_bootstrap, source_profiles["psi"]
 )
+sigma_init, sigma_face_init = calculate_conductivity(n_e, T_e, ions.Z_eff_face, q_face_init)
 psidot_value = calculate_psidot_from_psi_sources(
-    psi_sources=psi_sources, sigma=sigma, psi=psi, psi_bc=g.psi_bc
+    psi_sources=psi_sources, sigma=sigma_init, psi=psi, psi_bc=g.psi_bc
 )
 v_loop_lcfs = psidot_value[-1]
 psidot_bc = make_bc(right_face_constraint=v_loop_lcfs)
@@ -2111,24 +2098,35 @@ current_T_i = T_i
 current_T_e = T_e
 current_psi = psi
 current_n_e = n_e
-# Initial transport coeffs for first timestep calculation
-core_transport = calculate_transport_coeffs(
-    current_T_i,
-    current_T_e,
-    current_n_e,
-    current_psi,
-    current_n_i,
-    current_n_i_bc,
-    current_n_impurity,
-    current_n_impurity_bc,
-    current_q_face,
-    current_A_i,
-    current_Z_eff_face,
-)
 current_t = np.array(g.t_initial)
 history = [(current_t, current_T_i, current_T_e, current_psi, current_n_e)]
 while True:
+    # Calculate q_face from current psi
+    psi_face_grad = compute_face_grad_bc(current_psi, jnp.array(g.dx), g.psi_bc)
+    current_q_face = (
+        jnp.concatenate([
+            jnp.expand_dims(
+                jnp.abs((2 * g.geo_Phi_b * jnp.array(g.dx)) / psi_face_grad[1]), 0
+            ),
+            jnp.abs((2 * g.geo_Phi_b * g.face_centers[1:]) / psi_face_grad[1:]),
+        ])
+        * g.geo_q_correction_factor
+    )
+    # Calculate ions and transport from current state
     ions_for_sources = get_updated_ions(current_n_e, g.n_e_bc, current_T_e, g.T_e_bc)
+    core_transport = calculate_transport_coeffs(
+        current_T_i,
+        current_T_e,
+        current_n_e,
+        current_psi,
+        ions_for_sources.n_i,
+        ions_for_sources.n_i_bc,
+        ions_for_sources.n_impurity,
+        ions_for_sources.n_impurity_bc,
+        current_q_face,
+        ions_for_sources.A_i,
+        ions_for_sources.Z_eff_face,
+    )
     # Build empty source profiles for explicit (predictor) step
     explicit_source_profiles = {
         "bootstrap_current": BootstrapCurrent.zeros(),
@@ -2333,19 +2331,6 @@ while True:
         psi_bc=g.psi_bc,
     )
     psidot_bc = make_bc(right_face_constraint=v_loop_lcfs)
-    core_transport = calculate_transport_coeffs(
-        solved_T_i,
-        solved_T_e,
-        solved_n_e,
-        solved_psi,
-        ions_final.n_i,
-        ions_final.n_i_bc,
-        ions_final.n_impurity,
-        ions_final.n_impurity_bc,
-        q_face_solved,
-        ions_final.A_i,
-        ions_final.Z_eff_face,
-    )
     current_t = current_t + result[1]
     current_T_i = solved_T_i
     current_T_e = solved_T_e
