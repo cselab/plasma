@@ -147,15 +147,6 @@ def make_diffusion_terms(d_face, dr, bc):
     return mat, vec
 
 
-@jax.tree_util.register_dataclass
-@dataclasses.dataclass(frozen=True, eq=False)
-class CoreProfiles:
-    T_i: Any
-    T_e: Any
-    n_i: Any
-    n_i_bc: Any
-
-
 def calculate_log_lambda_ei(n_e, T_e_keV):
     return 31.3 - 0.5 * jnp.log(n_e) + jnp.log(T_e_keV * 1e3)
 
@@ -262,55 +253,6 @@ def gaussian_profile(*, center, width, total):
     S = jnp.exp(-((r - center)**2) / (2 * width**2))
     C = total / jnp.sum(S * g.geo_vpr * g.dx_array)
     return C * S
-
-
-def fusion_heat_model_func(core_profiles, unused_calculated_source_profiles,
-                           unused_conductivity):
-    product = 1.0
-    for fraction, symbol in zip(g.main_ion_fractions, g.main_ion_names):
-        if symbol == "D" or symbol == "T":
-            product *= fraction
-            DT_fraction_product = product
-            t_face = compute_face_value(core_profiles.T_i, g.T_i_bc[1], g.T_i_bc[3])
-            Efus = 17.6 * 1e3 * g.keV_to_J
-            mrc2 = 1124656
-            BG = 34.3827
-            C1 = 1.17302e-9
-            C2 = 1.51361e-2
-            C3 = 7.51886e-2
-            C4 = 4.60643e-3
-            C5 = 1.35e-2
-            C6 = -1.0675e-4
-            C7 = 1.366e-5
-            theta = t_face / (1.0 - (t_face * (C2 + t_face *
-                                               (C4 + t_face * C6))) /
-                              (1.0 + t_face * (C3 + t_face *
-                                               (C5 + t_face * C7))))
-            xi = (BG**2 / (4 * theta))**(1 / 3)
-            logsigmav = (jnp.log(C1 * theta) +
-                         0.5 * jnp.log(xi / (mrc2 * t_face**3)) - 3 * xi -
-                         jnp.log(1e6))
-            n_i_face_fusion = compute_face_value(core_profiles.n_i, core_profiles.n_i_bc[1], core_profiles.n_i_bc[3])
-            logPfus = (jnp.log(DT_fraction_product * Efus) +
-                       2 * jnp.log(n_i_face_fusion) + logsigmav)
-            Pfus_face = jnp.exp(logPfus)
-            Pfus_cell = 0.5 * (Pfus_face[:-1] + Pfus_face[1:])
-            alpha_fraction = 3.5 / 17.6
-            birth_energy = 3520
-            alpha_mass = 4.002602
-            critical_energy = 10 * alpha_mass * core_profiles.T_e
-            energy_ratio = birth_energy / critical_energy
-            x_squared = energy_ratio
-            x = jnp.sqrt(x_squared)
-            frac_i = (2 * ((1 / 6) * jnp.log(
-                (1.0 - x + x_squared) /
-                (1.0 + 2.0 * x + x_squared)) + (jnp.arctan(
-                    (2.0 * x - 1.0) / jnp.sqrt(3)) + jnp.pi / 6) / jnp.sqrt(3))
-                      / x_squared)
-            frac_e = 1.0 - frac_i
-            Pfus_i = Pfus_cell * frac_i * alpha_fraction
-            Pfus_e = Pfus_cell * frac_e * alpha_fraction
-    return (Pfus_i, Pfus_e)
 
 
 @jax.tree_util.register_dataclass
@@ -1071,12 +1013,6 @@ while True:
         ions_for_sources.A_i,
         ions_for_sources.Z_eff_face,
     )
-    core_profiles_for_sources = CoreProfiles(
-        T_i=s.T_i,
-        T_e=s.T_e,
-        n_i=ions_for_sources.n_i,
-        n_i_bc=ions_for_sources.n_i_bc,
-    )
     chi_max = jnp.maximum(
         jnp.max(core_transport[0] * g.geo_g1_over_vpr2_face),
         jnp.max(core_transport[1] * g.geo_g1_over_vpr2_face),
@@ -1213,12 +1149,6 @@ while True:
                 list(g.explicit_source_profiles[4]),
                 list(g.explicit_source_profiles[5]),
             )
-            core_profiles_for_sources = CoreProfiles(
-                T_i=T_i,
-                T_e=T_e,
-                n_i=ions.n_i,
-                n_i_bc=ions.n_i_bc,
-            )
             I_generic = g.Ip * g.generic_current_fraction
             generic_current_form = jnp.exp(
                 -((g.cell_centers - g.generic_current_location)**2) /
@@ -1243,7 +1173,50 @@ while True:
             S = jnp.exp(-(1.0 - r) / g.gas_puff_decay_length)
             C = g.gas_puff_S_total / jnp.sum(S * g.geo_vpr * g.dx_array)
             merged_source_profiles[5].append(C * S)
-            T_i_fusion, T_e_fusion = fusion_heat_model_func(core_profiles_for_sources, merged_source_profiles, (sigma, sigma_face))
+            product = 1.0
+            for fraction, symbol in zip(g.main_ion_fractions, g.main_ion_names):
+                if symbol == "D" or symbol == "T":
+                    product *= fraction
+                    DT_fraction_product = product
+                    t_face = compute_face_value(T_i, g.T_i_bc[1], g.T_i_bc[3])
+                    Efus = 17.6 * 1e3 * g.keV_to_J
+                    mrc2 = 1124656
+                    BG = 34.3827
+                    C1 = 1.17302e-9
+                    C2 = 1.51361e-2
+                    C3 = 7.51886e-2
+                    C4 = 4.60643e-3
+                    C5 = 1.35e-2
+                    C6 = -1.0675e-4
+                    C7 = 1.366e-5
+                    theta = t_face / (1.0 - (t_face * (C2 + t_face *
+                                                       (C4 + t_face * C6))) /
+                                      (1.0 + t_face * (C3 + t_face *
+                                                       (C5 + t_face * C7))))
+                    xi = (BG**2 / (4 * theta))**(1 / 3)
+                    logsigmav = (jnp.log(C1 * theta) +
+                                 0.5 * jnp.log(xi / (mrc2 * t_face**3)) - 3 * xi -
+                                 jnp.log(1e6))
+                    n_i_face_fusion = compute_face_value(ions.n_i, ions.n_i_bc[1], ions.n_i_bc[3])
+                    logPfus = (jnp.log(DT_fraction_product * Efus) +
+                               2 * jnp.log(n_i_face_fusion) + logsigmav)
+                    Pfus_face = jnp.exp(logPfus)
+                    Pfus_cell = 0.5 * (Pfus_face[:-1] + Pfus_face[1:])
+                    alpha_fraction = 3.5 / 17.6
+                    birth_energy = 3520
+                    alpha_mass = 4.002602
+                    critical_energy = 10 * alpha_mass * T_e
+                    energy_ratio = birth_energy / critical_energy
+                    x_squared = energy_ratio
+                    x = jnp.sqrt(x_squared)
+                    frac_i = (2 * ((1 / 6) * jnp.log(
+                        (1.0 - x + x_squared) /
+                        (1.0 + 2.0 * x + x_squared)) + (jnp.arctan(
+                            (2.0 * x - 1.0) / jnp.sqrt(3)) + jnp.pi / 6) / jnp.sqrt(3))
+                              / x_squared)
+                    frac_e = 1.0 - frac_i
+                    T_i_fusion = Pfus_cell * frac_i * alpha_fraction
+                    T_e_fusion = Pfus_cell * frac_e * alpha_fraction
             merged_source_profiles[2].append(T_i_fusion)
             merged_source_profiles[3].append(T_e_fusion)
             total = merged_source_profiles[0][0] + sum(merged_source_profiles[4])
