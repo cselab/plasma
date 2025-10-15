@@ -2404,15 +2404,7 @@ while True:
     current_n_e = solved_n_e
     current_n_i = ions_final.n_i
     current_n_i_bc = ions_final.n_i_bc
-    current_n_impurity = ions_final.n_impurity
-    current_n_impurity_bc = ions_final.n_impurity_bc
-    current_Z_i = ions_final.Z_i
-    current_Z_i_face = ions_final.Z_i_face
-    current_A_i = ions_final.A_i
-    current_Z_impurity = ions_final.Z_impurity
-    current_A_impurity = ions_final.A_impurity
-    current_q_face = q_face_solved
-    current_Z_eff_face = ions_final.Z_eff_face
+    # core_transport already updated above, used for chi_max in next iteration
     history.append((current_t, solved_T_i, solved_T_e, solved_psi, solved_n_e))
     if current_t >= (g.t_final - g.tolerance):
         break
