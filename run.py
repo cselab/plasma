@@ -250,8 +250,12 @@ g.FLUX_NAME_MAP = {
 g.EPSILON_NN = 1 / 3
 
 
-def calculate_transport_coeffs(T_i, T_e, n_e, psi, n_i, n_i_bc, n_impurity,
+def calculate_transport_coeffs(state, n_i, n_i_bc, n_impurity,
                                n_impurity_bc, q_face, A_i, Z_eff_face):
+    T_i = state[l.Ti]
+    T_e = state[l.Te]
+    n_e = state[l.ne]
+    psi = state[l.psi]
     T_i_face = compute_face_value(T_i, g.T_i_bc[1], g.T_i_bc[3])
     T_i_face_grad_rmid = compute_face_grad(T_i, g.T_i_bc[0], g.T_i_bc[1], g.T_i_bc[2], g.T_i_bc[3], x=g.geo_rmid)
     T_e_face = compute_face_value(T_e, g.T_e_bc[1], g.T_e_bc[3])
@@ -968,10 +972,7 @@ while True:
     ])
     ions_for_sources = get_updated_ions(s[l.ne], s[l.Te])
     core_transport = calculate_transport_coeffs(
-        s[l.Ti],
-        s[l.Te],
-        s[l.ne],
-        s[l.psi],
+        s,
         ions_for_sources.n_i,
         ions_for_sources.n_i_bc,
         ions_for_sources.n_impurity,
@@ -1191,10 +1192,7 @@ while True:
         toc_psi = (1.0 / g.resistivity_multiplier * g.cell_centers *
                    sigma * g.mu0_pi16sq_Phib_sq_over_F_sq)
         turbulent_transport = calculate_transport_coeffs(
-            T_i,
-            T_e,
-            n_e,
-            psi,
+            p,
             ions.n_i,
             ions.n_i_bc,
             ions.n_impurity,
