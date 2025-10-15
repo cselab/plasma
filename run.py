@@ -1206,8 +1206,7 @@ while True:
                     Pfus_face = jnp.exp(logPfus)
                     Pfus_cell = 0.5 * (Pfus_face[:-1] + Pfus_face[1:])
                     critical_energy = g.fusion_critical_energy_coeff * T_e
-                    energy_ratio = g.fusion_birth_energy / critical_energy
-                    x_squared = energy_ratio
+                    x_squared = g.fusion_birth_energy / critical_energy
                     x = jnp.sqrt(x_squared)
                     frac_i = (2 * ((1 / 6) * jnp.log(
                         (1.0 - x + x_squared) /
