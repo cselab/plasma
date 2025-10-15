@@ -1023,8 +1023,8 @@ class Ions:
     A_impurity_face: Any
     Z_eff: Any
     Z_eff_face: Any
-    n_i_bc: tuple = dataclasses.field(default_factory=lambda: (None, None, 0.0, 0.0))
-    n_impurity_bc: tuple = dataclasses.field(default_factory=lambda: (None, None, 0.0, 0.0))
+    n_i_bc: Any
+    n_impurity_bc: Any
 
 
 def get_updated_ions(n_e, n_e_bc, T_e, T_e_bc):
