@@ -1331,9 +1331,8 @@ while True:
                                                        | ~next_dt_too_small)
         if not (take_another_step & ~is_nan_next_dt):
             break
-    result = loop_output
-    t = t + result[1]
-    s = jnp.concatenate([result[0][0][0], result[0][1][0], result[0][2][0], result[0][3][0]])
+    t = t + loop_output[1]
+    s = jnp.concatenate([loop_output[0][0][0], loop_output[0][1][0], loop_output[0][2][0], loop_output[0][3][0]])
     history.append((t, s[l.Ti], s[l.Te], s[l.psi], s[l.ne]))
     if t >= (g.t_final - g.tolerance):
         break
