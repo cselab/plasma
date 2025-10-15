@@ -522,9 +522,6 @@ def _smooth_savgol(data, idx_limit, polyorder):
         [np.array([data[0]]), smoothed_data[1:idx_limit], data[idx_limit:]])
 
 
-g.scaling_n_e = 1e20
-
-
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class Ions:
@@ -960,7 +957,6 @@ g.n_e_bc = (None, g.n_e_right_bc, 0.0, 0.0)
 g.dpsi_drhonorm_edge = (g.Ip * g.pi_16_cubed * g.mu_0 * g.geo_Phi_b /
                         (g.geo_g2g3_over_rhon_face[-1] * g.geo_F_face[-1]))
 g.psi_bc = (None, None, 0.0, g.dpsi_drhonorm_edge)
-g.n_e_bc_scaled = (None, g.n_e_right_bc / g.scaling_n_e, 0.0, 0.0)
 
 
 g.num_cells = g.n_rho
@@ -1038,7 +1034,7 @@ while True:
         x_T_i = (s.T_i, g.dx_array, g.T_i_bc)
         x_T_e = (s.T_e, g.dx_array, g.T_e_bc)
         x_psi = (s.psi, g.dx_array, g.psi_bc)
-        x_n_e = (s.n_e / g.scaling_n_e, g.dx_array, g.n_e_bc_scaled)
+        x_n_e = (s.n_e, g.dx_array, g.n_e_bc)
         x_initial = (x_T_i, x_T_e, x_psi, x_n_e)
         x_new = x_initial
         tc_in_old = None
@@ -1047,7 +1043,7 @@ while True:
             T_i = x_input[0][0]
             T_e = x_input[1][0]
             psi = x_input[2][0]
-            n_e = x_input[3][0] * g.scaling_n_e
+            n_e = x_input[3][0]
             ions = get_updated_ions(n_e, T_e)
             psi_face_grad = compute_face_grad(psi, g.psi_bc[0], g.psi_bc[1], g.psi_bc[2], g.psi_bc[3])
             q_face = jnp.concatenate([
@@ -1265,7 +1261,7 @@ while True:
                 source_i,
                 source_e,
                 source_psi,
-                source_n_e / g.scaling_n_e,
+                source_n_e,
             )
             if tc_in_old is None:
                 tc_in_old = jnp.concatenate(transient_in_cell)
@@ -1328,7 +1324,7 @@ while True:
     s.T_i = result[0][0][0]
     s.T_e = result[0][1][0]
     s.psi = result[0][2][0]
-    s.n_e = result[0][3][0] * g.scaling_n_e
+    s.n_e = result[0][3][0]
     history.append((s.t, s.T_i, s.T_e, s.psi, s.n_e))
     if s.t >= (g.t_final - g.tolerance):
         break
