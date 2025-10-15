@@ -2034,11 +2034,7 @@ core_transport = calculate_total_transport_coeffs(
     current_q_face, current_A_i,
     current_Z_eff_face, current_Z_i_face)
 current_t = np.array(g.t_initial)
-state_history_t = [current_t]
-state_history_T_i = [current_T_i]
-state_history_T_e = [current_T_e]
-state_history_psi = [current_psi]
-state_history_n_e = [current_n_e]
+history = [(current_t, current_T_i, current_T_e, current_psi, current_n_e)]
 while True:
     explicit_source_profiles = build_source_profiles0(
         current_T_i, current_T_e,
@@ -2247,37 +2243,29 @@ while True:
     current_A_impurity = ions_final.A_impurity
     current_q_face = q_face_solved
     current_Z_eff_face = ions_final.Z_eff_face
-    state_history_t.append(current_t)
-    state_history_T_i.append(solved_T_i)
-    state_history_T_e.append(solved_T_e)
-    state_history_psi.append(solved_psi)
-    state_history_n_e.append(solved_n_e)
+    history.append((current_t, solved_T_i, solved_T_e, solved_psi, solved_n_e))
     if current_t >= (g.t_final - g.tolerance):
         break
-t = np.array(state_history_t)
+t = np.array([record[0] for record in history])
 rho = np.concatenate([[0.0], np.asarray(g.cell_centers), [1.0]])
 (nt, ) = np.shape(t)
-state_histories = [state_history_T_i, state_history_T_e, state_history_psi, state_history_n_e]
-evolving_data = {}
-for var_name, var_history in zip(g.evolving_names, state_histories):
-    var_bc = getattr(g, f"{var_name}_bc")
-    var_data = [
-        compute_cell_plus_boundaries_bc(var_value, jnp.array(g.dx), var_bc)
-        for var_value in var_history
-    ]
-    evolving_data[var_name] = np.stack(var_data)
 with open("run.raw", "wb") as f:
     t.tofile(f)
     rho.tofile(f)
-    for key in g.evolving_names:
-        evolving_data[key].tofile(f)
-for key in g.evolving_names:
-    var = evolving_data[key]
-    lo = np.min(var).item()
-    hi = np.max(var).item()
-    for i, idx in enumerate([0, nt // 4, nt // 2, 3 * nt // 4, nt - 1]):
-        plt.title(f"time: {t[idx]:8.3e}")
-        plt.axis([None, None, lo, hi])
-        plt.plot(rho, var[idx], "o-")
-        plt.savefig(f"{key}.{i:04d}.png")
-        plt.close()
+    for i, var_name in enumerate(g.evolving_names):
+        var_bc = getattr(g, f"{var_name}_bc")
+        var_history = [record[i+1] for record in history]
+        var_data = [
+            compute_cell_plus_boundaries_bc(var_value, jnp.array(g.dx), var_bc)
+            for var_value in var_history
+        ]
+        var = np.stack(var_data)
+        var.tofile(f)
+        lo = np.min(var).item()
+        hi = np.max(var).item()
+        for j, idx in enumerate([0, nt // 4, nt // 2, 3 * nt // 4, nt - 1]):
+            plt.title(f"time: {t[idx]:8.3e}")
+            plt.axis([None, None, lo, hi])
+            plt.plot(rho, var[idx], "o-")
+            plt.savefig(f"{var_name}.{j:04d}.png")
+            plt.close()
