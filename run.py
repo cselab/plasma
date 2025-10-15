@@ -34,7 +34,6 @@ g.q_e = 1.602176634e-19
 g.m_e = 9.1093837e-31
 g.epsilon_0 = 8.85418782e-12
 g.mu_0 = 4 * jnp.pi * 1e-7
-g.k_B = 1.380649e-23
 g.eps = 1e-7
 g.EPS_CONVECTION = 1e-20
 g.EPS_PECLET = 1e-3
@@ -687,7 +686,7 @@ class QualikizInputs:
     epsilon_lcfs: Any
 
 
-g.FLUX_NAME_MAP = immutabledict.immutabledict({
+g.FLUX_NAME_MAP = {
     "efiITG": "qi_itg",
     "efeITG": "qe_itg",
     "pfeITG": "pfe_itg",
@@ -695,7 +694,7 @@ g.FLUX_NAME_MAP = immutabledict.immutabledict({
     "efiTEM": "qi_tem",
     "pfeTEM": "pfe_tem",
     "efeETG": "qe_etg",
-})
+}
 g.EPSILON_NN = 1 / 3
 
 
