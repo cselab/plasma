@@ -214,7 +214,7 @@ With `theta=1.0`, this becomes:
 
 Where `C_mat` includes diffusion, convection, and source coupling matrices.
 
-**Matrix assembly** (lines 1968-2014):
+**Matrix assembly**:
 ```python
 # Transient scaling
 broadcasted = 1 / (tc_out_new * tc_in_new)
@@ -271,7 +271,7 @@ while s.t < t_final:
 
 ### Time Step Calculation
 
-**Initial dt estimate** (line 1756):
+**Initial dt estimate**:
 ```python
 chi_max = max(chi_face_ion * g1_over_vpr2_face, 
               chi_face_el * g1_over_vpr2_face)
@@ -291,7 +291,7 @@ Parameters:
 
 ### Predictor-Corrector
 
-The code uses **`g.n_corrector_steps = 1`** corrector iteration (line 1301):
+The code uses **`g.n_corrector_steps = 1`** corrector iteration:
 
 1. **Predictor** (iter 0): Solve with coefficients from `x_old`
 2. **Corrector** (iter 1): Re-solve with coefficients from predicted `x_new`
@@ -600,87 +600,87 @@ This removes noise from numerical differentiation near the magnetic axis.
 
 ## Loop Structure
 
-### Main Time Loop (Line 1718)
+### Main Time Loop
 ```python
 while True:
-    # Compute q_face from current psi (lines 1719-1727)
-    # Update ions (line 1729)
-    # Calculate transport coefficients (line 1731)
-    # Build source profiles (line 1750)
-    # Compute initial dt (lines 1756-1771)
+    # Compute q_face from current psi
+    # Update ions
+    # Calculate transport coefficients
+    # Build source profiles
+    # Compute initial dt
     
-    # Inner dt retry loop (line 1773)
+    # Inner dt retry loop
     while True:
-        # Corrector loop (line 1786)
+        # Corrector loop
         for _ in range(n_corrector_steps + 1):
-            # Coefficients callback (lines 1788-1959)
-            # Build and solve linear system (lines 1960-2018)
+            # Coefficients callback
+            # Build and solve linear system
         
-        # Check convergence and reduce dt if needed (lines 2025-2037)
+        # Check convergence and reduce dt if needed
         if converged: break
     
-    # Post-process step (lines 2038-2095)
-    # Append to history (line 2095)
-    # Check if finished (line 2096)
+    # Post-process step
+    # Append to history
+    # Check if finished
     if current_t >= t_final: break
 ```
 
-### Coefficients Computation (Lines 1788-1959)
+### Coefficients Computation
 
 This large block computes all coefficients needed for the linear system at a given state:
 
-1. **Extract variables** from solver tuple (lines 1789-1793)
-2. **Update ions** based on quasi-neutrality (line 1794)
-3. **Compute q_face** from psi gradients (lines 1795-1803)
-4. **Compute face values and gradients** for all variables (lines 1804-1812)
-5. **Calculate conductivity** (lines 1813-1814)
-6. **Build source profiles** including bootstrap current (lines 1815-1831)
-7. **Compute transient coefficients** (lines 1837-1846)
-8. **Calculate transport coefficients** from QLKNN (lines 1846-1858)
-9. **Build diffusion terms** (lines 1859-1870)
-10. **Add Pereverzev neoclassical** (lines 1877-1896)
-11. **Compute sources** (lines 1897-1907)
-12. **Package as tuples** for solver (lines 1908-1959)
+1. **Extract variables** from solver tuple
+2. **Update ions** based on quasi-neutrality
+3. **Compute q_face** from psi gradients
+4. **Compute face values and gradients** for all variables
+5. **Calculate conductivity**
+6. **Build source profiles** including bootstrap current
+7. **Compute transient coefficients**
+8. **Calculate transport coefficients** from QLKNN
+9. **Build diffusion terms**
+10. **Add Pereverzev neoclassical**
+11. **Compute sources**
+12. **Package as tuples** for solver
 
-### Linear System Assembly (Lines 1963-2018)
+### Linear System Assembly
 
 Builds block system for coupled equations:
 
 ```python
-# Initialize block matrices (lines 1971-1978)
+# Initialize block matrices
 c_mat = [[zero_block] * num_channels] * num_channels
 c = [zero_vec] * num_channels
 
-# Diffusion blocks (diagonal only) (lines 1980-1985)
+# Diffusion blocks (diagonal only)
 for i in range(num_channels):
     c_mat[i][i] += diffusion_mat
     c[i] += diffusion_vec
 
-# Convection blocks (diagonal only) (lines 1986-1995)
+# Convection blocks (diagonal only)
 for i in range(num_channels):
     c_mat[i][i] += conv_mat
     c[i] += conv_vec
 
-# Source coupling blocks (all channels) (lines 1996-2001)
+# Source coupling blocks (all channels)
 for i in range(num_channels):
     for j in range(num_channels):
         if source_mat_cell[i][j] is not None:
             c_mat[i][j] += diag(source_mat_cell[i][j])
 
-# Add explicit sources (lines 2002-2003)
-# Assemble into single matrix (lines 2004-2005)
+# Add explicit sources
+# Assemble into single matrix
 c_mat_new = block(c_mat)
 c_new = block(c)
 
-# Build LHS and RHS (lines 2006-2013)
+# Build LHS and RHS
 lhs_mat = I - dt * theta * (1/(toc*tic)) * c_mat_new
 rhs = (tic_old/tic_new) * x_old - dt * theta * (1/(toc*tic)) * c_new
 
-# Solve (line 2014)
+# Solve
 x_new = solve(lhs_mat, rhs)
 ```
 
-### Post-Processing Loop (Lines 2103-2120)
+### Post-Processing Loop
 
 Write outputs:
 ```python
