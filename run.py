@@ -1449,7 +1449,6 @@ g.mask = jnp.zeros_like(g.geo_rho,
 g.pedestal_mask_face = g.face_centers > g.rho_norm_ped_top
 g.mask_adaptive_T = g.mask * g.adaptive_T_source_prefactor
 g.mask_adaptive_n = g.mask * g.adaptive_n_source_prefactor
-g.qei_mode = "ZERO"
 g.T_i_bc = (None, g.T_i_right_bc, 0.0, 0.0)
 g.T_e_bc = (None, g.T_e_right_bc, 0.0, 0.0)
 g.n_e_bc = (None, g.n_e_right_bc, 0.0, 0.0)
