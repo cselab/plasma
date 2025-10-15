@@ -747,18 +747,17 @@ def calc_puff_source(
     return (C * S,)
 
 
-def build_source_profiles0(
-    T_i, T_e, n_i, n_i_bc, explicit_source_profiles=None, conductivity=None
-):
+def build_source_profiles0(T_i, T_e, n_i, n_i_bc):
+    """Build empty source profiles for explicit (predictor) step."""
     qei = QeiInfo.zeros()
     bootstrap_current = BootstrapCurrent.zeros()
     profiles = {
         "bootstrap_current": bootstrap_current,
         "qei": qei,
-        "T_e": explicit_source_profiles["T_e"] if explicit_source_profiles else {},
-        "T_i": explicit_source_profiles["T_i"] if explicit_source_profiles else {},
-        "n_e": explicit_source_profiles["n_e"] if explicit_source_profiles else {},
-        "psi": explicit_source_profiles["psi"] if explicit_source_profiles else {},
+        "T_e": {},
+        "T_i": {},
+        "n_e": {},
+        "psi": {},
     }
     core_profiles_for_sources = CoreProfiles(
         T_i=T_i,
@@ -770,7 +769,7 @@ def build_source_profiles0(
         calculated_source_profiles=profiles,
         core_profiles=core_profiles_for_sources,
         explicit=True,
-        conductivity=conductivity,
+        conductivity=None,
     )
     return profiles
 
