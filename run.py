@@ -107,16 +107,16 @@ def compute_cell_plus_boundaries(value, dr, right_face_constraint,
     return jnp.concatenate([left_value, value, right_value], axis=-1)
 
 
-def compute_face_grad_bc(value, dr, bc, x=None):
-    return compute_face_grad(value, dr, bc[0], bc[1], bc[2], bc[3], x=x)
+def compute_face_grad_bc(value, bc, x=None):
+    return compute_face_grad(value, g.dx_array, bc[0], bc[1], bc[2], bc[3], x=x)
 
 
-def compute_face_value_bc(value, dr, bc):
-    return compute_face_value(value, dr, bc[1], bc[3])
+def compute_face_value_bc(value, bc):
+    return compute_face_value(value, g.dx_array, bc[1], bc[3])
 
 
-def compute_cell_plus_boundaries_bc(value, dr, bc):
-    return compute_cell_plus_boundaries(value, dr, bc[1], bc[3])
+def compute_cell_plus_boundaries_bc(value, bc):
+    return compute_cell_plus_boundaries(value, g.dx_array, bc[1], bc[3])
 
 
 def make_convection_terms(v_face, d_face, dr, bc):
@@ -311,8 +311,8 @@ def calculate_nu_i_star(q, n_i, T_i, Z_eff, log_lambda_ii):
 
 
 def calculate_conductivity(n_e, T_e, Z_eff_face, q_face):
-    n_e_face = compute_face_value_bc(n_e, g.dx_array, g.n_e_bc)
-    T_e_face = compute_face_value_bc(T_e, g.dx_array, g.T_e_bc)
+    n_e_face = compute_face_value_bc(n_e, g.n_e_bc)
+    T_e_face = compute_face_value_bc(T_e, g.T_e_bc)
     f_trap = calculate_f_trap()
     NZ = 0.58 + 0.74 / (0.76 + Z_eff_face)
     log_lambda_ei = calculate_log_lambda_ei(n_e_face, T_e_face)
@@ -339,15 +339,15 @@ def _calculate_bootstrap_current(*, Z_eff_face, Z_i_face, n_e, n_e_bc, n_i,
                                  n_i_bc, T_e, T_e_bc, T_i, T_i_bc, psi, psi_bc,
                                  q_face):
     f_trap = calculate_f_trap()
-    n_e_face = compute_face_value_bc(n_e, g.dx_array, n_e_bc)
-    n_e_face_grad = compute_face_grad_bc(n_e, g.dx_array, n_e_bc)
-    T_e_face = compute_face_value_bc(T_e, g.dx_array, T_e_bc)
-    T_e_face_grad = compute_face_grad_bc(T_e, g.dx_array, T_e_bc)
-    T_i_face = compute_face_value_bc(T_i, g.dx_array, T_i_bc)
-    T_i_face_grad = compute_face_grad_bc(T_i, g.dx_array, T_i_bc)
-    psi_face_grad = compute_face_grad_bc(psi, g.dx_array, psi_bc)
-    n_i_face = compute_face_value_bc(n_i, g.dx_array, n_i_bc)
-    n_i_face_grad = compute_face_grad_bc(n_i, g.dx_array, n_i_bc)
+    n_e_face = compute_face_value_bc(n_e, n_e_bc)
+    n_e_face_grad = compute_face_grad_bc(n_e, n_e_bc)
+    T_e_face = compute_face_value_bc(T_e, T_e_bc)
+    T_e_face_grad = compute_face_grad_bc(T_e, T_e_bc)
+    T_i_face = compute_face_value_bc(T_i, T_i_bc)
+    T_i_face_grad = compute_face_grad_bc(T_i, T_i_bc)
+    psi_face_grad = compute_face_grad_bc(psi, psi_bc)
+    n_i_face = compute_face_value_bc(n_i, n_i_bc)
+    n_i_face_grad = compute_face_grad_bc(n_i, n_i_bc)
     f_trap = calculate_f_trap()
     log_lambda_ei = calculate_log_lambda_ei(n_e_face, T_e_face)
     T_i_ev = T_i_face * 1e3
@@ -496,8 +496,7 @@ def fusion_heat_model_func(core_profiles, unused_calculated_source_profiles,
         if symbol == "D" or symbol == "T":
             product *= fraction
             DT_fraction_product = product
-            t_face = compute_face_value_bc(core_profiles.T_i, g.dx_array,
-                                           g.T_i_bc)
+            t_face = compute_face_value_bc(core_profiles.T_i, g.T_i_bc)
             Efus = 17.6 * 1e3 * g.keV_to_J
             mrc2 = 1124656
             BG = 34.3827
@@ -516,9 +515,7 @@ def fusion_heat_model_func(core_profiles, unused_calculated_source_profiles,
             logsigmav = (jnp.log(C1 * theta) +
                          0.5 * jnp.log(xi / (mrc2 * t_face**3)) - 3 * xi -
                          jnp.log(1e6))
-            n_i_face_fusion = compute_face_value_bc(core_profiles.n_i,
-                                                    g.dx_array,
-                                                    core_profiles.n_i_bc)
+            n_i_face_fusion = compute_face_value_bc(core_profiles.n_i, core_profiles.n_i_bc)
             logPfus = (jnp.log(DT_fraction_product * Efus) +
                        2 * jnp.log(n_i_face_fusion) + logsigmav)
             Pfus_face = jnp.exp(logPfus)
@@ -680,23 +677,14 @@ g.EPSILON_NN = 1 / 3
 
 def calculate_transport_coeffs(T_i, T_e, n_e, psi, n_i, n_i_bc, n_impurity,
                                n_impurity_bc, q_face, A_i, Z_eff_face):
-    T_i_face = compute_face_value_bc(T_i, g.dx_array, g.T_i_bc)
-    T_i_face_grad_rmid = compute_face_grad_bc(T_i,
-                                              g.dx_array,
-                                              g.T_i_bc,
-                                              x=g.geo_rmid)
-    T_e_face = compute_face_value_bc(T_e, g.dx_array, g.T_e_bc)
-    T_e_face_grad_rmid = compute_face_grad_bc(T_e,
-                                              g.dx_array,
-                                              g.T_e_bc,
-                                              x=g.geo_rmid)
-    n_e_face = compute_face_value_bc(n_e, g.dx_array, g.n_e_bc)
-    n_e_face_grad_rmid = compute_face_grad_bc(n_e,
-                                              g.dx_array,
-                                              g.n_e_bc,
-                                              x=g.geo_rmid)
-    n_e_face_grad = compute_face_grad_bc(n_e, g.dx_array, g.n_e_bc)
-    psi_face_grad = compute_face_grad_bc(psi, g.dx_array, g.psi_bc)
+    T_i_face = compute_face_value_bc(T_i, g.T_i_bc)
+    T_i_face_grad_rmid = compute_face_grad_bc(T_i, g.T_i_bc, x=g.geo_rmid)
+    T_e_face = compute_face_value_bc(T_e, g.T_e_bc)
+    T_e_face_grad_rmid = compute_face_grad_bc(T_e, g.T_e_bc, x=g.geo_rmid)
+    n_e_face = compute_face_value_bc(n_e, g.n_e_bc)
+    n_e_face_grad_rmid = compute_face_grad_bc(n_e, g.n_e_bc, x=g.geo_rmid)
+    n_e_face_grad = compute_face_grad_bc(n_e, g.n_e_bc)
+    psi_face_grad = compute_face_grad_bc(psi, g.psi_bc)
     rmid = g.geo_rmid
     rmid_face = g.geo_rmid_face
     chiGB = ((A_i * g.m_amu)**0.5 / (g.geo_B_0 * g.q_e)**2 *
@@ -722,8 +710,8 @@ def calculate_transport_coeffs(T_i, T_e, n_e, psi, n_i, n_i_bc, n_impurity,
     )
     lref_over_lne = jnp.where(
         jnp.abs(lref_over_lne_result) < g.eps, g.eps, lref_over_lne_result)
-    n_i_face = compute_face_value_bc(n_i, g.dx_array, n_i_bc)
-    n_i_face_grad = compute_face_grad_bc(n_i, g.dx_array, n_i_bc, x=rmid)
+    n_i_face = compute_face_value_bc(n_i, n_i_bc)
+    n_i_face_grad = compute_face_grad_bc(n_i, n_i_bc, x=rmid)
     lref_over_lni0_result = jnp.where(
         jnp.abs(n_i_face) < g.eps,
         g.eps,
@@ -731,12 +719,8 @@ def calculate_transport_coeffs(T_i, T_e, n_e, psi, n_i, n_i_bc, n_impurity,
     )
     lref_over_lni0 = jnp.where(
         jnp.abs(lref_over_lni0_result) < g.eps, g.eps, lref_over_lni0_result)
-    n_impurity_face = compute_face_value_bc(n_impurity, g.dx_array,
-                                            n_impurity_bc)
-    n_impurity_face_grad = compute_face_grad_bc(n_impurity,
-                                                g.dx_array,
-                                                n_impurity_bc,
-                                                x=rmid)
+    n_impurity_face = compute_face_value_bc(n_impurity, n_impurity_bc)
+    n_impurity_face_grad = compute_face_grad_bc(n_impurity, n_impurity_bc, x=rmid)
     lref_over_lni1_result = jnp.where(
         jnp.abs(n_impurity_face) < g.eps,
         g.eps,
@@ -952,7 +936,7 @@ class Ions:
 
 
 def get_updated_ions(n_e, n_e_bc, T_e, T_e_bc):
-    T_e_face = compute_face_value_bc(T_e, g.dx_array, T_e_bc)
+    T_e_face = compute_face_value_bc(T_e, T_e_bc)
     Z_i_avg, Z_i_Z2_avg, _ = get_average_charge_state(
         ion_symbols=g.main_ion_names,
         T_e=T_e,
@@ -1004,10 +988,9 @@ def get_updated_ions(n_e, n_e_bc, T_e, T_e_bc):
     )
     n_impurity = n_impurity_value
     n_impurity_bc = (None, n_impurity_right_face_constraint, 0.0, 0.0)
-    n_e_face = compute_face_value_bc(n_e, g.dx_array, n_e_bc)
-    n_i_face = compute_face_value_bc(n_i, g.dx_array, n_i_bc)
-    n_impurity_face = compute_face_value_bc(n_impurity, g.dx_array,
-                                            n_impurity_bc)
+    n_e_face = compute_face_value_bc(n_e, n_e_bc)
+    n_i_face = compute_face_value_bc(n_i, n_i_bc)
+    n_impurity_face = compute_face_value_bc(n_impurity, n_impurity_bc)
     Z_eff_face = (Z_i_face**2 * n_i_face +
                   Z_impurity_face**2 * n_impurity_face) / n_e_face
     impurity_fractions_dict = {}
@@ -1423,7 +1406,7 @@ s.psi = g.geo_psi_from_Ip_base * (g.Ip / g.geo_Ip_profile_face_base[-1])
 s.t = 0.0
 history = [(s.t, s.T_i, s.T_e, s.psi, s.n_e)]
 while True:
-    psi_face_grad = compute_face_grad_bc(s.psi, g.dx_array, g.psi_bc)
+    psi_face_grad = compute_face_grad_bc(s.psi, g.psi_bc)
     current_q_face = jnp.concatenate([
         jnp.expand_dims(jnp.abs(g.q_factor_axis * g.dx_array / psi_face_grad[1]), 0),
         jnp.abs(g.q_factor_bulk * g.face_centers[1:] / psi_face_grad[1:]),
@@ -1493,20 +1476,17 @@ while True:
             psi = x_input[2][0] * g.scaling_psi
             n_e = x_input[3][0] * g.scaling_n_e
             ions = get_updated_ions(n_e, g.n_e_bc, T_e, g.T_e_bc)
-            psi_face_grad = compute_face_grad_bc(psi, g.dx_array, g.psi_bc)
+            psi_face_grad = compute_face_grad_bc(psi, g.psi_bc)
             q_face = jnp.concatenate([
                 jnp.expand_dims(jnp.abs(g.q_factor_axis * g.dx_array / psi_face_grad[1]), 0),
                 jnp.abs(g.q_factor_bulk * g.face_centers[1:] / psi_face_grad[1:]),
             ])
-            T_i_face = compute_face_value_bc(T_i, g.dx_array, g.T_i_bc)
-            T_i_face_grad = compute_face_grad_bc(T_i, g.dx_array,
-                                                 g.T_i_bc)
-            T_e_face = compute_face_value_bc(T_e, g.dx_array, g.T_e_bc)
-            T_e_face_grad = compute_face_grad_bc(T_e, g.dx_array,
-                                                 g.T_e_bc)
-            n_e_face = compute_face_value_bc(n_e, g.dx_array, g.n_e_bc)
-            n_e_face_grad = compute_face_grad_bc(n_e, g.dx_array,
-                                                 g.n_e_bc)
+            T_i_face = compute_face_value_bc(T_i, g.T_i_bc)
+            T_i_face_grad = compute_face_grad_bc(T_i, g.T_i_bc)
+            T_e_face = compute_face_value_bc(T_e, g.T_e_bc)
+            T_e_face_grad = compute_face_grad_bc(T_e, g.T_e_bc)
+            n_e_face = compute_face_value_bc(n_e, g.n_e_bc)
+            n_e_face_grad = compute_face_grad_bc(n_e, g.n_e_bc)
             sigma, sigma_face = calculate_conductivity(n_e, T_e,
                                                        ions.Z_eff_face, q_face)
             merged_source_profiles = build_source_profiles1(
@@ -1547,7 +1527,7 @@ while True:
                 ions.A_i,
                 ions.Z_eff_face,
             )
-            n_i_face_chi = compute_face_value_bc(ions.n_i, g.dx_array, ions.n_i_bc)
+            n_i_face_chi = compute_face_value_bc(ions.n_i, ions.n_i_bc)
             full_chi_face_ion = g.geo_g1_keV * n_i_face_chi * turbulent_transport[0]
             full_chi_face_el = g.geo_g1_keV * n_e_face * turbulent_transport[1]
             full_d_face_el = g.geo_g1_over_vpr_face * turbulent_transport[2]
@@ -1662,10 +1642,10 @@ while True:
     solved_psi = result[0][2][0] * g.scaling_psi
     solved_n_e = result[0][3][0] * g.scaling_n_e
     ions_final = get_updated_ions(solved_n_e, g.n_e_bc, solved_T_e, g.T_e_bc)
-    psi_face_new = compute_face_value_bc(solved_psi, g.dx_array, g.psi_bc)
-    psi_face_old = compute_face_value_bc(s.psi, g.dx_array, g.psi_bc)
+    psi_face_new = compute_face_value_bc(solved_psi, g.psi_bc)
+    psi_face_old = compute_face_value_bc(s.psi, g.psi_bc)
     v_loop_lcfs = (psi_face_new[-1] - psi_face_old[-1]) / result[1]
-    psi_face_grad_solved = compute_face_grad_bc(solved_psi, g.dx_array, g.psi_bc)
+    psi_face_grad_solved = compute_face_grad_bc(solved_psi, g.psi_bc)
     q_face_solved = jnp.concatenate([
         jnp.expand_dims(jnp.abs(g.q_factor_axis * g.dx_array / psi_face_grad_solved[1]), 0),
         jnp.abs(g.q_factor_bulk * g.face_centers[1:] / psi_face_grad_solved[1:]),
@@ -1720,7 +1700,7 @@ with open("run.raw", "wb") as f:
     for var_name, var_history in zip(var_names, var_histories):
         var_bc = getattr(g, f"{var_name}_bc")
         var_data = [
-            compute_cell_plus_boundaries_bc(var_value, g.dx_array, var_bc)
+            compute_cell_plus_boundaries_bc(var_value, var_bc)
             for var_value in var_history
         ]
         var = np.stack(var_data)
