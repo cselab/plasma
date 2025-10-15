@@ -1645,10 +1645,8 @@ ions = get_updated_ions(n_e, g.n_e_bc, T_e, g.T_e_bc)
 v_loop_lcfs = np.array(0.0, dtype=jnp.float64)
 psidot = np.zeros_like(g.geo_rho)
 psidot_bc = make_bc()
-psi = np.zeros_like(g.geo_rho)
-geo_psi_from_Ip_scaled = g.geo_psi_from_Ip_base * Ip_scale_factor
+psi = g.geo_psi_from_Ip_base * Ip_scale_factor
 geo_psi_from_Ip_face_scaled = g.geo_psi_from_Ip_face_base * Ip_scale_factor
-psi = geo_psi_from_Ip_scaled
 psi_face_grad_init = compute_face_grad_bc(psi, jnp.array(g.dx), g.psi_bc)
 q_face_init = (jnp.concatenate([
     jnp.expand_dims(
