@@ -204,7 +204,7 @@ class CoreProfiles:
     T_i: Any
     T_e: Any
     n_i: Any
-    n_i_bc: tuple
+    n_i_bc: Any
 
 
 def calculate_psidot_from_psi_sources(*, psi_sources, sigma, psi, psi_bc):
