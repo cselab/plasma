@@ -564,11 +564,8 @@ def calc_pellet_source(unused_state, unused_calculated_source_profiles,
     ), )
 
 
-def fusion_heat_model_func(
-    core_profiles,
-    unused_calculated_source_profiles,
-    unused_conductivity
-):
+def fusion_heat_model_func(core_profiles, unused_calculated_source_profiles,
+                           unused_conductivity):
     product = 1.0
     for fraction, symbol in zip(g.main_ion_fractions, g.main_ion_names):
         if symbol == "D" or symbol == "T":
@@ -619,35 +616,17 @@ def fusion_heat_model_func(
     return (Pfus_i, Pfus_e)
 
 
-def calc_puff_source(
-    unused_state,
-    unused_calculated_source_profiles,
-    unused_conductivity
-):
+def calc_puff_source(unused_state, unused_calculated_source_profiles,
+                     unused_conductivity):
     r = g.cell_centers
     S = jnp.exp(-(1.0 - r) / g.gas_puff_decay_length)
     C = g.gas_puff_S_total / jnp.sum(S * g.geo_vpr * jnp.array(g.dx))
     return (C * S, )
 
 
-def build_source_profiles1(
-    T_i,
-    T_e,
-    n_e,
-    psi,
-    n_i,
-    n_i_bc,
-    n_impurity,
-    Z_i,
-    A_i,
-    Z_impurity,
-    A_impurity,
-    q_face,
-    Z_eff_face,
-    Z_i_face,
-    explicit_source_profiles,
-    conductivity
-):
+def build_source_profiles1(T_i, T_e, n_e, psi, n_i, n_i_bc, n_impurity, Z_i,
+                           A_i, Z_impurity, A_impurity, q_face, Z_eff_face,
+                           Z_i_face, explicit_source_profiles, conductivity):
     log_lambda_ei = calculate_log_lambda_ei(n_e, T_e)
     log_tau_e_Z1 = _calculate_log_tau_e_Z1(
         T_e,
@@ -688,14 +667,10 @@ def build_source_profiles1(
     profiles = {
         "bootstrap_current": bootstrap_current,
         "qei": qei,
-        "T_e":
-        explicit_source_profiles["T_e"],
-        "T_i":
-        explicit_source_profiles["T_i"],
-        "n_e":
-        explicit_source_profiles["n_e"],
-        "psi":
-        explicit_source_profiles["psi"],
+        "T_e": explicit_source_profiles["T_e"],
+        "T_i": explicit_source_profiles["T_i"],
+        "n_e": explicit_source_profiles["n_e"],
+        "psi": explicit_source_profiles["psi"],
     }
     core_profiles_for_sources = CoreProfiles(
         T_i=T_i,
@@ -712,15 +687,13 @@ def build_source_profiles1(
     return profiles
 
 
-def build_standard_source_profiles(
-    *,
-    calculated_source_profiles,
-    core_profiles,
-    explicit=True,
-    conductivity=None,
-    calculate_anyway=False,
-    psi_only=False
-):
+def build_standard_source_profiles(*,
+                                   calculated_source_profiles,
+                                   core_profiles,
+                                   explicit=True,
+                                   conductivity=None,
+                                   calculate_anyway=False,
+                                   psi_only=False):
 
     def calculate_source(source_name):
         handler = g.source_registry[source_name]
