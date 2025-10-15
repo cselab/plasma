@@ -48,26 +48,16 @@ def compute_face_grad(value,
         forward_difference = jnp.diff(value) / g.dx_array
     else:
         forward_difference = jnp.diff(value) / jnp.diff(x)
-
-    def constrained_grad(face, grad, cell, right):
-        if face is None:
-            return grad
-        dx = g.dx_array if x is None else (x[-1] - x[-2] if right else x[1] - x[0])
-        sign = -1 if right else 1
-        return sign * (cell - face) / (0.5 * dx)
-
-    left_grad = constrained_grad(
-        left_face_constraint,
-        left_face_grad_constraint,
-        value[0],
-        right=False,
-    )
-    right_grad = constrained_grad(
-        right_face_constraint,
-        right_face_grad_constraint,
-        value[-1],
-        right=True,
-    )
+    if left_face_constraint is None:
+        left_grad = left_face_grad_constraint
+    else:
+        dx = g.dx_array if x is None else x[1] - x[0]
+        left_grad = (value[0] - left_face_constraint) / (0.5 * dx)
+    if right_face_constraint is None:
+        right_grad = right_face_grad_constraint
+    else:
+        dx = g.dx_array if x is None else x[-1] - x[-2]
+        right_grad = -(value[-1] - right_face_constraint) / (0.5 * dx)
     left = jnp.expand_dims(left_grad, axis=0)
     right = jnp.expand_dims(right_grad, axis=0)
     return jnp.concatenate([left, forward_difference, right])
