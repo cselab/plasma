@@ -1507,6 +1507,8 @@ rho_norm_ped_top_idx = jnp.abs(g.cell_centers - g.rho_norm_ped_top).argmin()
 g.mask = jnp.zeros_like(g.geo_rho,
                         dtype=bool).at[rho_norm_ped_top_idx].set(True)
 g.pedestal_mask_face = g.face_centers > g.rho_norm_ped_top
+g.mask_adaptive_T = g.mask * g.adaptive_T_source_prefactor
+g.mask_adaptive_n = g.mask * g.adaptive_n_source_prefactor
 g.qei_mode = "ZERO"
 # BC tuple format: (left_face, right_face, left_grad, right_grad)
 g.T_i_bc = (None, g.T_i_right_bc, 0.0, 0.0)
@@ -1698,8 +1700,8 @@ while True:
             full_d_face_el = g.geo_g1_over_vpr_face * turbulent_transport.d_face_el
             full_v_face_el = g.geo_g0_face * turbulent_transport.v_face_el
             source_n_e = calculate_total_sources(merged_source_profiles["n_e"])
-            source_n_e += g.mask * g.adaptive_n_source_prefactor * g.n_e_ped
-            source_mat_nn = -(g.mask * g.adaptive_n_source_prefactor)
+            source_n_e += g.mask_adaptive_n * g.n_e_ped
+            source_mat_nn = -g.mask_adaptive_n
             chi_face_per_ion = g.geo_g1_keV * n_i_face_chi * g.chi_pereverzev
             chi_face_per_el = g.geo_g1_keV * n_e_face * g.chi_pereverzev
             d_face_per_el = g.D_pereverzev
@@ -1725,10 +1727,10 @@ while True:
             source_mat_ee = qei.implicit_ee * g.geo_vpr
             source_mat_ie = qei.implicit_ie * g.geo_vpr
             source_mat_ei = qei.implicit_ei * g.geo_vpr
-            source_i += g.mask * g.adaptive_T_source_prefactor * g.T_i_ped
-            source_e += g.mask * g.adaptive_T_source_prefactor * g.T_e_ped
-            source_mat_ii -= g.mask * g.adaptive_T_source_prefactor
-            source_mat_ee -= g.mask * g.adaptive_T_source_prefactor
+            source_i += g.mask_adaptive_T * g.T_i_ped
+            source_e += g.mask_adaptive_T * g.T_e_ped
+            source_mat_ii -= g.mask_adaptive_T
+            source_mat_ee -= g.mask_adaptive_T
             transient_out_cell = (g.toc_temperature_factor, g.toc_temperature_factor, toc_psi, g.ones_like_vpr)
             transient_in_cell = (tic_T_i, tic_T_e, g.ones_vec, g.geo_vpr)
             d_face = (full_chi_face_ion, full_chi_face_el, g.geo_g2g3_over_rhon_face, full_d_face_el)
