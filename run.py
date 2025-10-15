@@ -432,15 +432,6 @@ def gaussian_profile(*, center, width, total):
     return C * S
 
 
-@jax.tree_util.register_dataclass
-@dataclasses.dataclass(frozen=True)
-class QeiInfo:
-    implicit_ii: Any
-    implicit_ee: Any
-    implicit_ie: Any
-    implicit_ei: Any
-
-
 def calculate_total_psi_sources(j_bootstrap, psi_sources_dict):
     total = j_bootstrap
     total += sum(psi_sources_dict.values())
@@ -590,12 +581,7 @@ def build_source_profiles1(T_i, T_e, n_e, psi, n_i, n_i_bc, n_impurity, Z_i,
                     jnp.log(g.keV_to_J / g.m_amu) + jnp.log(2 * g.m_e) +
                     jnp.log(weighted_Z_eff) - log_tau_e_Z1)
     qei_coef = jnp.exp(log_Qei_coef)
-    qei = QeiInfo(
-        implicit_ii=-qei_coef,
-        implicit_ee=-qei_coef,
-        implicit_ie=qei_coef,
-        implicit_ei=qei_coef,
-    )
+    qei = (-qei_coef, -qei_coef, qei_coef, qei_coef)
     result = _calculate_bootstrap_current(
         Z_eff_face=Z_eff_face,
         Z_i_face=Z_i_face,
@@ -1497,12 +1483,7 @@ g.zero_vec = jnp.zeros(g.num_cells)
 g.ones_vec = jnp.ones(g.num_cells)
 g.v_face_psi_zero = jnp.zeros_like(g.geo_g2g3_over_rhon_face)
 g.ones_like_vpr = jnp.ones_like(g.geo_vpr)
-g.qei_zero = QeiInfo(
-    implicit_ii=g.zero_vec,
-    implicit_ee=g.zero_vec,
-    implicit_ie=g.zero_vec,
-    implicit_ei=g.zero_vec,
-)
+g.qei_zero = (g.zero_vec, g.zero_vec, g.zero_vec, g.zero_vec)
 g.bootstrap_zero = BootstrapCurrent(
     j_bootstrap=g.zero_vec,
     j_bootstrap_face=jnp.zeros_like(g.face_centers),
@@ -1689,10 +1670,10 @@ while True:
             source_i = calculate_total_sources(merged_source_profiles["T_i"])
             source_e = calculate_total_sources(merged_source_profiles["T_e"])
             qei = merged_source_profiles["qei"]
-            source_mat_ii = qei.implicit_ii * g.geo_vpr
-            source_mat_ee = qei.implicit_ee * g.geo_vpr
-            source_mat_ie = qei.implicit_ie * g.geo_vpr
-            source_mat_ei = qei.implicit_ei * g.geo_vpr
+            source_mat_ii = qei[0] * g.geo_vpr
+            source_mat_ee = qei[1] * g.geo_vpr
+            source_mat_ie = qei[2] * g.geo_vpr
+            source_mat_ei = qei[3] * g.geo_vpr
             source_i += g.mask_adaptive_T * g.T_i_ped
             source_e += g.mask_adaptive_T * g.T_e_ped
             source_mat_ii -= g.mask_adaptive_T
