@@ -2138,30 +2138,7 @@ current_T_i = T_i
 current_T_e = T_e
 current_psi = psi
 current_n_e = n_e
-explicit_source_profiles = build_source_profiles0(
-    current_T_i,
-    current_T_e,
-    current_n_i,
-    current_n_i_bc,
-)
-initial_core_sources = build_source_profiles1(
-    current_T_i,
-    current_T_e,
-    current_n_e,
-    current_psi,
-    current_n_i,
-    current_n_i_bc,
-    current_n_impurity,
-    current_Z_i,
-    current_A_i,
-    current_Z_impurity,
-    current_A_impurity,
-    current_q_face,
-    current_Z_eff_face,
-    current_Z_i_face,
-    explicit_source_profiles=explicit_source_profiles,
-    conductivity=(sigma, sigma_face),
-)
+# Initial transport coeffs for first timestep calculation
 core_transport = calculate_transport_coeffs(
     current_T_i,
     current_T_e,
@@ -2202,34 +2179,18 @@ while True:
     )
     dt = initial_dt
     while True:
-        ions_edge = get_updated_ions(
-            current_n_e,
-            {**g.n_e_bc, "right_face_constraint": g.n_e_right_bc},
-            current_T_e,
-            {**g.T_e_bc, "right_face_constraint": g.T_e_right_bc},
-        )
+        ions_edge = get_updated_ions(current_n_e, g.n_e_bc, current_T_e, g.T_e_bc)
         Z_i_edge = ions_edge.Z_i_face[-1]
         Z_impurity_edge = ions_edge.Z_impurity_face[-1]
-        Z_eff_edge = g.Z_eff
-        dilution_factor_edge = (Z_impurity_edge - Z_eff_edge) / (
+        dilution_factor_edge = (Z_impurity_edge - g.Z_eff) / (
             Z_i_edge * (Z_impurity_edge - Z_i_edge)
         )
         n_i_bound_right = g.n_e_right_bc * dilution_factor_edge
         n_impurity_bound_right = (
             g.n_e_right_bc - n_i_bound_right * Z_i_edge
         ) / Z_impurity_edge
-        n_i_bc_updated = {
-            "left_face_constraint": None,
-            "right_face_constraint": jnp.array(n_i_bound_right),
-            "left_face_grad_constraint": jnp.zeros(()),
-            "right_face_grad_constraint": jnp.zeros(()),
-        }
-        n_impurity_bc_updated = {
-            "left_face_constraint": None,
-            "right_face_constraint": jnp.array(n_impurity_bound_right),
-            "left_face_grad_constraint": jnp.zeros(()),
-            "right_face_grad_constraint": jnp.zeros(()),
-        }
+        n_i_bc_updated = make_bc(right_face_constraint=jnp.array(n_i_bound_right))
+        n_impurity_bc_updated = make_bc(right_face_constraint=jnp.array(n_impurity_bound_right))
         x_initial = evolving_vars_to_solver_x_tuple(
             current_T_i, current_T_e, current_psi, current_n_e
         )
@@ -2403,8 +2364,6 @@ while True:
     current_T_e = solved_T_e
     current_psi = solved_psi
     current_n_e = solved_n_e
-    # core_transport already updated above, used for chi_max in next iteration
-    # n_i, n_i_bc will be recalculated from current_n_e, current_T_e at loop start
     history.append((current_t, solved_T_i, solved_T_e, solved_psi, solved_n_e))
     if current_t >= (g.t_final - g.tolerance):
         break
