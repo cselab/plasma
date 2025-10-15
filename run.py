@@ -2246,15 +2246,15 @@ while True:
     history.append((current_t, solved_T_i, solved_T_e, solved_psi, solved_n_e))
     if current_t >= (g.t_final - g.tolerance):
         break
-t = np.array([record[0] for record in history])
+t_history, *var_histories = zip(*history)
+t = np.array(t_history)
 rho = np.concatenate([[0.0], np.asarray(g.cell_centers), [1.0]])
 (nt, ) = np.shape(t)
 with open("run.raw", "wb") as f:
     t.tofile(f)
     rho.tofile(f)
-    for i, var_name in enumerate(g.evolving_names):
+    for var_name, var_history in zip(g.evolving_names, var_histories):
         var_bc = getattr(g, f"{var_name}_bc")
-        var_history = [record[i+1] for record in history]
         var_data = [
             compute_cell_plus_boundaries_bc(var_value, jnp.array(g.dx), var_bc)
             for var_value in var_history
