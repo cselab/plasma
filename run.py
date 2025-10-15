@@ -239,30 +239,12 @@ def make_diffusion_terms(d_face, dr, bc):
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True, eq=False)
 class CoreProfiles:
+    """Minimal container for source registry uniform interface.
+    Only used by fusion_heat_model_func which needs T_i, T_e, n_i, n_i_bc."""
     T_i: Any
     T_e: Any
-    psi: Any
-    n_e: Any
-    psidot: Any
     n_i: Any
-    n_impurity: Any
-    impurity_fractions: Any
-    q_face: Any
-    v_loop_lcfs: Any
-    Z_i: Any
-    Z_i_face: Any
-    A_i: Any
-    Z_impurity: Any
-    Z_impurity_face: Any
-    A_impurity: Any
-    A_impurity_face: Any
-    Z_eff: Any
-    Z_eff_face: Any
-    sigma: Any
-    sigma_face: Any
-    psidot_bc: dict = dataclasses.field(default_factory=make_bc)
-    n_i_bc: dict = dataclasses.field(default_factory=make_bc)
-    n_impurity_bc: dict = dataclasses.field(default_factory=make_bc)
+    n_i_bc: dict
 
 
 @jax.tree_util.register_dataclass
@@ -724,26 +706,10 @@ def build_source_profiles0(T_i, T_e, n_e, psi, n_i, n_i_bc, n_impurity, n_impuri
         n_e=explicit_source_profiles.n_e if explicit_source_profiles else {},
         psi=explicit_source_profiles.psi if explicit_source_profiles else {},
     )
-    # Reconstruct core_profiles for source registry functions (they need uniform interface)
+    # Reconstruct minimal core_profiles for source registry (only fusion_heat_model_func needs it)
     core_profiles_for_sources = CoreProfiles(
-        T_i=T_i, T_e=T_e, psi=psi, n_e=n_e,
+        T_i=T_i, T_e=T_e,
         n_i=n_i, n_i_bc=n_i_bc,
-        n_impurity=n_impurity, n_impurity_bc=n_impurity_bc,
-        impurity_fractions=g.impurity_fractions,  # constant
-        Z_i=Z_i, Z_i_face=Z_i_face,
-        A_i=A_i,
-        Z_impurity=Z_impurity,
-        Z_impurity_face=jnp.zeros_like(q_face),  # Not used by sources
-        A_impurity=A_impurity,
-        A_impurity_face=jnp.zeros_like(q_face),  # Not used by sources
-        Z_eff=jnp.zeros_like(psi),  # Not used by sources
-        Z_eff_face=Z_eff_face,
-        q_face=q_face,
-        psidot=jnp.zeros_like(psi),  # Not used by sources
-        psidot_bc=make_bc(),
-        v_loop_lcfs=jnp.array(0.0),  # Not used by sources
-        sigma=jnp.zeros_like(psi),  # Not used by sources
-        sigma_face=jnp.zeros_like(q_face),  # Not used by sources
     )
     build_standard_source_profiles(
         calculated_source_profiles=profiles,
@@ -805,26 +771,10 @@ def build_source_profiles1(T_i, T_e, n_e, psi, n_i, n_i_bc, n_impurity, n_impuri
         n_e=explicit_source_profiles.n_e if explicit_source_profiles else {},
         psi=explicit_source_profiles.psi if explicit_source_profiles else {},
     )
-    # Reconstruct core_profiles for source registry functions (they need uniform interface)
+    # Reconstruct minimal core_profiles for source registry (only fusion_heat_model_func needs it)
     core_profiles_for_sources = CoreProfiles(
-        T_i=T_i, T_e=T_e, psi=psi, n_e=n_e,
+        T_i=T_i, T_e=T_e,
         n_i=n_i, n_i_bc=n_i_bc,
-        n_impurity=n_impurity, n_impurity_bc=n_impurity_bc,
-        impurity_fractions=g.impurity_fractions,  # constant
-        Z_i=Z_i, Z_i_face=Z_i_face,
-        A_i=A_i,
-        Z_impurity=Z_impurity,
-        Z_impurity_face=jnp.zeros_like(q_face),  # Not used by sources
-        A_impurity=A_impurity,
-        A_impurity_face=jnp.zeros_like(q_face),  # Not used by sources
-        Z_eff=jnp.zeros_like(psi),  # Not used by sources
-        Z_eff_face=Z_eff_face,
-        q_face=q_face,
-        psidot=jnp.zeros_like(psi),  # Not used by sources
-        psidot_bc=make_bc(),
-        v_loop_lcfs=jnp.array(0.0),  # Not used by sources
-        sigma=jnp.zeros_like(psi),  # Not used by sources
-        sigma_face=jnp.zeros_like(q_face),  # Not used by sources
     )
     build_standard_source_profiles(
         calculated_source_profiles=profiles,
@@ -2025,24 +1975,8 @@ q_face_init = jnp.concatenate([
 conductivity = calculate_conductivity(
     n_e, T_e, Z_eff_face_init, q_face_init)
 core_profiles_for_init_sources = CoreProfiles(
-    T_i=T_i, T_e=T_e, psi=psi, n_e=n_e,
+    T_i=T_i, T_e=T_e,
     n_i=n_i_init, n_i_bc=n_i_bc_init,
-    n_impurity=n_impurity_init, n_impurity_bc=n_impurity_bc_init,
-    impurity_fractions=ions.impurity_fractions,
-    Z_i=Z_i_init, Z_i_face=Z_i_face_init,
-    A_i=A_i_init,
-    Z_impurity=Z_impurity_init,
-    Z_impurity_face=Z_impurity_face_init,
-    A_impurity=A_impurity_init,
-    A_impurity_face=A_impurity_face_init,
-    Z_eff=Z_eff_init,
-    Z_eff_face=Z_eff_face_init,
-    q_face=q_face_init,
-    psidot=psidot,
-    psidot_bc=psidot_bc,
-    v_loop_lcfs=v_loop_lcfs,
-    sigma=sigma_init,
-    sigma_face=sigma_face_init,
 )
 build_standard_source_profiles(
     core_profiles=core_profiles_for_init_sources,
