@@ -2178,11 +2178,12 @@ core_transport = calculate_transport_coeffs(
 current_t = np.array(g.t_initial)
 history = [(current_t, current_T_i, current_T_e, current_psi, current_n_e)]
 while True:
+    ions_for_sources = get_updated_ions(current_n_e, g.n_e_bc, current_T_e, g.T_e_bc)
     explicit_source_profiles = build_source_profiles0(
         current_T_i,
         current_T_e,
-        current_n_i,
-        current_n_i_bc,
+        ions_for_sources.n_i,
+        ions_for_sources.n_i_bc,
     )
     chi_max = jnp.maximum(
         jnp.max(core_transport.chi_face_ion * g.geo_g1_over_vpr2_face),
@@ -2402,9 +2403,8 @@ while True:
     current_T_e = solved_T_e
     current_psi = solved_psi
     current_n_e = solved_n_e
-    current_n_i = ions_final.n_i
-    current_n_i_bc = ions_final.n_i_bc
     # core_transport already updated above, used for chi_max in next iteration
+    # n_i, n_i_bc will be recalculated from current_n_e, current_T_e at loop start
     history.append((current_t, solved_T_i, solved_T_e, solved_psi, solved_n_e))
     if current_t >= (g.t_final - g.tolerance):
         break
