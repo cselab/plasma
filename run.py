@@ -723,6 +723,7 @@ g.fusion_C7 = 1.366e-5
 g.fusion_alpha_fraction = 3.5 / 17.6
 g.fusion_birth_energy = 3520
 g.fusion_alpha_mass = 4.002602
+g.fusion_critical_energy_coeff = 10 * 4.002602
 g.D_e_min = 0.05
 g.D_e_max = 100.0
 g.V_e_min = -50.0
@@ -1204,7 +1205,7 @@ while True:
                                2 * jnp.log(n_i_face_fusion) + logsigmav)
                     Pfus_face = jnp.exp(logPfus)
                     Pfus_cell = 0.5 * (Pfus_face[:-1] + Pfus_face[1:])
-                    critical_energy = 10 * g.fusion_alpha_mass * T_e
+                    critical_energy = g.fusion_critical_energy_coeff * T_e
                     energy_ratio = g.fusion_birth_energy / critical_energy
                     x_squared = energy_ratio
                     x = jnp.sqrt(x_squared)
