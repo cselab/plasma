@@ -247,30 +247,6 @@ class CoreProfiles:
     n_i_bc: dict
 
 
-@jax.tree_util.register_dataclass
-@dataclasses.dataclass
-class CoreTransport:
-    chi_face_ion: Any
-    chi_face_el: Any
-    d_face_el: Any
-    v_face_el: Any
-    chi_face_el_bohm: Any = None
-    chi_face_el_gyrobohm: Any = None
-    chi_face_ion_bohm: Any = None
-    chi_face_ion_gyrobohm: Any = None
-    chi_neo_i: Any = None
-    chi_neo_e: Any = None
-    D_neo_e: Any = None
-    V_neo_e: Any = None
-    V_neo_ware_e: Any = None
-
-    def chi_max(self):
-        return jnp.maximum(
-            jnp.max(self.chi_face_ion * g.geo_g1_over_vpr2_face),
-            jnp.max(self.chi_face_el * g.geo_g1_over_vpr2_face),
-        )
-
-
 def calculate_psidot_from_psi_sources(*, psi_sources, sigma, psi, psi_bc):
     toc_psi = (1.0 / g.resistivity_multiplier * g.cell_centers * sigma *
                g.mu_0 * 16 * jnp.pi**2 * g.geo_Phi_b**2 / g.geo_F**2)
@@ -1161,7 +1137,7 @@ def calculate_transport_coeffs(T_i, T_e, n_e, psi, n_i, n_i_bc, n_impurity, n_im
 def calculate_total_transport_coeffs(T_i, T_e, n_e, psi, n_i, n_i_bc, n_impurity, n_impurity_bc, q_face, A_i, Z_eff_face, Z_i_face):
     turbulent_transport = calculate_transport_coeffs(
         T_i, T_e, n_e, psi, n_i, n_i_bc, n_impurity, n_impurity_bc, q_face, A_i, Z_eff_face, Z_i_face)
-    return CoreTransport(**dataclasses.asdict(turbulent_transport))
+    return turbulent_transport
 
 
 g.rho_smoothing_limit = 0.1
@@ -1571,7 +1547,7 @@ def coeffs_callback(x,
             auxiliary_outputs=(
                 merged_source_profiles,
                 conductivity,
-                CoreTransport(**dataclasses.asdict(turbulent_transport)),
+                turbulent_transport,
             ),
         )
         return coeffs
@@ -2046,7 +2022,10 @@ while True:
         current_q_face, current_Z_eff_face,
         current_Z_i_face,
     )
-    chi_max = core_transport.chi_max()
+    chi_max = jnp.maximum(
+        jnp.max(core_transport.chi_face_ion * g.geo_g1_over_vpr2_face),
+        jnp.max(core_transport.chi_face_el * g.geo_g1_over_vpr2_face),
+    )
     basic_dt = (3.0 / 4.0) * (jnp.array(g.dx)**2) / chi_max
     initial_dt = jnp.minimum(
         g.chi_timestep_prefactor * basic_dt,
