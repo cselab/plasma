@@ -348,13 +348,6 @@ def calculate_nu_i_star(q, n_i, T_i, Z_eff, log_lambda_ii):
             (((T_i * 1e3)**2) * (g.geo_epsilon_face + g.eps)**1.5))
 
 
-@jax.tree_util.register_dataclass
-@dataclasses.dataclass(kw_only=True, frozen=True)
-class Conductivity:
-    sigma: Any
-    sigma_face: Any
-
-
 def calculate_conductivity(n_e, T_e, Z_eff_face, q_face):
     n_e_face = compute_face_value_bc(n_e, jnp.array(g.dx), g.n_e_bc)
     T_e_face = compute_face_value_bc(T_e, jnp.array(g.dx), g.T_e_bc)
@@ -376,11 +369,8 @@ def calculate_conductivity(n_e, T_e, Z_eff_face, q_face):
     signeo_face = 1.0 - ft33 * (1.0 + 0.36 / Z_eff_face - ft33 *
                                 (0.59 / Z_eff_face - 0.23 / Z_eff_face * ft33))
     sigma_face = sigsptz * signeo_face
-    sigmaneo_cell = 0.5 * (sigma_face[:-1] + sigma_face[1:])
-    return Conductivity(
-        sigma=sigmaneo_cell,
-        sigma_face=sigma_face,
-    )
+    sigma = 0.5 * (sigma_face[:-1] + sigma_face[1:])
+    return (sigma, sigma_face)
 
 
 @jax.tree_util.register_dataclass
@@ -1403,8 +1393,8 @@ def coeffs_callback(x, explicit_source_profiles, explicit_call=False):
                                        g.rho_norm_ped_top).argmin()
         mask = (jnp.zeros_like(g.geo_rho,
                                dtype=bool).at[rho_norm_ped_top_idx].set(True))
-        conductivity = calculate_conductivity(n_e, T_e, ions.Z_eff_face,
-                                              q_face)
+        sigma, sigma_face = calculate_conductivity(n_e, T_e, ions.Z_eff_face,
+                                                   q_face)
         merged_source_profiles = build_source_profiles1(
             T_i,
             T_e,
@@ -1421,7 +1411,7 @@ def coeffs_callback(x, explicit_source_profiles, explicit_call=False):
             ions.Z_eff_face,
             ions.Z_i_face,
             explicit_source_profiles=explicit_source_profiles,
-            conductivity=conductivity,
+            conductivity=(sigma, sigma_face),
         )
         source_mat_psi = jnp.zeros_like(g.geo_rho)
         source_psi = calculate_total_psi_sources(
@@ -1432,7 +1422,7 @@ def coeffs_callback(x, explicit_source_profiles, explicit_call=False):
         toc_T_e = g.toc_temperature_factor
         tic_T_e = n_e * g.geo_vpr**(5.0 / 3.0)
         toc_psi = (1.0 / g.resistivity_multiplier * g.cell_centers *
-                   conductivity.sigma * g.mu0_pi16sq_Phib_sq_over_F_sq)
+                   sigma * g.mu0_pi16sq_Phib_sq_over_F_sq)
         tic_psi = jnp.ones_like(toc_psi)
         toc_dens_el = jnp.ones_like(g.geo_vpr)
         tic_dens_el = g.geo_vpr
@@ -1559,11 +1549,11 @@ def coeffs_callback(x, explicit_source_profiles, explicit_call=False):
             v_face=v_face,
             source_mat_cell=source_mat_cell,
             source_cell=source_cell,
-            auxiliary_outputs=(
-                merged_source_profiles,
-                conductivity,
-                turbulent_transport,
-            ),
+        auxiliary_outputs=(
+            merged_source_profiles,
+            (sigma, sigma_face),
+            turbulent_transport,
+        ),
         )
         return coeffs
 
@@ -1955,8 +1945,8 @@ current_q_face = jnp.concatenate([
         jnp.abs((2 * g.geo_Phi_b * jnp.array(g.dx)) / psi_face_grad[1]), 0),
     jnp.abs((2 * g.geo_Phi_b * g.face_centers[1:]) / psi_face_grad[1:])
 ]) * g.geo_q_correction_factor
-conductivity = calculate_conductivity(n_e, T_e, current_Z_eff_face,
-                                      current_q_face)
+sigma, sigma_face = calculate_conductivity(n_e, T_e, current_Z_eff_face,
+                                           current_q_face)
 core_profiles_for_init_sources = CoreProfiles(
     T_i=T_i,
     T_e=T_e,
@@ -1992,7 +1982,7 @@ source_profiles["bootstrap_current"] = bootstrap_current
 psi_sources = calculate_total_psi_sources(
     source_profiles["bootstrap_current"].j_bootstrap, source_profiles["psi"])
 psidot_value = calculate_psidot_from_psi_sources(psi_sources=psi_sources,
-                                                 sigma=conductivity.sigma,
+                                                 sigma=sigma,
                                                  psi=psi,
                                                  psi_bc=g.psi_bc)
 v_loop_lcfs = psidot_value[-1]
@@ -2024,7 +2014,7 @@ initial_core_sources = build_source_profiles1(
     current_Z_eff_face,
     current_Z_i_face,
     explicit_source_profiles=explicit_source_profiles,
-    conductivity=conductivity,
+    conductivity=(sigma, sigma_face),
 )
 core_transport = calculate_total_transport_coeffs(
     current_T_i, current_T_e, current_n_e, current_psi, current_n_i,
@@ -2203,10 +2193,8 @@ while True:
         jnp.abs(
             (2 * g.geo_Phi_b * g.face_centers[1:]) / psi_face_grad_solved[1:])
     ]) * g.geo_q_correction_factor
-    conductivity = calculate_conductivity(solved_n_e, solved_T_e,
-                                          ions_final.Z_eff_face, q_face_solved)
-    sigma_solved = conductivity.sigma
-    sigma_face_solved = conductivity.sigma_face
+    sigma_solved, sigma_face_solved = calculate_conductivity(solved_n_e, solved_T_e,
+                                                              ions_final.Z_eff_face, q_face_solved)
     final_source_profiles = build_source_profiles1(
         solved_T_i,
         solved_T_e,
@@ -2223,7 +2211,7 @@ while True:
         ions_final.Z_eff_face,
         ions_final.Z_i_face,
         explicit_source_profiles=explicit_source_profiles,
-        conductivity=conductivity,
+        conductivity=(sigma_solved, sigma_face_solved),
     )
     psi_sources = calculate_total_psi_sources(
         final_source_profiles["bootstrap_current"].j_bootstrap,
