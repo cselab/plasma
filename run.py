@@ -283,19 +283,6 @@ def gaussian_profile(*, center, width, total):
     return C * S
 
 
-@enum.unique
-class AffectedCoreProfile(enum.IntEnum):
-    PSI = 1
-    NE = 2
-    TEMP_ION = 3
-    TEMP_EL = 4
-
-
-class SourceHandler(typing.NamedTuple):
-    affects: tuple[AffectedCoreProfile, ...]
-    eval_fn: typing.Callable
-
-
 def calculate_generic_current(unused_state, unused_calculated_source_profiles,
                               unused_conductivity):
     I_generic = g.Ip * g.generic_current_fraction
@@ -393,42 +380,6 @@ def calc_puff_source(unused_state, unused_calculated_source_profiles,
     S = jnp.exp(-(1.0 - r) / g.gas_puff_decay_length)
     C = g.gas_puff_S_total / jnp.sum(S * g.geo_vpr * g.dx_array)
     return (C * S, )
-
-
-def build_standard_source_profiles(*,
-                                   calculated_source_profiles,
-                                   core_profiles,
-                                   explicit=True,
-                                   conductivity=None,
-                                   calculate_anyway=False,
-                                   psi_only=False):
-
-    def calculate_source(source_idx):
-        handler = g.source_handlers[source_idx]
-        if (not explicit) | calculate_anyway:
-            value = handler.eval_fn(
-                core_profiles,
-                calculated_source_profiles,
-                conductivity,
-            )
-            for profile, affected_core_profile in zip(value,
-                                                      handler.affects,
-                                                      strict=True):
-                match affected_core_profile:
-                    case AffectedCoreProfile.PSI:
-                        calculated_source_profiles[4].append(profile)
-                    case AffectedCoreProfile.NE:
-                        calculated_source_profiles[5].append(profile)
-                    case AffectedCoreProfile.TEMP_ION:
-                        calculated_source_profiles[2].append(profile)
-                    case AffectedCoreProfile.TEMP_EL:
-                        calculated_source_profiles[3].append(profile)
-
-    calculate_source(0)
-    if psi_only:
-        return
-    for source_idx in range(1, len(g.source_handlers)):
-        calculate_source(source_idx)
 
 
 @jax.tree_util.register_dataclass
@@ -1103,32 +1054,6 @@ g.geo_factor_pereverzev = jnp.concatenate(
     [jnp.ones(1), g.geo_g1_over_vpr_face[1:] / g.geo_g0_face[1:]])
 
 
-g.source_handlers = [
-    SourceHandler(
-        affects=(AffectedCoreProfile.PSI, ),
-        eval_fn=calculate_generic_current,
-    ),
-    SourceHandler(
-        affects=(AffectedCoreProfile.TEMP_ION, AffectedCoreProfile.TEMP_EL),
-        eval_fn=default_formula,
-    ),
-    SourceHandler(
-        affects=(AffectedCoreProfile.NE, ),
-        eval_fn=calc_generic_particle_source,
-    ),
-    SourceHandler(
-        affects=(AffectedCoreProfile.NE, ),
-        eval_fn=calc_pellet_source,
-    ),
-    SourceHandler(
-        affects=(AffectedCoreProfile.NE, ),
-        eval_fn=calc_puff_source,
-    ),
-    SourceHandler(
-        affects=(AffectedCoreProfile.TEMP_ION, AffectedCoreProfile.TEMP_EL),
-        eval_fn=fusion_heat_model_func,
-    ),
-]
 g.ETG_correction_factor = 1.0 / 3.0
 g.collisionality_multiplier = 1.0
 g.smoothing_width = 0.1
@@ -1214,12 +1139,6 @@ while True:
         T_e=s.T_e,
         n_i=ions_for_sources.n_i,
         n_i_bc=ions_for_sources.n_i_bc,
-    )
-    build_standard_source_profiles(
-        calculated_source_profiles=g.explicit_source_profiles,
-        core_profiles=core_profiles_for_sources,
-        explicit=True,
-        conductivity=None,
     )
     chi_max = jnp.maximum(
         jnp.max(core_transport[0] * g.geo_g1_over_vpr2_face),
@@ -1363,12 +1282,20 @@ while True:
                 n_i=ions.n_i,
                 n_i_bc=ions.n_i_bc,
             )
-            build_standard_source_profiles(
-                calculated_source_profiles=merged_source_profiles,
-                core_profiles=core_profiles_for_sources,
-                explicit=False,
-                conductivity=(sigma, sigma_face),
-            )
+            psi_source, = calculate_generic_current(core_profiles_for_sources, merged_source_profiles, (sigma, sigma_face))
+            merged_source_profiles[4].append(psi_source)
+            T_i_source, T_e_source = default_formula(core_profiles_for_sources, merged_source_profiles, (sigma, sigma_face))
+            merged_source_profiles[2].append(T_i_source)
+            merged_source_profiles[3].append(T_e_source)
+            n_e_source, = calc_generic_particle_source(core_profiles_for_sources, merged_source_profiles, (sigma, sigma_face))
+            merged_source_profiles[5].append(n_e_source)
+            n_e_pellet, = calc_pellet_source(core_profiles_for_sources, merged_source_profiles, (sigma, sigma_face))
+            merged_source_profiles[5].append(n_e_pellet)
+            n_e_puff, = calc_puff_source(core_profiles_for_sources, merged_source_profiles, (sigma, sigma_face))
+            merged_source_profiles[5].append(n_e_puff)
+            T_i_fusion, T_e_fusion = fusion_heat_model_func(core_profiles_for_sources, merged_source_profiles, (sigma, sigma_face))
+            merged_source_profiles[2].append(T_i_fusion)
+            merged_source_profiles[3].append(T_e_fusion)
             total = merged_source_profiles[0][0] + sum(merged_source_profiles[4])
             source_psi = -total * 8 * g.geo_vpr * jnp.pi**2 * g.geo_B_0 * g.mu_0 * g.geo_Phi_b / g.geo_F**2
             tic_T_i = ions.n_i * g.vpr_5_3
