@@ -1256,8 +1256,7 @@ while True:
             x_old = s
         tc_out_new = jnp.concatenate(transient_out_cell)
         tc_in_new = jnp.concatenate(transient_in_cell)
-        left_transient = g.identity_matrix
-        right_transient = jnp.diag(jnp.squeeze(tc_in_old / tc_in_new))
+        
         c_mat = [g.zero_row_of_blocks.copy() for _ in range(g.num_channels)]
         c = g.zero_block_vec.copy()
         for i in range(g.num_channels):
@@ -1274,11 +1273,14 @@ while True:
                 if source is not None:
                     c_mat[i][j] += jnp.diag(source)
         c = [(c_i + source_i) for c_i, source_i in zip(c, source_cell)]
-        c_mat_new = jnp.block(c_mat)
-        c_new = jnp.block(c)
-        broadcasted = jnp.expand_dims(1 / (tc_out_new * tc_in_new), 1)
-        lhs_mat = left_transient - dt * g.theta_implicit * broadcasted * c_mat_new
-        lhs_vec = -g.theta_implicit * dt * (1 / (tc_out_new * tc_in_new)) * c_new
+        
+        spatial_mat = jnp.block(c_mat)
+        spatial_vec = jnp.block(c)
+        transient_coeff = 1 / (tc_out_new * tc_in_new)
+        broadcasted = jnp.expand_dims(transient_coeff, 1)
+        lhs_mat = g.identity_matrix - dt * g.theta_implicit * broadcasted * spatial_mat
+        lhs_vec = -g.theta_implicit * dt * transient_coeff * spatial_vec
+        right_transient = jnp.diag(jnp.squeeze(tc_in_old / tc_in_new))
         rhs = jnp.dot(right_transient, x_old) - lhs_vec
         p = jnp.linalg.solve(lhs_mat, rhs)
     t = t + dt
