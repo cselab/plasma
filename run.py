@@ -747,33 +747,6 @@ def calc_puff_source(
     return (C * S,)
 
 
-def build_source_profiles0(T_i, T_e, n_i, n_i_bc):
-    """Build empty source profiles for explicit (predictor) step."""
-    qei = QeiInfo.zeros()
-    bootstrap_current = BootstrapCurrent.zeros()
-    profiles = {
-        "bootstrap_current": bootstrap_current,
-        "qei": qei,
-        "T_e": {},
-        "T_i": {},
-        "n_e": {},
-        "psi": {},
-    }
-    core_profiles_for_sources = CoreProfiles(
-        T_i=T_i,
-        T_e=T_e,
-        n_i=n_i,
-        n_i_bc=n_i_bc,
-    )
-    build_standard_source_profiles(
-        calculated_source_profiles=profiles,
-        core_profiles=core_profiles_for_sources,
-        explicit=True,
-        conductivity=None,
-    )
-    return profiles
-
-
 def build_source_profiles1(
     T_i,
     T_e,
@@ -2156,11 +2129,26 @@ current_t = np.array(g.t_initial)
 history = [(current_t, current_T_i, current_T_e, current_psi, current_n_e)]
 while True:
     ions_for_sources = get_updated_ions(current_n_e, g.n_e_bc, current_T_e, g.T_e_bc)
-    explicit_source_profiles = build_source_profiles0(
-        current_T_i,
-        current_T_e,
-        ions_for_sources.n_i,
-        ions_for_sources.n_i_bc,
+    # Build empty source profiles for explicit (predictor) step
+    explicit_source_profiles = {
+        "bootstrap_current": BootstrapCurrent.zeros(),
+        "qei": QeiInfo.zeros(),
+        "T_e": {},
+        "T_i": {},
+        "n_e": {},
+        "psi": {},
+    }
+    core_profiles_for_sources = CoreProfiles(
+        T_i=current_T_i,
+        T_e=current_T_e,
+        n_i=ions_for_sources.n_i,
+        n_i_bc=ions_for_sources.n_i_bc,
+    )
+    build_standard_source_profiles(
+        calculated_source_profiles=explicit_source_profiles,
+        core_profiles=core_profiles_for_sources,
+        explicit=True,
+        conductivity=None,
     )
     chi_max = jnp.maximum(
         jnp.max(core_transport.chi_face_ion * g.geo_g1_over_vpr2_face),
@@ -2179,9 +2167,8 @@ while True:
     )
     dt = initial_dt
     while True:
-        ions_edge = get_updated_ions(current_n_e, g.n_e_bc, current_T_e, g.T_e_bc)
-        Z_i_edge = ions_edge.Z_i_face[-1]
-        Z_impurity_edge = ions_edge.Z_impurity_face[-1]
+        Z_i_edge = ions_for_sources.Z_i_face[-1]
+        Z_impurity_edge = ions_for_sources.Z_impurity_face[-1]
         dilution_factor_edge = (Z_impurity_edge - g.Z_eff) / (
             Z_i_edge * (Z_impurity_edge - Z_i_edge)
         )
