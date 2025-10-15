@@ -1606,6 +1606,9 @@ g.collisionality_multiplier = 1.0
 g.smoothing_width = 0.1
 g.transport_rho_min = 0.0
 g.transport_rho_max = 1.0
+rho_norm_ped_top_idx = jnp.abs(g.cell_centers - g.rho_norm_ped_top).argmin()
+g.mask = jnp.zeros_like(g.geo_rho,
+                        dtype=bool).at[rho_norm_ped_top_idx].set(True)
 g.qei_mode = "ZERO"
 g.T_i_bc = make_bc(
     left_face_grad_constraint=jnp.zeros(()),
@@ -1807,10 +1810,6 @@ while True:
             n_e_face = compute_face_value_bc(n_e, jnp.array(g.dx), g.n_e_bc)
             n_e_face_grad = compute_face_grad_bc(n_e, jnp.array(g.dx),
                                                  g.n_e_bc)
-            rho_norm_ped_top_idx = jnp.abs(g.cell_centers -
-                                           g.rho_norm_ped_top).argmin()
-            mask = jnp.zeros_like(
-                g.geo_rho, dtype=bool).at[rho_norm_ped_top_idx].set(True)
             sigma, sigma_face = calculate_conductivity(n_e, T_e,
                                                        ions.Z_eff_face, q_face)
             merged_source_profiles = build_source_profiles1(
@@ -1872,8 +1871,8 @@ while True:
             full_v_face_el = g.geo_g0_face * v_face_el_total
             source_mat_nn = jnp.zeros_like(g.geo_rho)
             source_n_e = calculate_total_sources(merged_source_profiles["n_e"])
-            source_n_e += mask * g.adaptive_n_source_prefactor * g.n_e_ped
-            source_mat_nn += -(mask * g.adaptive_n_source_prefactor)
+            source_n_e += g.mask * g.adaptive_n_source_prefactor * g.n_e_ped
+            source_mat_nn += -(g.mask * g.adaptive_n_source_prefactor)
             geo_factor = jnp.concatenate(
                 [jnp.ones(1), g.geo_g1_over_vpr_face[1:] / g.geo_g0_face[1:]])
             chi_face_per_ion = g.geo_g1_over_vpr_face * n_i_face_chi * g.keV_to_J * g.chi_pereverzev
@@ -1903,10 +1902,10 @@ while True:
             source_mat_ee = qei.implicit_ee * g.geo_vpr
             source_mat_ie = qei.implicit_ie * g.geo_vpr
             source_mat_ei = qei.implicit_ei * g.geo_vpr
-            source_i += mask * g.adaptive_T_source_prefactor * g.T_i_ped
-            source_e += mask * g.adaptive_T_source_prefactor * g.T_e_ped
-            source_mat_ii -= mask * g.adaptive_T_source_prefactor
-            source_mat_ee -= mask * g.adaptive_T_source_prefactor
+            source_i += g.mask * g.adaptive_T_source_prefactor * g.T_i_ped
+            source_e += g.mask * g.adaptive_T_source_prefactor * g.T_e_ped
+            source_mat_ii -= g.mask * g.adaptive_T_source_prefactor
+            source_mat_ee -= g.mask * g.adaptive_T_source_prefactor
             var_to_toc = {
                 "T_i": toc_T_i,
                 "T_e": toc_T_e,
@@ -1978,12 +1977,13 @@ while True:
             zero_block_vec = [zero_vec] * num_channels
             c_mat = [zero_row_of_blocks.copy() for _ in range(num_channels)]
             c = zero_block_vec.copy()
-            if d_face is not None:
-                for i in range(num_channels):
-                    (diffusion_mat, diffusion_vec) = make_diffusion_terms(
-                        d_face[i], x[i][1], x[i][2])
-                    c_mat[i][i] += diffusion_mat
-                    c[i] += diffusion_vec
+            assert d_face
+            for i in range(num_channels):
+                (diffusion_mat,
+                 diffusion_vec) = make_diffusion_terms(d_face[i], x[i][1],
+                                                       x[i][2])
+                c_mat[i][i] += diffusion_mat
+                c[i] += diffusion_vec
             if v_face is not None:
                 for i in range(num_channels):
                     d_face_i = d_face[i] if d_face is not None else None
