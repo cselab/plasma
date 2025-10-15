@@ -264,36 +264,6 @@ def gaussian_profile(*, center, width, total):
     return C * S
 
 
-def default_formula(unused_core_profiles, unused_calculated_source_profiles,
-                    unused_conductivity):
-    absorbed_power = g.generic_heat_P_total * 1.0
-    profile = gaussian_profile(center=g.generic_heat_location,
-                               width=g.generic_heat_width,
-                               total=absorbed_power)
-    ion = profile * (1 - g.generic_heat_electron_fraction)
-    el = profile * g.generic_heat_electron_fraction
-    return (ion, el)
-
-
-def calc_generic_particle_source(unused_state,
-                                 unused_calculated_source_profiles,
-                                 unused_conductivity):
-    return (gaussian_profile(
-        center=g.generic_particle_location,
-        width=g.generic_particle_width,
-        total=g.generic_particle_S_total,
-    ), )
-
-
-def calc_pellet_source(unused_state, unused_calculated_source_profiles,
-                       unused_conductivity):
-    return (gaussian_profile(
-        center=g.pellet_location,
-        width=g.pellet_width,
-        total=g.pellet_S_total,
-    ), )
-
-
 def fusion_heat_model_func(core_profiles, unused_calculated_source_profiles,
                            unused_conductivity):
     product = 1.0
@@ -341,14 +311,6 @@ def fusion_heat_model_func(core_profiles, unused_calculated_source_profiles,
             Pfus_i = Pfus_cell * frac_i * alpha_fraction
             Pfus_e = Pfus_cell * frac_e * alpha_fraction
     return (Pfus_i, Pfus_e)
-
-
-def calc_puff_source(unused_state, unused_calculated_source_profiles,
-                     unused_conductivity):
-    r = g.cell_centers
-    S = jnp.exp(-(1.0 - r) / g.gas_puff_decay_length)
-    C = g.gas_puff_S_total / jnp.sum(S * g.geo_vpr * g.dx_array)
-    return (C * S, )
 
 
 @jax.tree_util.register_dataclass
@@ -1264,15 +1226,23 @@ while True:
             Cext = I_generic / jnp.sum(generic_current_form * g.geo_spr * g.dx_array)
             psi_source = Cext * generic_current_form
             merged_source_profiles[4].append(psi_source)
-            T_i_source, T_e_source = default_formula(core_profiles_for_sources, merged_source_profiles, (sigma, sigma_face))
-            merged_source_profiles[2].append(T_i_source)
-            merged_source_profiles[3].append(T_e_source)
-            n_e_source, = calc_generic_particle_source(core_profiles_for_sources, merged_source_profiles, (sigma, sigma_face))
-            merged_source_profiles[5].append(n_e_source)
-            n_e_pellet, = calc_pellet_source(core_profiles_for_sources, merged_source_profiles, (sigma, sigma_face))
-            merged_source_profiles[5].append(n_e_pellet)
-            n_e_puff, = calc_puff_source(core_profiles_for_sources, merged_source_profiles, (sigma, sigma_face))
-            merged_source_profiles[5].append(n_e_puff)
+            profile = gaussian_profile(center=g.generic_heat_location,
+                                       width=g.generic_heat_width,
+                                       total=g.generic_heat_P_total)
+            merged_source_profiles[2].append(profile * (1 - g.generic_heat_electron_fraction))
+            merged_source_profiles[3].append(profile * g.generic_heat_electron_fraction)
+            merged_source_profiles[5].append(gaussian_profile(
+                center=g.generic_particle_location,
+                width=g.generic_particle_width,
+                total=g.generic_particle_S_total))
+            merged_source_profiles[5].append(gaussian_profile(
+                center=g.pellet_location,
+                width=g.pellet_width,
+                total=g.pellet_S_total))
+            r = g.cell_centers
+            S = jnp.exp(-(1.0 - r) / g.gas_puff_decay_length)
+            C = g.gas_puff_S_total / jnp.sum(S * g.geo_vpr * g.dx_array)
+            merged_source_profiles[5].append(C * S)
             T_i_fusion, T_e_fusion = fusion_heat_model_func(core_profiles_for_sources, merged_source_profiles, (sigma, sigma_face))
             merged_source_profiles[2].append(T_i_fusion)
             merged_source_profiles[3].append(T_e_fusion)
