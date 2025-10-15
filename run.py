@@ -1004,13 +1004,13 @@ while True:
     n_i_bound_right = g.n_e_right_bc * dilution_factor_edge
     n_impurity_bound_right = (g.n_e_right_bc -
                               n_i_bound_right * Z_i_edge) / Z_impurity_edge
-    x = s
+    p = s
     tc_in_old = None
     for _ in range(g.n_corrector_steps + 1):
-        T_i = x[l.Ti]
-        T_e = x[l.Te]
-        psi = x[l.psi]
-        n_e = x[l.ne]
+        T_i = p[l.Ti]
+        T_e = p[l.Te]
+        psi = p[l.psi]
+        n_e = p[l.ne]
         ions = get_updated_ions(n_e, T_e)
         psi_face_grad = compute_face_grad(psi, g.psi_bc[0], g.psi_bc[1], g.psi_bc[2], g.psi_bc[3])
         q_face = jnp.concatenate([
@@ -1281,9 +1281,9 @@ while True:
         lhs_mat = left_transient - dt * g.theta_implicit * broadcasted * c_mat_new
         lhs_vec = -g.theta_implicit * dt * (1 / (tc_out_new * tc_in_new)) * c_new
         rhs = jnp.dot(right_transient, x_old) - lhs_vec
-        x = jnp.linalg.solve(lhs_mat, rhs)
+        p = jnp.linalg.solve(lhs_mat, rhs)
     t = t + dt
-    s = x
+    s = p
     history.append((t, s))
     if t >= (g.t_final - g.tolerance):
         break
