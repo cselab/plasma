@@ -21,24 +21,28 @@ The grid uses a **staggered mesh**:
 - **Cell-centered quantities**: `T_i`, `T_e`, `n_e`, `psi` (unknowns at cell centers)
 - **Face-centered quantities**: diffusion coefficients `d_face`, convection velocities `v_face`, gradients
 
+## State Variables
+
+The current simulation state is stored in the global object `s`:
+- **`s.T_i`** - Ion temperature [keV]
+- **`s.T_e`** - Electron temperature [keV]
+- **`s.psi`** - Poloidal magnetic flux [Wb]
+- **`s.n_e`** - Electron density [m⁻³]
+- **`s.t`** - Current simulation time [s]
+
+These state variables are **read-only during a time step** and only updated after a successful step is completed.
+
 ## Evolved Variables
 
-The code evolves **4 coupled variables** stored in `g.evolving_names = ("T_i", "T_e", "psi", "n_e")`:
-
-1. **`T_i`** - Ion temperature [keV]
-2. **`T_e`** - Electron temperature [keV]  
-3. **`psi`** - Poloidal magnetic flux [Wb]
-4. **`n_e`** - Electron density [m⁻³]
+The code evolves **4 coupled variables**: `T_i`, `T_e`, `psi`, `n_e`
 
 ### Scaling Factors
-Variables are internally scaled for numerical stability via `SCALING_FACTORS`:
+Variables are internally scaled for numerical stability:
 ```python
-SCALING_FACTORS = {
-    "T_i": 1.0,      # keV
-    "T_e": 1.0,      # keV
-    "n_e": 1e20,     # 10²⁰ m⁻³
-    "psi": 1.0,      # Wb
-}
+g.scaling_T_i = 1.0      # keV
+g.scaling_T_e = 1.0      # keV
+g.scaling_n_e = 1e20     # 10²⁰ m⁻³
+g.scaling_psi = 1.0      # Wb
 ```
 
 ## Governing Equations
@@ -108,16 +112,15 @@ q_face = 2 * Phi_b * rho_face_norm / |∂psi/∂rho_norm|
 
 ## Boundary Conditions
 
-Boundary conditions are stored as dictionaries via `make_bc()`:
-
+Boundary conditions are stored as tuples with format:
 ```python
-bc = {
-    "left_face_constraint": value at rho=0 (or None),
-    "right_face_constraint": value at rho=1 (or None),
-    "left_face_grad_constraint": gradient at rho=0,
-    "right_face_grad_constraint": gradient at rho=1
-}
+bc = (left_face, right_face, left_grad, right_grad)
 ```
+Where:
+- `left_face`: value at rho=0 (or None for natural BC)
+- `right_face`: value at rho=1 (or None for natural BC)
+- `left_grad`: gradient at rho=0
+- `right_grad`: gradient at rho=1
 
 ### Applied Boundary Conditions
 
@@ -230,17 +233,24 @@ x_new = solve(lhs_mat, rhs)
 
 ### Main Time Loop Structure
 
-The code uses **nested adaptive time stepping**:
+The code uses **nested adaptive time stepping** with state stored in global `s`:
 
 ```python
-while current_t < t_final:                    # Line 1718
+# Initialize state variables
+s.T_i = <initial ion temperature>
+s.T_e = <initial electron temperature>
+s.n_e = <initial electron density>
+s.psi = <initial poloidal flux>
+s.t = 0.0
+
+while s.t < t_final:
     # Outer loop: successful time steps
-    dt = compute_initial_dt()                 # Lines 1756-1771
+    dt = compute_initial_dt()
     
-    while True:                               # Line 1773
+    while True:
         # Inner loop: retry with smaller dt if needed
         
-        for corrector_iter in range(n_corrector_steps + 1):  # Line 1786
+        for corrector_iter in range(n_corrector_steps + 1):
             # Predictor-corrector iterations
             x_input = x_new
             # Compute coefficients at x_input
@@ -251,11 +261,12 @@ while current_t < t_final:                    # Line 1718
         if converged:
             break
         else:
-            dt = dt / dt_reduction_factor     # Line 2025
+            dt = dt / dt_reduction_factor
     
-    # Accept step
-    current_t += dt
-    history.append(...)
+    # Accept step and update state
+    s.t += dt
+    s.T_i, s.T_e, s.psi, s.n_e = <unscaled solutions>
+    history.append((s.t, s.T_i, s.T_e, s.psi, s.n_e))
 ```
 
 ### Time Step Calculation
