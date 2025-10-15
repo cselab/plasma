@@ -1083,16 +1083,10 @@ def _smooth_savgol(data, idx_limit, polyorder):
         [np.array([data[0]]), smoothed_data[1:idx_limit], data[idx_limit:]])
 
 
-SCALING_FACTORS: Final[Mapping[str, float]] = immutabledict.immutabledict({
-    "T_i":
-    1.0,
-    "T_e":
-    1.0,
-    "n_e":
-    1e20,
-    "psi":
-    1.0,
-})
+g.scaling_T_i = 1.0
+g.scaling_T_e = 1.0
+g.scaling_n_e = 1e20
+g.scaling_psi = 1.0
 
 
 @jax.tree_util.register_dataclass
@@ -1226,43 +1220,6 @@ def get_updated_ions(n_e, n_e_bc, T_e, T_e_bc):
         Z_eff=Z_eff,
         Z_eff_face=Z_eff_face,
     )
-
-
-def evolving_vars_to_solver_x_tuple(T_i, T_e, psi, n_e):
-    evolving_dict = {"T_i": T_i, "T_e": T_e, "psi": psi, "n_e": n_e}
-    x_tuple_for_solver_list = []
-    for name in g.evolving_names:
-        original_value = evolving_dict[name]
-        original_bc = getattr(g, f"{name}_bc")
-        scaling_factor = 1 / SCALING_FACTORS[name]
-        operation = lambda x, factor: x * factor if x is not None else None
-        scaled_bc = make_bc(
-            left_face_constraint=operation(original_bc["left_face_constraint"],
-                                           scaling_factor),
-            left_face_grad_constraint=operation(
-                original_bc["left_face_grad_constraint"], scaling_factor),
-            right_face_constraint=operation(
-                original_bc["right_face_constraint"], scaling_factor),
-            right_face_grad_constraint=operation(
-                original_bc["right_face_grad_constraint"], scaling_factor),
-        )
-        solver_var = (
-            operation(original_value, scaling_factor),
-            jnp.array(g.dx),
-            scaled_bc,
-        )
-        x_tuple_for_solver_list.append(solver_var)
-    return tuple(x_tuple_for_solver_list)
-
-
-def solver_x_tuple_to_evolving_vars(x_new):
-    updated_vars = {}
-    for i, var_name in enumerate(g.evolving_names):
-        solver_var = x_new[i]
-        scaling_factor = SCALING_FACTORS[var_name]
-        operation = lambda x, factor: x * factor if x is not None else None
-        updated_vars[var_name] = operation(solver_var[0], scaling_factor)
-    return updated_vars
 
 
 OptionalTupleMatrix: TypeAlias = tuple[tuple[Any | None, ...], ...] | None
@@ -1632,6 +1589,38 @@ g.psi_bc = make_bc(
     right_face_grad_constraint=g.dpsi_drhonorm_edge,
     right_face_constraint=None,
 )
+
+# Precompute scaled BCs for solver (avoids make_bc calls in loop)
+operation = lambda x, factor: x * factor if x is not None else None
+
+g.T_i_bc_scaled = make_bc(
+    left_face_constraint=operation(g.T_i_bc["left_face_constraint"], 1/g.scaling_T_i),
+    left_face_grad_constraint=operation(g.T_i_bc["left_face_grad_constraint"], 1/g.scaling_T_i),
+    right_face_constraint=operation(g.T_i_bc["right_face_constraint"], 1/g.scaling_T_i),
+    right_face_grad_constraint=operation(g.T_i_bc["right_face_grad_constraint"], 1/g.scaling_T_i),
+)
+
+g.T_e_bc_scaled = make_bc(
+    left_face_constraint=operation(g.T_e_bc["left_face_constraint"], 1/g.scaling_T_e),
+    left_face_grad_constraint=operation(g.T_e_bc["left_face_grad_constraint"], 1/g.scaling_T_e),
+    right_face_constraint=operation(g.T_e_bc["right_face_constraint"], 1/g.scaling_T_e),
+    right_face_grad_constraint=operation(g.T_e_bc["right_face_grad_constraint"], 1/g.scaling_T_e),
+)
+
+g.psi_bc_scaled = make_bc(
+    left_face_constraint=operation(g.psi_bc["left_face_constraint"], 1/g.scaling_psi),
+    left_face_grad_constraint=operation(g.psi_bc["left_face_grad_constraint"], 1/g.scaling_psi),
+    right_face_constraint=operation(g.psi_bc["right_face_constraint"], 1/g.scaling_psi),
+    right_face_grad_constraint=operation(g.psi_bc["right_face_grad_constraint"], 1/g.scaling_psi),
+)
+
+g.n_e_bc_scaled = make_bc(
+    left_face_constraint=operation(g.n_e_bc["left_face_constraint"], 1/g.scaling_n_e),
+    left_face_grad_constraint=operation(g.n_e_bc["left_face_grad_constraint"], 1/g.scaling_n_e),
+    right_face_constraint=operation(g.n_e_bc["right_face_constraint"], 1/g.scaling_n_e),
+    right_face_grad_constraint=operation(g.n_e_bc["right_face_grad_constraint"], 1/g.scaling_n_e),
+)
+
 g.explicit_source_profiles = {
     "bootstrap_current": BootstrapCurrent.zeros(),
     "qei": QeiInfo.zeros(),
@@ -1776,17 +1765,22 @@ while True:
         n_i_bound_right = g.n_e_right_bc * dilution_factor_edge
         n_impurity_bound_right = (g.n_e_right_bc -
                                   n_i_bound_right * Z_i_edge) / Z_impurity_edge
-        x_initial = evolving_vars_to_solver_x_tuple(s.T_i, s.T_e,
-                                                    s.psi, s.n_e)
+        # Create initial solver tuples using precomputed scaled BCs
+        x_T_i = (s.T_i / g.scaling_T_i, jnp.array(g.dx), g.T_i_bc_scaled)
+        x_T_e = (s.T_e / g.scaling_T_e, jnp.array(g.dx), g.T_e_bc_scaled)
+        x_psi = (s.psi / g.scaling_psi, jnp.array(g.dx), g.psi_bc_scaled)
+        x_n_e = (s.n_e / g.scaling_n_e, jnp.array(g.dx), g.n_e_bc_scaled)
+        
+        x_initial = (x_T_i, x_T_e, x_psi, x_n_e)
         x_new = x_initial
         tc_in_old = None
         for _ in range(g.n_corrector_steps + 1):
             x_input = x_new
-            evolved = solver_x_tuple_to_evolving_vars(x_input)
-            T_i = evolved["T_i"]
-            T_e = evolved["T_e"]
-            psi = evolved["psi"]
-            n_e = evolved["n_e"]
+            # Inline solver_x_tuple_to_evolving_vars: unscale from x_input
+            T_i = x_input[0][0] * g.scaling_T_i
+            T_e = x_input[1][0] * g.scaling_T_e
+            psi = x_input[2][0] * g.scaling_psi
+            n_e = x_input[3][0] * g.scaling_n_e
             ions = get_updated_ions(n_e, g.n_e_bc, T_e, g.T_e_bc)
             psi_face_grad = compute_face_grad_bc(psi, jnp.array(g.dx),
                                                  g.psi_bc)
@@ -1901,57 +1895,29 @@ while True:
             source_e += g.mask * g.adaptive_T_source_prefactor * g.T_e_ped
             source_mat_ii -= g.mask * g.adaptive_T_source_prefactor
             source_mat_ee -= g.mask * g.adaptive_T_source_prefactor
-            var_to_toc = {
-                "T_i": toc_T_i,
-                "T_e": toc_T_e,
-                "psi": toc_psi,
-                "n_e": toc_dens_el
-            }
-            var_to_tic = {
-                "T_i": tic_T_i,
-                "T_e": tic_T_e,
-                "psi": tic_psi,
-                "n_e": tic_dens_el
-            }
-            transient_out_cell = tuple(var_to_toc[var]
-                                       for var in g.evolving_names)
-            transient_in_cell = tuple(var_to_tic[var]
-                                      for var in g.evolving_names)
-            var_to_d_face = {
-                "T_i": full_chi_face_ion,
-                "T_e": full_chi_face_el,
-                "psi": d_face_psi,
-                "n_e": full_d_face_el
-            }
-            d_face = tuple(var_to_d_face[var] for var in g.evolving_names)
-            var_to_v_face = {
-                "T_i": v_heat_face_ion,
-                "T_e": v_heat_face_el,
-                "psi": v_face_psi,
-                "n_e": full_v_face_el
-            }
-            v_face = tuple(var_to_v_face.get(var) for var in g.evolving_names)
-            d_mat = {
-                ("T_i", "T_i"): source_mat_ii,
-                ("T_i", "T_e"): source_mat_ie,
-                ("T_e", "T_i"): source_mat_ei,
-                ("T_e", "T_e"): source_mat_ee,
-                ("n_e", "n_e"): source_mat_nn,
-                ("psi", "psi"): source_mat_psi,
-            }
-            source_mat_cell = tuple(
-                tuple(
-                    d_mat.get((row_block, col_block))
-                    for col_block in g.evolving_names)
-                for row_block in g.evolving_names)
-            var_to_source = {
-                "T_i": source_i / SCALING_FACTORS["T_i"],
-                "T_e": source_e / SCALING_FACTORS["T_e"],
-                "psi": source_psi / SCALING_FACTORS["psi"],
-                "n_e": source_n_e / SCALING_FACTORS["n_e"],
-            }
-            source_cell = tuple(
-                var_to_source.get(var) for var in g.evolving_names)
+            # Transient coefficients in order: T_i, T_e, psi, n_e
+            transient_out_cell = (toc_T_i, toc_T_e, toc_psi, toc_dens_el)
+            transient_in_cell = (tic_T_i, tic_T_e, tic_psi, tic_dens_el)
+            
+            # Diffusion and convection coefficients in order: T_i, T_e, psi, n_e
+            d_face = (full_chi_face_ion, full_chi_face_el, d_face_psi, full_d_face_el)
+            v_face = (v_heat_face_ion, v_heat_face_el, v_face_psi, full_v_face_el)
+            
+            # Source matrix coupling: 4x4 block matrix for T_i, T_e, psi, n_e
+            source_mat_cell = (
+                (source_mat_ii, source_mat_ie, None, None),           # T_i row
+                (source_mat_ei, source_mat_ee, None, None),           # T_e row
+                (None, None, source_mat_psi, None),                   # psi row
+                (None, None, None, source_mat_nn),                    # n_e row
+            )
+            
+            # Source terms in order: T_i, T_e, psi, n_e
+            source_cell = (
+                source_i / g.scaling_T_i,
+                source_e / g.scaling_T_e,
+                source_psi / g.scaling_psi,
+                source_n_e / g.scaling_n_e,
+            )
             if tc_in_old is None:
                 tc_in_old = jnp.concatenate(transient_in_cell)
             x_old_vec = jnp.concatenate([x[0] for x in x_initial])
@@ -2030,11 +1996,11 @@ while True:
         if not (take_another_step & ~is_nan_next_dt):
             break
     result = loop_output
-    solved = solver_x_tuple_to_evolving_vars(result[0])
-    solved_T_i = solved["T_i"]
-    solved_T_e = solved["T_e"]
-    solved_psi = solved["psi"]
-    solved_n_e = solved["n_e"]
+    # Inline solver_x_tuple_to_evolving_vars: unscale from result[0]
+    solved_T_i = result[0][0][0] * g.scaling_T_i
+    solved_T_e = result[0][1][0] * g.scaling_T_e
+    solved_psi = result[0][2][0] * g.scaling_psi
+    solved_n_e = result[0][3][0] * g.scaling_n_e
     ions_final = get_updated_ions(solved_n_e, g.n_e_bc, solved_T_e, g.T_e_bc)
     psi_face_new = compute_face_value_bc(solved_psi, jnp.array(g.dx), g.psi_bc)
     psi_face_old = compute_face_value_bc(s.psi, jnp.array(g.dx),
