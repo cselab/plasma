@@ -2,12 +2,10 @@ from fusion_surrogates.qlknn import qlknn_model
 from jax import numpy as jnp
 from typing import Any
 import dataclasses
-import enum
 import jax
 import numpy as np
 import os
 import scipy
-import typing
 import matplotlib.pyplot as plt
 
 
@@ -549,8 +547,8 @@ class Ions:
     n_impurity_bc: Any
 
 
-def get_updated_ions(n_e, n_e_bc, T_e, T_e_bc):
-    T_e_face = compute_face_value(T_e, T_e_bc[1], T_e_bc[3])
+def get_updated_ions(n_e, T_e):
+    T_e_face = compute_face_value(T_e, g.T_e_bc[1], g.T_e_bc[3])
     Z_i_avg, Z_i_Z2_avg, _ = get_average_charge_state(
         ion_symbols=g.main_ion_names,
         T_e=T_e,
@@ -589,7 +587,7 @@ def get_updated_ions(n_e, n_e_bc, T_e, T_e_bc):
         (Z_i_face[-1] * (Z_impurity_face[-1] - Z_i_face[-1])),
     )
     n_i = n_e * dilution_factor
-    n_i_bc = (None, n_e_bc[1] * dilution_factor_edge, 0.0, 0.0)
+    n_i_bc = (None, g.n_e_bc[1] * dilution_factor_edge, 0.0, 0.0)
     n_impurity_value = jnp.where(
         dilution_factor == 1.0,
         0.0,
@@ -598,11 +596,11 @@ def get_updated_ions(n_e, n_e_bc, T_e, T_e_bc):
     n_impurity_right_face_constraint = jnp.where(
         dilution_factor_edge == 1.0,
         0.0,
-        (n_e_bc[1] - n_i_bc[1] * Z_i_face[-1]) / Z_impurity_face[-1],
+        (g.n_e_bc[1] - n_i_bc[1] * Z_i_face[-1]) / Z_impurity_face[-1],
     )
     n_impurity = n_impurity_value
     n_impurity_bc = (None, n_impurity_right_face_constraint, 0.0, 0.0)
-    n_e_face = compute_face_value(n_e, n_e_bc[1], n_e_bc[3])
+    n_e_face = compute_face_value(n_e, g.n_e_bc[1], g.n_e_bc[3])
     n_i_face = compute_face_value(n_i, n_i_bc[1], n_i_bc[3])
     n_impurity_face = compute_face_value(n_impurity, n_impurity_bc[1], n_impurity_bc[3])
     Z_eff_face = (Z_i_face**2 * n_i_face +
@@ -1012,7 +1010,7 @@ while True:
         jnp.expand_dims(jnp.abs(g.q_factor_axis * g.dx_array / psi_face_grad[1]), 0),
         jnp.abs(g.q_factor_bulk * g.face_centers[1:] / psi_face_grad[1:]),
     ])
-    ions_for_sources = get_updated_ions(s.n_e, g.n_e_bc, s.T_e, g.T_e_bc)
+    ions_for_sources = get_updated_ions(s.n_e, s.T_e)
     core_transport = calculate_transport_coeffs(
         s.T_i,
         s.T_e,
@@ -1064,7 +1062,7 @@ while True:
             T_e = x_input[1][0] * g.scaling_T_e
             psi = x_input[2][0] * g.scaling_psi
             n_e = x_input[3][0] * g.scaling_n_e
-            ions = get_updated_ions(n_e, g.n_e_bc, T_e, g.T_e_bc)
+            ions = get_updated_ions(n_e, T_e)
             psi_face_grad = compute_face_grad(psi, g.psi_bc[0], g.psi_bc[1], g.psi_bc[2], g.psi_bc[3])
             q_face = jnp.concatenate([
                 jnp.expand_dims(jnp.abs(g.q_factor_axis * g.dx_array / psi_face_grad[1]), 0),
