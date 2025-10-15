@@ -645,8 +645,8 @@ def build_source_profiles1(
     q_face,
     Z_eff_face,
     Z_i_face,
-    explicit_source_profiles=None,
-    conductivity=None
+    explicit_source_profiles,
+    conductivity
 ):
     log_lambda_ei = calculate_log_lambda_ei(n_e, T_e)
     log_tau_e_Z1 = _calculate_log_tau_e_Z1(
