@@ -48,20 +48,6 @@ g.z = dict(zip(g.sym, [1.0, 1.0, 10.0]))
 g.A = dict(zip(g.sym, [2.0141, 3.0160, 20.180]))
 
 
-def make_bc(left_face_constraint=None,
-            right_face_constraint=None,
-            left_face_grad_constraint=None,
-            right_face_grad_constraint=None):
-    return (
-        left_face_constraint,
-        right_face_constraint,
-        left_face_grad_constraint
-        if left_face_grad_constraint is not None else jnp.zeros(()),
-        right_face_grad_constraint
-        if right_face_grad_constraint is not None else jnp.zeros(()),
-    )
-
-
 def compute_face_grad(value,
                       dr,
                       left_face_constraint,
@@ -221,7 +207,7 @@ class CoreProfiles:
     T_i: Any
     T_e: Any
     n_i: Any
-    n_i_bc: dict
+    n_i_bc: tuple
 
 
 def calculate_psidot_from_psi_sources(*, psi_sources, sigma, psi, psi_bc):
@@ -1085,33 +1071,8 @@ class Ions:
     A_impurity_face: Any
     Z_eff: Any
     Z_eff_face: Any
-    n_i_bc: dict = dataclasses.field(default_factory=make_bc)
-    n_impurity_bc: dict = dataclasses.field(default_factory=make_bc)
-
-
-def get_updated_electron_density():
-    nGW = g.Ip / 1e6 / (jnp.pi * g.geo_a_minor**2) * 1e20
-    n_e_value = g.n_e * nGW
-    n_e_right_bc = g.n_e_right_bc
-    face_left = n_e_value[0]
-    face_right = n_e_right_bc
-    face_inner = (n_e_value[..., :-1] + n_e_value[..., 1:]) / 2.0
-    n_e_face = jnp.concatenate(
-        [face_left[None], face_inner, face_right[None]], )
-    a_minor_out = g.geo_R_out_face[-1] - g.geo_R_out_face[0]
-    target_nbar = jnp.where(
-        True,
-        g.nbar * nGW,
-        g.nbar,
-    )
-    nbar_from_n_e_face_inner = (
-        jax.scipy.integrate.trapezoid(n_e_face[:-1], g.geo_R_out_face[:-1]) /
-        a_minor_out)
-    dr_edge = g.geo_R_out_face[-1] - g.geo_R_out_face[-2]
-    C = (target_nbar - 0.5 * n_e_face[-1] * dr_edge / a_minor_out) / (
-        nbar_from_n_e_face_inner + 0.5 * n_e_face[-2] * dr_edge / a_minor_out)
-    n_e_value = C * n_e_value
-    return n_e_value
+    n_i_bc: tuple = dataclasses.field(default_factory=lambda: (None, None, 0.0, 0.0))
+    n_impurity_bc: tuple = dataclasses.field(default_factory=lambda: (None, None, 0.0, 0.0))
 
 
 def get_updated_ions(n_e, n_e_bc, T_e, T_e_bc):
@@ -1154,10 +1115,7 @@ def get_updated_ions(n_e, n_e_bc, T_e, T_e_bc):
         (Z_i_face[-1] * (Z_impurity_face[-1] - Z_i_face[-1])),
     )
     n_i = n_e * dilution_factor
-    n_i_bc = make_bc(
-        right_face_grad_constraint=None,
-        right_face_constraint=n_e_bc[1] * dilution_factor_edge,
-    )
+    n_i_bc = (None, n_e_bc[1] * dilution_factor_edge, 0.0, 0.0)
     n_impurity_value = jnp.where(
         dilution_factor == 1.0,
         0.0,
@@ -1169,10 +1127,7 @@ def get_updated_ions(n_e, n_e_bc, T_e, T_e_bc):
         (n_e_bc[1] - n_i_bc[1] * Z_i_face[-1]) / Z_impurity_face[-1],
     )
     n_impurity = n_impurity_value
-    n_impurity_bc = make_bc(
-        right_face_grad_constraint=None,
-        right_face_constraint=n_impurity_right_face_constraint,
-    )
+    n_impurity_bc = (None, n_impurity_right_face_constraint, 0.0, 0.0)
     n_e_face = compute_face_value_bc(n_e, jnp.array(g.dx), n_e_bc)
     n_i_face = compute_face_value_bc(n_i, jnp.array(g.dx), n_i_bc)
     n_impurity_face = compute_face_value_bc(n_impurity, jnp.array(g.dx),
@@ -1552,26 +1507,13 @@ g.mask = jnp.zeros_like(g.geo_rho,
                         dtype=bool).at[rho_norm_ped_top_idx].set(True)
 g.pedestal_mask_face = g.face_centers > g.rho_norm_ped_top
 g.qei_mode = "ZERO"
-g.T_i_bc = make_bc(
-    left_face_grad_constraint=jnp.zeros(()),
-    right_face_grad_constraint=None,
-    right_face_constraint=g.T_i_right_bc,
-)
-g.T_e_bc = make_bc(
-    left_face_grad_constraint=jnp.zeros(()),
-    right_face_grad_constraint=None,
-    right_face_constraint=g.T_e_right_bc,
-)
-g.n_e_bc = make_bc(
-    right_face_grad_constraint=None,
-    right_face_constraint=g.n_e_right_bc,
-)
+# BC tuple format: (left_face, right_face, left_grad, right_grad)
+g.T_i_bc = (None, g.T_i_right_bc, 0.0, 0.0)
+g.T_e_bc = (None, g.T_e_right_bc, 0.0, 0.0)
+g.n_e_bc = (None, g.n_e_right_bc, 0.0, 0.0)
 g.dpsi_drhonorm_edge = (g.Ip * 16 * jnp.pi**3 * g.mu_0 * g.geo_Phi_b /
                         (g.geo_g2g3_over_rhon_face[-1] * g.geo_F_face[-1]))
-g.psi_bc = make_bc(
-    right_face_grad_constraint=g.dpsi_drhonorm_edge,
-    right_face_constraint=None,
-)
+g.psi_bc = (None, None, 0.0, g.dpsi_drhonorm_edge)
 g.T_i_bc_scaled = (None, g.T_i_right_bc / g.scaling_T_i, 0.0, 0.0)
 g.T_e_bc_scaled = (None, g.T_e_right_bc / g.scaling_T_e, 0.0, 0.0)
 g.psi_bc_scaled = (None, None, 0.0, g.dpsi_drhonorm_edge / g.scaling_psi)
@@ -1587,7 +1529,21 @@ g.explicit_source_profiles = {
 # Initialize state
 s.T_i = jnp.interp(g.cell_centers, g.T_i_profile_x, g.T_i_profile_y)
 s.T_e = jnp.interp(g.cell_centers, g.T_e_profile_x, g.T_e_profile_y)
-s.n_e = get_updated_electron_density()
+# Inline get_updated_electron_density
+nGW = g.Ip / 1e6 / (jnp.pi * g.geo_a_minor**2) * 1e20
+n_e_value = g.n_e * nGW
+n_e_face = jnp.concatenate([
+    n_e_value[0:1],
+    (n_e_value[:-1] + n_e_value[1:]) / 2.0,
+    g.n_e_right_bc[None],
+])
+a_minor_out = g.geo_R_out_face[-1] - g.geo_R_out_face[0]
+nbar_from_n_e_face_inner = (
+    jax.scipy.integrate.trapezoid(n_e_face[:-1], g.geo_R_out_face[:-1]) / a_minor_out)
+dr_edge = g.geo_R_out_face[-1] - g.geo_R_out_face[-2]
+C = (g.nbar * nGW - 0.5 * n_e_face[-1] * dr_edge / a_minor_out) / (
+    nbar_from_n_e_face_inner + 0.5 * n_e_face[-2] * dr_edge / a_minor_out)
+s.n_e = C * n_e_value
 s.psi = g.geo_psi_from_Ip_base * (g.Ip / g.geo_Ip_profile_face_base[-1])
 s.t = np.array(g.t_initial)
 history = [(s.t, s.T_i, s.T_e, s.psi, s.n_e)]
@@ -1695,7 +1651,6 @@ while True:
                 ions.Z_i_face,
                 conductivity=(sigma, sigma_face),
             )
-            source_mat_psi = jnp.zeros_like(g.geo_rho)
             source_psi = calculate_total_psi_sources(
                 merged_source_profiles["bootstrap_current"].j_bootstrap,
                 merged_source_profiles["psi"],
@@ -1722,22 +1677,16 @@ while True:
                 ions.A_i,
                 ions.Z_eff_face,
             )
-            chi_face_ion_total = turbulent_transport.chi_face_ion
-            chi_face_el_total = turbulent_transport.chi_face_el
-            d_face_el_total = turbulent_transport.d_face_el
-            v_face_el_total = turbulent_transport.v_face_el
             d_face_psi = g.geo_g2g3_over_rhon_face
             v_face_psi = jnp.zeros_like(d_face_psi)
-            n_i_face_chi = compute_face_value_bc(ions.n_i, jnp.array(g.dx),
-                                                 ions.n_i_bc)
-            full_chi_face_ion = g.geo_g1_keV * n_i_face_chi * chi_face_ion_total
-            full_chi_face_el = g.geo_g1_keV * n_e_face * chi_face_el_total
-            full_d_face_el = g.geo_g1_over_vpr_face * d_face_el_total
-            full_v_face_el = g.geo_g0_face * v_face_el_total
-            source_mat_nn = jnp.zeros_like(g.geo_rho)
+            n_i_face_chi = compute_face_value_bc(ions.n_i, jnp.array(g.dx), ions.n_i_bc)
+            full_chi_face_ion = g.geo_g1_keV * n_i_face_chi * turbulent_transport.chi_face_ion
+            full_chi_face_el = g.geo_g1_keV * n_e_face * turbulent_transport.chi_face_el
+            full_d_face_el = g.geo_g1_over_vpr_face * turbulent_transport.d_face_el
+            full_v_face_el = g.geo_g0_face * turbulent_transport.v_face_el
             source_n_e = calculate_total_sources(merged_source_profiles["n_e"])
             source_n_e += g.mask * g.adaptive_n_source_prefactor * g.n_e_ped
-            source_mat_nn += -(g.mask * g.adaptive_n_source_prefactor)
+            source_mat_nn = -(g.mask * g.adaptive_n_source_prefactor)
             chi_face_per_ion = g.geo_g1_keV * n_i_face_chi * g.chi_pereverzev
             chi_face_per_el = g.geo_g1_keV * n_e_face * g.chi_pereverzev
             d_face_per_el = g.D_pereverzev
@@ -1776,7 +1725,7 @@ while True:
             source_mat_cell = (
                 (source_mat_ii, source_mat_ie, None, None),
                 (source_mat_ei, source_mat_ee, None, None),
-                (None, None, source_mat_psi, None),
+                (None, None, None, None),
                 (None, None, None, source_mat_nn),
             )
             source_cell = (
@@ -1905,7 +1854,6 @@ while True:
         psi=solved_psi,
         psi_bc=g.psi_bc,
     )
-    psidot_bc = make_bc(right_face_constraint=v_loop_lcfs)
     s.t = s.t + result[1]
     s.T_i = solved_T_i
     s.T_e = solved_T_e
