@@ -1312,10 +1312,7 @@ while True:
             x_new_split = jnp.split(x_new_vec, g.num_channels)
             x_new = tuple((value, x_input[i][1], x_input[i][2])
                           for i, value in enumerate(x_new_split))
-        loop_output = (
-            x_new,
-            dt,
-        )
+        dt_old = dt
         dt = dt / g.dt_reduction_factor
         at_exact_t_final = jnp.allclose(
             t + dt,
@@ -1326,8 +1323,8 @@ while True:
                                      | ~next_dt_too_small)
         if not (take_another_step & ~False):
             break
-    t = t + loop_output[1]
-    s = jnp.concatenate([loop_output[0][0][0], loop_output[0][1][0], loop_output[0][2][0], loop_output[0][3][0]])
+    t = t + dt_old
+    s = jnp.concatenate([x_new[0][0], x_new[1][0], x_new[2][0], x_new[3][0]])
     history.append((t, s[l.Ti], s[l.Te], s[l.psi], s[l.ne]))
     if t >= (g.t_final - g.tolerance):
         break
