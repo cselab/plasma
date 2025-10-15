@@ -16,8 +16,10 @@ import matplotlib.pyplot as plt
 class g:
     pass
 
+
 class s:
     pass
+
 
 g.evolving_names = "T_i", "T_e", "psi", "n_e"
 os.environ["XLA_FLAGS"] = (
@@ -1638,7 +1640,6 @@ g.explicit_source_profiles = {
     "n_e": {},
     "psi": {},
 }
-
 Ip_scale_factor = g.Ip / g.geo_Ip_profile_face_base[-1]
 T_i = g.T_i
 T_e = g.T_e
@@ -1707,14 +1708,13 @@ psidot_value = calculate_psidot_from_psi_sources(psi_sources=psi_sources,
 v_loop_lcfs = psidot_value[-1]
 psidot_bc = make_bc(right_face_constraint=v_loop_lcfs)
 psidot = psidot_value
-current_T_i = T_i
-current_T_e = T_e
-current_psi = psi
-current_n_e = n_e
+s.T_i = T_i
+s.T_e = T_e
+s.psi = psi
+s.n_e = n_e
 current_t = np.array(g.t_initial)
 history = [(current_t, current_T_i, current_T_e, current_psi, current_n_e)]
 while True:
-    # Calculate q_face from current psi
     psi_face_grad = compute_face_grad_bc(current_psi, jnp.array(g.dx),
                                          g.psi_bc)
     current_q_face = (jnp.concatenate([
@@ -1723,7 +1723,6 @@ while True:
                 (2 * g.geo_Phi_b * jnp.array(g.dx)) / psi_face_grad[1]), 0),
         jnp.abs((2 * g.geo_Phi_b * g.face_centers[1:]) / psi_face_grad[1:]),
     ]) * g.geo_q_correction_factor)
-    # Calculate ions and transport from current state
     ions_for_sources = get_updated_ions(current_n_e, g.n_e_bc, current_T_e,
                                         g.T_e_bc)
     core_transport = calculate_transport_coeffs(
@@ -1780,10 +1779,9 @@ while True:
         x_initial = evolving_vars_to_solver_x_tuple(current_T_i, current_T_e,
                                                     current_psi, current_n_e)
         x_new = x_initial
-        tc_in_old = None  # Will be set on first iteration
+        tc_in_old = None
         for _ in range(0, g.n_corrector_steps + 1):
             x_input = x_new
-            # Inlined coeffs_callback body
             evolved = solver_x_tuple_to_evolving_vars(x_input)
             T_i = evolved["T_i"]
             T_e = evolved["T_e"]
@@ -1954,9 +1952,7 @@ while True:
             }
             source_cell = tuple(
                 var_to_source.get(var) for var in g.evolving_names)
-            # End of inlined coeffs_callback
             if tc_in_old is None:
-                # First iteration: save transient_in from initial state
                 tc_in_old = jnp.concatenate(transient_in_cell)
             x_old_vec = jnp.concatenate([x[0] for x in x_initial])
             x_new_guess_vec = jnp.concatenate([x[0] for x in x_input])
@@ -2086,10 +2082,10 @@ while True:
     )
     psidot_bc = make_bc(right_face_constraint=v_loop_lcfs)
     current_t = current_t + result[1]
-    current_T_i = solved_T_i
-    current_T_e = solved_T_e
-    current_psi = solved_psi
-    current_n_e = solved_n_e
+    s.T_i = solved_T_i
+    s.T_e = solved_T_e
+    s.psi = solved_psi
+    s.n_e = solved_n_e
     history.append((current_t, solved_T_i, solved_T_e, solved_psi, solved_n_e))
     if current_t >= (g.t_final - g.tolerance):
         break
