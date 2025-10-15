@@ -13,6 +13,10 @@ class g:
     pass
 
 
+class l:
+    pass
+
+
 class s:
     pass
 
@@ -963,10 +967,10 @@ g.psi_bc = (None, None, 0.0, g.dpsi_drhonorm_edge)
 g.num_cells = g.n_rho
 g.num_channels = 4
 n = g.num_cells
-g.T_i_slice = np.s_[:n]
-g.T_e_slice = np.s_[n:2*n]
-g.psi_slice = np.s_[2*n:3*n]
-g.n_e_slice = np.s_[3*n:4*n]
+l.Ti = np.s_[:n]
+l.Te = np.s_[n:2*n]
+l.psi = np.s_[2*n:3*n]
+l.ne = np.s_[3*n:4*n]
 g.state_size = 4 * n
 g.zero_block = jnp.zeros((g.num_cells, g.num_cells))
 g.zero_vec = jnp.zeros(g.num_cells)
@@ -975,8 +979,8 @@ g.v_face_psi_zero = jnp.zeros_like(g.geo_g2g3_over_rhon_face)
 g.ones_like_vpr = jnp.ones_like(g.geo_vpr)
 
 s = jnp.zeros(g.state_size)
-s = s.at[g.T_i_slice].set(jnp.interp(g.cell_centers, g.T_i_profile_x, g.T_i_profile_y))
-s = s.at[g.T_e_slice].set(jnp.interp(g.cell_centers, g.T_e_profile_x, g.T_e_profile_y))
+s = s.at[l.Ti].set(jnp.interp(g.cell_centers, g.T_i_profile_x, g.T_i_profile_y))
+s = s.at[l.Te].set(jnp.interp(g.cell_centers, g.T_e_profile_x, g.T_e_profile_y))
 nGW = g.Ip / 1e6 / (jnp.pi * g.geo_a_minor**2) * g.scaling_n_e
 n_e_value = g.n_e * nGW
 n_e_face = jnp.concatenate([
@@ -990,22 +994,22 @@ nbar_from_n_e_face_inner = (
 dr_edge = g.geo_R_out_face[-1] - g.geo_R_out_face[-2]
 C = (g.nbar * nGW - 0.5 * n_e_face[-1] * dr_edge / a_minor_out) / (
     nbar_from_n_e_face_inner + 0.5 * n_e_face[-2] * dr_edge / a_minor_out)
-s = s.at[g.n_e_slice].set(C * n_e_value)
-s = s.at[g.psi_slice].set(g.geo_psi_from_Ip_base * (g.Ip / g.geo_Ip_profile_face_base[-1]))
+s = s.at[l.ne].set(C * n_e_value)
+s = s.at[l.psi].set(g.geo_psi_from_Ip_base * (g.Ip / g.geo_Ip_profile_face_base[-1]))
 t = 0.0
-history = [(t, s[g.T_i_slice], s[g.T_e_slice], s[g.psi_slice], s[g.n_e_slice])]
+history = [(t, s[l.Ti], s[l.Te], s[l.psi], s[l.ne])]
 while True:
-    psi_face_grad = compute_face_grad(s[g.psi_slice], g.psi_bc[0], g.psi_bc[1], g.psi_bc[2], g.psi_bc[3])
+    psi_face_grad = compute_face_grad(s[l.psi], g.psi_bc[0], g.psi_bc[1], g.psi_bc[2], g.psi_bc[3])
     current_q_face = jnp.concatenate([
         jnp.expand_dims(jnp.abs(g.q_factor_axis * g.dx_array / psi_face_grad[1]), 0),
         jnp.abs(g.q_factor_bulk * g.face_centers[1:] / psi_face_grad[1:]),
     ])
-    ions_for_sources = get_updated_ions(s[g.n_e_slice], s[g.T_e_slice])
+    ions_for_sources = get_updated_ions(s[l.ne], s[l.Te])
     core_transport = calculate_transport_coeffs(
-        s[g.T_i_slice],
-        s[g.T_e_slice],
-        s[g.n_e_slice],
-        s[g.psi_slice],
+        s[l.Ti],
+        s[l.Te],
+        s[l.ne],
+        s[l.psi],
         ions_for_sources.n_i,
         ions_for_sources.n_i_bc,
         ions_for_sources.n_impurity,
@@ -1039,10 +1043,10 @@ while True:
         n_i_bound_right = g.n_e_right_bc * dilution_factor_edge
         n_impurity_bound_right = (g.n_e_right_bc -
                                   n_i_bound_right * Z_i_edge) / Z_impurity_edge
-        x_T_i = (s[g.T_i_slice], g.dx_array, g.T_i_bc)
-        x_T_e = (s[g.T_e_slice], g.dx_array, g.T_e_bc)
-        x_psi = (s[g.psi_slice], g.dx_array, g.psi_bc)
-        x_n_e = (s[g.n_e_slice], g.dx_array, g.n_e_bc)
+        x_T_i = (s[l.Ti], g.dx_array, g.T_i_bc)
+        x_T_e = (s[l.Te], g.dx_array, g.T_e_bc)
+        x_psi = (s[l.psi], g.dx_array, g.psi_bc)
+        x_n_e = (s[l.ne], g.dx_array, g.n_e_bc)
         x_initial = (x_T_i, x_T_e, x_psi, x_n_e)
         x_new = x_initial
         tc_in_old = None
@@ -1329,11 +1333,11 @@ while True:
             break
     result = loop_output
     t = t + result[1]
-    s = s.at[g.T_i_slice].set(result[0][0][0])
-    s = s.at[g.T_e_slice].set(result[0][1][0])
-    s = s.at[g.psi_slice].set(result[0][2][0])
-    s = s.at[g.n_e_slice].set(result[0][3][0])
-    history.append((t, s[g.T_i_slice], s[g.T_e_slice], s[g.psi_slice], s[g.n_e_slice]))
+    s = s.at[l.Ti].set(result[0][0][0])
+    s = s.at[l.Te].set(result[0][1][0])
+    s = s.at[l.psi].set(result[0][2][0])
+    s = s.at[l.ne].set(result[0][3][0])
+    history.append((t, s[l.Ti], s[l.Te], s[l.psi], s[l.ne]))
     if t >= (g.t_final - g.tolerance):
         break
 
