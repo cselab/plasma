@@ -1459,6 +1459,7 @@ g.geo_g1_over_vpr2_face = jnp.concatenate(
 g.pi_16_squared = 16 * jnp.pi**2
 g.pi_16_cubed = 16 * jnp.pi**3
 g.toc_temperature_factor = 1.5 * g.geo_vpr**(-2.0 / 3.0) * g.keV_to_J
+g.vpr_5_3 = g.geo_vpr**(5.0 / 3.0)
 g.mu0_pi16sq_Phib_sq_over_F_sq = g.mu_0 * g.pi_16_squared * g.geo_Phi_b**2 / g.geo_F**2
 g.pi16cubed_mu0_Phib = g.pi_16_cubed * g.mu_0 * g.geo_Phi_b
 g.geo_g1_keV = g.geo_g1_over_vpr_face * g.keV_to_J
@@ -1674,8 +1675,8 @@ while True:
                 merged_source_profiles["bootstrap_current"].j_bootstrap,
                 merged_source_profiles["psi"],
             )
-            tic_T_i = ions.n_i * g.geo_vpr**(5.0 / 3.0)
-            tic_T_e = n_e * g.geo_vpr**(5.0 / 3.0)
+            tic_T_i = ions.n_i * g.vpr_5_3
+            tic_T_e = n_e * g.vpr_5_3
             toc_psi = (1.0 / g.resistivity_multiplier * g.cell_centers *
                        sigma * g.mu0_pi16sq_Phib_sq_over_F_sq)
             turbulent_transport = calculate_transport_coeffs(
