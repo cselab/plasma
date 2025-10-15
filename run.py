@@ -199,33 +199,6 @@ def get_average_charge_state(ion_symbols, T_e, fractions):
     return Z_avg, Z2_avg, Z_per_species
 
 
-def calculate_L31(f_trap, nu_e_star, Z_eff):
-    denom = (1.0 + (1 - 0.1 * f_trap) * jnp.sqrt(nu_e_star) + 0.5 *
-             (1.0 - f_trap) * nu_e_star / Z_eff)
-    ft31 = f_trap / denom
-    term_0 = (1 + 1.4 / (Z_eff + 1)) * ft31
-    term_1 = -1.9 / (Z_eff + 1) * ft31**2
-    term_2 = 0.3 / (Z_eff + 1) * ft31**3
-    term_3 = 0.2 / (Z_eff + 1) * ft31**4
-    return term_0 + term_1 + term_2 + term_3
-
-
-def calculate_L32(f_trap, nu_e_star, Z_eff):
-    ft32ee = f_trap / (1 + 0.26 * (1 - f_trap) * jnp.sqrt(nu_e_star) + 0.18 *
-                       (1 - 0.37 * f_trap) * nu_e_star / jnp.sqrt(Z_eff))
-    ft32ei = f_trap / (1 + (1 + 0.6 * f_trap) * jnp.sqrt(nu_e_star) + 0.85 *
-                       (1 - 0.37 * f_trap) * nu_e_star * (1 + Z_eff))
-    F32ee = ((0.05 + 0.62 * Z_eff) / (Z_eff * (1 + 0.44 * Z_eff)) *
-             (ft32ee - ft32ee**4) + 1 / (1 + 0.22 * Z_eff) *
-             (ft32ee**2 - ft32ee**4 - 1.2 *
-              (ft32ee**3 - ft32ee**4)) + 1.2 / (1 + 0.5 * Z_eff) * ft32ee**4)
-    F32ei = (-(0.56 + 1.93 * Z_eff) / (Z_eff * (1 + 0.44 * Z_eff)) *
-             (ft32ei - ft32ei**4) + 4.95 / (1 + 2.48 * Z_eff) *
-             (ft32ei**2 - ft32ei**4 - 0.55 *
-              (ft32ei**3 - ft32ei**4)) - 1.2 / (1 + 0.5 * Z_eff) * ft32ei**4)
-    return F32ee + F32ei
-
-
 def calculate_nu_e_star(q, n_e, T_e, Z_eff, log_lambda_ei):
     return (6.921e-18 * q * g.R_major * n_e * Z_eff * log_lambda_ei /
             (((T_e * 1e3)**2) * (g.geo_epsilon_face + g.eps)**1.5))
@@ -234,21 +207,6 @@ def calculate_nu_e_star(q, n_e, T_e, Z_eff, log_lambda_ei):
 def calculate_nu_i_star(q, n_i, T_i, Z_eff, log_lambda_ii):
     return (4.9e-18 * q * g.R_major * n_i * Z_eff**4 * log_lambda_ii /
             (((T_i * 1e3)**2) * (g.geo_epsilon_face + g.eps)**1.5))
-
-
-def _calculate_L34(f_trap, nu_e_star, Z_eff):
-    ft34 = f_trap / (1.0 + (1 - 0.1 * f_trap) * jnp.sqrt(nu_e_star) + 0.5 *
-                     (1.0 - 0.5 * f_trap) * nu_e_star / Z_eff)
-    return ((1 + 1.4 / (Z_eff + 1)) * ft34 - 1.9 / (Z_eff + 1) * ft34**2 +
-            0.3 / (Z_eff + 1) * ft34**3 + 0.2 / (Z_eff + 1) * ft34**4)
-
-
-def _calculate_alpha(f_trap, nu_i_star):
-    alpha0 = -1.17 * (1 - f_trap) / (1 - 0.22 * f_trap - 0.19 * f_trap**2)
-    alpha = ((alpha0 + 0.25 * (1 - f_trap**2) * jnp.sqrt(nu_i_star)) /
-             (1 + 0.5 * jnp.sqrt(nu_i_star)) + 0.315 * nu_i_star**2 *
-             f_trap**6) / (1 + 0.15 * nu_i_star**2 * f_trap**6)
-    return alpha
 
 
 def gaussian_profile(*, center, width, total):
@@ -1119,10 +1077,32 @@ while True:
             Z_eff=ions.Z_eff_face,
             log_lambda_ii=log_lambda_ii,
         )
-        L31 = calculate_L31(f_trap, nu_e_star, ions.Z_eff_face)
-        L32 = calculate_L32(f_trap, nu_e_star, ions.Z_eff_face)
-        L34 = _calculate_L34(f_trap, nu_e_star, ions.Z_eff_face)
-        alpha = _calculate_alpha(f_trap, nu_i_star)
+        denom = (1.0 + (1 - 0.1 * f_trap) * jnp.sqrt(nu_e_star) + 0.5 *
+                 (1.0 - f_trap) * nu_e_star / ions.Z_eff_face)
+        ft31 = f_trap / denom
+        L31 = ((1 + 1.4 / (ions.Z_eff_face + 1)) * ft31 - 1.9 / (ions.Z_eff_face + 1) * ft31**2 +
+               0.3 / (ions.Z_eff_face + 1) * ft31**3 + 0.2 / (ions.Z_eff_face + 1) * ft31**4)
+        ft32ee = f_trap / (1 + 0.26 * (1 - f_trap) * jnp.sqrt(nu_e_star) + 0.18 *
+                           (1 - 0.37 * f_trap) * nu_e_star / jnp.sqrt(ions.Z_eff_face))
+        ft32ei = f_trap / (1 + (1 + 0.6 * f_trap) * jnp.sqrt(nu_e_star) + 0.85 *
+                           (1 - 0.37 * f_trap) * nu_e_star * (1 + ions.Z_eff_face))
+        F32ee = ((0.05 + 0.62 * ions.Z_eff_face) / (ions.Z_eff_face * (1 + 0.44 * ions.Z_eff_face)) *
+                 (ft32ee - ft32ee**4) + 1 / (1 + 0.22 * ions.Z_eff_face) *
+                 (ft32ee**2 - ft32ee**4 - 1.2 *
+                  (ft32ee**3 - ft32ee**4)) + 1.2 / (1 + 0.5 * ions.Z_eff_face) * ft32ee**4)
+        F32ei = (-(0.56 + 1.93 * ions.Z_eff_face) / (ions.Z_eff_face * (1 + 0.44 * ions.Z_eff_face)) *
+                 (ft32ei - ft32ei**4) + 4.95 / (1 + 2.48 * ions.Z_eff_face) *
+                 (ft32ei**2 - ft32ei**4 - 0.55 *
+                  (ft32ei**3 - ft32ei**4)) - 1.2 / (1 + 0.5 * ions.Z_eff_face) * ft32ei**4)
+        L32 = F32ee + F32ei
+        ft34 = f_trap / (1.0 + (1 - 0.1 * f_trap) * jnp.sqrt(nu_e_star) + 0.5 *
+                         (1.0 - 0.5 * f_trap) * nu_e_star / ions.Z_eff_face)
+        L34 = ((1 + 1.4 / (ions.Z_eff_face + 1)) * ft34 - 1.9 / (ions.Z_eff_face + 1) * ft34**2 +
+               0.3 / (ions.Z_eff_face + 1) * ft34**3 + 0.2 / (ions.Z_eff_face + 1) * ft34**4)
+        alpha0 = -1.17 * (1 - f_trap) / (1 - 0.22 * f_trap - 0.19 * f_trap**2)
+        alpha = ((alpha0 + 0.25 * (1 - f_trap**2) * jnp.sqrt(nu_i_star)) /
+                 (1 + 0.5 * jnp.sqrt(nu_i_star)) + 0.315 * nu_i_star**2 *
+                 f_trap**6) / (1 + 0.15 * nu_i_star**2 * f_trap**6)
         prefactor = -g.geo_F_face * 2 * jnp.pi / g.geo_B_0
         pe = n_e_face_bootstrap * T_e_face_bootstrap * 1e3 * 1.6e-19
         pi = n_i_face_bootstrap * T_i_face_bootstrap * 1e3 * 1.6e-19
