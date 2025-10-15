@@ -1248,25 +1248,6 @@ def calculate_transport_coeffs(
     return jax.tree_util.tree_map(smooth_single_coeff, transport_coeffs)
 
 
-def calculate_total_transport_coeffs(
-    T_i, T_e, n_e, psi, n_i, n_i_bc, n_impurity, n_impurity_bc, q_face, A_i, Z_eff_face
-):
-    turbulent_transport = calculate_transport_coeffs(
-        T_i,
-        T_e,
-        n_e,
-        psi,
-        n_i,
-        n_i_bc,
-        n_impurity,
-        n_impurity_bc,
-        q_face,
-        A_i,
-        Z_eff_face,
-    )
-    return turbulent_transport
-
-
 g.rho_smoothing_limit = 0.1
 
 
@@ -2181,7 +2162,7 @@ initial_core_sources = build_source_profiles1(
     explicit_source_profiles=explicit_source_profiles,
     conductivity=(sigma, sigma_face),
 )
-core_transport = calculate_total_transport_coeffs(
+core_transport = calculate_transport_coeffs(
     current_T_i,
     current_T_e,
     current_n_e,
@@ -2403,7 +2384,7 @@ while True:
         psi_bc=g.psi_bc,
     )
     psidot_bc = make_bc(right_face_constraint=v_loop_lcfs)
-    core_transport = calculate_total_transport_coeffs(
+    core_transport = calculate_transport_coeffs(
         solved_T_i,
         solved_T_e,
         solved_n_e,
