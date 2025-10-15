@@ -1317,7 +1317,6 @@ while True:
             dt,
         )
         dt = dt / g.dt_reduction_factor
-        is_nan_next_dt = jnp.isnan(dt)
         at_exact_t_final = jnp.allclose(
             t + dt,
             g.t_final,
@@ -1325,7 +1324,7 @@ while True:
         next_dt_too_small = dt < g.min_dt
         take_another_step = False & (at_exact_t_final
                                      | ~next_dt_too_small)
-        if not (take_another_step & ~is_nan_next_dt):
+        if not (take_another_step & ~False):
             break
     t = t + loop_output[1]
     s = jnp.concatenate([loop_output[0][0][0], loop_output[0][1][0], loop_output[0][2][0], loop_output[0][3][0]])
