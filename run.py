@@ -1159,6 +1159,15 @@ g.source_Ti_external, g.source_Te_external = calculate_external_heating_sources(
 g.source_ne_external = calculate_particle_sources()
 g.source_psi_external = calculate_external_current_source()
 
+# Precompute constant source terms
+g.source_i_external = g.source_Ti_external * g.geo_vpr
+g.source_e_external = g.source_Te_external * g.geo_vpr
+g.source_i_adaptive = g.mask_adaptive_T * g.T_i_ped
+g.source_e_adaptive = g.mask_adaptive_T * g.T_e_ped
+g.source_n_e_constant = g.source_ne_external * g.geo_vpr + g.mask_adaptive_n * g.n_e_ped
+g.source_mat_adaptive_T = -g.mask_adaptive_T
+g.source_mat_adaptive_n = -g.mask_adaptive_n
+
 T_i_initial = np.interp(g.cell_centers, g.T_i_profile_x, g.T_i_profile_y)
 T_e_initial = np.interp(g.cell_centers, g.T_e_profile_x, g.T_e_profile_y)
 nGW = g.Ip / 1e6 / (np.pi * g.geo_a_minor**2) * g.scaling_n_e
@@ -1241,15 +1250,15 @@ while True:
         source_Te = g.source_Te_external + source_Te_fusion
         source_psi = -(j_bootstrap + g.source_psi_external) * g.source_psi_coeff
 
-        source_i = source_Ti * g.geo_vpr + g.mask_adaptive_T * g.T_i_ped
-        source_e = source_Te * g.geo_vpr + g.mask_adaptive_T * g.T_e_ped
-        source_n_e = g.source_ne_external * g.geo_vpr + g.mask_adaptive_n * g.n_e_ped
+        source_i = g.source_i_external + source_Ti_fusion * g.geo_vpr + g.source_i_adaptive
+        source_e = g.source_e_external + source_Te_fusion * g.geo_vpr + g.source_e_adaptive
+        source_n_e = g.source_n_e_constant
 
-        source_mat_TiTi = qei_mat_TiTi - g.mask_adaptive_T
-        source_mat_TeTe = qei_mat_TeTe - g.mask_adaptive_T
+        source_mat_TiTi = qei_mat_TiTi + g.source_mat_adaptive_T
+        source_mat_TeTe = qei_mat_TeTe + g.source_mat_adaptive_T
         source_mat_TiTe = qei_mat_TiTe
         source_mat_TeTi = qei_mat_TeTi
-        source_mat_nene = -g.mask_adaptive_n
+        source_mat_nene = g.source_mat_adaptive_n
 
         tic_Ti = ions.n_i * g.vpr_5_3
         tic_Te = n_e * g.vpr_5_3
