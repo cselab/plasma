@@ -992,7 +992,7 @@ C = (g.nbar * nGW - 0.5 * n_face[-1] * dr / a_out) / (nbar_inner + 0.5 * n_face[
 n_initial = C * n_val
 p_initial = g.geo_psi_from_Ip_base * g.Ip / g.geo_Ip_profile_face_base[-1]
 state = jnp.array(np.concatenate([i_initial, e_initial, p_initial, n_initial]))
-t, history = 0.0, [(0.0, state)]
+t, history = 0.0, [(0.0, np.array(state))]
 while True:
     dt = min(g.dt, g.t_end - t)
     pred, tc_in_old = state, None
@@ -1053,7 +1053,8 @@ while True:
         rhs = jnp.dot(jnp.diag(jnp.squeeze(tc_old / tc_in)), state) + g.theta_imp * dt * tc * spatial_vec
         pred = jnp.linalg.solve(lhs, rhs)
     t += dt
-    state, history = pred, history + [(t, pred)]
+    state = pred
+    history.append((t, np.array(pred)))
     if t >= g.t_end - g.tol: break
 t_history, state_history = zip(*history)
 var_names = ("T_i", "T_e", "psi", "n_e")
