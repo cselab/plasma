@@ -1169,6 +1169,10 @@ g.source_mat_adaptive_T = -g.mask_adaptive_T
 g.source_mat_adaptive_n = -g.mask_adaptive_n
 g.toc_psipsi_coeff = g.cell_centers * g.mu0_pi16sq_Phib_sq_over_F_sq / g.resistivity_multiplier
 
+# Precompute constant PSI transport (v=0, constant diffusion, constant BC)
+g.transport_psipsi, g.b_psi = make_transport_terms(
+    g.v_face_psi_zero, g.geo_g2g3_over_rhon_face, g.bcs[2])
+
 T_i_initial = np.interp(g.cell_centers, g.T_i_profile_x, g.T_i_profile_y)
 T_e_initial = np.interp(g.cell_centers, g.T_e_profile_x, g.T_e_profile_y)
 nGW = g.Ip / 1e6 / (np.pi * g.geo_a_minor**2) * g.scaling_n_e
@@ -1295,8 +1299,6 @@ while True:
                                                     g.bcs[0])
         transport_TeTe, b_Te = make_transport_terms(v_face_Te, d_face_Te,
                                                     g.bcs[1])
-        transport_psipsi, b_psi = make_transport_terms(
-            g.v_face_psi_zero, g.geo_g2g3_over_rhon_face, g.bcs[2])
         transport_nene, b_ne = make_transport_terms(v_face_ne, d_face_ne,
                                                     g.bcs[3])
 
@@ -1304,7 +1306,7 @@ while True:
         C_TiTe = jnp.diag(source_mat_TiTe)
         C_TeTi = jnp.diag(source_mat_TeTi)
         C_TeTe = transport_TeTe + jnp.diag(source_mat_TeTe)
-        C_psipsi = transport_psipsi
+        C_psipsi = g.transport_psipsi
         C_nene = transport_nene + jnp.diag(source_mat_nene)
 
         spatial_mat = jnp.block(
@@ -1313,7 +1315,7 @@ while True:
              [g.zero_block, g.zero_block, C_psipsi, g.zero_block],
              [g.zero_block, g.zero_block, g.zero_block, C_nene]])
         spatial_vec = jnp.concatenate([
-            b_Ti + source_i, b_Te + source_e, b_psi + source_psi,
+            b_Ti + source_i, b_Te + source_e, g.b_psi + source_psi,
             b_ne + source_n_e
         ])
         transient_coeff = 1 / (tc_out_new * tc_in_new)
