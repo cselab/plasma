@@ -45,21 +45,20 @@ g.A = dict(zip(g.sym, [2.0141, 3.0160, 20.180]))
 def build_grad_operator_uniform(bc):
     D = np.zeros((g.n + 1, g.n))
     b = np.zeros(g.n + 1)
-    inv_dx = 1.0 / g.dx
 
     for i in range(1, g.n):
-        D[i, i - 1] = -inv_dx
-        D[i, i] = inv_dx
+        D[i, i - 1] = -g.inv_dx
+        D[i, i] = g.inv_dx
 
     b[0] = bc[2] if bc[2] is not None else 0.0
 
     if bc[1] is not None:
-        D[g.n, g.n - 1] = -2.0 * inv_dx
-        b[g.n] = 2.0 * inv_dx * bc[1]
+        D[g.n, g.n - 1] = -2.0 * g.inv_dx
+        b[g.n] = 2.0 * g.inv_dx * bc[1]
     else:
         b[g.n] = bc[3] if bc[3] is not None else 0.0
 
-    return jnp.array(D), jnp.array(b)
+    return D, b
 
 
 def build_grad_operator_nonuniform(inv_dx_array, bc):
@@ -75,7 +74,7 @@ def build_grad_operator_nonuniform(inv_dx_array, bc):
         D[g.n, g.n - 1] = -2.0 * inv_dx_array[-1]
         b[g.n] = 2.0 * inv_dx_array[-1] * bc[1]
 
-    return jnp.array(D), jnp.array(b)
+    return D, b
 
 
 def build_face_operator(bc_right_face, bc_right_grad):
@@ -92,7 +91,7 @@ def build_face_operator(bc_right_face, bc_right_grad):
         I[g.n, g.n - 1] = 1.0
         b[g.n] = 0.5 * g.dx * (bc_right_grad
                                          if bc_right_grad is not None else 0.0)
-    return jnp.array(I), jnp.array(b)
+    return I, b
 
 
 def make_convection_terms(v_face, d_face, bc):
@@ -127,24 +126,24 @@ def make_convection_terms(v_face, d_face, bc):
     right_alpha = peclet_to_alpha(right_peclet)
     left_v = v_face[:-1]
     right_v = v_face[1:]
-    diag = (left_alpha * left_v - right_alpha * right_v) / g.dx
-    above = -(1.0 - right_alpha) * right_v / g.dx
+    diag = (left_alpha * left_v - right_alpha * right_v) * g.inv_dx
+    above = -(1.0 - right_alpha) * right_v * g.inv_dx
     above = above[:-1]
-    below = (1.0 - left_alpha) * left_v / g.dx
+    below = (1.0 - left_alpha) * left_v * g.inv_dx
     below = below[1:]
     mat = jnp.diag(diag) + jnp.diag(above, 1) + jnp.diag(below, -1)
     vec = jnp.zeros_like(diag)
-    mat_value = (v_face[0] - right_alpha[0] * v_face[1]) / g.dx
+    mat_value = (v_face[0] - right_alpha[0] * v_face[1]) * g.inv_dx
     vec_value = -v_face[0] * (1.0 - left_alpha[0]) * bc[2]
     mat = mat.at[0, 0].set(mat_value)
     vec = vec.at[0].set(vec_value)
     if bc[1] is not None:
         mat_value = (v_face[-2] * left_alpha[-1] + v_face[-1] *
-                     (1.0 - 2.0 * right_alpha[-1])) / g.dx
+                     (1.0 - 2.0 * right_alpha[-1])) * g.inv_dx
         vec_value = (-2.0 * v_face[-1] *
-                     (1.0 - right_alpha[-1]) * bc[1]) / g.dx
+                     (1.0 - right_alpha[-1]) * bc[1]) * g.inv_dx
     else:
-        mat_value = -(v_face[-1] - v_face[-2] * left_alpha[-1]) / g.dx
+        mat_value = -(v_face[-1] - v_face[-2] * left_alpha[-1]) * g.inv_dx
         vec_value = (-v_face[-1] * (1.0 - right_alpha[-1]) * bc[3])
     mat = mat.at[-1, -1].set(mat_value)
     vec = vec.at[-1].set(vec_value)
@@ -152,19 +151,18 @@ def make_convection_terms(v_face, d_face, bc):
 
 
 def make_diffusion_terms(d_face, bc):
-    denom = g.dx**2
     diag = jnp.asarray(-d_face[1:] - d_face[:-1])
     off = d_face[1:-1]
     vec = jnp.zeros_like(diag)
     diag = diag.at[0].set(-d_face[1])
-    vec = vec.at[0].set(-d_face[0] * bc[2] / g.dx)
+    vec = vec.at[0].set(-d_face[0] * bc[2] * g.inv_dx)
     if bc[1] is not None:
         diag = diag.at[-1].set(-2 * d_face[-1] - d_face[-2])
-        vec = vec.at[-1].set(2 * d_face[-1] * bc[1] / denom)
+        vec = vec.at[-1].set(2 * d_face[-1] * bc[1] * g.inv_dx_sq)
     else:
         diag = diag.at[-1].set(-d_face[-2])
-        vec = vec.at[-1].set(d_face[-1] * bc[3] / g.dx)
-    mat = (jnp.diag(diag) + jnp.diag(off, 1) + jnp.diag(off, -1)) / denom
+        vec = vec.at[-1].set(d_face[-1] * bc[3] * g.inv_dx)
+    mat = (jnp.diag(diag) + jnp.diag(off, 1) + jnp.diag(off, -1)) * g.inv_dx_sq
     return mat, vec
 
 
@@ -479,7 +477,7 @@ def calculate_turbulent_transport(T_i_face, T_i_face_grad_rmid, T_e_face,
     lref_over_lni1 = safe_lref(n_impurity_face, n_impurity_face_grad_rmid)
     q = q_face
     iota_scaled = jnp.abs((psi_face_grad[1:] / g.face_centers[1:]))
-    iota_scaled0 = jnp.expand_dims(jnp.abs(psi_face_grad[1] / g.dx),
+    iota_scaled0 = jnp.expand_dims(jnp.abs(psi_face_grad[1] * g.inv_dx),
                                    axis=0)
     iota_scaled = jnp.concatenate([iota_scaled0, iota_scaled])
     rmid_face = g.geo_rmid_face
@@ -813,8 +811,10 @@ g.main_ion_fractions = np.array([0.5, 0.5])
 g.main_ion_A_avg = 0.5 * g.A["D"] + 0.5 * g.A["T"]
 g.n = 25
 g.dx = 1 / g.n
-g.face_centers = np.linspace(0, g.n * g.dx, g.n + 1)
-g.cell_centers = np.linspace(g.dx * 0.5, (g.n - 0.5) * g.dx, g.n)
+g.inv_dx = 1.0 / g.dx
+g.inv_dx_sq = g.inv_dx ** 2
+g.face_centers = np.arange(g.n + 1) * g.dx
+g.cell_centers = (np.arange(g.n) + 0.5) * g.dx
 g.Ip = 10.5e6
 g.T_i_right_bc = 0.2
 g.T_e_right_bc = 0.2
@@ -1125,17 +1125,16 @@ g.I_psi, g.b_face_psi = build_face_operator(g.psi_bc[1], g.psi_bc[3])
 
 dummy_bc = (None, 1.0, 0.0, 0.0)
 g.D_ni_rho, _ = build_grad_operator_uniform(dummy_bc)
-g.D_ni_rmid, _ = build_grad_operator_nonuniform(1.0 / np.diff(g.geo_rmid), dummy_bc)
+g.D_ni_rmid, _ = build_grad_operator_nonuniform(inv_drmid, dummy_bc)
 g.I_ni, _ = build_face_operator(1.0, 0.0)
-g.D_nimp_rmid, _ = build_grad_operator_nonuniform(1.0 / np.diff(g.geo_rmid), dummy_bc)
+g.D_nimp_rmid, _ = build_grad_operator_nonuniform(inv_drmid, dummy_bc)
 g.I_nimp, _ = build_face_operator(1.0, 0.0)
 
 g.b_template_right = np.zeros(g.n + 1)
 g.b_template_right[-1] = 1.0
 g.b_template_right = jnp.array(g.b_template_right)
-g.b_template_right_grad_rho = g.b_template_right * (2.0 / g.dx)
-g.b_template_right_grad_rmid = g.b_template_right * (
-    2.0 * (1.0 / np.diff(g.geo_rmid))[-1])
+g.b_template_right_grad_rho = g.b_template_right * (2.0 * g.inv_dx)
+g.b_template_right_grad_rmid = g.b_template_right * (2.0 * inv_drmid[-1])
 
 g.num_cells = g.n
 g.num_channels = 4
@@ -1205,7 +1204,7 @@ while True:
         psi_face_grad = g.D_psi_rho @ psi + g.b_psi_rho
         q_face = jnp.concatenate([
             jnp.expand_dims(
-                jnp.abs(g.q_factor_axis * g.dx / psi_face_grad[1]), 0),
+                jnp.abs(g.q_factor_axis / (psi_face_grad[1] * g.inv_dx)), 0),
             jnp.abs(g.q_factor_bulk * g.face_centers[1:] / psi_face_grad[1:]),
         ])
 
