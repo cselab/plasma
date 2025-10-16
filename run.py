@@ -1027,22 +1027,16 @@ g.geo_Phi_b = Phi_b
 g.q_factor_axis = 2 * g.geo_Phi_b * g.geo_q_correction_factor
 g.q_factor_bulk = g.q_factor_axis
 g.geo_rho_b = np.sqrt(Phi_b / np.pi / g.B_0)
-g.geo_rho_face = g.face_centers * np.expand_dims(g.geo_rho_b, axis=-1)
-g.geo_rho = g.cell_centers * np.expand_dims(g.geo_rho_b, axis=-1)
+g.geo_rho_face = g.face_centers * g.geo_rho_b
+g.geo_rho = g.cell_centers * g.geo_rho_b
 g.geo_epsilon_face = (g.geo_R_out_face - g.geo_R_in_face) / (g.geo_R_out_face +
                                                              g.geo_R_in_face)
-bulk = g.geo_g0_face[..., 1:] / g.geo_vpr_face[..., 1:]
-first_element = np.ones_like(g.geo_rho_b) / g.geo_rho_b
-g.geo_g0_over_vpr_face = np.concatenate(
-    [np.expand_dims(first_element, axis=-1), bulk], axis=-1)
-bulk = g.geo_g1_face[..., 1:] / g.geo_vpr_face[..., 1:]
-first_element = np.zeros_like(g.geo_rho_b)
-g.geo_g1_over_vpr_face = np.concatenate(
-    [np.expand_dims(first_element, axis=-1), bulk], axis=-1)
-bulk = g.geo_g1_face[..., 1:] / g.geo_vpr_face[..., 1:]**2
-first_element = np.ones_like(g.geo_rho_b) / g.geo_rho_b**2
-g.geo_g1_over_vpr2_face = np.concatenate(
-    [np.expand_dims(first_element, axis=-1), bulk], axis=-1)
+bulk = g.geo_g0_face[1:] / g.geo_vpr_face[1:]
+g.geo_g0_over_vpr_face = np.concatenate([np.ones(1) / g.geo_rho_b, bulk])
+bulk = g.geo_g1_face[1:] / g.geo_vpr_face[1:]
+g.geo_g1_over_vpr_face = np.concatenate([np.zeros(1), bulk])
+bulk = g.geo_g1_face[1:] / g.geo_vpr_face[1:]**2
+g.geo_g1_over_vpr2_face = np.concatenate([np.ones(1) / g.geo_rho_b**2, bulk])
 g.pi_16_squared = 16 * np.pi**2
 g.pi_16_cubed = 16 * np.pi**3
 g.toc_temperature_factor = 1.5 * g.geo_vpr**(-2.0 / 3.0) * g.keV_to_J
@@ -1065,7 +1059,7 @@ g.smooth_w = 0.1
 g.transport_rho_min = 0.0
 g.transport_rho_max = 1.0
 rho_norm_ped_top_idx = np.abs(g.cell_centers - g.rho_norm_ped_top).argmin()
-g.mask = np.zeros_like(g.geo_rho, dtype=bool)
+g.mask = np.zeros(g.n, dtype=bool)
 g.mask[rho_norm_ped_top_idx] = True
 g.pedestal_mask_face = g.face_centers > g.rho_norm_ped_top
 g.mask_adaptive_T = g.mask * g.adapt_T_prefac
@@ -1110,8 +1104,8 @@ g.state_size = 4 * nc
 g.zero_block = jnp.zeros((g.num_cells, g.num_cells))
 g.zero_vec = jnp.zeros(g.num_cells)
 g.ones_vec = jnp.ones(g.num_cells)
-g.v_p_zero = jnp.zeros_like(g.geo_g2g3_over_rhon_face)
-g.ones_like_vpr = jnp.ones_like(g.geo_vpr)
+g.v_p_zero = jnp.zeros(g.n + 1)
+g.ones_vpr = jnp.ones(g.n)
 g.identity_matrix = jnp.eye(g.state_size)
 g.zero_row_of_blocks = [g.zero_block] * g.num_channels
 g.zero_block_vec = [g.zero_vec] * g.num_channels
@@ -1211,7 +1205,7 @@ while True:
         c_i = g.toc_temperature_factor
         c_e = g.toc_temperature_factor
         c_p = g.c_p_coeff * sigma
-        c_n = g.ones_like_vpr
+        c_n = g.ones_vpr
         chi_i, chi_e, D_n, v_n = turbulent_transport(
             i_face, i_grad_r, e_face, e_grad_r, n_face, n_grad, n_grad_r,
             ni_face, ni_grad_r, nz_face, nz_grad_r, p_grad, q_face, ions)
