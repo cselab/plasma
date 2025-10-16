@@ -1,7 +1,5 @@
 from fusion_surrogates.qlknn import qlknn_model
 from jax import numpy as jnp
-from typing import Any
-import dataclasses
 import jax
 import numpy as np
 import os
@@ -331,8 +329,8 @@ def safe_lref(v, grad):
 
 
 def turbulent_transport(i_f, i_r, e_f, e_r, n_f, n_g, n_r, ni_f, ni_r, nz_f,
-                        nz_r, p_g, q, ions):
-    chiGB = ((ions.A_i * g.m_amu)**0.5 / (g.geo_B_0 * g.q_e)**2 *
+                        nz_r, p_g, q, ions_Z_eff_face):
+    chiGB = ((g.main_ion_A_avg * g.m_amu)**0.5 / (g.geo_B_0 * g.q_e)**2 *
              (i_f * g.keV_to_J)**1.5 / g.geo_a_minor)
     lti = safe_lref(i_f, i_r)
     lte = safe_lref(e_f, e_r)
@@ -347,7 +345,7 @@ def turbulent_transport(i_f, i_r, e_f, e_r, n_f, n_g, n_r, ni_f, ni_r, nz_f,
     x = jnp.where(jnp.abs(rm / rm[-1]) < g.eps, g.eps, rm / rm[-1])
     TiTe = i_f / e_f
     log_tau = _calculate_log_tau_e_Z1(e_f, n_f, log_lambda_ei(n_f, e_f))
-    nu = 1 / jnp.exp(log_tau) * ions.Z_eff_face * g.coll_mult
+    nu = 1 / jnp.exp(log_tau) * ions_Z_eff_face * g.coll_mult
     eps = jnp.clip(g.geo_rho_face / g.R_major, g.eps)
     tb = (q * g.R_major /
           (eps**1.5 * jnp.sqrt(e_f * g.keV_to_J / g.m_e))).at[0].set(
@@ -361,19 +359,9 @@ def turbulent_transport(i_f, i_r, e_f, e_r, n_f, n_g, n_r, ni_f, ni_r, nz_f,
     smag = jnp.where(q < 1, 0.1, smag)
     q = jnp.where(q < 1, 1, q)
     smag = jnp.where(smag - alph < -0.2, alph - 0.2, smag)
-    feature_scan = jnp.array([
-        lti,
-        lte,
-        lne,
-        lni0,
-        q,
-        smag,
-        x * eps_lcfs / g.EPSILON_NN,
-        TiTe,
-        nu_star,
-        ni_f / n_f,
-    ], dtype=jnp.float64).T
-    model_predictions = g.model.predict(feature_scan)
+    features = jnp.c_[lti, lte, lne, lni0, q, smag, x * eps_lcfs / g.EPSILON_NN,
+                      TiTe, nu_star, ni_f / n_f]
+    model_predictions = g.model.predict(features)
     qi_itg_squeezed = model_predictions["efiITG"].squeeze()
     qi = qi_itg_squeezed + model_predictions["efiTEM"].squeeze()
     qe = (model_predictions["efeITG"].squeeze() * g.ITG_flux_ratio_correction +
@@ -476,7 +464,7 @@ def neoclassical_transport(i_f, e_f, n_f, ni_f, i_g, e_g, n_g):
     return v_i, v_e, chi_i_neo, chi_e_neo, d_neo_n, v_neo_n
 
 
-def _smooth_savgol(data, idx_limit, polyorder):
+def smooth_savgol(data, idx_limit, polyorder):
     window_length = g.savgol_w
     smoothed_data = scipy.signal.savgol_filter(data,
                                                window_length,
@@ -485,102 +473,44 @@ def _smooth_savgol(data, idx_limit, polyorder):
     return np.r_[np.array([data[0]]), smoothed_data[1:idx_limit], data[idx_limit:]]
 
 
-@jax.tree_util.register_dataclass
-@dataclasses.dataclass(frozen=True)
-class Ions:
-    n_i: Any
-    n_impurity: Any
-    impurity_fractions: Any
-    Z_i: Any
-    Z_i_face: Any
-    Z_impurity: Any
-    Z_impurity_face: Any
-    A_i: Any
-    A_impurity: Any
-    A_impurity_face: Any
-    Z_eff: Any
-    Z_eff_face: Any
-    n_i_bc: Any
-    n_impurity_bc: Any
 
 
 def ions_update(n_e, T_e, T_e_face):
-    Z_i_avg, Z_i_Z2_avg, _ = z_avg(
-        ion_symbols=g.main_ion_names,
-        T_e=T_e,
-        fractions=g.main_ion_fractions,
-    )
+    Z_i_avg, Z_i_Z2_avg, _ = z_avg(g.main_ion_names, T_e, g.main_ion_fractions)
     Z_i = Z_i_Z2_avg / Z_i_avg
-    Z_i_face_avg, Z_i_face_Z2_avg, _ = z_avg(
-        ion_symbols=g.main_ion_names,
-        T_e=T_e_face,
-        fractions=g.main_ion_fractions,
-    )
+    Z_i_face_avg, Z_i_face_Z2_avg, _ = z_avg(g.main_ion_names, T_e_face, g.main_ion_fractions)
     Z_i_face = Z_i_face_Z2_avg / Z_i_face_avg
-    Z_impurity_avg, Z_impurity_Z2_avg, _ = z_avg(
-        ion_symbols=g.impurity_names,
-        T_e=T_e,
-        fractions=g.impurity_fractions,
-    )
+    Z_impurity_avg, Z_impurity_Z2_avg, _ = z_avg(g.impurity_names, T_e, g.impurity_fractions)
     Z_impurity = Z_impurity_Z2_avg / Z_impurity_avg
-    Z_impurity_face_avg, Z_impurity_face_Z2_avg, _ = z_avg(
-        ion_symbols=g.impurity_names,
-        T_e=T_e_face,
-        fractions=g.impurity_fractions_face,
-    )
+    Z_impurity_face_avg, Z_impurity_face_Z2_avg, _ = z_avg(g.impurity_names, T_e_face, g.impurity_fractions_face)
     Z_impurity_face = Z_impurity_face_Z2_avg / Z_impurity_face_avg
-    Z_eff = g.Z_eff
-    Z_eff_edge = g.Z_eff
     dilution_factor = jnp.where(
-        Z_eff == 1.0,
+        g.Z_eff == 1.0,
         1.0,
-        (Z_impurity - Z_eff) / (Z_i * (Z_impurity - Z_i)),
+        (Z_impurity - g.Z_eff) / (Z_i * (Z_impurity - Z_i)),
     )
     dilution_factor_edge = jnp.where(
-        Z_eff_edge == 1.0,
+        g.Z_eff == 1.0,
         1.0,
-        (Z_impurity_face[-1] - Z_eff_edge) /
+        (Z_impurity_face[-1] - g.Z_eff) /
         (Z_i_face[-1] * (Z_impurity_face[-1] - Z_i_face[-1])),
     )
     n_i = n_e * dilution_factor
     n_i_bc = (None, g.bc_n[1] * dilution_factor_edge, 0.0, 0.0)
-    n_impurity_value = jnp.where(
+    n_impurity = jnp.where(
         dilution_factor == 1.0,
         0.0,
         (n_e - n_i * Z_i) / Z_impurity,
     )
-    n_impurity_right_face_constraint = jnp.where(
+    n_impurity_bc = (None, jnp.where(
         dilution_factor_edge == 1.0,
         0.0,
         (g.bc_n[1] - n_i_bc[1] * Z_i_face[-1]) / Z_impurity_face[-1],
-    )
-    n_impurity = n_impurity_value
-    n_impurity_bc = (None, n_impurity_right_face_constraint, 0.0, 0.0)
-    n_e_face = g.I_n @ n_e + g.b_n_face
-    n_i_face = g.I_ni @ n_i + g.b_r * n_i_bc[1]
-    n_impurity_face = g.I_nimp @ n_impurity + g.b_r * n_impurity_bc[1]
-    Z_eff_face = (Z_i_face**2 * n_i_face +
-                  Z_impurity_face**2 * n_impurity_face) / n_e_face
-    impurity_fractions_dict = {}
-    for i, symbol in enumerate(g.impurity_names):
-        fraction = g.impurity_fractions[i]
-        impurity_fractions_dict[symbol] = fraction
-    return Ions(
-        n_i=n_i,
-        n_i_bc=n_i_bc,
-        n_impurity=n_impurity,
-        n_impurity_bc=n_impurity_bc,
-        impurity_fractions=impurity_fractions_dict,
-        Z_i=Z_i,
-        Z_i_face=Z_i_face,
-        Z_impurity=Z_impurity,
-        Z_impurity_face=Z_impurity_face,
-        A_i=g.main_ion_A_avg,
-        A_impurity=g.impurity_A_avg,
-        A_impurity_face=g.impurity_A_avg_face,
-        Z_eff=Z_eff,
-        Z_eff_face=Z_eff_face,
-    )
+    ), 0.0, 0.0)
+    Z_eff_face = (Z_i_face**2 * (g.I_ni @ n_i + g.b_r * n_i_bc[1]) +
+                  Z_impurity_face**2 * (g.I_nimp @ n_impurity + g.b_r * n_impurity_bc[1])) / (g.I_n @ n_e + g.b_n_face)
+    return (n_i, n_impurity, Z_i, Z_i_face, Z_impurity,
+            Z_eff_face, n_i_bc, n_impurity_bc)
 
 
 g.MIN_DELTA = 1e-7
@@ -719,10 +649,10 @@ rhon = np.sqrt(Phi / Phi[-1])
 vpr = 4 * np.pi * Phi[-1] * rhon / (F_chease * flux_surf_avg_1_over_R2)
 assert not flux_surf_avg_Bp2[-1] < 1e-10
 idx_limit = np.argmin(np.abs(rhon - g.rho_smooth_lim))
-flux_surf_avg_Bp2[:] = _smooth_savgol(flux_surf_avg_Bp2, idx_limit, 2)
-flux_surf_avg_R2Bp2[:] = _smooth_savgol(flux_surf_avg_R2Bp2, idx_limit, 2)
-flux_surf_avg_RBp[:] = _smooth_savgol(flux_surf_avg_RBp, idx_limit, 1)
-vpr[:] = _smooth_savgol(vpr, idx_limit, 1)
+flux_surf_avg_Bp2[:] = smooth_savgol(flux_surf_avg_Bp2, idx_limit, 2)
+flux_surf_avg_R2Bp2[:] = smooth_savgol(flux_surf_avg_R2Bp2, idx_limit, 2)
+flux_surf_avg_RBp[:] = smooth_savgol(flux_surf_avg_RBp, idx_limit, 1)
+vpr[:] = smooth_savgol(vpr, idx_limit, 1)
 rho_intermediate = np.sqrt(Phi / (np.pi * g.B_0))
 rho_norm_intermediate = rho_intermediate / rho_intermediate[-1]
 C1 = int_dl_over_Bp
@@ -980,37 +910,37 @@ while True:
         e_face, e_grad, e_grad_r = g.I_e @ e + g.b_e_face, g.D_e @ e + g.b_e_grad, g.D_e_r @ e + g.b_e_grad_r
         n_face, n_grad, n_grad_r = g.I_n @ n + g.b_n_face, g.D_n @ n + g.b_n_grad, g.D_n_r @ n + g.b_n_grad_r
         p_grad = g.D_p @ p + g.b_p_grad
-        ions = ions_update(n, e, e_face)
+        (ions_n_i, ions_n_impurity, ions_Z_i, ions_Z_i_face, ions_Z_impurity,
+         ions_Z_eff_face, ions_n_i_bc, ions_n_impurity_bc) = ions_update(n, e, e_face)
         q_face = jnp.r_[jnp.abs(g.q_factor_axis / (p_grad[1] * g.inv_dx))[None],
             jnp.abs(g.q_factor_bulk * g.face_centers[1:] / p_grad[1:])]
-        ni_face, ni_grad, ni_grad_r = (g.I_ni @ ions.n_i +
-                                       g.b_r * ions.n_i_bc[1],
-                                       g.D_ni_rho @ ions.n_i +
-                                       g.b_r_grad * ions.n_i_bc[1],
-                                       g.D_ni_rmid @ ions.n_i +
-                                       g.b_r_grad_r * ions.n_i_bc[1])
-        nz_face, nz_grad_r = (g.I_nimp @ ions.n_impurity +
-                              g.b_r * ions.n_impurity_bc[1],
-                              g.D_nimp_rmid @ ions.n_impurity +
-                              g.b_r_grad_r * ions.n_impurity_bc[1])
-        sigma = neoclassical_conductivity(e_face, n_face, q_face,
-                                          ions.Z_eff_face)
+        ni_face, ni_grad, ni_grad_r = (g.I_ni @ ions_n_i +
+                                       g.b_r * ions_n_i_bc[1],
+                                       g.D_ni_rho @ ions_n_i +
+                                       g.b_r_grad * ions_n_i_bc[1],
+                                       g.D_ni_rmid @ ions_n_i +
+                                       g.b_r_grad_r * ions_n_i_bc[1])
+        nz_face, nz_grad_r = (g.I_nimp @ ions_n_impurity +
+                              g.b_r * ions_n_impurity_bc[1],
+                              g.D_nimp_rmid @ ions_n_impurity +
+                              g.b_r_grad_r * ions_n_impurity_bc[1])
+        sigma = neoclassical_conductivity(e_face, n_face, q_face, ions_Z_eff_face)
         si_fus, se_fus = fusion_source(e, i_face, ni_face)
         j_bs = bootstrap_current(i_face, e_face, n_face, ni_face, p_grad,
                                  q_face, i_grad, e_grad, n_grad, ni_grad,
-                                 ions.Z_i_face, ions.Z_eff_face)
+                                 ions_Z_i_face, ions_Z_eff_face)
         Qei_ii, Qei_ee, Qei_ie, Qei_ei = qei_coupling(
-            e, n, ions.n_i, ions.n_impurity, ions.Z_i, ions.Z_impurity,
-            ions.A_i, ions.A_impurity)
+            e, n, ions_n_i, ions_n_impurity, ions_Z_i, ions_Z_impurity,
+            g.main_ion_A_avg, g.impurity_A_avg)
         src_p = -(j_bs + g.source_p_external) * g.source_p_coeff
         src_i = g.source_i_external + si_fus * g.geo_vpr + g.source_i_adaptive
         src_e = g.source_e_external + se_fus * g.geo_vpr + g.source_e_adaptive
-        tc_in = jnp.r_[ions.n_i * g.vpr_5_3, n * g.vpr_5_3, g.ones_vec, g.geo_vpr]
+        tc_in = jnp.r_[ions_n_i * g.vpr_5_3, n * g.vpr_5_3, g.ones_vec, g.geo_vpr]
         tc_out = jnp.r_[g.toc_temperature_factor, g.toc_temperature_factor,
             g.c_p_coeff * sigma, g.ones_vpr]
         chi_i, chi_e, D_n, v_n = turbulent_transport(
             i_face, i_grad_r, e_face, e_grad_r, n_face, n_grad, n_grad_r,
-            ni_face, ni_grad_r, nz_face, nz_grad_r, p_grad, q_face, ions)
+            ni_face, ni_grad_r, nz_face, nz_grad_r, p_grad, q_face, ions_Z_eff_face)
         v_i, v_e, chi_neo_i, chi_neo_e, D_neo_n, v_neo_n = neoclassical_transport(
             i_face, e_face, n_face, ni_face, i_grad, e_grad, n_grad)
         chi_i += chi_neo_i
