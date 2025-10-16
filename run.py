@@ -26,7 +26,7 @@ g.m_amu = 1.6605390666e-27
 g.q_e = 1.602176634e-19
 g.m_e = 9.1093837e-31
 g.epsilon_0 = 8.85418782e-12
-g.mu_0 = 4 * jnp.pi * 1e-7
+g.mu_0 = 4 * np.pi * 1e-7
 g.eps = 1e-7
 g.EPS_CONVECTION = 1e-20
 g.EPS_PECLET = 1e-3
@@ -1090,7 +1090,6 @@ g.D_nimp_rmid, _ = grad_op_nu(inv_drmid, dummy_bc)
 g.I_nimp, _ = face_op(1.0, 0.0)
 g.b_r = np.zeros(g.n + 1)
 g.b_r[-1] = 1.0
-g.b_r = jnp.array(g.b_r)
 g.b_r_grad = g.b_r * (2.0 * g.inv_dx)
 g.b_r_grad_r = g.b_r * (2.0 * inv_drmid[-1])
 g.num_cells = g.n
@@ -1101,15 +1100,23 @@ l.e = np.s_[nc:2 * nc]
 l.p = np.s_[2 * nc:3 * nc]
 l.n = np.s_[3 * nc:4 * nc]
 g.state_size = 4 * nc
-g.zero_block = jnp.zeros((g.num_cells, g.num_cells))
-g.zero_vec = jnp.zeros(g.num_cells)
-g.ones_vec = jnp.ones(g.num_cells)
-g.v_p_zero = jnp.zeros(g.n + 1)
-g.ones_vpr = jnp.ones(g.n)
-g.identity_matrix = jnp.eye(g.state_size)
+g.zero_block = np.zeros((g.num_cells, g.num_cells))
+g.zero_vec = np.zeros(g.num_cells)
+g.ones_vec = np.ones(g.num_cells)
+g.v_p_zero = np.zeros(g.n + 1)
+g.ones_vpr = np.ones(g.n)
+g.identity = np.eye(g.state_size)
 g.zero_row_of_blocks = [g.zero_block] * g.num_channels
 g.zero_block_vec = [g.zero_vec] * g.num_channels
 g.bcs = (g.bc_i, g.bc_e, g.bc_p, g.bc_n)
+
+# Convert static arrays to JAX for use in loop
+g.zero_block = jnp.array(g.zero_block)
+g.zero_vec = jnp.array(g.zero_vec)
+g.ones_vec = jnp.array(g.ones_vec)
+g.v_p_zero = jnp.array(g.v_p_zero)
+g.ones_vpr = jnp.array(g.ones_vpr)
+g.identity = jnp.array(g.identity)
 # Precompute time-independent external sources
 source_i_ext, source_e_ext = heat_source()
 source_n_ext = particle_source()
@@ -1144,7 +1151,8 @@ C = (g.nbar * nGW - 0.5 * n_face_init[-1] * dr_edge / a_minor_out) / (
     nbar_from_n_face_inner + 0.5 * n_face_init[-2] * dr_edge / a_minor_out)
 n_initial = C * n_value
 p_initial = g.geo_psi_from_Ip_base * (g.Ip / g.geo_Ip_profile_face_base[-1])
-state = jnp.concatenate([i_initial, e_initial, p_initial, n_initial])
+state = np.concatenate([i_initial, e_initial, p_initial, n_initial])
+state = jnp.array(state)  # Convert to JAX array for loop
 t = 0.0
 history = [(t, state)]
 while True:
@@ -1237,7 +1245,7 @@ while True:
             [b_i + src_i, b_e + src_e, g.b_p + source_p, b_n + src_n])
         transient_coeff = 1 / (tc_out_new * tc_in_new)
         broadcasted = jnp.expand_dims(transient_coeff, 1)
-        lhs_mat = g.identity_matrix - dt * g.theta_imp * broadcasted * spatial_mat
+        lhs_mat = g.identity - dt * g.theta_imp * broadcasted * spatial_mat
         lhs_vec = -g.theta_imp * dt * transient_coeff * spatial_vec
         right_transient = jnp.diag(jnp.squeeze(tc_in_old / tc_in_new))
         rhs = jnp.dot(right_transient, state) - lhs_vec
