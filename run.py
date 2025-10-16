@@ -1057,12 +1057,10 @@ while True:
     history.append((t, np.array(pred)))
     if t >= g.t_end - g.tol: break
 t_out, states = zip(*history)
-t_out = np.array(t_out)
-rho = np.asarray(g.cell_centers)
 states = np.array(states)
 with open("run.raw", "wb") as f:
     states.tofile(f)
-    t_out.tofile(f)
+    np.asarray(t_out).tofile(f)
 nt = len(t_out)
 for var_name, var_slice in zip(("T_i", "T_e", "psi", "n_e"), (l.i, l.e, l.p, l.n)):
     var = states[:, var_slice]
@@ -1070,6 +1068,6 @@ for var_name, var_slice in zip(("T_i", "T_e", "psi", "n_e"), (l.i, l.e, l.p, l.n
     for idx in [0, nt // 4, nt // 2, 3 * nt // 4, nt - 1]:
         plt.title(f"time: {t_out[idx]:8.3e}")
         plt.axis([None, None, lo, hi])
-        plt.plot(rho, var[idx], "o-")
+        plt.plot(g.cell_centers, var[idx], "o-")
     plt.savefig(f"{var_name}.{idx:04d}.png")
     plt.close()
