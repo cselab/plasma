@@ -1008,6 +1008,7 @@ while True:
                               n_i_bound_right * Z_i_edge) / Z_impurity_edge
     p = s
     tc_in_old = None
+    x_old = s
     for _ in range(g.n_corrector_steps + 1):
         T_i = p[l.Ti]
         T_e = p[l.Te]
@@ -1052,7 +1053,6 @@ while True:
                         jnp.log(weighted_Z_eff) - log_tau_e_Z1)
         qei_coef = jnp.exp(log_Qei_coef)
         qei = (-qei_coef, -qei_coef, qei_coef, qei_coef)
-        f_trap = g.f_trap
         n_i_face_bootstrap = compute_face_value(ions.n_i, ions.n_i_bc[1], ions.n_i_bc[3])
         n_i_face_grad_bootstrap = compute_face_grad(ions.n_i, ions.n_i_bc[0], ions.n_i_bc[1], ions.n_i_bc[2], ions.n_i_bc[3])
         dlnne_drnorm = n_e_face_grad / n_e_face
@@ -1234,7 +1234,6 @@ while True:
         v_face = (v_heat_face_ion, v_heat_face_el, g.v_face_psi_zero, full_v_face_el)
         if tc_in_old is None:
             tc_in_old = jnp.concatenate(transient_in_cell)
-            x_old = s
         tc_out_new = jnp.concatenate(transient_out_cell)
         tc_in_new = jnp.concatenate(transient_in_cell)
         
