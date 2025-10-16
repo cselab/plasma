@@ -1053,30 +1053,27 @@ while True:
         qei_coef = jnp.exp(log_Qei_coef)
         qei = (-qei_coef, -qei_coef, qei_coef, qei_coef)
         f_trap = g.f_trap
-        n_e_face_bootstrap = compute_face_value(n_e, g.n_e_bc[1], g.n_e_bc[3])
-        n_e_face_grad_bootstrap = compute_face_grad(n_e, g.n_e_bc[0], g.n_e_bc[1], g.n_e_bc[2], g.n_e_bc[3])
-        T_e_face_bootstrap = compute_face_value(T_e, g.T_e_bc[1], g.T_e_bc[3])
-        T_e_face_grad_bootstrap = compute_face_grad(T_e, g.T_e_bc[0], g.T_e_bc[1], g.T_e_bc[2], g.T_e_bc[3])
-        T_i_face_bootstrap = compute_face_value(T_i, g.T_i_bc[1], g.T_i_bc[3])
-        T_i_face_grad_bootstrap = compute_face_grad(T_i, g.T_i_bc[0], g.T_i_bc[1], g.T_i_bc[2], g.T_i_bc[3])
-        psi_face_grad_bootstrap = compute_face_grad(psi, g.psi_bc[0], g.psi_bc[1], g.psi_bc[2], g.psi_bc[3])
         n_i_face_bootstrap = compute_face_value(ions.n_i, ions.n_i_bc[1], ions.n_i_bc[3])
         n_i_face_grad_bootstrap = compute_face_grad(ions.n_i, ions.n_i_bc[0], ions.n_i_bc[1], ions.n_i_bc[2], ions.n_i_bc[3])
-        log_lambda_ei_bootstrap = calculate_log_lambda_ei(n_e_face_bootstrap, T_e_face_bootstrap)
-        T_i_ev = T_i_face_bootstrap * 1e3
+        dlnne_drnorm = n_e_face_grad / n_e_face
+        dlnni_drnorm = n_i_face_grad_bootstrap / n_i_face_bootstrap
+        dlnte_drnorm = T_e_face_grad / T_e_face
+        dlnti_drnorm = T_i_face_grad / T_i_face
+        log_lambda_ei_bootstrap = calculate_log_lambda_ei(n_e_face, T_e_face)
+        T_i_ev = T_i_face * 1e3
         log_lambda_ii = (30.0 - 0.5 * jnp.log(n_i_face_bootstrap) + 1.5 * jnp.log(T_i_ev) -
                          3.0 * jnp.log(ions.Z_i_face))
         nu_e_star = calculate_nu_e_star(
             q=q_face,
-            n_e=n_e_face_bootstrap,
-            T_e=T_e_face_bootstrap,
+            n_e=n_e_face,
+            T_e=T_e_face,
             Z_eff=ions.Z_eff_face,
             log_lambda_ei=log_lambda_ei_bootstrap,
         )
         nu_i_star = calculate_nu_i_star(
             q=q_face,
             n_i=n_i_face_bootstrap,
-            T_i=T_i_face_bootstrap,
+            T_i=T_i_face,
             Z_eff=ions.Z_eff_face,
             log_lambda_ii=log_lambda_ii,
         )
@@ -1107,13 +1104,9 @@ while True:
                  (1 + 0.5 * jnp.sqrt(nu_i_star)) + 0.315 * nu_i_star**2 *
                  f_trap**6) / (1 + 0.15 * nu_i_star**2 * f_trap**6)
         prefactor = -g.geo_F_face * 2 * jnp.pi / g.geo_B_0
-        pe = n_e_face_bootstrap * T_e_face_bootstrap * 1e3 * 1.6e-19
-        pi = n_i_face_bootstrap * T_i_face_bootstrap * 1e3 * 1.6e-19
-        dpsi_drnorm = psi_face_grad_bootstrap
-        dlnne_drnorm = n_e_face_grad_bootstrap / n_e_face_bootstrap
-        dlnni_drnorm = n_i_face_grad_bootstrap / n_i_face_bootstrap
-        dlnte_drnorm = T_e_face_grad_bootstrap / T_e_face_bootstrap
-        dlnti_drnorm = T_i_face_grad_bootstrap / T_i_face_bootstrap
+        pe = n_e_face * T_e_face * 1e3 * 1.6e-19
+        pi = n_i_face_bootstrap * T_i_face * 1e3 * 1.6e-19
+        dpsi_drnorm = psi_face_grad
         global_coeff = prefactor[1:] / dpsi_drnorm[1:]
         global_coeff = jnp.concatenate([jnp.zeros(1), global_coeff])
         necoeff = L31 * pe
