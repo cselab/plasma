@@ -42,51 +42,51 @@ g.A = dict(zip(g.sym, [2.0141, 3.0160, 20.180]))
 
 
 def build_grad_operator(nx, inv_dx, bc):
-    D = jnp.zeros((nx+1, nx))
-    b = jnp.zeros(nx+1)
+    D = np.zeros((nx+1, nx))
+    b = np.zeros(nx+1)
     
-    if jnp.ndim(inv_dx) == 0:
+    if np.ndim(inv_dx) == 0:
         for i in range(1, nx):
-            D = D.at[i, i-1].set(-inv_dx)
-            D = D.at[i, i].set(inv_dx)
+            D[i, i-1] = -inv_dx
+            D[i, i] = inv_dx
         dx0 = inv_dx
         dxN = inv_dx
     else:
         for i in range(1, nx):
-            D = D.at[i, i-1].set(-inv_dx[i-1])
-            D = D.at[i, i].set(inv_dx[i-1])
+            D[i, i-1] = -inv_dx[i-1]
+            D[i, i] = inv_dx[i-1]
         dx0 = inv_dx[0]
         dxN = inv_dx[-1]
     
     if bc[0] is not None:
-        D = D.at[0, 0].set(2.0 * dx0)
-        b = b.at[0].set(-2.0 * dx0 * bc[0])
+        D[0, 0] = 2.0 * dx0
+        b[0] = -2.0 * dx0 * bc[0]
     else:
-        b = b.at[0].set(bc[2] if bc[2] is not None else 0.0)
+        b[0] = bc[2] if bc[2] is not None else 0.0
     
     if bc[1] is not None:
-        D = D.at[nx, nx-1].set(-2.0 * dxN)
-        b = b.at[nx].set(2.0 * dxN * bc[1])
+        D[nx, nx-1] = -2.0 * dxN
+        b[nx] = 2.0 * dxN * bc[1]
     else:
-        b = b.at[nx].set(bc[3] if bc[3] is not None else 0.0)
+        b[nx] = bc[3] if bc[3] is not None else 0.0
     
-    return D, b
+    return jnp.array(D), jnp.array(b)
 
 
 def build_face_operator(nx, bc_right_face, bc_right_grad):
-    I = jnp.zeros((nx+1, nx))
-    I = I.at[0, 0].set(1.0)
+    I = np.zeros((nx+1, nx))
+    I[0, 0] = 1.0
     for i in range(1, nx):
-        I = I.at[i, i-1].set(0.5)
-        I = I.at[i, i].set(0.5)
+        I[i, i-1] = 0.5
+        I[i, i] = 0.5
     
-    b = jnp.zeros(nx+1)
+    b = np.zeros(nx+1)
     if bc_right_face is not None:
-        b = b.at[nx].set(bc_right_face)
+        b[nx] = bc_right_face
     else:
-        I = I.at[nx, nx-1].set(1.0)
-        b = b.at[nx].set(0.5 * g.dx_array * (bc_right_grad if bc_right_grad is not None else 0.0))
-    return I, b
+        I[nx, nx-1] = 1.0
+        b[nx] = 0.5 * g.dx_array * (bc_right_grad if bc_right_grad is not None else 0.0)
+    return jnp.array(I), jnp.array(b)
 
 
 def make_convection_terms(v_face, d_face, bc):
