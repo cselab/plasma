@@ -41,6 +41,57 @@ g.z = dict(zip(g.sym, [1.0, 1.0, 10.0]))
 g.A = dict(zip(g.sym, [2.0141, 3.0160, 20.180]))
 
 
+def build_grad_operator(nx, inv_dx, bc):
+    D = jnp.zeros((nx+1, nx))
+    b = jnp.zeros(nx+1)
+    
+    if jnp.ndim(inv_dx) == 0:
+        for i in range(1, nx):
+            D = D.at[i, i-1].set(-inv_dx)
+            D = D.at[i, i].set(inv_dx)
+        dx0 = inv_dx
+        dxN = inv_dx
+    else:
+        for i in range(1, nx):
+            D = D.at[i, i-1].set(-inv_dx[i-1])
+            D = D.at[i, i].set(inv_dx[i-1])
+        dx0 = inv_dx[0]
+        dxN = inv_dx[-1]
+    
+    if bc[0] is not None:
+        D = D.at[0, 0].set(2.0 * dx0)
+        b = b.at[0].set(-2.0 * dx0 * bc[0])
+    else:
+        b = b.at[0].set(bc[2] if bc[2] is not None else 0.0)
+    
+    if bc[1] is not None:
+        D = D.at[nx, nx-1].set(-2.0 * dxN)
+        b = b.at[nx].set(2.0 * dxN * bc[1])
+    else:
+        b = b.at[nx].set(bc[3] if bc[3] is not None else 0.0)
+    
+    return D, b
+
+
+def build_face_operator(nx, bc_right_face, bc_right_grad):
+    I = jnp.zeros((nx+1, nx))
+    b = jnp.zeros(nx+1)
+    
+    I = I.at[0, 0].set(1.0)
+    
+    for i in range(1, nx):
+        I = I.at[i, i-1].set(0.5)
+        I = I.at[i, i].set(0.5)
+    
+    if bc_right_face is not None:
+        b = b.at[nx].set(bc_right_face)
+    else:
+        I = I.at[nx, nx-1].set(1.0)
+        b = b.at[nx].set(0.5 * g.dx_array * (bc_right_grad if bc_right_grad is not None else 0.0))
+    
+    return I, b
+
+
 def compute_face_grad(value,
                       left_face_constraint,
                       right_face_constraint,
@@ -1093,6 +1144,20 @@ g.dpsi_drhonorm_edge = (g.Ip * g.pi_16_cubed * g.mu_0 * g.geo_Phi_b /
 g.psi_bc = (None, None, 0.0, g.dpsi_drhonorm_edge)
 g.n_e_bc = (None, g.n_e_right_bc, 0.0, 0.0)
 
+g.D_Ti_rho, g.b_Ti_rho = build_grad_operator(g.n_rho, 1.0 / g.dx_array, g.T_i_bc)
+g.D_Te_rho, g.b_Te_rho = build_grad_operator(g.n_rho, 1.0 / g.dx_array, g.T_e_bc)
+g.D_ne_rho, g.b_ne_rho = build_grad_operator(g.n_rho, 1.0 / g.dx_array, g.n_e_bc)
+g.D_psi_rho, g.b_psi_rho = build_grad_operator(g.n_rho, 1.0 / g.dx_array, g.psi_bc)
+
+inv_drmid = 1.0 / jnp.diff(g.geo_rmid)
+g.D_Ti_rmid, g.b_Ti_rmid = build_grad_operator(g.n_rho, inv_drmid, g.T_i_bc)
+g.D_Te_rmid, g.b_Te_rmid = build_grad_operator(g.n_rho, inv_drmid, g.T_e_bc)
+g.D_ne_rmid, g.b_ne_rmid = build_grad_operator(g.n_rho, inv_drmid, g.n_e_bc)
+
+g.I_Ti, g.b_face_Ti = build_face_operator(g.n_rho, g.T_i_bc[1], g.T_i_bc[3])
+g.I_Te, g.b_face_Te = build_face_operator(g.n_rho, g.T_e_bc[1], g.T_e_bc[3])
+g.I_ne, g.b_face_ne = build_face_operator(g.n_rho, g.n_e_bc[1], g.n_e_bc[3])
+g.I_psi, g.b_face_psi = build_face_operator(g.n_rho, g.psi_bc[1], g.psi_bc[3])
 
 g.num_cells = g.n_rho
 g.num_channels = 4
@@ -1145,19 +1210,19 @@ while True:
         n_e = p[l.ne]
         ions = get_updated_ions(n_e, T_e)
         
-        T_i_face = compute_face_value(T_i, g.T_i_bc[1], g.T_i_bc[3])
-        T_i_face_grad = compute_face_grad(T_i, g.T_i_bc[0], g.T_i_bc[1], g.T_i_bc[2], g.T_i_bc[3])
-        T_i_face_grad_rmid = compute_face_grad(T_i, g.T_i_bc[0], g.T_i_bc[1], g.T_i_bc[2], g.T_i_bc[3], x=g.geo_rmid)
+        T_i_face = g.I_Ti @ T_i + g.b_face_Ti
+        T_i_face_grad = g.D_Ti_rho @ T_i + g.b_Ti_rho
+        T_i_face_grad_rmid = g.D_Ti_rmid @ T_i + g.b_Ti_rmid
         
-        T_e_face = compute_face_value(T_e, g.T_e_bc[1], g.T_e_bc[3])
-        T_e_face_grad = compute_face_grad(T_e, g.T_e_bc[0], g.T_e_bc[1], g.T_e_bc[2], g.T_e_bc[3])
-        T_e_face_grad_rmid = compute_face_grad(T_e, g.T_e_bc[0], g.T_e_bc[1], g.T_e_bc[2], g.T_e_bc[3], x=g.geo_rmid)
+        T_e_face = g.I_Te @ T_e + g.b_face_Te
+        T_e_face_grad = g.D_Te_rho @ T_e + g.b_Te_rho
+        T_e_face_grad_rmid = g.D_Te_rmid @ T_e + g.b_Te_rmid
         
-        n_e_face = compute_face_value(n_e, g.n_e_bc[1], g.n_e_bc[3])
-        n_e_face_grad = compute_face_grad(n_e, g.n_e_bc[0], g.n_e_bc[1], g.n_e_bc[2], g.n_e_bc[3])
-        n_e_face_grad_rmid = compute_face_grad(n_e, g.n_e_bc[0], g.n_e_bc[1], g.n_e_bc[2], g.n_e_bc[3], x=g.geo_rmid)
+        n_e_face = g.I_ne @ n_e + g.b_face_ne
+        n_e_face_grad = g.D_ne_rho @ n_e + g.b_ne_rho
+        n_e_face_grad_rmid = g.D_ne_rmid @ n_e + g.b_ne_rmid
         
-        psi_face_grad = compute_face_grad(psi, g.psi_bc[0], g.psi_bc[1], g.psi_bc[2], g.psi_bc[3])
+        psi_face_grad = g.D_psi_rho @ psi + g.b_psi_rho
         q_face = jnp.concatenate([
             jnp.expand_dims(jnp.abs(g.q_factor_axis * g.dx_array / psi_face_grad[1]), 0),
             jnp.abs(g.q_factor_bulk * g.face_centers[1:] / psi_face_grad[1:]),
@@ -1205,7 +1270,7 @@ while True:
         toc_TiTi = g.toc_temperature_factor
         toc_TeTe = g.toc_temperature_factor
         toc_psipsi = (1.0 / g.resistivity_multiplier * g.cell_centers *
-                      sigma * g.mu0_pi16sq_Phib_sq_over_F_sq)
+                   sigma * g.mu0_pi16sq_Phib_sq_over_F_sq)
         toc_nene = g.ones_like_vpr
         
         d_face_Ti, d_face_Te, d_face_ne, v_face_ne = calculate_turbulent_transport(
@@ -1283,11 +1348,12 @@ with open("run.raw", "wb") as f:
             var_data.append(jnp.concatenate([left_value, var_value, right_value], axis=-1))
         var = np.stack(var_data)
         var.tofile(f)
-        lo = np.min(var).item()
-        hi = np.max(var).item()
-        for j, idx in enumerate([0, nt // 4, nt // 2, 3 * nt // 4, nt - 1]):
-            plt.title(f"time: {t_out[idx]:8.3e}")
-            plt.axis([None, None, lo, hi])
-            plt.plot(rho, var[idx], "o-")
-            plt.savefig(f"{var_name}.{j:04d}.png")
-            plt.close()
+        if not (np.isnan(var).any() or np.isinf(var).any()):
+            lo = np.min(var).item()
+            hi = np.max(var).item()
+            for j, idx in enumerate([0, nt // 4, nt // 2, 3 * nt // 4, nt - 1]):
+                plt.title(f"time: {t_out[idx]:8.3e}")
+                plt.axis([None, None, lo, hi])
+                plt.plot(rho, var[idx], "o-")
+                plt.savefig(f"{var_name}.{j:04d}.png")
+                plt.close()
