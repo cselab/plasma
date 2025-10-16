@@ -210,37 +210,6 @@ def gaussian_profile(center, width, total):
     return C * S
 
 
-@jax.tree_util.register_dataclass
-@dataclasses.dataclass(frozen=True)
-class QualikizInputs:
-    chiGB: Any
-    Rmin: Any
-    Rmaj: Any
-    lref_over_lti: Any
-    lref_over_lte: Any
-    lref_over_lne: Any
-    lref_over_lni0: Any
-    lref_over_lni1: Any
-    Z_eff_face: Any
-    q: Any
-    smag: Any
-    x: Any
-    Ti_Te: Any
-    log_nu_star_face: Any
-    normni: Any
-    alpha: Any
-    epsilon_lcfs: Any
-
-
-g.FLUX_NAME_MAP = {
-    "efiITG": "qi_itg",
-    "efeITG": "qe_itg",
-    "pfeITG": "pfe_itg",
-    "efeTEM": "qe_tem",
-    "efiTEM": "qi_tem",
-    "pfeTEM": "pfe_tem",
-    "efeETG": "qe_etg",
-}
 g.EPSILON_NN = 1 / 3
 g.rho_smooth_lim = 0.1
 
@@ -392,68 +361,36 @@ def turbulent_transport(i_f, i_r, e_f, e_r, n_f, n_g, n_r, ni_f, ni_r, nz_f,
     smag = jnp.where(q < 1, 0.1, smag)
     q = jnp.where(q < 1, 1, q)
     smag = jnp.where(smag - alph < -0.2, alph - 0.2, smag)
-    qualikiz_inputs = QualikizInputs(Z_eff_face=ions.Z_eff_face,
-                                     lref_over_lti=lti,
-                                     lref_over_lte=lte,
-                                     lref_over_lne=lne,
-                                     lref_over_lni0=lni0,
-                                     lref_over_lni1=lni1,
-                                     q=q,
-                                     smag=smag,
-                                     x=x,
-                                     Ti_Te=TiTe,
-                                     log_nu_star_face=nu_star,
-                                     normni=ni_f / n_f,
-                                     chiGB=chiGB,
-                                     Rmaj=g.R_major,
-                                     Rmin=g.geo_a_minor,
-                                     alpha=alph,
-                                     epsilon_lcfs=eps_lcfs)
-    qualikiz_inputs = dataclasses.replace(
-        qualikiz_inputs,
-        x=qualikiz_inputs.x * qualikiz_inputs.epsilon_lcfs / g.EPSILON_NN,
-    )
-    input_map = {
-        "Ati": lambda x: x.lref_over_lti,
-        "Ate": lambda x: x.lref_over_lte,
-        "Ane": lambda x: x.lref_over_lne,
-        "Ani": lambda x: x.lref_over_lni0,
-        "LogNuStar": lambda x: x.log_nu_star_face,
-    }
-
-    def _get_input(key):
-        return jnp.array(
-            input_map.get(key, lambda x: getattr(x, key))(qualikiz_inputs),
-            dtype=jnp.float64,
-        )
-
-    feature_scan = jnp.array(
-        [_get_input(key) for key in g.model.inputs_and_ranges.keys()],
-        dtype=jnp.float64,
-    ).T
+    feature_scan = jnp.array([
+        lti,
+        lte,
+        lne,
+        lni0,
+        q,
+        smag,
+        x * eps_lcfs / g.EPSILON_NN,
+        TiTe,
+        nu_star,
+        ni_f / n_f,
+    ], dtype=jnp.float64).T
     model_predictions = g.model.predict(feature_scan)
-    model_output = {
-        g.FLUX_NAME_MAP.get(flux_name, flux_name): flux_value
-        for flux_name, flux_value in model_predictions.items()
-    }
-    qi_itg_squeezed = model_output["qi_itg"].squeeze()
-    qi = qi_itg_squeezed + model_output["qi_tem"].squeeze()
-    qe = (model_output["qe_itg"].squeeze() * g.ITG_flux_ratio_correction +
-          model_output["qe_tem"].squeeze() +
-          model_output["qe_etg"].squeeze() * g.ETG_correction_factor)
-    pfe = model_output["pfe_itg"].squeeze() + model_output["pfe_tem"].squeeze()
+    qi_itg_squeezed = model_predictions["efiITG"].squeeze()
+    qi = qi_itg_squeezed + model_predictions["efiTEM"].squeeze()
+    qe = (model_predictions["efeITG"].squeeze() * g.ITG_flux_ratio_correction +
+          model_predictions["efeTEM"].squeeze() +
+          model_predictions["efeETG"].squeeze() * g.ETG_correction_factor)
+    pfe = model_predictions["pfeITG"].squeeze() + model_predictions["pfeTEM"].squeeze()
     gradient_reference_length = g.R_major
     gyrobohm_flux_reference_length = g.geo_a_minor
-    pfe_SI = pfe * n_f * qualikiz_inputs.chiGB / gyrobohm_flux_reference_length
+    pfe_SI = pfe * n_f * chiGB / gyrobohm_flux_reference_length
     chi_i = ((gradient_reference_length / gyrobohm_flux_reference_length) *
-             qi / qualikiz_inputs.lref_over_lti) * qualikiz_inputs.chiGB
+             qi / lti) * chiGB
     chi_e = ((gradient_reference_length / gyrobohm_flux_reference_length) *
-             qe / qualikiz_inputs.lref_over_lte) * qualikiz_inputs.chiGB
+             qe / lte) * chiGB
     Deff = -pfe_SI / (n_g * g.geo_g1_over_vpr2_face * g.geo_rho_b + g.eps)
     Veff = pfe_SI / (n_f * g.geo_g0_over_vpr_face * g.geo_rho_b)
-    Deff_mask = (((pfe >= 0) & (qualikiz_inputs.lref_over_lne >= 0)) |
-                 ((pfe < 0) & (qualikiz_inputs.lref_over_lne < 0))) & (abs(
-                     qualikiz_inputs.lref_over_lne) >= g.An_min)
+    Deff_mask = (((pfe >= 0) & (lne >= 0)) |
+                 ((pfe < 0) & (lne < 0))) & (abs(lne) >= g.An_min)
     Veff_mask = jnp.invert(Deff_mask)
     d_e = jnp.where(Veff_mask, 0.0, Deff)
     v_e = jnp.where(Deff_mask, 0.0, Veff)
@@ -663,6 +600,7 @@ g.heat_w = 0.07280908366127758
 g.heat_P = 51.0e6
 g.heat_efrac = 0.68
 g.model = qlknn_model.QLKNNModel.load_default_model()
+assert list(g.model.inputs_and_ranges.keys()) == ['Ati', 'Ate', 'Ane', 'Ani', 'q', 'smag', 'x', 'Ti_Te', 'LogNuStar', 'normni'], "Model input order changed!"
 g.R_major = 6.2
 g.a_minor = 2.0
 g.B_0 = 5.3
