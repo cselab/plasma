@@ -770,21 +770,21 @@ g.n_corrector_steps = 1
 g.Z_eff = 1.6
 g.impurity_names = ("Ne", )
 g.main_ion_names = "D", "T"
-g.impurity_fractions = jnp.array([1.0])
-g.impurity_fractions_face = jnp.array([1.0])
+g.impurity_fractions = np.array([1.0])
+g.impurity_fractions_face = np.array([1.0])
 g.impurity_A_avg = g.A["Ne"]
 g.impurity_A_avg_face = g.A["Ne"]
-g.main_ion_fractions = jnp.array([0.5, 0.5])
+g.main_ion_fractions = np.array([0.5, 0.5])
 g.main_ion_A_avg = 0.5 * g.A["D"] + 0.5 * g.A["T"]
 g.n_rho = 25
 g.dx = 1 / g.n_rho
-g.dx_array = jnp.array(g.dx)
+g.dx_array = g.dx
 g.face_centers = np.linspace(0, g.n_rho * g.dx, g.n_rho + 1)
 g.cell_centers = np.linspace(g.dx * 0.5, (g.n_rho - 0.5) * g.dx, g.n_rho)
 g.Ip = 10.5e6
-g.T_i_right_bc = jnp.array(0.2)
-g.T_e_right_bc = jnp.array(0.2)
-g.n_e_right_bc = jnp.array(0.25e20)
+g.T_i_right_bc = 0.2
+g.T_e_right_bc = 0.2
+g.n_e_right_bc = 0.25e20
 g.nbar = 0.8
 g.T_i_profile_dict = {0.0: 15.0, 1.0: 0.2}
 g.T_e_profile_dict = {0.0: 15.0, 1.0: 0.2}
@@ -795,7 +795,7 @@ g.T_e_profile_x = np.array(list(g.T_e_profile_dict.keys()))
 g.T_e_profile_y = np.array(list(g.T_e_profile_dict.values()))
 g.n_e_profile_x = np.array(list(g.n_e_profile_dict.keys()))
 g.n_e_profile_y = np.array(list(g.n_e_profile_dict.values()))
-g.n_e = jnp.interp(g.cell_centers, g.n_e_profile_x, g.n_e_profile_y)
+g.n_e = np.interp(g.cell_centers, g.n_e_profile_x, g.n_e_profile_y)
 g.chi_pereverzev = 30
 g.D_pereverzev = 15
 g.theta_implicit = 1.0
@@ -1026,39 +1026,39 @@ Phi_b = g.geo_Phi_face[..., -1]
 g.geo_Phi_b = Phi_b
 g.q_factor_axis = 2 * g.geo_Phi_b * g.geo_q_correction_factor
 g.q_factor_bulk = g.q_factor_axis
-g.geo_rho_b = jnp.sqrt(Phi_b / np.pi / g.B_0)
-g.geo_rho_face = g.face_centers * jnp.expand_dims(g.geo_rho_b, axis=-1)
-g.geo_rho = g.cell_centers * jnp.expand_dims(g.geo_rho_b, axis=-1)
+g.geo_rho_b = np.sqrt(Phi_b / np.pi / g.B_0)
+g.geo_rho_face = g.face_centers * np.expand_dims(g.geo_rho_b, axis=-1)
+g.geo_rho = g.cell_centers * np.expand_dims(g.geo_rho_b, axis=-1)
 g.geo_epsilon_face = (g.geo_R_out_face - g.geo_R_in_face) / (g.geo_R_out_face +
                                                              g.geo_R_in_face)
 bulk = g.geo_g0_face[..., 1:] / g.geo_vpr_face[..., 1:]
-first_element = jnp.ones_like(g.geo_rho_b) / g.geo_rho_b
-g.geo_g0_over_vpr_face = jnp.concatenate(
-    [jnp.expand_dims(first_element, axis=-1), bulk], axis=-1)
+first_element = np.ones_like(g.geo_rho_b) / g.geo_rho_b
+g.geo_g0_over_vpr_face = np.concatenate(
+    [np.expand_dims(first_element, axis=-1), bulk], axis=-1)
 bulk = g.geo_g1_face[..., 1:] / g.geo_vpr_face[..., 1:]
-first_element = jnp.zeros_like(g.geo_rho_b)
-g.geo_g1_over_vpr_face = jnp.concatenate(
-    [jnp.expand_dims(first_element, axis=-1), bulk], axis=-1)
+first_element = np.zeros_like(g.geo_rho_b)
+g.geo_g1_over_vpr_face = np.concatenate(
+    [np.expand_dims(first_element, axis=-1), bulk], axis=-1)
 bulk = g.geo_g1_face[..., 1:] / g.geo_vpr_face[..., 1:]**2
-first_element = jnp.ones_like(g.geo_rho_b) / g.geo_rho_b**2
-g.geo_g1_over_vpr2_face = jnp.concatenate(
-    [jnp.expand_dims(first_element, axis=-1), bulk], axis=-1)
-g.pi_16_squared = 16 * jnp.pi**2
-g.pi_16_cubed = 16 * jnp.pi**3
+first_element = np.ones_like(g.geo_rho_b) / g.geo_rho_b**2
+g.geo_g1_over_vpr2_face = np.concatenate(
+    [np.expand_dims(first_element, axis=-1), bulk], axis=-1)
+g.pi_16_squared = 16 * np.pi**2
+g.pi_16_cubed = 16 * np.pi**3
 g.toc_temperature_factor = 1.5 * g.geo_vpr**(-2.0 / 3.0) * g.keV_to_J
-g.source_psi_coeff = 8 * g.geo_vpr * jnp.pi**2 * g.geo_B_0 * g.mu_0 * g.geo_Phi_b / g.geo_F**2
+g.source_psi_coeff = 8 * g.geo_vpr * np.pi**2 * g.geo_B_0 * g.mu_0 * g.geo_Phi_b / g.geo_F**2
 g.vpr_5_3 = g.geo_vpr**(5.0 / 3.0)
 g.mu0_pi16sq_Phib_sq_over_F_sq = g.mu_0 * g.pi_16_squared * g.geo_Phi_b**2 / g.geo_F**2
 g.pi16cubed_mu0_Phib = g.pi_16_cubed * g.mu_0 * g.geo_Phi_b
 g.geo_g1_keV = g.geo_g1_over_vpr_face * g.keV_to_J
-g.geo_factor_pereverzev = jnp.concatenate(
-    [jnp.ones(1), g.geo_g1_over_vpr_face[1:] / g.geo_g0_face[1:]])
+g.geo_factor_pereverzev = np.concatenate(
+    [np.ones(1), g.geo_g1_over_vpr_face[1:] / g.geo_g0_face[1:]])
 epsilon_effective = (
-    0.67 * (1.0 - 1.4 * jnp.abs(g.geo_delta_face) * g.geo_delta_face) *
+    0.67 * (1.0 - 1.4 * np.abs(g.geo_delta_face) * g.geo_delta_face) *
     g.geo_epsilon_face)
 aa = (1.0 - g.geo_epsilon_face) / (1.0 + g.geo_epsilon_face)
-g.f_trap = 1.0 - jnp.sqrt(aa) * (1.0 - epsilon_effective) / (
-    1.0 + 2.0 * jnp.sqrt(epsilon_effective))
+g.f_trap = 1.0 - np.sqrt(aa) * (1.0 - epsilon_effective) / (
+    1.0 + 2.0 * np.sqrt(epsilon_effective))
 
 
 g.ETG_correction_factor = 1.0 / 3.0
@@ -1066,9 +1066,9 @@ g.collisionality_multiplier = 1.0
 g.smoothing_width = 0.1
 g.transport_rho_min = 0.0
 g.transport_rho_max = 1.0
-rho_norm_ped_top_idx = jnp.abs(g.cell_centers - g.rho_norm_ped_top).argmin()
-g.mask = jnp.zeros_like(g.geo_rho,
-                        dtype=bool).at[rho_norm_ped_top_idx].set(True)
+rho_norm_ped_top_idx = np.abs(g.cell_centers - g.rho_norm_ped_top).argmin()
+g.mask = np.zeros_like(g.geo_rho, dtype=bool)
+g.mask[rho_norm_ped_top_idx] = True
 g.pedestal_mask_face = g.face_centers > g.rho_norm_ped_top
 g.mask_adaptive_T = g.mask * g.adaptive_T_source_prefactor
 g.mask_adaptive_n = g.mask * g.adaptive_n_source_prefactor
@@ -1084,7 +1084,7 @@ g.D_Te_rho, g.b_Te_rho = build_grad_operator(g.n_rho, 1.0 / g.dx_array, g.T_e_bc
 g.D_ne_rho, g.b_ne_rho = build_grad_operator(g.n_rho, 1.0 / g.dx_array, g.n_e_bc)
 g.D_psi_rho, g.b_psi_rho = build_grad_operator(g.n_rho, 1.0 / g.dx_array, g.psi_bc)
 
-inv_drmid = 1.0 / jnp.diff(g.geo_rmid)
+inv_drmid = 1.0 / np.diff(g.geo_rmid)
 g.D_Ti_rmid, g.b_Ti_rmid = build_grad_operator(g.n_rho, inv_drmid, g.T_i_bc)
 g.D_Te_rmid, g.b_Te_rmid = build_grad_operator(g.n_rho, inv_drmid, g.T_e_bc)
 g.D_ne_rmid, g.b_ne_rmid = build_grad_operator(g.n_rho, inv_drmid, g.n_e_bc)
@@ -1096,14 +1096,16 @@ g.I_psi, g.b_face_psi = build_face_operator(g.n_rho, g.psi_bc[1], g.psi_bc[3])
 
 dummy_bc = (None, 1.0, 0.0, 0.0)
 g.D_ni_rho, _ = build_grad_operator(g.n_rho, 1.0 / g.dx_array, dummy_bc)
-g.D_ni_rmid, _ = build_grad_operator(g.n_rho, 1.0 / jnp.diff(g.geo_rmid), dummy_bc)
+g.D_ni_rmid, _ = build_grad_operator(g.n_rho, 1.0 / np.diff(g.geo_rmid), dummy_bc)
 g.I_ni, _ = build_face_operator(g.n_rho, 1.0, 0.0)
-g.D_nimp_rmid, _ = build_grad_operator(g.n_rho, 1.0 / jnp.diff(g.geo_rmid), dummy_bc)
+g.D_nimp_rmid, _ = build_grad_operator(g.n_rho, 1.0 / np.diff(g.geo_rmid), dummy_bc)
 g.I_nimp, _ = build_face_operator(g.n_rho, 1.0, 0.0)
 
-g.b_template_right = jnp.zeros(g.n_rho + 1).at[-1].set(1.0)
+g.b_template_right = np.zeros(g.n_rho + 1)
+g.b_template_right[-1] = 1.0
+g.b_template_right = jnp.array(g.b_template_right)
 g.b_template_right_grad_rho = g.b_template_right * (2.0 / g.dx_array)
-g.b_template_right_grad_rmid = g.b_template_right * (2.0 * (1.0 / jnp.diff(g.geo_rmid))[-1])
+g.b_template_right_grad_rmid = g.b_template_right * (2.0 * (1.0 / np.diff(g.geo_rmid))[-1])
 
 g.num_cells = g.n_rho
 g.num_channels = 4
@@ -1118,19 +1120,19 @@ g.zero_vec = jnp.zeros(g.num_cells)
 g.ones_vec = jnp.ones(g.num_cells)
 g.v_face_psi_zero = jnp.zeros_like(g.geo_g2g3_over_rhon_face)
 g.ones_like_vpr = jnp.ones_like(g.geo_vpr)
-g.identity_matrix = jnp.identity(g.state_size)
+g.identity_matrix = jnp.eye(g.state_size)
 g.zero_row_of_blocks = [g.zero_block] * g.num_channels
 g.zero_block_vec = [g.zero_vec] * g.num_channels
 g.bcs = (g.T_i_bc, g.T_e_bc, g.psi_bc, g.n_e_bc)
 
-T_i_initial = jnp.interp(g.cell_centers, g.T_i_profile_x, g.T_i_profile_y)
-T_e_initial = jnp.interp(g.cell_centers, g.T_e_profile_x, g.T_e_profile_y)
-nGW = g.Ip / 1e6 / (jnp.pi * g.geo_a_minor**2) * g.scaling_n_e
+T_i_initial = np.interp(g.cell_centers, g.T_i_profile_x, g.T_i_profile_y)
+T_e_initial = np.interp(g.cell_centers, g.T_e_profile_x, g.T_e_profile_y)
+nGW = g.Ip / 1e6 / (np.pi * g.geo_a_minor**2) * g.scaling_n_e
 n_e_value = g.n_e * nGW
-n_e_face = jnp.concatenate([
+n_e_face = np.concatenate([
     n_e_value[0:1],
     (n_e_value[:-1] + n_e_value[1:]) / 2.0,
-    g.n_e_right_bc[None],
+    np.array([g.n_e_right_bc]),
 ])
 a_minor_out = g.geo_R_out_face[-1] - g.geo_R_out_face[0]
 nbar_from_n_e_face_inner = (
