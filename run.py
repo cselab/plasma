@@ -106,43 +106,6 @@ def build_face_operator(nx, bc_right_face, bc_right_grad):
     return I, b
 
 
-def compute_face_grad(value,
-                      left_face_constraint,
-                      right_face_constraint,
-                      left_face_grad_constraint,
-                      right_face_grad_constraint,
-                      x=None):
-    if x is None:
-        forward_difference = jnp.diff(value) / g.dx_array
-    else:
-        forward_difference = jnp.diff(value) / jnp.diff(x)
-    if left_face_constraint is None:
-        left_grad = left_face_grad_constraint
-    else:
-        dx = g.dx_array if x is None else x[1] - x[0]
-        left_grad = (value[0] - left_face_constraint) / (0.5 * dx)
-    if right_face_constraint is None:
-        right_grad = right_face_grad_constraint
-    else:
-        dx = g.dx_array if x is None else x[-1] - x[-2]
-        right_grad = -(value[-1] - right_face_constraint) / (0.5 * dx)
-    left = jnp.expand_dims(left_grad, axis=0)
-    right = jnp.expand_dims(right_grad, axis=0)
-    return jnp.concatenate([left, forward_difference, right])
-
-
-def compute_face_value(value, right_face_constraint, right_face_grad_constraint):
-    left_face = value[..., 0:1]
-    inner = (value[..., :-1] + value[..., 1:]) / 2.0
-    if right_face_constraint is not None:
-        right_face = jnp.expand_dims(right_face_constraint, axis=-1)
-    else:
-        right_face = (value[..., -1:] +
-                      jnp.expand_dims(right_face_grad_constraint, axis=-1) *
-                      jnp.expand_dims(g.dx_array, axis=-1) / 2)
-    return jnp.concatenate([left_face, inner, right_face], axis=-1)
-
-
 def make_convection_terms(v_face, d_face, bc):
     eps = g.EPS_CONVECTION
     is_neg = d_face < 0.0
@@ -357,13 +320,13 @@ def calculate_external_current_source():
     return source_psi_external
 
 
-def calculate_fusion_sources(T_i, T_e, n_i_face):
+def calculate_fusion_sources(T_i, T_e, T_i_face, n_i_face):
     product = 1.0
     for fraction, symbol in zip(g.main_ion_fractions, g.main_ion_names):
         if symbol == "D" or symbol == "T":
             product *= fraction
             DT_fraction_product = product
-            t_face = compute_face_value(T_i, g.T_i_bc[1], g.T_i_bc[3])
+            t_face = T_i_face
             theta = t_face / (1.0 - (t_face * (g.fusion_C2 + t_face *
                                                (g.fusion_C4 + t_face * g.fusion_C6))) /
                               (1.0 + t_face * (g.fusion_C3 + t_face *
@@ -745,7 +708,7 @@ class Ions:
 
 
 def get_updated_ions(n_e, T_e):
-    T_e_face = compute_face_value(T_e, g.T_e_bc[1], g.T_e_bc[3])
+    T_e_face = g.I_Te @ T_e + g.b_face_Te
     Z_i_avg, Z_i_Z2_avg, _ = get_average_charge_state(
         ion_symbols=g.main_ion_names,
         T_e=T_e,
@@ -797,9 +760,11 @@ def get_updated_ions(n_e, T_e):
     )
     n_impurity = n_impurity_value
     n_impurity_bc = (None, n_impurity_right_face_constraint, 0.0, 0.0)
-    n_e_face = compute_face_value(n_e, g.n_e_bc[1], g.n_e_bc[3])
-    n_i_face = compute_face_value(n_i, n_i_bc[1], n_i_bc[3])
-    n_impurity_face = compute_face_value(n_impurity, n_impurity_bc[1], n_impurity_bc[3])
+    n_e_face = g.I_ne @ n_e + g.b_face_ne
+    I_ni_temp, b_ni_temp = build_face_operator(g.n_rho, n_i_bc[1], n_i_bc[3])
+    I_nimp_temp, b_nimp_temp = build_face_operator(g.n_rho, n_impurity_bc[1], n_impurity_bc[3])
+    n_i_face = I_ni_temp @ n_i + b_ni_temp
+    n_impurity_face = I_nimp_temp @ n_impurity + b_nimp_temp
     Z_eff_face = (Z_i_face**2 * n_i_face +
                   Z_impurity_face**2 * n_impurity_face) / n_e_face
     impurity_fractions_dict = {}
@@ -1265,7 +1230,7 @@ while True:
         source_Ti_external, source_Te_external = calculate_external_heating_sources()
         source_ne = calculate_particle_sources()
         source_psi_external = calculate_external_current_source()
-        source_Ti_fusion, source_Te_fusion = calculate_fusion_sources(T_i, T_e, n_i_face)
+        source_Ti_fusion, source_Te_fusion = calculate_fusion_sources(T_i, T_e, T_i_face, n_i_face)
         j_bootstrap = calculate_bootstrap_current_source(
             T_i_face, T_e_face, n_e_face, n_i_face, psi_face_grad, q_face,
             T_i_face_grad, T_e_face_grad, n_e_face_grad, n_i_face_grad,
