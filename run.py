@@ -73,6 +73,20 @@ def build_grad_operator(nx, inv_dx, bc):
     return D, b
 
 
+def update_bc_vector(b, bc, dx0, dxN, left_is_dirichlet, right_is_dirichlet):
+    if left_is_dirichlet:
+        b = b.at[0].set(-2.0 * dx0 * bc[0])
+    else:
+        b = b.at[0].set(bc[2] if bc[2] is not None else 0.0)
+    
+    if right_is_dirichlet:
+        b = b.at[-1].set(2.0 * dxN * bc[1])
+    else:
+        b = b.at[-1].set(bc[3] if bc[3] is not None else 0.0)
+    
+    return b
+
+
 def build_face_operator(nx, bc_right_face, bc_right_grad):
     I = jnp.zeros((nx+1, nx))
     b = jnp.zeros(nx+1)
@@ -1159,6 +1173,17 @@ g.I_Te, g.b_face_Te = build_face_operator(g.n_rho, g.T_e_bc[1], g.T_e_bc[3])
 g.I_ne, g.b_face_ne = build_face_operator(g.n_rho, g.n_e_bc[1], g.n_e_bc[3])
 g.I_psi, g.b_face_psi = build_face_operator(g.n_rho, g.psi_bc[1], g.psi_bc[3])
 
+dummy_bc = (None, 1.0, 0.0, 0.0)
+g.D_ni_rho, _ = build_grad_operator(g.n_rho, 1.0 / g.dx_array, dummy_bc)
+g.D_ni_rmid, _ = build_grad_operator(g.n_rho, 1.0 / jnp.diff(g.geo_rmid), dummy_bc)
+g.I_ni, _ = build_face_operator(g.n_rho, 1.0, 0.0)
+g.D_nimp_rmid, _ = build_grad_operator(g.n_rho, 1.0 / jnp.diff(g.geo_rmid), dummy_bc)
+g.I_nimp, _ = build_face_operator(g.n_rho, 1.0, 0.0)
+
+g.b_template_right = jnp.zeros(g.n_rho + 1).at[-1].set(1.0)
+g.b_template_right_grad_rho = g.b_template_right * (2.0 / g.dx_array)
+g.b_template_right_grad_rmid = g.b_template_right * (2.0 * (1.0 / jnp.diff(g.geo_rmid))[-1])
+
 g.num_cells = g.n_rho
 g.num_channels = 4
 n = g.num_cells
@@ -1228,12 +1253,12 @@ while True:
             jnp.abs(g.q_factor_bulk * g.face_centers[1:] / psi_face_grad[1:]),
         ])
         
-        n_i_face = compute_face_value(ions.n_i, ions.n_i_bc[1], ions.n_i_bc[3])
-        n_i_face_grad = compute_face_grad(ions.n_i, ions.n_i_bc[0], ions.n_i_bc[1], ions.n_i_bc[2], ions.n_i_bc[3])
-        n_i_face_grad_rmid = compute_face_grad(ions.n_i, ions.n_i_bc[0], ions.n_i_bc[1], ions.n_i_bc[2], ions.n_i_bc[3], x=g.geo_rmid)
+        n_i_face = g.I_ni @ ions.n_i + g.b_template_right * ions.n_i_bc[1]
+        n_i_face_grad = g.D_ni_rho @ ions.n_i + g.b_template_right_grad_rho * ions.n_i_bc[1]
+        n_i_face_grad_rmid = g.D_ni_rmid @ ions.n_i + g.b_template_right_grad_rmid * ions.n_i_bc[1]
         
-        n_impurity_face = compute_face_value(ions.n_impurity, ions.n_impurity_bc[1], ions.n_impurity_bc[3])
-        n_impurity_face_grad_rmid = compute_face_grad(ions.n_impurity, ions.n_impurity_bc[0], ions.n_impurity_bc[1], ions.n_impurity_bc[2], ions.n_impurity_bc[3], x=g.geo_rmid)
+        n_impurity_face = g.I_nimp @ ions.n_impurity + g.b_template_right * ions.n_impurity_bc[1]
+        n_impurity_face_grad_rmid = g.D_nimp_rmid @ ions.n_impurity + g.b_template_right_grad_rmid * ions.n_impurity_bc[1]
         
         sigma = calculate_neoclassical_conductivity(T_e_face, n_e_face, q_face, ions.Z_eff_face)
         
