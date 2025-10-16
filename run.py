@@ -1154,6 +1154,11 @@ g.zero_row_of_blocks = [g.zero_block] * g.num_channels
 g.zero_block_vec = [g.zero_vec] * g.num_channels
 g.bcs = (g.T_i_bc, g.T_e_bc, g.psi_bc, g.n_e_bc)
 
+# Precompute time-independent external sources
+g.source_Ti_external, g.source_Te_external = calculate_external_heating_sources()
+g.source_ne_external = calculate_particle_sources()
+g.source_psi_external = calculate_external_current_source()
+
 T_i_initial = np.interp(g.cell_centers, g.T_i_profile_x, g.T_i_profile_y)
 T_e_initial = np.interp(g.cell_centers, g.T_e_profile_x, g.T_e_profile_y)
 nGW = g.Ip / 1e6 / (np.pi * g.geo_a_minor**2) * g.scaling_n_e
@@ -1222,10 +1227,6 @@ while True:
         sigma = calculate_neoclassical_conductivity(T_e_face, n_e_face, q_face,
                                                     ions.Z_eff_face)
 
-        source_Ti_external, source_Te_external = calculate_external_heating_sources(
-        )
-        source_ne = calculate_particle_sources()
-        source_psi_external = calculate_external_current_source()
         source_Ti_fusion, source_Te_fusion = calculate_fusion_sources(
             T_e, T_i_face, n_i_face)
         j_bootstrap = calculate_bootstrap_current_source(
@@ -1236,13 +1237,13 @@ while True:
             T_e, n_e, ions.n_i, ions.n_impurity, ions.Z_i, ions.Z_impurity,
             ions.A_i, ions.A_impurity)
 
-        source_Ti = source_Ti_external + source_Ti_fusion
-        source_Te = source_Te_external + source_Te_fusion
-        source_psi = -(j_bootstrap + source_psi_external) * g.source_psi_coeff
+        source_Ti = g.source_Ti_external + source_Ti_fusion
+        source_Te = g.source_Te_external + source_Te_fusion
+        source_psi = -(j_bootstrap + g.source_psi_external) * g.source_psi_coeff
 
         source_i = source_Ti * g.geo_vpr + g.mask_adaptive_T * g.T_i_ped
         source_e = source_Te * g.geo_vpr + g.mask_adaptive_T * g.T_e_ped
-        source_n_e = source_ne * g.geo_vpr + g.mask_adaptive_n * g.n_e_ped
+        source_n_e = g.source_ne_external * g.geo_vpr + g.mask_adaptive_n * g.n_e_ped
 
         source_mat_TiTi = qei_mat_TiTi - g.mask_adaptive_T
         source_mat_TeTe = qei_mat_TeTe - g.mask_adaptive_T
