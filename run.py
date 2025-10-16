@@ -665,8 +665,8 @@ class Ions:
     n_impurity_bc: Any
 
 
-def get_updated_ions(n_e, T_e):
-    T_e_face = g.I_Te @ T_e + g.b_face_Te
+def get_updated_ions(n_e, T_e, T_e_face):
+
     Z_i_avg, Z_i_Z2_avg, _ = get_average_charge_state(
         ion_symbols=g.main_ion_names,
         T_e=T_e,
@@ -1156,13 +1156,14 @@ while True:
         T_e = p[l.Te]
         psi = p[l.psi]
         n_e = p[l.ne]
-        ions = get_updated_ions(n_e, T_e)
         
         T_i_face = g.I_Ti @ T_i + g.b_face_Ti
         T_i_face_grad = g.D_Ti_rho @ T_i + g.b_Ti_rho
         T_i_face_grad_rmid = g.D_Ti_rmid @ T_i + g.b_Ti_rmid
         
         T_e_face = g.I_Te @ T_e + g.b_face_Te
+        ions = get_updated_ions(n_e, T_e, T_e_face)
+        
         T_e_face_grad = g.D_Te_rho @ T_e + g.b_Te_rho
         T_e_face_grad_rmid = g.D_Te_rmid @ T_e + g.b_Te_rmid
         
