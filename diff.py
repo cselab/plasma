@@ -39,7 +39,7 @@ if len(data1) != len(data2):
 
 nx = 25
 n_vars = 4
-nt = (len(data1) - nx) // (1 + n_vars * nx)
+nt = len(data1) // (n_vars * nx + 1)
 
 print(f"\nDeduced structure:")
 print(f"  nx (cells): {nx}")
@@ -53,10 +53,8 @@ o += nt * n_vars * nx
 
 time1 = data1[o:o+nt]
 time2 = data2[o:o+nt]
-o += nt
 
-rho1 = data1[o:o+nx]
-rho2 = data2[o:o+nx]
+rho1 = rho2 = np.linspace(0, 1, nx + 2)[1:-1]
 
 var_names = ['T_i', 'T_e', 'psi', 'n_e']
 vars1 = {var_names[i]: state1[:, i*nx:(i+1)*nx] for i in range(n_vars)}

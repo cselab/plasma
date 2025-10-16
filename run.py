@@ -918,7 +918,7 @@ g.mask_adaptive_n = g.mask * g.adapt_n_prefac
 g.bc_i = (None, g.i_right_bc, 0.0, 0.0)
 g.bc_e = (None, g.e_right_bc, 0.0, 0.0)
 g.dp_edge = (g.Ip * g.pi_16_cubed * g.mu_0 * g.geo_Phi_b /
-             (g.geo_g2g3_over_rhon_face[-1] * g.geo_F_face[-1]))
+                        (g.geo_g2g3_over_rhon_face[-1] * g.geo_F_face[-1]))
 g.bc_p = (None, None, 0.0, g.dp_edge)
 g.bc_n = (None, g.n_right_bc, 0.0, 0.0)
 g.D_i, g.b_i_grad = grad_op(g.bc_i)
@@ -1063,7 +1063,6 @@ states = np.array(states)
 with open("run.raw", "wb") as f:
     states.tofile(f)
     t_out.tofile(f)
-    rho.tofile(f)
 nt = len(t_out)
 for var_name, var_slice in zip(("T_i", "T_e", "psi", "n_e"), (l.i, l.e, l.p, l.n)):
     var = states[:, var_slice]
@@ -1072,5 +1071,5 @@ for var_name, var_slice in zip(("T_i", "T_e", "psi", "n_e"), (l.i, l.e, l.p, l.n
         plt.title(f"time: {t_out[idx]:8.3e}")
         plt.axis([None, None, lo, hi])
         plt.plot(rho, var[idx], "o-")
-        plt.savefig(f"{var_name}.{idx:04d}.png")
-        plt.close()
+    plt.savefig(f"{var_name}.{idx:04d}.png")
+    plt.close()
