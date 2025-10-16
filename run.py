@@ -1167,6 +1167,7 @@ g.source_e_adaptive = g.mask_adaptive_T * g.T_e_ped
 g.source_n_e_constant = g.source_ne_external * g.geo_vpr + g.mask_adaptive_n * g.n_e_ped
 g.source_mat_adaptive_T = -g.mask_adaptive_T
 g.source_mat_adaptive_n = -g.mask_adaptive_n
+g.toc_psipsi_coeff = g.cell_centers * g.mu0_pi16sq_Phib_sq_over_F_sq / g.resistivity_multiplier
 
 T_i_initial = np.interp(g.cell_centers, g.T_i_profile_x, g.T_i_profile_y)
 T_e_initial = np.interp(g.cell_centers, g.T_e_profile_x, g.T_e_profile_y)
@@ -1267,8 +1268,7 @@ while True:
 
         toc_TiTi = g.toc_temperature_factor
         toc_TeTe = g.toc_temperature_factor
-        toc_psipsi = (1.0 / g.resistivity_multiplier * g.cell_centers * sigma *
-                      g.mu0_pi16sq_Phib_sq_over_F_sq)
+        toc_psipsi = g.toc_psipsi_coeff * sigma
         toc_nene = g.ones_like_vpr
 
         d_face_Ti, d_face_Te, d_face_ne, v_face_ne = calculate_turbulent_transport(
