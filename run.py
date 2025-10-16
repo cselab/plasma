@@ -1055,38 +1055,32 @@ while True:
     t += dt
     state, history = pred, history + [(t, pred)]
     if t >= g.t_end - g.tol: break
-t_history, state_history = zip(*history)
-var_names = ("T_i", "T_e", "psi", "n_e")
-var_bcs = (g.bc_i, g.bc_e, g.bc_p, g.bc_n)
-var_slices = (l.i, l.e, l.p, l.n)
-t_out = np.array(t_history)
+t_out = np.array([t for t, _ in history])
 rho = np.concatenate([[0.0], np.asarray(g.cell_centers), [1.0]])
-(nt, ) = np.shape(t_out)
+nt = len(t_out)
+
+def add_bc(vals, bc):
+    out = []
+    for v in vals:
+        left = v[0:1]
+        right = jnp.array([bc[1]]) if bc[1] is not None else v[-1:] + bc[3] * g.dx / 2
+        out.append(jnp.concatenate([left, v, right]))
+    return np.stack(out)
+
 with open("run.raw", "wb") as f:
     t_out.tofile(f)
     rho.tofile(f)
-    for var_name, var_bc, var_slice in zip(var_names, var_bcs, var_slices):
-        var_history = [x[var_slice] for x in state_history]
-        var_data = []
-        for var_value in var_history:
-            left_value = var_value[..., 0:1]
-            if var_bc[1] is not None:
-                right_value = jnp.expand_dims(var_bc[1], axis=-1)
-            else:
-                right_value = (var_value[..., -1:] +
-                               jnp.expand_dims(var_bc[3], axis=-1) *
-                               jnp.expand_dims(g.dx, axis=-1) / 2)
-            var_data.append(
-                jnp.concatenate([left_value, var_value, right_value], axis=-1))
-        var = np.stack(var_data)
+    for name, vals, bc in [("T_i", [s[l.i] for _, s in history], g.bc_i),
+                            ("T_e", [s[l.e] for _, s in history], g.bc_e),
+                            ("psi", [s[l.p] for _, s in history], g.bc_p),
+                            ("n_e", [s[l.n] for _, s in history], g.bc_n)]:
+        var = add_bc(vals, bc)
         var.tofile(f)
         if not (np.isnan(var).any() or np.isinf(var).any()):
-            lo = np.min(var).item()
-            hi = np.max(var).item()
-            for j, idx in enumerate([0, nt // 4, nt // 2, 3 * nt // 4,
-                                     nt - 1]):
+            lo, hi = np.min(var), np.max(var)
+            for j, idx in enumerate([0, nt // 4, nt // 2, 3 * nt // 4, nt - 1]):
                 plt.title(f"time: {t_out[idx]:8.3e}")
                 plt.axis([None, None, lo, hi])
                 plt.plot(rho, var[idx], "o-")
-                plt.savefig(f"{var_name}.{j:04d}.png")
+                plt.savefig(f"{name}.{j:04d}.png")
                 plt.close()
