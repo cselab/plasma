@@ -78,7 +78,7 @@ def face_op(bc_right_face, bc_right_grad):
     else:
         I[g.n, g.n - 1] = 1.0
         b[g.n] = 0.5 * g.dx * (bc_right_grad
-                               if bc_right_grad is not None else 0.0)
+                                         if bc_right_grad is not None else 0.0)
     return I, b
 
 
@@ -293,7 +293,7 @@ def qei_coupling(Te, ne, ni, nz, Zi, Zz, Ai, Az):
     return -Q, -Q, Q, Q
 
 
-def bootstrap_current(Ti_f, Te_f, ne_f, ni_f, p_grad, q, Ti_grad, Te_grad, ne_grad, ni_grad, Zi_f, Zeff_f):
+def bootstrap_current(Ti_f, Te_f, ne_f, ni_f, p_g, q, Ti_g, Te_g, ne_g, ni_g, Zi_f, Zeff_f):
     ft = g.f_trap
     log_lei = log_lambda_ei(ne_f, Te_f)
     log_lii = 30 - 0.5 * jnp.log(ni_f) + 1.5 * jnp.log(Ti_f * 1e3) - 3 * jnp.log(Zi_f)
@@ -315,10 +315,10 @@ def bootstrap_current(Ti_f, Te_f, ne_f, ni_f, p_grad, q, Ti_grad, Te_grad, ne_gr
     alph = ((a0 + 0.25 * (1 - ft**2) * jnp.sqrt(nui)) / (1 + 0.5 * jnp.sqrt(nui)) + 
             0.315 * nui**2 * ft**6) / (1 + 0.15 * nui**2 * ft**6)
     pe, pi = ne_f * Te_f * 1.6e-16, ni_f * Ti_f * 1.6e-16
-    gc = jnp.concatenate([jnp.zeros(1), -g.geo_F_face[1:] * 2 * jnp.pi / (g.geo_B_0 * p_grad[1:])])
-    jbs = gc * (L31 * (pe * ne_grad/ne_f + pi * ni_grad/ni_f) + 
-                (L31 + F32ee + F32ei) * pe * Te_grad/Te_f + 
-                (L31 + alph * L34) * pi * Ti_grad/Ti_f)
+    gc = jnp.concatenate([jnp.zeros(1), -g.geo_F_face[1:] * 2 * jnp.pi / (g.geo_B_0 * p_g[1:])])
+    jbs = gc * (L31 * (pe * ne_g/ne_f + pi * ni_g/ni_f) + 
+                (L31 + F32ee + F32ei) * pe * Te_g/Te_f + 
+                (L31 + alph * L34) * pi * Ti_g/Ti_f)
     return 0.5 * (jbs[:-1] + jbs[1:])
 
 
@@ -339,15 +339,15 @@ def safe_lref(v, grad):
     return jnp.where(jnp.abs(r) < g.eps, g.eps, r)
 
 
-def turbulent_transport(Ti_f, Ti_gr, Te_f, Te_gr, ne_f, ne_grad, ne_gr, ni_f, ni_gr, nz_f, nz_gr, p_grad, q, ions):
+def turbulent_transport(Ti_f, Ti_r, Te_f, Te_r, ne_f, ne_g, ne_r, ni_f, ni_r, nz_f, nz_r, p_g, q, ions):
     chiGB = ((ions.A_i * g.m_amu)**0.5 / (g.geo_B_0 * g.q_e)**2 * (Ti_f * g.keV_to_J)**1.5 / g.geo_a_minor)
-    lti = safe_lref(Ti_f, Ti_gr)
-    lte = safe_lref(Te_f, Te_gr)
-    lne = safe_lref(ne_f, ne_gr)
-    lni0 = safe_lref(ni_f, ni_gr)
-    lni1 = safe_lref(nz_f, nz_gr)
-    iota = jnp.abs(p_grad[1:] / g.face_centers[1:])
-    iota = jnp.concatenate([jnp.abs(p_grad[1] * g.inv_dx)[None], iota])
+    lti = safe_lref(Ti_f, Ti_r)
+    lte = safe_lref(Te_f, Te_r)
+    lne = safe_lref(ne_f, ne_r)
+    lni0 = safe_lref(ni_f, ni_r)
+    lni1 = safe_lref(nz_f, nz_r)
+    iota = jnp.abs(p_g[1:] / g.face_centers[1:])
+    iota = jnp.concatenate([jnp.abs(p_g[1] * g.inv_dx)[None], iota])
     rm = g.geo_rmid_face
     smag = -rm * jnp.gradient(iota, rm) / iota
     eps_lcfs = rm[-1] / g.R_major
@@ -406,40 +406,33 @@ def turbulent_transport(Ti_f, Ti_gr, Te_f, Te_gr, ne_f, ne_grad, ne_gr, ni_f, ni
     gradient_reference_length = g.R_major
     gyrobohm_flux_reference_length = g.geo_a_minor
     pfe_SI = pfe * ne_f * qualikiz_inputs.chiGB / gyrobohm_flux_reference_length
-    chi_face_ion = ((
-        (gradient_reference_length / gyrobohm_flux_reference_length) * qi) /
+    chi_i = ((gradient_reference_length / gyrobohm_flux_reference_length) * qi / 
                     qualikiz_inputs.lref_over_lti) * qualikiz_inputs.chiGB
-    chi_face_el = ((
-        (gradient_reference_length / gyrobohm_flux_reference_length) * qe) /
+    chi_e = ((gradient_reference_length / gyrobohm_flux_reference_length) * qe / 
                    qualikiz_inputs.lref_over_lte) * qualikiz_inputs.chiGB
-    Deff = -pfe_SI / (ne_grad * g.geo_g1_over_vpr2_face * g.geo_rho_b + g.eps)
+    Deff = -pfe_SI / (ne_g * g.geo_g1_over_vpr2_face * g.geo_rho_b + g.eps)
     Veff = pfe_SI / (ne_f * g.geo_g0_over_vpr_face * g.geo_rho_b)
-    Deff_mask = (((pfe >= 0) & (qualikiz_inputs.lref_over_lne >= 0))
-                 | ((pfe < 0) & (qualikiz_inputs.lref_over_lne < 0))) & (abs(
-                     qualikiz_inputs.lref_over_lne) >= g.An_min)
+    Deff_mask = (((pfe >= 0) & (qualikiz_inputs.lref_over_lne >= 0)) | 
+                 ((pfe < 0) & (qualikiz_inputs.lref_over_lne < 0))) & (abs(qualikiz_inputs.lref_over_lne) >= g.An_min)
     Veff_mask = jnp.invert(Deff_mask)
-    d_face_el = jnp.where(Veff_mask, 0.0, Deff)
-    v_face_el = jnp.where(Deff_mask, 0.0, Veff)
+    d_e = jnp.where(Veff_mask, 0.0, Deff)
+    v_e = jnp.where(Deff_mask, 0.0, Veff)
     active_mask = ((g.face_centers > g.transport_rho_min)
                    & (g.face_centers <= g.transport_rho_max)
                    & (g.face_centers <= g.rho_norm_ped_top))
     active_mask = jnp.asarray(active_mask).at[0].set(g.transport_rho_min == 0)
-    chi_face_ion = jnp.where(active_mask, chi_face_ion, 0.0)
-    chi_face_el = jnp.where(active_mask, chi_face_el, 0.0)
-    d_face_el = jnp.where(active_mask, d_face_el, 0.0)
-    v_face_el = jnp.where(active_mask, v_face_el, 0.0)
-    chi_face_ion = jnp.clip(chi_face_ion, g.chi_min, g.chi_max)
-    chi_face_el = jnp.clip(chi_face_el, g.chi_min, g.chi_max)
-    d_face_el = jnp.clip(d_face_el, g.D_e_min, g.D_e_max)
-    v_face_el = jnp.clip(v_face_el, g.V_e_min, g.V_e_max)
-    chi_face_ion = jnp.where(g.face_centers < g.rho_inner + g.eps,
-                             g.chi_i_inner, chi_face_ion)
-    chi_face_el = jnp.where(g.face_centers < g.rho_inner + g.eps,
-                            g.chi_e_inner, chi_face_el)
-    d_face_el = jnp.where(g.face_centers < g.rho_inner + g.eps, g.D_e_inner,
-                          d_face_el)
-    v_face_el = jnp.where(g.face_centers < g.rho_inner + g.eps, g.V_e_inner,
-                          v_face_el)
+    chi_i = jnp.where(active_mask, chi_i, 0.0)
+    chi_e = jnp.where(active_mask, chi_e, 0.0)
+    d_e = jnp.where(active_mask, d_e, 0.0)
+    v_e = jnp.where(active_mask, v_e, 0.0)
+    chi_i = jnp.clip(chi_i, g.chi_min, g.chi_max)
+    chi_e = jnp.clip(chi_e, g.chi_min, g.chi_max)
+    d_e = jnp.clip(d_e, g.D_e_min, g.D_e_max)
+    v_e = jnp.clip(v_e, g.V_e_min, g.V_e_max)
+    chi_i = jnp.where(g.face_centers < g.rho_inner + g.eps, g.chi_i_inner, chi_i)
+    chi_e = jnp.where(g.face_centers < g.rho_inner + g.eps, g.chi_e_inner, chi_e)
+    d_e = jnp.where(g.face_centers < g.rho_inner + g.eps, g.D_e_inner, d_e)
+    v_e = jnp.where(g.face_centers < g.rho_inner + g.eps, g.V_e_inner, v_e)
     lower_cutoff = 0.01
     kernel = jnp.exp(-jnp.log(2) *
                      (g.face_centers[:, jnp.newaxis] - g.face_centers)**2 /
@@ -476,26 +469,26 @@ def turbulent_transport(Ti_f, Ti_gr, Te_f, Te_gr, ne_f, ne_grad, ne_gr, ni_f, ni
             lambda: jnp.dot(smoothing_matrix, coeff),
         )
 
-    chi_face_ion = smooth_single_coeff(chi_face_ion)
-    chi_face_el = smooth_single_coeff(chi_face_el)
-    d_face_el = smooth_single_coeff(d_face_el)
-    v_face_el = smooth_single_coeff(v_face_el)
-    d_face_Ti = g.geo_g1_keV * ni_f * chi_face_ion
-    d_face_Te = g.geo_g1_keV * ne_f * chi_face_el
-    d_face_ne = g.geo_g1_over_vpr_face * d_face_el
-    v_face_ne = g.geo_g0_face * v_face_el
-    return d_face_Ti, d_face_Te, d_face_ne, v_face_ne
+    chi_i = smooth_single_coeff(chi_i)
+    chi_e = smooth_single_coeff(chi_e)
+    d_e = smooth_single_coeff(d_e)
+    v_e = smooth_single_coeff(v_e)
+    d_i = g.geo_g1_keV * ni_f * chi_i
+    d_e_out = g.geo_g1_keV * ne_f * chi_e
+    d_n = g.geo_g1_over_vpr_face * d_e
+    v_n = g.geo_g0_face * v_e
+    return d_i, d_e_out, d_n, v_n
 
 
-def neoclassical_transport(Ti_f, Te_f, ne_f, ni_f, Ti_grad, Te_grad, ne_grad):
+def neoclassical_transport(Ti_f, Te_f, ne_f, ni_f, Ti_g, Te_g, ne_g):
     chi_Ti_neo = g.geo_g1_keV * ni_f * g.chi_pereverzev
     chi_Te_neo = g.geo_g1_keV * ne_f * g.chi_pereverzev
     d_neo_ne = g.D_pereverzev
-    v_neo_ne = ne_grad / ne_f * d_neo_ne * g.geo_factor_pereverzev
+    v_neo_ne = ne_g / ne_f * d_neo_ne * g.geo_factor_pereverzev
     chi_Ti_neo = jnp.where(g.pedestal_mask_face, 0.0, chi_Ti_neo)
     chi_Te_neo = jnp.where(g.pedestal_mask_face, 0.0, chi_Te_neo)
-    v_Ti = Ti_grad / Ti_f * chi_Ti_neo
-    v_Te = Te_grad / Te_f * chi_Te_neo
+    v_Ti = Ti_g / Ti_f * chi_Ti_neo
+    v_Te = Te_g / Te_f * chi_Te_neo
     d_neo_ne = jnp.where(g.pedestal_mask_face, 0.0, d_neo_ne * g.geo_g1_over_vpr_face)
     v_neo_ne = jnp.where(g.pedestal_mask_face, 0.0, v_neo_ne * g.geo_g0_face)
     chi_Ti_neo = jnp.concatenate([chi_Ti_neo[1:2], chi_Ti_neo[1:]])
@@ -1027,7 +1020,7 @@ while True:
                                  i_grad, e_grad, n_grad, ni_grad, ions.Z_i_face, ions.Z_eff_face)
         Qei_ii, Qei_ee, Qei_ie, Qei_ei = qei_coupling(e, n, ions.n_i, ions.n_impurity, 
                                                        ions.Z_i, ions.Z_impurity, ions.A_i, ions.A_impurity)
-        source_p = -(j_bs + g.source_p_external) * g.source_p_coeff
+        src_p = -(j_bs + g.source_p_external) * g.source_p_coeff
         src_i = g.source_i_external + si_fus * g.geo_vpr + g.source_i_adaptive
         src_e = g.source_e_external + se_fus * g.geo_vpr + g.source_e_adaptive
         tc_in = jnp.concatenate([ions.n_i * g.vpr_5_3, n * g.vpr_5_3, 
@@ -1057,7 +1050,7 @@ while True:
             [g.zero_block, g.zero_block, g.zero_block, 
              A_n + jnp.diag(g.source_mat_adaptive_n)]])
         spatial_vec = jnp.concatenate([b_i + src_i, b_e + src_e, 
-                                       g.b_p + source_p, 
+                                       g.b_p + src_p, 
                                        b_n + g.source_n_constant])
         tc = 1 / (tc_out * tc_in)
         lhs = g.identity - dt * g.theta_imp * jnp.expand_dims(tc, 1) * spatial_mat
