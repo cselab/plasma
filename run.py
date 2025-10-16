@@ -1058,21 +1058,15 @@ while True:
     if t >= g.t_end - g.tol: break
 t_history, state_history = zip(*history)
 var_names = ("T_i", "T_e", "psi", "n_e")
-var_bcs = (g.bc_i, g.bc_e, g.bc_p, g.bc_n)
 var_slices = (l.i, l.e, l.p, l.n)
 t_out = np.array(t_history)
-rho = np.concatenate([[0.0], np.asarray(g.cell_centers), [1.0]])
+rho = np.asarray(g.cell_centers)
 nt = len(t_out)
 with open("run.raw", "wb") as f:
     t_out.tofile(f)
     rho.tofile(f)
-    for var_name, var_bc, var_slice in zip(var_names, var_bcs, var_slices):
-        vals = [s[var_slice] for s in state_history]
-        data = []
-        for v in vals:
-            left, right = v[0], var_bc[1] if var_bc[1] is not None else v[-1] + var_bc[3] * g.dx / 2
-            data.append(np.r_[left, v, right])
-        var = np.array(data)
+    for var_name, var_slice in zip(var_names, var_slices):
+        var = np.array([s[var_slice] for s in state_history])
         var.tofile(f)
         if not (np.isnan(var).any() or np.isinf(var).any()):
             lo, hi = np.min(var), np.max(var)
