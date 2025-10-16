@@ -23,27 +23,34 @@ The grid uses a **staggered mesh**:
 
 ## State Variables
 
-The current simulation state is stored in the global object `s`:
-- **`s.T_i`** - Ion temperature [keV]
-- **`s.T_e`** - Electron temperature [keV]
-- **`s.psi`** - Poloidal magnetic flux [Wb]
-- **`s.n_e`** - Electron density [m⁻³]
-- **`s.t`** - Current simulation time [s]
+The simulation state is stored in a **single array** `s` with slicing:
+- **`s[l.Ti]`** - Ion temperature [keV] (cells 0:25)
+- **`s[l.Te]`** - Electron temperature [keV] (cells 25:50)
+- **`s[l.psi]`** - Poloidal magnetic flux [Wb] (cells 50:75)
+- **`s[l.ne]`** - Electron density [m⁻³] (cells 75:100)
+- **`t`** - Current simulation time [s] (scalar)
 
-These state variables are **read-only during a time step** and only updated after a successful step is completed.
+Where `l` is a namespace for array slices:
+```python
+n = g.num_cells = 25
+l.Ti = np.s_[:n]
+l.Te = np.s_[n:2*n]
+l.psi = np.s_[2*n:3*n]
+l.ne = np.s_[3*n:4*n]
+```
+
+This structure allows efficient matrix operations on the full state vector.
 
 ## Evolved Variables
 
-The code evolves **4 coupled variables**: `T_i`, `T_e`, `psi`, `n_e`
+The code evolves **4 coupled variables** in a single state array of size 100 (4 channels × 25 cells).
 
-### Scaling Factors
-Variables are internally scaled for numerical stability:
+### Density Scaling
+For numerical convenience, density uses a reference scale:
 ```python
-g.scaling_T_i = 1.0      # keV
-g.scaling_T_e = 1.0      # keV
-g.scaling_n_e = 1e20     # 10²⁰ m⁻³
-g.scaling_psi = 1.0      # Wb
+g.scaling_n_e = 1e20     # 10²⁰ m⁻³ (Greenwald density scale)
 ```
+All other variables (`T_i`, `T_e`, `psi`) remain in physical units throughout.
 
 ## Governing Equations
 
@@ -233,40 +240,45 @@ x_new = solve(lhs_mat, rhs)
 
 ### Main Time Loop Structure
 
-The code uses **nested adaptive time stepping** with state stored in global `s`:
+The code uses **predictor-corrector time stepping** with state array `s`:
 
 ```python
-# Initialize state variables
-s.T_i = <initial ion temperature>
-s.T_e = <initial electron temperature>
-s.n_e = <initial electron density>
-s.psi = <initial poloidal flux>
-s.t = 0.0
+# Initialize state array
+s = jnp.concatenate([T_i_initial, T_e_initial, psi_initial, n_e_initial])
+t = 0.0
+history = [(t, s)]
 
-while s.t < t_final:
-    # Outer loop: successful time steps
-    dt = compute_initial_dt()
+while True:
+    # Compute dt from current state
+    dt = compute_initial_dt(s)
     
-    while True:
-        # Inner loop: retry with smaller dt if needed
+    # Predictor-corrector loop
+    p = s  # Working copy
+    x_old = s  # For RHS
+    for _ in range(g.n_corrector_steps + 1):
+        # Extract variables from working state
+        T_i, T_e, psi, n_e = p[l.Ti], p[l.Te], p[l.psi], p[l.ne]
         
-        for corrector_iter in range(n_corrector_steps + 1):
-            # Predictor-corrector iterations
-            x_input = x_new
-            # Compute coefficients at x_input
-            # Build and solve linear system
-            x_new = solve_system(x_input)
+        # Compute physics (ions, transport, sources)
+        ions = get_updated_ions(n_e, T_e)
+        turbulent_transport = calculate_transport_coeffs(p, ions, ...)
         
-        # Check convergence
-        if converged:
-            break
-        else:
-            dt = dt / dt_reduction_factor
+        # Assemble spatial operators (100×100 matrix)
+        spatial_mat = build_spatial_matrix(d_face, v_face, source_mat)
+        spatial_vec = build_spatial_vector(sources, bcs)
+        
+        # Build and solve linear system
+        lhs = I - dt*θ*transient_coeff*spatial_mat
+        rhs = transient_ratio @ x_old - dt*θ*transient_coeff*spatial_vec
+        p = solve(lhs, rhs)
     
-    # Accept step and update state
-    s.t += dt
-    s.T_i, s.T_e, s.psi, s.n_e = <unscaled solutions>
-    history.append((s.t, s.T_i, s.T_e, s.psi, s.n_e))
+    # Accept step
+    t = t + dt
+    s = p
+    history.append((t, s))
+    
+    if t >= t_final:
+        break
 ```
 
 ### Time Step Calculation
@@ -412,13 +424,19 @@ sigma = sigma_Spitzer * sigma_neo
 
 ## Source Terms
 
-Sources are registered in `g.source_registry` (lines 1571-1602) with handlers:
+Sources are computed explicitly and accumulated into source variables:
 
 ```python
-SourceHandler(
-    affects: tuple[AffectedCoreProfile],  # Which equations it affects
-    eval_fn: callable                     # Function to compute source
-)
+source_T_i = jnp.zeros_like(T_i)  # Ion temperature source
+source_T_e = jnp.zeros_like(T_e)  # Electron temperature source  
+source_psi_current = jnp.zeros_like(psi)  # Current source
+source_n_e = jnp.zeros_like(n_e)  # Particle source
+
+# Add various sources (heating, fusion, particles)
+source_T_i += generic_heat + fusion_heat_i
+source_T_e += generic_heat + fusion_heat_e
+source_psi_current += external_current
+source_n_e += gas_puff + pellet + particle_source
 ```
 
 ### Generic Heating Source
@@ -583,20 +601,29 @@ This removes noise from numerical differentiation near the magnetic axis.
 
 ### State Variables
 
-- `current_T_i`, `current_T_e`, `current_psi`, `current_n_e`: Current time step values
-- `x_initial`, `x_new`, `x_old`: Solver state tuples (value, dr, bc)
+- `s`: State array (100,) = [T_i(25), T_e(25), psi(25), n_e(25)]
+- `p`: Working state during corrector iterations
+- `x_old`: State for RHS (saved at start of time step)
+- `t`: Current simulation time [s]
+- `history`: List of (t, s) tuples
+
+### Transient Coefficients
+
 - `tc_in`, `tc_out`: Transient coefficients (in/out of time derivative)
-- `tic_**`, `toc_**`: Transient in/out for specific variable
+- `tic_T_i`, `tic_T_e`: Transient in for temperatures = n * vpr^(5/3)
+- `toc_psi`: Transient out for psi = resistivity factors
+- Concatenated into 100-vectors for matrix operations
 
 ### Matrix/Vector Notation
 
 - `**_mat`: Matrix (2D array or block matrix)
 - `**_vec`: Vector (1D array)
-- `diffusion_mat`, `diffusion_vec`: Diffusion operator and boundary terms
-- `conv_mat`, `conv_vec`: Convection operator and boundary terms
-- `c_mat`, `c`: Combined spatial operator matrix and vector
-- `source_mat_cell`: Coupling matrix for implicit sources
-- `source_cell`: Explicit source vector
+- `spatial_mat`: Combined spatial operator (100×100)
+- `spatial_vec`: Combined spatial source vector (100,)
+- `lhs_mat`: Left-hand side of linear system (100×100)
+- `rhs`: Right-hand side vector (100,)
+- `c_mat`: List of 4×4 blocks (each 25×25)
+- `c`: List of 4 vectors (each 25,)
 
 ## Loop Structure
 
@@ -606,23 +633,25 @@ while True:
     # Compute q_face from current psi
     # Update ions
     # Calculate transport coefficients
-    # Build source profiles
-    # Compute initial dt
+    # Compute dt
     
-    # Inner dt retry loop
-    while True:
-        # Corrector loop
-        for _ in range(n_corrector_steps + 1):
-            # Coefficients callback
-            # Build and solve linear system
-        
-        # Check convergence and reduce dt if needed
-        if converged: break
+    # Predictor-corrector loop
+    p = s  # Working copy
+    x_old = s  # For RHS
+    for _ in range(g.n_corrector_steps + 1):
+        # Extract T_i, T_e, psi, n_e from p
+        # Compute physics (ions, sigma, bootstrap, sources, transport)
+        # Assemble spatial operators
+        # Build and solve linear system
+        # Update p
     
-    # Post-process step
-    # Append to history
+    # Accept step
+    t = t + dt
+    s = p
+    history.append((t, s))
+    
     # Check if finished
-    if current_t >= t_final: break
+    if t >= t_final: break
 ```
 
 ### Coefficients Computation
@@ -644,40 +673,48 @@ This large block computes all coefficients needed for the linear system at a giv
 
 ### Linear System Assembly
 
-Builds block system for coupled equations:
+Builds 100×100 block system (4 channels × 25 cells) for coupled equations:
 
 ```python
-# Initialize block matrices
-c_mat = [[zero_block] * num_channels] * num_channels
-c = [zero_vec] * num_channels
+# Initialize 4×4 block matrix (each block is 25×25)
+c_mat = [g.zero_row_of_blocks.copy() for _ in range(4)]
+c = g.zero_block_vec.copy()
 
-# Diffusion blocks (diagonal only)
-for i in range(num_channels):
-    c_mat[i][i] += diffusion_mat
-    c[i] += diffusion_vec
+# Add diffusion and convection (diagonal blocks only)
+for i in range(4):
+    diffusion_mat, diffusion_vec = make_diffusion_terms(d_face[i], g.dx_array, g.bcs[i])
+    conv_mat, conv_vec = make_convection_terms(v_face[i], d_face[i], g.dx_array, g.bcs[i])
+    c_mat[i][i] += diffusion_mat + conv_mat  # Tridiagonal 25×25
+    c[i] += diffusion_vec + conv_vec
 
-# Convection blocks (diagonal only)
-for i in range(num_channels):
-    c_mat[i][i] += conv_mat
-    c[i] += conv_vec
-
-# Source coupling blocks (all channels)
-for i in range(num_channels):
-    for j in range(num_channels):
-        if source_mat_cell[i][j] is not None:
-            c_mat[i][j] += diag(source_mat_cell[i][j])
+# Add source coupling (explicit which channels couple)
+c_mat[0][0] += jnp.diag(source_mat_ii)  # T_i self-coupling
+c_mat[0][1] += jnp.diag(source_mat_ie)  # T_i → T_e (Q_ei)
+c_mat[1][0] += jnp.diag(source_mat_ei)  # T_e → T_i (Q_ei)
+c_mat[1][1] += jnp.diag(source_mat_ee)  # T_e self-coupling
+c_mat[3][3] += jnp.diag(source_mat_nn)  # n_e self-coupling (adaptive)
+# c_mat[2][*] = 0  (psi has no coupling)
 
 # Add explicit sources
-# Assemble into single matrix
-c_mat_new = block(c_mat)
-c_new = block(c)
+c[0] += source_i   # Ion heating
+c[1] += source_e   # Electron heating  
+c[2] += source_psi # Current sources
+c[3] += source_n_e # Particle sources
 
-# Build LHS and RHS
-lhs_mat = I - dt * theta * (1/(toc*tic)) * c_mat_new
-rhs = (tic_old/tic_new) * x_old - dt * theta * (1/(toc*tic)) * c_new
+# Assemble into single 100×100 matrix
+spatial_mat = jnp.block(c_mat)
+spatial_vec = jnp.block(c)
 
-# Solve
-x_new = solve(lhs_mat, rhs)
+# Build implicit system
+transient_coeff = 1 / (tc_out_new * tc_in_new)
+broadcasted = jnp.expand_dims(transient_coeff, 1)
+lhs_mat = g.identity_matrix - dt * g.theta_implicit * broadcasted * spatial_mat
+lhs_vec = -g.theta_implicit * dt * transient_coeff * spatial_vec
+right_transient = jnp.diag(tc_in_old / tc_in_new)
+rhs = jnp.dot(right_transient, x_old) - lhs_vec
+
+# Solve dense 100×100 linear system
+p = jnp.linalg.solve(lhs_mat, rhs)
 ```
 
 ### Post-Processing Loop
