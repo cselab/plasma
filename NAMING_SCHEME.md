@@ -105,10 +105,3 @@ Pattern: `{var}_{location}_{grid}` where grid is optional
 3. **Avoid redundancy:**
    - Don't use `_grad_rmid` when `_r` suffices
    - Don't use `face` when `_f` suffices
-
-## Benefits
-
-- **Compact signatures:** 70% reduction in function parameter length
-- **Easy to scan:** Minimal visual noise, quick pattern recognition
-- **Consistent:** Same rules apply everywhere
-- **Low cognitive load:** Simple, predictable naming
