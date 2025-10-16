@@ -71,12 +71,9 @@ def build_grad_operator_nonuniform(inv_dx_array, bc):
         D[i, i] = inv_dx_array[i - 1]
 
     b[0] = bc[2] if bc[2] is not None else 0.0
-
     if bc[1] is not None:
         D[g.n, g.n - 1] = -2.0 * inv_dx_array[-1]
         b[g.n] = 2.0 * inv_dx_array[-1] * bc[1]
-    else:
-        b[g.n] = bc[3] if bc[3] is not None else 0.0
 
     return jnp.array(D), jnp.array(b)
 
