@@ -6,8 +6,6 @@ import jax
 import numpy as np
 import os
 import scipy
-import matplotlib.pyplot as plt
-import mmap
 
 
 class g:
@@ -1131,27 +1129,3 @@ while True:
     t += dt
     state = pred
 f.close()
-rc = 1 + 4 * g.n
-dtype = np.dtype(float)
-sz = dtype.itemsize
-with open("run.raw", "rb") as f:
-    mm = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
-    nt = len(mm) // (rc * sz)
-    t_out = np.ndarray(shape=(nt, ),
-                       dtype=dtype,
-                       buffer=mm,
-                       strides=(rc * sz, ))
-    states = np.ndarray(shape=(nt, 4, g.n),
-                        dtype=dtype,
-                        buffer=mm,
-                        offset=sz,
-                        strides=(rc * sz, g.n * sz, sz))
-    for j, var_name in enumerate(("T_i", "T_e", "psi", "n_e")):
-        var = states[:, j]
-        lo, hi = np.min(var), np.max(var)
-        for idx in [0, nt // 4, nt // 2, 3 * nt // 4, nt - 1]:
-            plt.title(f"time: {t_out[idx]:8.3e}")
-            plt.axis([None, None, lo, hi])
-            plt.plot(g.cell_centers, var[idx], "o-")
-            plt.savefig(f"{var_name}.{idx:04d}.png")
-            plt.close()
