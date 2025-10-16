@@ -81,7 +81,7 @@ def build_face_operator(bc_right_face, bc_right_grad):
     else:
         I[g.n_rho, g.n_rho - 1] = 1.0
         b[g.n_rho] = 0.5 * g.dx_array * (bc_right_grad
-                                    if bc_right_grad is not None else 0.0)
+                                         if bc_right_grad is not None else 0.0)
     return jnp.array(I), jnp.array(b)
 
 
