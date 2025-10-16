@@ -89,19 +89,3 @@ p_grad = ...
 ```
 
 Pattern: `{var}_{location}_{grid}` where grid is optional
-
-## Naming Convention Rules
-
-1. **Suffixes are additive from left to right:**
-   - Base variable: `i`, `e`, `p`, `n`
-   - Add location: `i_f` (face), `e` (cell - no suffix)
-   - Add derivative: `i_g` (gradient on rho), `i_r` (gradient on rmid)
-
-2. **Keep it short but clear:**
-   - 1 char for state vars: `i`, `e`, `p`, `n`
-   - 2 chars only for ion species: `ni`, `nz` (to distinguish from electron density `n`)
-   - 1-2 char suffixes: `_f`, `_g`, `_r`
-
-3. **Avoid redundancy:**
-   - Don't use `_grad_rmid` when `_r` suffices
-   - Don't use `face` when `_f` suffices
