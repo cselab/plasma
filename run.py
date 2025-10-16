@@ -73,36 +73,19 @@ def build_grad_operator(nx, inv_dx, bc):
     return D, b
 
 
-def update_bc_vector(b, bc, dx0, dxN, left_is_dirichlet, right_is_dirichlet):
-    if left_is_dirichlet:
-        b = b.at[0].set(-2.0 * dx0 * bc[0])
-    else:
-        b = b.at[0].set(bc[2] if bc[2] is not None else 0.0)
-    
-    if right_is_dirichlet:
-        b = b.at[-1].set(2.0 * dxN * bc[1])
-    else:
-        b = b.at[-1].set(bc[3] if bc[3] is not None else 0.0)
-    
-    return b
-
-
 def build_face_operator(nx, bc_right_face, bc_right_grad):
     I = jnp.zeros((nx+1, nx))
-    b = jnp.zeros(nx+1)
-    
     I = I.at[0, 0].set(1.0)
-    
     for i in range(1, nx):
         I = I.at[i, i-1].set(0.5)
         I = I.at[i, i].set(0.5)
     
+    b = jnp.zeros(nx+1)
     if bc_right_face is not None:
         b = b.at[nx].set(bc_right_face)
     else:
         I = I.at[nx, nx-1].set(1.0)
         b = b.at[nx].set(0.5 * g.dx_array * (bc_right_grad if bc_right_grad is not None else 0.0))
-    
     return I, b
 
 
@@ -459,6 +442,11 @@ def calculate_neoclassical_conductivity(T_e_face, n_e_face, q_face, Z_eff_face):
     return sigma
 
 
+def safe_lref(face_value, face_grad_rmid):
+    result = jnp.where(jnp.abs(face_value) < g.eps, g.eps, -g.R_major * face_grad_rmid / face_value)
+    return jnp.where(jnp.abs(result) < g.eps, g.eps, result)
+
+
 def calculate_turbulent_transport(
         T_i_face, T_i_face_grad_rmid,
         T_e_face, T_e_face_grad_rmid,
@@ -468,41 +456,11 @@ def calculate_turbulent_transport(
         psi_face_grad, q_face, ions):
     chiGB = ((ions.A_i * g.m_amu)**0.5 / (g.geo_B_0 * g.q_e)**2 *
              (T_i_face * g.keV_to_J)**1.5 / g.geo_a_minor)
-    lref_over_lti_result = jnp.where(
-        jnp.abs(T_i_face) < g.eps,
-        g.eps,
-        -g.R_major * T_i_face_grad_rmid / T_i_face,
-    )
-    lref_over_lti = jnp.where(
-        jnp.abs(lref_over_lti_result) < g.eps, g.eps, lref_over_lti_result)
-    lref_over_lte_result = jnp.where(
-        jnp.abs(T_e_face) < g.eps,
-        g.eps,
-        -g.R_major * T_e_face_grad_rmid / T_e_face,
-    )
-    lref_over_lte = jnp.where(
-        jnp.abs(lref_over_lte_result) < g.eps, g.eps, lref_over_lte_result)
-    lref_over_lne_result = jnp.where(
-        jnp.abs(n_e_face) < g.eps,
-        g.eps,
-        -g.R_major * n_e_face_grad_rmid / n_e_face,
-    )
-    lref_over_lne = jnp.where(
-        jnp.abs(lref_over_lne_result) < g.eps, g.eps, lref_over_lne_result)
-    lref_over_lni0_result = jnp.where(
-        jnp.abs(n_i_face) < g.eps,
-        g.eps,
-        -g.R_major * n_i_face_grad_rmid / n_i_face,
-    )
-    lref_over_lni0 = jnp.where(
-        jnp.abs(lref_over_lni0_result) < g.eps, g.eps, lref_over_lni0_result)
-    lref_over_lni1_result = jnp.where(
-        jnp.abs(n_impurity_face) < g.eps,
-        g.eps,
-        -g.R_major * n_impurity_face_grad_rmid / n_impurity_face,
-    )
-    lref_over_lni1 = jnp.where(
-        jnp.abs(lref_over_lni1_result) < g.eps, g.eps, lref_over_lni1_result)
+    lref_over_lti = safe_lref(T_i_face, T_i_face_grad_rmid)
+    lref_over_lte = safe_lref(T_e_face, T_e_face_grad_rmid)
+    lref_over_lne = safe_lref(n_e_face, n_e_face_grad_rmid)
+    lref_over_lni0 = safe_lref(n_i_face, n_i_face_grad_rmid)
+    lref_over_lni1 = safe_lref(n_impurity_face, n_impurity_face_grad_rmid)
     q = q_face
     iota_scaled = jnp.abs((psi_face_grad[1:] / g.face_centers[1:]))
     iota_scaled0 = jnp.expand_dims(jnp.abs(psi_face_grad[1] / g.dx_array), axis=0)
@@ -761,10 +719,8 @@ def get_updated_ions(n_e, T_e):
     n_impurity = n_impurity_value
     n_impurity_bc = (None, n_impurity_right_face_constraint, 0.0, 0.0)
     n_e_face = g.I_ne @ n_e + g.b_face_ne
-    I_ni_temp, b_ni_temp = build_face_operator(g.n_rho, n_i_bc[1], n_i_bc[3])
-    I_nimp_temp, b_nimp_temp = build_face_operator(g.n_rho, n_impurity_bc[1], n_impurity_bc[3])
-    n_i_face = I_ni_temp @ n_i + b_ni_temp
-    n_impurity_face = I_nimp_temp @ n_impurity + b_nimp_temp
+    n_i_face = g.I_ni @ n_i + g.b_template_right * n_i_bc[1]
+    n_impurity_face = g.I_nimp @ n_impurity + g.b_template_right * n_impurity_bc[1]
     Z_eff_face = (Z_i_face**2 * n_i_face +
                   Z_impurity_face**2 * n_impurity_face) / n_e_face
     impurity_fractions_dict = {}
