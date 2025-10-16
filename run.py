@@ -1232,18 +1232,6 @@ while True:
         transient_in_cell = (tic_T_i, tic_T_e, g.ones_vec, g.geo_vpr)
         d_face = (full_chi_face_ion, full_chi_face_el, g.geo_g2g3_over_rhon_face, full_d_face_el)
         v_face = (v_heat_face_ion, v_heat_face_el, g.v_face_psi_zero, full_v_face_el)
-        source_mat_cell = (
-            (source_mat_ii, source_mat_ie, None, None),
-            (source_mat_ei, source_mat_ee, None, None),
-            (None, None, None, None),
-            (None, None, None, source_mat_nn),
-        )
-        source_cell = (
-            source_i,
-            source_e,
-            source_psi,
-            source_n_e,
-        )
         if tc_in_old is None:
             tc_in_old = jnp.concatenate(transient_in_cell)
             x_old = s
@@ -1260,12 +1248,15 @@ while True:
             conv_mat, conv_vec = make_convection_terms(v_face[i], d_face[i], g.dx_array, g.bcs[i])
             c_mat[i][i] += conv_mat
             c[i] += conv_vec
-        for i in range(g.num_channels):
-            for j in range(g.num_channels):
-                source = source_mat_cell[i][j]
-                if source is not None:
-                    c_mat[i][j] += jnp.diag(source)
-        c = [(c_i + source_i) for c_i, source_i in zip(c, source_cell)]
+        c_mat[0][0] += jnp.diag(source_mat_ii)
+        c_mat[0][1] += jnp.diag(source_mat_ie)
+        c_mat[1][0] += jnp.diag(source_mat_ei)
+        c_mat[1][1] += jnp.diag(source_mat_ee)
+        c_mat[3][3] += jnp.diag(source_mat_nn)
+        c[0] += source_i
+        c[1] += source_e
+        c[2] += source_psi
+        c[3] += source_n_e
         
         spatial_mat = jnp.block(c_mat)
         spatial_vec = jnp.block(c)
