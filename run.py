@@ -1173,25 +1173,25 @@ g.toc_psipsi_coeff = g.cell_centers * g.mu0_pi16sq_Phib_sq_over_F_sq / g.resisti
 g.transport_psipsi, g.b_psi = make_transport_terms(
     g.v_face_psi_zero, g.geo_g2g3_over_rhon_face, g.bcs[2])
 
-T_i_initial = np.interp(g.cell_centers, g.T_i_profile_x, g.T_i_profile_y)
-T_e_initial = np.interp(g.cell_centers, g.T_e_profile_x, g.T_e_profile_y)
+i_initial = np.interp(g.cell_centers, g.T_i_profile_x, g.T_i_profile_y)
+e_initial = np.interp(g.cell_centers, g.T_e_profile_x, g.T_e_profile_y)
 nGW = g.Ip / 1e6 / (np.pi * g.geo_a_minor**2) * g.scaling_n_e
-n_e_value = g.n_e * nGW
-n_e_face = np.concatenate([
-    n_e_value[0:1],
-    (n_e_value[:-1] + n_e_value[1:]) / 2.0,
+n_value = g.n_e * nGW
+n_face_init = np.concatenate([
+    n_value[0:1],
+    (n_value[:-1] + n_value[1:]) / 2.0,
     np.array([g.n_e_right_bc]),
 ])
 a_minor_out = g.geo_R_out_face[-1] - g.geo_R_out_face[0]
-nbar_from_n_e_face_inner = (
-    jax.scipy.integrate.trapezoid(n_e_face[:-1], g.geo_R_out_face[:-1]) /
+nbar_from_n_face_inner = (
+    jax.scipy.integrate.trapezoid(n_face_init[:-1], g.geo_R_out_face[:-1]) /
     a_minor_out)
 dr_edge = g.geo_R_out_face[-1] - g.geo_R_out_face[-2]
-C = (g.nbar * nGW - 0.5 * n_e_face[-1] * dr_edge / a_minor_out) / (
-    nbar_from_n_e_face_inner + 0.5 * n_e_face[-2] * dr_edge / a_minor_out)
-n_e_initial = C * n_e_value
-psi_initial = g.geo_psi_from_Ip_base * (g.Ip / g.geo_Ip_profile_face_base[-1])
-state = jnp.concatenate([T_i_initial, T_e_initial, psi_initial, n_e_initial])
+C = (g.nbar * nGW - 0.5 * n_face_init[-1] * dr_edge / a_minor_out) / (
+    nbar_from_n_face_inner + 0.5 * n_face_init[-2] * dr_edge / a_minor_out)
+n_initial = C * n_value
+p_initial = g.geo_psi_from_Ip_base * (g.Ip / g.geo_Ip_profile_face_base[-1])
+state = jnp.concatenate([i_initial, e_initial, p_initial, n_initial])
 t = 0.0
 history = [(t, state)]
 while True:
