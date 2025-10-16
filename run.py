@@ -992,9 +992,12 @@ C = (g.nbar * nGW - 0.5 * n_face[-1] * dr / a_out) / (nbar_inner + 0.5 * n_face[
 n_initial = C * n_val
 p_initial = g.geo_psi_from_Ip_base * g.Ip / g.geo_Ip_profile_face_base[-1]
 state = jnp.array(np.concatenate([i_initial, e_initial, p_initial, n_initial]))
-t, history = 0.0, []
-history.append((t, np.array(state)))
+t = 0.0
+f = open("run.raw", "wb")
 while True:
+    np.array([t]).tofile(f)
+    np.array(state).tofile(f)
+    if t >= g.t_end - g.tol: break
     dt = min(g.dt, g.t_end - t)
     pred, tc_in_old = state, None
     for _ in range(g.n_corr + 1):
@@ -1055,16 +1058,14 @@ while True:
         pred = jnp.linalg.solve(lhs, rhs)
     t += dt
     state = pred
-    history.append((t, np.array(pred)))
-    if t >= g.t_end - g.tol: break
-t_out, states = zip(*history)
-states = np.array(states)
-with open("run.raw", "wb") as f:
-    states.tofile(f)
-    np.asarray(t_out).tofile(f)
-nt = len(t_out)
-for var_name, var_slice in zip(("T_i", "T_e", "psi", "n_e"), (l.i, l.e, l.p, l.n)):
-    var = states[:, var_slice]
+f.close()
+data = np.fromfile("run.raw")
+nx = g.n
+nt = len(data) // (1 + 4 * nx)
+t_out = data[::1 + 4*nx]
+states = data.reshape(nt, 1 + 4*nx)[:, 1:].reshape(nt, 4, nx)
+for j, var_name in enumerate(("T_i", "T_e", "psi", "n_e")):
+    var = states[:, j]
     lo, hi = np.min(var), np.max(var)
     for idx in [0, nt // 4, nt // 2, 3 * nt // 4, nt - 1]:
         plt.title(f"time: {t_out[idx]:8.3e}")
