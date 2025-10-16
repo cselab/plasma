@@ -917,9 +917,9 @@ g.mask_adaptive_T = g.mask * g.adapt_T_prefac
 g.mask_adaptive_n = g.mask * g.adapt_n_prefac
 g.bc_i = (None, g.i_right_bc, 0.0, 0.0)
 g.bc_e = (None, g.e_right_bc, 0.0, 0.0)
-g.dpsi_drhonorm_edge = (g.Ip * g.pi_16_cubed * g.mu_0 * g.geo_Phi_b /
-                        (g.geo_g2g3_over_rhon_face[-1] * g.geo_F_face[-1]))
-g.bc_p = (None, None, 0.0, g.dpsi_drhonorm_edge)
+g.dp_edge = (g.Ip * g.pi_16_cubed * g.mu_0 * g.geo_Phi_b /
+             (g.geo_g2g3_over_rhon_face[-1] * g.geo_F_face[-1]))
+g.bc_p = (None, None, 0.0, g.dp_edge)
 g.bc_n = (None, g.n_right_bc, 0.0, 0.0)
 g.D_i, g.b_i_grad = grad_op(g.bc_i)
 g.D_e, g.b_e_grad = grad_op(g.bc_e)
@@ -961,18 +961,15 @@ g.zero_row_of_blocks = [g.zero_block] * g.num_channels
 g.zero_block_vec = [g.zero_vec] * g.num_channels
 g.bcs = (g.bc_i, g.bc_e, g.bc_p, g.bc_n)
 
-# Convert static arrays to JAX for use in loop
 g.zero_block = jnp.array(g.zero_block)
 g.zero_vec = jnp.array(g.zero_vec)
 g.ones_vec = jnp.array(g.ones_vec)
 g.v_p_zero = jnp.array(g.v_p_zero)
 g.ones_vpr = jnp.array(g.ones_vpr)
 g.identity = jnp.array(g.identity)
-# Precompute time-independent external sources
 source_i_ext, source_e_ext = heat_source()
 source_n_ext = particle_source()
 source_p_ext = current_source()
-# Precompute constant source terms
 g.source_i_external = source_i_ext * g.geo_vpr
 g.source_e_external = source_e_ext * g.geo_vpr
 g.source_i_adaptive = g.mask_adaptive_T * g.i_ped
@@ -982,7 +979,6 @@ g.source_p_external = source_p_ext
 g.source_mat_adaptive_T = -g.mask_adaptive_T
 g.source_mat_adaptive_n = -g.mask_adaptive_n
 g.c_p_coeff = g.cell_centers * g.mu0_pi16sq_Phib_sq_over_F_sq / g.resist_mult
-# Precompute constant PSI transport (v=0, constant diffusion, constant BC)
 g.A_p, g.b_p = trans_terms(g.v_p_zero, g.geo_g2g3_over_rhon_face, g.bcs[2])
 i_initial = np.interp(g.cell_centers, g.i_profile_x, g.i_profile_y)
 e_initial = np.interp(g.cell_centers, g.e_profile_x, g.e_profile_y)
