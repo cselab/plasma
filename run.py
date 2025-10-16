@@ -68,7 +68,7 @@ def build_grad_operator(inv_dx, bc):
     return jnp.array(D), jnp.array(b)
 
 
-def build_face_operator(nx, bc_right_face, bc_right_grad):
+def build_face_operator(bc_right_face, bc_right_grad):
     I = np.zeros((g.n_rho + 1, g.n_rho))
     I[0, 0] = 1.0
     for i in range(1, g.n_rho):
@@ -1109,17 +1109,17 @@ g.D_Ti_rmid, g.b_Ti_rmid = build_grad_operator(inv_drmid, g.T_i_bc)
 g.D_Te_rmid, g.b_Te_rmid = build_grad_operator(inv_drmid, g.T_e_bc)
 g.D_ne_rmid, g.b_ne_rmid = build_grad_operator(inv_drmid, g.n_e_bc)
 
-g.I_Ti, g.b_face_Ti = build_face_operator(g.n_rho, g.T_i_bc[1], g.T_i_bc[3])
-g.I_Te, g.b_face_Te = build_face_operator(g.n_rho, g.T_e_bc[1], g.T_e_bc[3])
-g.I_ne, g.b_face_ne = build_face_operator(g.n_rho, g.n_e_bc[1], g.n_e_bc[3])
-g.I_psi, g.b_face_psi = build_face_operator(g.n_rho, g.psi_bc[1], g.psi_bc[3])
+g.I_Ti, g.b_face_Ti = build_face_operator(g.T_i_bc[1], g.T_i_bc[3])
+g.I_Te, g.b_face_Te = build_face_operator(g.T_e_bc[1], g.T_e_bc[3])
+g.I_ne, g.b_face_ne = build_face_operator(g.n_e_bc[1], g.n_e_bc[3])
+g.I_psi, g.b_face_psi = build_face_operator(g.psi_bc[1], g.psi_bc[3])
 
 dummy_bc = (None, 1.0, 0.0, 0.0)
 g.D_ni_rho, _ = build_grad_operator(1.0 / g.dx_array, dummy_bc)
 g.D_ni_rmid, _ = build_grad_operator(1.0 / np.diff(g.geo_rmid), dummy_bc)
-g.I_ni, _ = build_face_operator(g.n_rho, 1.0, 0.0)
+g.I_ni, _ = build_face_operator(1.0, 0.0)
 g.D_nimp_rmid, _ = build_grad_operator(1.0 / np.diff(g.geo_rmid), dummy_bc)
-g.I_nimp, _ = build_face_operator(g.n_rho, 1.0, 0.0)
+g.I_nimp, _ = build_face_operator(1.0, 0.0)
 
 g.b_template_right = np.zeros(g.n_rho + 1)
 g.b_template_right[-1] = 1.0
