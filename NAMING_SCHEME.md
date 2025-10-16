@@ -1,7 +1,6 @@
-# Naming Scheme Documentation
+# Naming Scheme
 
-## Core Physics Variables (State Vector)
-**Ultra-short names for primary quantities:**
+## Core Variables
 - `i` = ion temperature (T_i)
 - `e` = electron temperature (T_e)  
 - `p` = poloidal flux (psi)
@@ -26,39 +25,37 @@
 
 Note: Ion density uses `ni` (2 chars) to distinguish from electron density `n`
 
-## Consistent Function Signatures
+## Function Signatures
 
-### Short cell-centered:
+### Cell-centered:
 ```python
 qei_coupling(e, n, ni, nz, Zi, Zz, Ai, Az)
 ```
 
-### Face values with _f:
+### Face values:
 ```python
 fusion_source(e, i_f, ni_f)
 neoclassical_conductivity(e_f, n_f, q, Zeff_f)
 ```
 
-### Face + gradients:
+### Face and gradients:
 ```python
 bootstrap_current(i_f, e_f, n_f, ni_f, p_g, q, 
                   i_g, e_g, n_g, ni_g, Zi_f, Zeff_f)
 neoclassical_transport(i_f, e_f, n_f, ni_f, i_g, e_g, n_g)
 ```
 
-### Mixed grids (rho + rmid):
+### Multiple grids:
 ```python
 turbulent_transport(i_f, i_r, e_f, e_r, n_f, n_g, n_r, 
                     ni_f, ni_r, nz_f, nz_r, p_g, q, ions)
 ```
-- i_r, e_r, n_r, ni_r, nz_r = rmid gradients (for safe_lref)
-- n_g = rho gradient (for Deff calculation)
-- p_g = psi gradient on rho
+Where `_r` = rmid gradients, `_g` = rho gradients
 
 ## Internal Variable Naming
 
 ### Transport Coefficients
-- `chi_i`, `chi_e` = thermal diffusivities (NOT chi_face_ion!)
+- `chi_i`, `chi_e` = thermal diffusivities
 - `D_n`, `v_n` = particle diffusivity, convection
 - `d_i`, `d_e`, `d_n` = diffusion terms
 - `v_i`, `v_e`, `v_n` = convection terms
@@ -69,8 +66,8 @@ turbulent_transport(i_f, i_r, e_f, e_r, n_f, n_g, n_r,
 - `C_ii`, `C_ie`, `C_ei`, `C_ee` = coupling matrices
 
 ### Sources
-- `src_i`, `src_e`, `src_p`, `src_n` = all sources use src_* prefix
-- `si_fus`, `se_fus` = fusion sources (ultra-short temporary)
+- `src_i`, `src_e`, `src_p`, `src_n` = source terms
+- `si_fus`, `se_fus` = fusion sources (temporary variables)
 
 ### Physics Quantities
 - `ft` = trapped particle fraction
@@ -85,37 +82,13 @@ turbulent_transport(i_f, i_r, e_f, e_r, n_f, n_g, n_r,
 
 ```python
 i, e, p, n = pred[l.i], pred[l.e], pred[l.p], pred[l.n]
-i_face, i_grad, i_grad_r = ...  # face, rho gradient, rmid gradient
+i_face, i_grad, i_grad_r = ...
 e_face, e_grad, e_grad_r = ...
 n_face, n_grad, n_grad_r = ...
-p_grad = ...                    # psi only has rho gradient
+p_grad = ...
 ```
 
 Pattern: `{var}_{location}_{grid}` where grid is optional
-
-## Summary of Changes Made
-
-### Fixed Inconsistencies:
-
-1. **Function parameter naming:**
-   - `turbulent_transport`: Changed to use `_r` for rmid gradients consistently
-   - `neoclassical_transport`: Changed `_grad` → `_g`
-   - `bootstrap_current`: Changed `_grad` → `_g`, `p_grad` → `p_g`
-
-2. **Internal variable naming:**
-   - `chi_face_ion` → `chi_i`
-   - `chi_face_el` → `chi_e`
-   - `d_face_el` → `d_e`
-   - `v_face_el` → `v_e`
-   - `d_face_*` → `d_i`, `d_e_out`, `d_n` (diffusion terms)
-
-3. **Source naming:**
-   - `source_p` → `src_p` (now all sources use `src_*`)
-
-4. **Removed all old-style suffixes:**
-   - No more `_face` (use `_f`)
-   - No more `_grad` (use `_g`)  
-   - No more `_gr` (use `_r` for rmid)
 
 ## Naming Convention Rules
 
@@ -133,24 +106,9 @@ Pattern: `{var}_{location}_{grid}` where grid is optional
    - Don't use `_grad_rmid` when `_r` suffices
    - Don't use `face` when `_f` suffices
 
-## Cognitive Load Reduction
+## Benefits
 
-**Before:**
-```python
-def turbulent_transport(T_i_face, T_i_face_grad_rmid, T_e_face, 
-                        T_e_face_grad_rmid, n_e_face, n_e_face_grad,
-                        n_e_face_grad_rmid, ...)
-```
-
-**After:**
-```python
-def turbulent_transport(i_f, i_r, e_f, e_r, n_f, n_g, n_r, ...)
-```
-
-**Improvement:** 70% reduction in function signature length while maintaining clarity
-
-**Result:** 
-- Fully consistent across all functions
-- Easy to scan and understand
-- Follows logical pattern
-- Minimal cognitive overhead
+- **Compact signatures:** 70% reduction in function parameter length
+- **Easy to scan:** Minimal visual noise, quick pattern recognition
+- **Consistent:** Same rules apply everywhere
+- **Low cognitive load:** Simple, predictable naming

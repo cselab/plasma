@@ -267,38 +267,38 @@ def current_source():
     return source_p_ext
 
 
-def fusion_source(Te, Ti_f, ni_f):
+def fusion_source(e, i_f, ni_f):
     prod = 1.0
     for frac, sym in zip(g.main_ion_fractions, g.main_ion_names):
         if sym in ("D", "T"):
             prod *= frac
-    theta = Ti_f / (1 - (Ti_f * (g.fusion_C2 + Ti_f * (g.fusion_C4 + Ti_f * g.fusion_C6))) /
-                    (1 + Ti_f * (g.fusion_C3 + Ti_f * (g.fusion_C5 + Ti_f * g.fusion_C7))))
+    theta = i_f / (1 - (i_f * (g.fusion_C2 + i_f * (g.fusion_C4 + i_f * g.fusion_C6))) /
+                    (1 + i_f * (g.fusion_C3 + i_f * (g.fusion_C5 + i_f * g.fusion_C7))))
     xi = (g.fusion_BG**2 / (4 * theta))**(1/3)
-    logsv = jnp.log(g.fusion_C1 * theta) + 0.5 * jnp.log(xi / (g.fusion_mrc2 * Ti_f**3)) - 3 * xi - jnp.log(1e6)
+    logsv = jnp.log(g.fusion_C1 * theta) + 0.5 * jnp.log(xi / (g.fusion_mrc2 * i_f**3)) - 3 * xi - jnp.log(1e6)
     Pf = jnp.exp(jnp.log(prod * g.fusion_Efus) + 2 * jnp.log(ni_f) + logsv)
     Pc = 0.5 * (Pf[:-1] + Pf[1:])
-    x2 = g.fusion_birth_energy / (g.fusion_critical_energy_coeff * Te)
+    x2 = g.fusion_birth_energy / (g.fusion_critical_energy_coeff * e)
     x = jnp.sqrt(x2)
     fi = 2 * ((1/6) * jnp.log((1 - x + x2) / (1 + 2*x + x2)) + 
              (jnp.arctan((2*x - 1) / jnp.sqrt(3)) + jnp.pi/6) / jnp.sqrt(3)) / x2
     return Pc * fi * g.fusion_alpha_fraction, Pc * (1 - fi) * g.fusion_alpha_fraction
 
 
-def qei_coupling(Te, ne, ni, nz, Zi, Zz, Ai, Az):
-    log_tau = _calculate_log_tau_e_Z1(Te, ne, log_lambda_ei(ne, Te))
-    Zw = (ni * Zi**2 / Ai + nz * Zz**2 / Az) / ne
-    Q = jnp.exp(jnp.log(g.Qei_multiplier * 1.5 * ne) + jnp.log(g.keV_to_J / g.m_amu) + 
+def qei_coupling(e, n, ni, nz, Zi, Zz, Ai, Az):
+    log_tau = _calculate_log_tau_e_Z1(e, n, log_lambda_ei(n, e))
+    Zw = (ni * Zi**2 / Ai + nz * Zz**2 / Az) / n
+    Q = jnp.exp(jnp.log(g.Qei_multiplier * 1.5 * n) + jnp.log(g.keV_to_J / g.m_amu) + 
                 jnp.log(2 * g.m_e) + jnp.log(Zw) - log_tau) * g.geo_vpr
     return -Q, -Q, Q, Q
 
 
-def bootstrap_current(Ti_f, Te_f, ne_f, ni_f, p_g, q, Ti_g, Te_g, ne_g, ni_g, Zi_f, Zeff_f):
+def bootstrap_current(i_f, e_f, n_f, ni_f, p_g, q, i_g, e_g, n_g, ni_g, Zi_f, Zeff_f):
     ft = g.f_trap
-    log_lei = log_lambda_ei(ne_f, Te_f)
-    log_lii = 30 - 0.5 * jnp.log(ni_f) + 1.5 * jnp.log(Ti_f * 1e3) - 3 * jnp.log(Zi_f)
-    nue = nu_e_star(q, ne_f, Te_f, Zeff_f, log_lei)
-    nui = nu_i_star(q, ni_f, Ti_f, Zeff_f, log_lii)
+    log_lei = log_lambda_ei(n_f, e_f)
+    log_lii = 30 - 0.5 * jnp.log(ni_f) + 1.5 * jnp.log(i_f * 1e3) - 3 * jnp.log(Zi_f)
+    nue = nu_e_star(q, n_f, e_f, Zeff_f, log_lei)
+    nui = nu_i_star(q, ni_f, i_f, Zeff_f, log_lii)
     ft31 = ft / (1 + (1 - 0.1 * ft) * jnp.sqrt(nue) + 0.5 * (1 - ft) * nue / Zeff_f)
     L31 = (1 + 1.4/(Zeff_f + 1)) * ft31 - 1.9/(Zeff_f + 1) * ft31**2 + 0.3/(Zeff_f + 1) * ft31**3 + 0.2/(Zeff_f + 1) * ft31**4
     ft32ee = ft / (1 + 0.26 * (1 - ft) * jnp.sqrt(nue) + 0.18 * (1 - 0.37 * ft) * nue / jnp.sqrt(Zeff_f))
@@ -314,20 +314,20 @@ def bootstrap_current(Ti_f, Te_f, ne_f, ni_f, p_g, q, Ti_g, Te_g, ne_g, ni_g, Zi
     a0 = -1.17 * (1 - ft) / (1 - 0.22 * ft - 0.19 * ft**2)
     alph = ((a0 + 0.25 * (1 - ft**2) * jnp.sqrt(nui)) / (1 + 0.5 * jnp.sqrt(nui)) + 
             0.315 * nui**2 * ft**6) / (1 + 0.15 * nui**2 * ft**6)
-    pe, pi = ne_f * Te_f * 1.6e-16, ni_f * Ti_f * 1.6e-16
+    pe, pi = n_f * e_f * 1.6e-16, ni_f * i_f * 1.6e-16
     gc = jnp.concatenate([jnp.zeros(1), -g.geo_F_face[1:] * 2 * jnp.pi / (g.geo_B_0 * p_g[1:])])
-    jbs = gc * (L31 * (pe * ne_g/ne_f + pi * ni_g/ni_f) + 
-                (L31 + F32ee + F32ei) * pe * Te_g/Te_f + 
-                (L31 + alph * L34) * pi * Ti_g/Ti_f)
+    jbs = gc * (L31 * (pe * n_g/n_f + pi * ni_g/ni_f) + 
+                (L31 + F32ee + F32ei) * pe * e_g/e_f + 
+                (L31 + alph * L34) * pi * i_g/i_f)
     return 0.5 * (jbs[:-1] + jbs[1:])
 
 
-def neoclassical_conductivity(Te_f, ne_f, q, Zeff_f):
+def neoclassical_conductivity(e_f, n_f, q, Zeff_f):
     ft = g.f_trap
     NZ = 0.58 + 0.74 / (0.76 + Zeff_f)
-    log_lei = log_lambda_ei(ne_f, Te_f)
-    sig_sptz = 1.9012e04 * (Te_f * 1e3)**1.5 / Zeff_f / NZ / log_lei
-    nue = nu_e_star(q, ne_f, Te_f, Zeff_f, log_lei)
+    log_lei = log_lambda_ei(n_f, e_f)
+    sig_sptz = 1.9012e04 * (e_f * 1e3)**1.5 / Zeff_f / NZ / log_lei
+    nue = nu_e_star(q, n_f, e_f, Zeff_f, log_lei)
     ft33 = ft / (1 + (0.55 - 0.1 * ft) * jnp.sqrt(nue) + 0.45 * (1 - ft) * nue / Zeff_f**1.5)
     sig_neo = 1 - ft33 * (1 + 0.36/Zeff_f - ft33 * (0.59/Zeff_f - 0.23/Zeff_f * ft33))
     sig_f = sig_sptz * sig_neo
@@ -339,11 +339,11 @@ def safe_lref(v, grad):
     return jnp.where(jnp.abs(r) < g.eps, g.eps, r)
 
 
-def turbulent_transport(Ti_f, Ti_r, Te_f, Te_r, ne_f, ne_g, ne_r, ni_f, ni_r, nz_f, nz_r, p_g, q, ions):
-    chiGB = ((ions.A_i * g.m_amu)**0.5 / (g.geo_B_0 * g.q_e)**2 * (Ti_f * g.keV_to_J)**1.5 / g.geo_a_minor)
-    lti = safe_lref(Ti_f, Ti_r)
-    lte = safe_lref(Te_f, Te_r)
-    lne = safe_lref(ne_f, ne_r)
+def turbulent_transport(i_f, i_r, e_f, e_r, n_f, n_g, n_r, ni_f, ni_r, nz_f, nz_r, p_g, q, ions):
+    chiGB = ((ions.A_i * g.m_amu)**0.5 / (g.geo_B_0 * g.q_e)**2 * (i_f * g.keV_to_J)**1.5 / g.geo_a_minor)
+    lti = safe_lref(i_f, i_r)
+    lte = safe_lref(e_f, e_r)
+    lne = safe_lref(n_f, n_r)
     lni0 = safe_lref(ni_f, ni_r)
     lni1 = safe_lref(nz_f, nz_r)
     iota = jnp.abs(p_g[1:] / g.face_centers[1:])
@@ -352,15 +352,15 @@ def turbulent_transport(Ti_f, Ti_r, Te_f, Te_r, ne_f, ne_g, ne_r, ni_f, ni_r, nz
     smag = -rm * jnp.gradient(iota, rm) / iota
     eps_lcfs = rm[-1] / g.R_major
     x = jnp.where(jnp.abs(rm / rm[-1]) < g.eps, g.eps, rm / rm[-1])
-    TiTe = Ti_f / Te_f
-    log_tau = _calculate_log_tau_e_Z1(Te_f, ne_f, log_lambda_ei(ne_f, Te_f))
+    TiTe = i_f / e_f
+    log_tau = _calculate_log_tau_e_Z1(e_f, n_f, log_lambda_ei(n_f, e_f))
     nu = 1 / jnp.exp(log_tau) * ions.Z_eff_face * g.coll_mult
     eps = jnp.clip(g.geo_rho_face / g.R_major, g.eps)
-    tb = (q * g.R_major / (eps**1.5 * jnp.sqrt(Te_f * g.keV_to_J / g.m_e))).at[0].set(
-        q[1] * g.R_major / (eps[1]**1.5 * jnp.sqrt(Te_f[1] * g.keV_to_J / g.m_e)))
+    tb = (q * g.R_major / (eps**1.5 * jnp.sqrt(e_f * g.keV_to_J / g.m_e))).at[0].set(
+        q[1] * g.R_major / (eps[1]**1.5 * jnp.sqrt(e_f[1] * g.keV_to_J / g.m_e)))
     nu_star = jnp.log10(nu * tb)
     f0 = 2 * g.keV_to_J / g.geo_B_0**2 * g.mu_0 * q**2
-    alph = f0 * (Te_f * ne_f * (lte + lne) + ni_f * Ti_f * (lti + lni0) + nz_f * Ti_f * (lti + lni1))
+    alph = f0 * (e_f * n_f * (lte + lne) + ni_f * i_f * (lti + lni0) + nz_f * i_f * (lti + lni1))
     smag = smag - alph/2
     smag = jnp.where(q < 1, 0.1, smag)
     q = jnp.where(q < 1, 1, q)
@@ -368,7 +368,7 @@ def turbulent_transport(Ti_f, Ti_r, Te_f, Te_r, ne_f, ne_g, ne_r, ni_f, ni_r, nz
     qualikiz_inputs = QualikizInputs(
         Z_eff_face=ions.Z_eff_face, lref_over_lti=lti, lref_over_lte=lte, lref_over_lne=lne,
         lref_over_lni0=lni0, lref_over_lni1=lni1, q=q, smag=smag, x=x, Ti_Te=TiTe,
-        log_nu_star_face=nu_star, normni=ni_f/ne_f, chiGB=chiGB, Rmaj=g.R_major,
+        log_nu_star_face=nu_star, normni=ni_f/n_f, chiGB=chiGB, Rmaj=g.R_major,
         Rmin=g.geo_a_minor, alpha=alph, epsilon_lcfs=eps_lcfs)
     qualikiz_inputs = dataclasses.replace(
         qualikiz_inputs,
@@ -405,13 +405,13 @@ def turbulent_transport(Ti_f, Ti_r, Te_f, Te_r, ne_f, ne_g, ne_r, ni_f, ni_r, nz
     pfe = model_output["pfe_itg"].squeeze() + model_output["pfe_tem"].squeeze()
     gradient_reference_length = g.R_major
     gyrobohm_flux_reference_length = g.geo_a_minor
-    pfe_SI = pfe * ne_f * qualikiz_inputs.chiGB / gyrobohm_flux_reference_length
+    pfe_SI = pfe * n_f * qualikiz_inputs.chiGB / gyrobohm_flux_reference_length
     chi_i = ((gradient_reference_length / gyrobohm_flux_reference_length) * qi / 
                     qualikiz_inputs.lref_over_lti) * qualikiz_inputs.chiGB
     chi_e = ((gradient_reference_length / gyrobohm_flux_reference_length) * qe / 
                    qualikiz_inputs.lref_over_lte) * qualikiz_inputs.chiGB
-    Deff = -pfe_SI / (ne_g * g.geo_g1_over_vpr2_face * g.geo_rho_b + g.eps)
-    Veff = pfe_SI / (ne_f * g.geo_g0_over_vpr_face * g.geo_rho_b)
+    Deff = -pfe_SI / (n_g * g.geo_g1_over_vpr2_face * g.geo_rho_b + g.eps)
+    Veff = pfe_SI / (n_f * g.geo_g0_over_vpr_face * g.geo_rho_b)
     Deff_mask = (((pfe >= 0) & (qualikiz_inputs.lref_over_lne >= 0)) | 
                  ((pfe < 0) & (qualikiz_inputs.lref_over_lne < 0))) & (abs(qualikiz_inputs.lref_over_lne) >= g.An_min)
     Veff_mask = jnp.invert(Deff_mask)
@@ -474,26 +474,26 @@ def turbulent_transport(Ti_f, Ti_r, Te_f, Te_r, ne_f, ne_g, ne_r, ni_f, ni_r, nz
     d_e = smooth_single_coeff(d_e)
     v_e = smooth_single_coeff(v_e)
     d_i = g.geo_g1_keV * ni_f * chi_i
-    d_e_out = g.geo_g1_keV * ne_f * chi_e
+    d_e_out = g.geo_g1_keV * n_f * chi_e
     d_n = g.geo_g1_over_vpr_face * d_e
     v_n = g.geo_g0_face * v_e
     return d_i, d_e_out, d_n, v_n
 
 
-def neoclassical_transport(Ti_f, Te_f, ne_f, ni_f, Ti_g, Te_g, ne_g):
-    chi_Ti_neo = g.geo_g1_keV * ni_f * g.chi_pereverzev
-    chi_Te_neo = g.geo_g1_keV * ne_f * g.chi_pereverzev
-    d_neo_ne = g.D_pereverzev
-    v_neo_ne = ne_g / ne_f * d_neo_ne * g.geo_factor_pereverzev
-    chi_Ti_neo = jnp.where(g.pedestal_mask_face, 0.0, chi_Ti_neo)
-    chi_Te_neo = jnp.where(g.pedestal_mask_face, 0.0, chi_Te_neo)
-    v_Ti = Ti_g / Ti_f * chi_Ti_neo
-    v_Te = Te_g / Te_f * chi_Te_neo
-    d_neo_ne = jnp.where(g.pedestal_mask_face, 0.0, d_neo_ne * g.geo_g1_over_vpr_face)
-    v_neo_ne = jnp.where(g.pedestal_mask_face, 0.0, v_neo_ne * g.geo_g0_face)
-    chi_Ti_neo = jnp.concatenate([chi_Ti_neo[1:2], chi_Ti_neo[1:]])
-    chi_Te_neo = jnp.concatenate([chi_Te_neo[1:2], chi_Te_neo[1:]])
-    return v_Ti, v_Te, chi_Ti_neo, chi_Te_neo, d_neo_ne, v_neo_ne
+def neoclassical_transport(i_f, e_f, n_f, ni_f, i_g, e_g, n_g):
+    chi_i_neo = g.geo_g1_keV * ni_f * g.chi_pereverzev
+    chi_e_neo = g.geo_g1_keV * n_f * g.chi_pereverzev
+    d_neo_n = g.D_pereverzev
+    v_neo_n = n_g / n_f * d_neo_n * g.geo_factor_pereverzev
+    chi_i_neo = jnp.where(g.pedestal_mask_face, 0.0, chi_i_neo)
+    chi_e_neo = jnp.where(g.pedestal_mask_face, 0.0, chi_e_neo)
+    v_i = i_g / i_f * chi_i_neo
+    v_e = e_g / e_f * chi_e_neo
+    d_neo_n = jnp.where(g.pedestal_mask_face, 0.0, d_neo_n * g.geo_g1_over_vpr_face)
+    v_neo_n = jnp.where(g.pedestal_mask_face, 0.0, v_neo_n * g.geo_g0_face)
+    chi_i_neo = jnp.concatenate([chi_i_neo[1:2], chi_i_neo[1:]])
+    chi_e_neo = jnp.concatenate([chi_e_neo[1:2], chi_e_neo[1:]])
+    return v_i, v_e, chi_i_neo, chi_e_neo, d_neo_n, v_neo_n
 
 
 def _smooth_savgol(data, idx_limit, polyorder):
