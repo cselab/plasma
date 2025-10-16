@@ -34,7 +34,7 @@ g.mu_0 = 4 * jnp.pi * 1e-7
 g.eps = 1e-7
 g.EPS_CONVECTION = 1e-20
 g.EPS_PECLET = 1e-3
-g.SAVGOL_WINDOW_LENGTH = 5
+g.savgol_w = 5
 g.T_E_ALLOWED_RANGE = (0.1, 100.0)
 g.scaling_n_e = 1e20
 g.sym = "D", "T", "Ne"
@@ -190,7 +190,7 @@ g.MAVRIN_Z_COEFFS = {
         [0.0000e00, 0.0000e00, 0.0000e00, 0.0000e00, 1.0000e01],
     ]),
 }
-g.TEMPERATURE_INTERVALS = {
+g.T_intervals = {
     "Ne": np.array([0.5, 2.0]),
 }
 
@@ -199,7 +199,7 @@ def z_avg_species(T_e, ion_symbol):
     if ion_symbol not in g.MAVRIN_Z_COEFFS:
         return jnp.ones_like(T_e) * g.z[ion_symbol]
     T_e = jnp.clip(T_e, *g.T_E_ALLOWED_RANGE)
-    interval_indices = jnp.searchsorted(g.TEMPERATURE_INTERVALS[ion_symbol],
+    interval_indices = jnp.searchsorted(g.T_intervals[ion_symbol],
                                         T_e)
     Zavg_coeffs_in_range = jnp.take(g.MAVRIN_Z_COEFFS[ion_symbol],
                                     interval_indices,
@@ -269,40 +269,40 @@ g.FLUX_NAME_MAP = {
     "efeETG": "qe_etg",
 }
 g.EPSILON_NN = 1 / 3
-g.rho_smoothing_limit = 0.1
+g.rho_smooth_lim = 0.1
 
 
 def heat_source():
-    profile = gaussian_profile(g.generic_heat_location,
-                               g.generic_heat_width,
-                               g.generic_heat_P_total)
-    source_i = profile * (1 - g.generic_heat_electron_fraction)
-    source_e = profile * g.generic_heat_electron_fraction
+    profile = gaussian_profile(g.heat_loc,
+                               g.heat_w,
+                               g.heat_P)
+    source_i = profile * (1 - g.heat_efrac)
+    source_e = profile * g.heat_efrac
     return source_i, source_e
 
 
 def particle_source():
-    source_n = gaussian_profile(g.generic_particle_location,
-                                 g.generic_particle_width,
-                                 g.generic_particle_S_total)
-    source_n += gaussian_profile(g.pellet_location,
-                                  g.pellet_width,
-                                  g.pellet_S_total)
+    source_n = gaussian_profile(g.part_loc,
+                                 g.part_w,
+                                 g.part_S)
+    source_n += gaussian_profile(g.pellet_loc,
+                                  g.pellet_w,
+                                  g.pellet_S)
     r = g.cell_centers
-    S = jnp.exp(-(1.0 - r) / g.gas_puff_decay_length)
-    C = g.gas_puff_S_total / jnp.sum(S * g.geo_vpr * g.dx)
+    S = jnp.exp(-(1.0 - r) / g.puff_decay)
+    C = g.puff_S / jnp.sum(S * g.geo_vpr * g.dx)
     source_n += C * S
     return source_n
 
 
 def current_source():
-    I_generic = g.Ip * g.generic_current_fraction
-    generic_current_form = jnp.exp(
-        -((g.cell_centers - g.generic_current_location)**2) /
-        (2 * g.generic_current_width**2))
-    Cext = I_generic / jnp.sum(generic_current_form * g.geo_spr * g.dx)
-    source_p_external = Cext * generic_current_form
-    return source_p_external
+    I_curr = g.Ip * g.curr_frac
+    curr_form = jnp.exp(
+        -((g.cell_centers - g.curr_loc)**2) /
+        (2 * g.curr_w**2))
+    C = I_curr / jnp.sum(curr_form * g.geo_spr * g.dx)
+    source_p_ext = C * curr_form
+    return source_p_ext
 
 
 def fusion_source(T_e, T_i_face, n_i_face):
@@ -490,7 +490,7 @@ def turbulent_transport(T_i_face, T_i_face_grad_rmid, T_e_face,
     log_tau_e_Z1 = _calculate_log_tau_e_Z1(T_e_face, n_e_face,
                                            log_lambda_ei_face)
     nu_e = 1 / jnp.exp(
-        log_tau_e_Z1) * ions.Z_eff_face * g.collisionality_multiplier
+        log_tau_e_Z1) * ions.Z_eff_face * g.coll_mult
     epsilon = g.geo_rho_face / g.R_major
     epsilon = jnp.clip(epsilon, g.eps)
     tau_bounce = (q_face * g.R_major /
@@ -602,7 +602,7 @@ def turbulent_transport(T_i_face, T_i_face_grad_rmid, T_e_face,
     lower_cutoff = 0.01
     kernel = jnp.exp(-jnp.log(2) *
                      (g.face_centers[:, jnp.newaxis] - g.face_centers)**2 /
-                     (g.smoothing_width**2 + g.eps))
+                     (g.smooth_w**2 + g.eps))
     mask_outer_edge = g.rho_norm_ped_top - g.eps
     mask_inner_edge = g.rho_inner + g.eps
     mask = jnp.where(
@@ -669,7 +669,7 @@ def neoclassical_transport(T_i_face, T_e_face, n_e_face, n_i_face,
 
 
 def _smooth_savgol(data, idx_limit, polyorder):
-    window_length = g.SAVGOL_WINDOW_LENGTH
+    window_length = g.savgol_w
     smoothed_data = scipy.signal.savgol_filter(data,
                                                window_length,
                                                polyorder,
@@ -751,8 +751,8 @@ def ions_update(n_e, T_e, T_e_face):
     n_impurity = n_impurity_value
     n_impurity_bc = (None, n_impurity_right_face_constraint, 0.0, 0.0)
     n_e_face = g.I_n @ n_e + g.b_n_face
-    n_i_face = g.I_ni @ n_i + g.b_template_right * n_i_bc[1]
-    n_impurity_face = g.I_nimp @ n_impurity + g.b_template_right * n_impurity_bc[
+    n_i_face = g.I_ni @ n_i + g.b_r * n_i_bc[1]
+    n_impurity_face = g.I_nimp @ n_impurity + g.b_r * n_impurity_bc[
         1]
     Z_eff_face = (Z_i_face**2 * n_i_face +
                   Z_impurity_face**2 * n_impurity_face) / n_e_face
@@ -779,27 +779,27 @@ def ions_update(n_e, T_e, T_e_face):
 
 
 g.MIN_DELTA = 1e-7
-g.generic_current_fraction = 0.46
-g.generic_current_width = 0.075
-g.generic_current_location = 0.36
-g.generic_particle_S_total = 2.05e20
-g.generic_particle_location = 0.3
-g.generic_particle_width = 0.25
-g.gas_puff_decay_length = 0.3
-g.gas_puff_S_total = 6.0e21
-g.pellet_S_total = 0.0e22
-g.pellet_width = 0.1
-g.pellet_location = 0.85
-g.generic_heat_location = 0.12741589640723575
-g.generic_heat_width = 0.07280908366127758
-g.generic_heat_P_total = 51.0e6
-g.generic_heat_electron_fraction = 0.68
+g.curr_frac = 0.46
+g.curr_w = 0.075
+g.curr_loc = 0.36
+g.part_S = 2.05e20
+g.part_loc = 0.3
+g.part_w = 0.25
+g.puff_decay = 0.3
+g.puff_S = 6.0e21
+g.pellet_S = 0.0e22
+g.pellet_w = 0.1
+g.pellet_loc = 0.85
+g.heat_loc = 0.12741589640723575
+g.heat_w = 0.07280908366127758
+g.heat_P = 51.0e6
+g.heat_efrac = 0.68
 g.model = qlknn_model.QLKNNModel.load_default_model()
 g.R_major = 6.2
 g.a_minor = 2.0
 g.B_0 = 5.3
-g.tolerance = 1e-7
-g.n_corrector_steps = 1
+g.tol = 1e-7
+g.n_corr = 1
 g.Z_eff = 1.6
 g.impurity_names = ("Ne", )
 g.main_ion_names = "D", "T"
@@ -832,13 +832,13 @@ g.n_profile_y = np.array(list(g.n_profile_dict.values()))
 g.n_profile = np.interp(g.cell_centers, g.n_profile_x, g.n_profile_y)
 g.chi_pereverzev = 30
 g.D_pereverzev = 15
-g.theta_implicit = 1.0
-g.theta_explicit = 0.0
-g.t_final = 5.0
-g.dt_fixed = 0.2
-g.resistivity_multiplier = 200
-g.adaptive_T_source_prefactor = 2.0e10
-g.adaptive_n_source_prefactor = 2.0e8
+g.theta_imp = 1.0
+g.theta_exp = 0.0
+g.t_end = 5.0
+g.dt = 0.2
+g.resist_mult = 200
+g.adapt_T_prefac = 2.0e10
+g.adapt_n_prefac = 2.0e8
 g.ITG_flux_ratio_correction = 1
 g.hires_factor = 4
 g.Qei_multiplier = 1.0
@@ -913,7 +913,7 @@ flux_surf_avg_1_over_B2 = chease_data["<1/B**2>"] / g.B_0**2
 rhon = np.sqrt(Phi / Phi[-1])
 vpr = 4 * np.pi * Phi[-1] * rhon / (F_chease * flux_surf_avg_1_over_R2)
 assert not flux_surf_avg_Bp2[-1] < 1e-10
-idx_limit = np.argmin(np.abs(rhon - g.rho_smoothing_limit))
+idx_limit = np.argmin(np.abs(rhon - g.rho_smooth_lim))
 flux_surf_avg_Bp2[:] = _smooth_savgol(flux_surf_avg_Bp2, idx_limit, 2)
 flux_surf_avg_R2Bp2[:] = _smooth_savgol(flux_surf_avg_R2Bp2, idx_limit, 2)
 flux_surf_avg_RBp[:] = _smooth_savgol(flux_surf_avg_RBp, idx_limit, 1)
@@ -1091,16 +1091,16 @@ g.f_trap = 1.0 - np.sqrt(aa) * (1.0 - epsilon_effective) / (
     1.0 + 2.0 * np.sqrt(epsilon_effective))
 
 g.ETG_correction_factor = 1.0 / 3.0
-g.collisionality_multiplier = 1.0
-g.smoothing_width = 0.1
+g.coll_mult = 1.0
+g.smooth_w = 0.1
 g.transport_rho_min = 0.0
 g.transport_rho_max = 1.0
 rho_norm_ped_top_idx = np.abs(g.cell_centers - g.rho_norm_ped_top).argmin()
 g.mask = np.zeros_like(g.geo_rho, dtype=bool)
 g.mask[rho_norm_ped_top_idx] = True
 g.pedestal_mask_face = g.face_centers > g.rho_norm_ped_top
-g.mask_adaptive_T = g.mask * g.adaptive_T_source_prefactor
-g.mask_adaptive_n = g.mask * g.adaptive_n_source_prefactor
+g.mask_adaptive_T = g.mask * g.adapt_T_prefac
+g.mask_adaptive_n = g.mask * g.adapt_n_prefac
 g.bc_i = (None, g.i_right_bc, 0.0, 0.0)
 g.bc_e = (None, g.e_right_bc, 0.0, 0.0)
 g.dpsi_drhonorm_edge = (g.Ip * g.pi_16_cubed * g.mu_0 * g.geo_Phi_b /
@@ -1130,11 +1130,11 @@ g.I_ni, _ = face_op(1.0, 0.0)
 g.D_nimp_rmid, _ = grad_op_nu(inv_drmid, dummy_bc)
 g.I_nimp, _ = face_op(1.0, 0.0)
 
-g.b_template_right = np.zeros(g.n + 1)
-g.b_template_right[-1] = 1.0
-g.b_template_right = jnp.array(g.b_template_right)
-g.b_template_right_grad_rho = g.b_template_right * (2.0 * g.inv_dx)
-g.b_template_right_grad_rmid = g.b_template_right * (2.0 * inv_drmid[-1])
+g.b_r = np.zeros(g.n + 1)
+g.b_r[-1] = 1.0
+g.b_r = jnp.array(g.b_r)
+g.b_r_grad = g.b_r * (2.0 * g.inv_dx)
+g.b_r_grad_r = g.b_r * (2.0 * inv_drmid[-1])
 
 g.num_cells = g.n
 g.num_channels = 4
@@ -1168,7 +1168,7 @@ g.source_n_constant = source_n_ext * g.geo_vpr + g.mask_adaptive_n * g.n_ped
 g.source_p_external = source_p_ext
 g.source_mat_adaptive_T = -g.mask_adaptive_T
 g.source_mat_adaptive_n = -g.mask_adaptive_n
-g.c_p_coeff = g.cell_centers * g.mu0_pi16sq_Phib_sq_over_F_sq / g.resistivity_multiplier
+g.c_p_coeff = g.cell_centers * g.mu0_pi16sq_Phib_sq_over_F_sq / g.resist_mult
 
 # Precompute constant PSI transport (v=0, constant diffusion, constant BC)
 g.A_p, g.b_p = trans_terms(
@@ -1196,12 +1196,12 @@ state = jnp.concatenate([i_initial, e_initial, p_initial, n_initial])
 t = 0.0
 history = [(t, state)]
 while True:
-    dt = g.dt_fixed
-    if t + dt > g.t_final:
-        dt = g.t_final - t
+    dt = g.dt
+    if t + dt > g.t_end:
+        dt = g.t_end - t
     pred = state
     tc_in_old = None
-    for _ in range(g.n_corrector_steps + 1):
+    for _ in range(g.n_corr + 1):
         i = pred[l.i]
         e = pred[l.e]
         p = pred[l.p]
@@ -1228,16 +1228,12 @@ while True:
             jnp.abs(g.q_factor_bulk * g.face_centers[1:] / p_grad[1:]),
         ])
 
-        ni_face = g.I_ni @ ions.n_i + g.b_template_right * ions.n_i_bc[1]
-        ni_grad = g.D_ni_rho @ ions.n_i + g.b_template_right_grad_rho * ions.n_i_bc[
-            1]
-        ni_grad_r = g.D_ni_rmid @ ions.n_i + g.b_template_right_grad_rmid * ions.n_i_bc[
-            1]
+        ni_face = g.I_ni @ ions.n_i + g.b_r * ions.n_i_bc[1]
+        ni_grad = g.D_ni_rho @ ions.n_i + g.b_r_grad * ions.n_i_bc[1]
+        ni_grad_r = g.D_ni_rmid @ ions.n_i + g.b_r_grad_r * ions.n_i_bc[1]
 
-        nz_face = g.I_nimp @ ions.n_impurity + g.b_template_right * ions.n_impurity_bc[
-            1]
-        nz_grad_r = g.D_nimp_rmid @ ions.n_impurity + g.b_template_right_grad_rmid * ions.n_impurity_bc[
-            1]
+        nz_face = g.I_nimp @ ions.n_impurity + g.b_r * ions.n_impurity_bc[1]
+        nz_grad_r = g.D_nimp_rmid @ ions.n_impurity + g.b_r_grad_r * ions.n_impurity_bc[1]
 
         sigma = neoclassical_conductivity(e_face, n_face, q_face,
                                           ions.Z_eff_face)
@@ -1314,15 +1310,15 @@ while True:
         ])
         transient_coeff = 1 / (tc_out_new * tc_in_new)
         broadcasted = jnp.expand_dims(transient_coeff, 1)
-        lhs_mat = g.identity_matrix - dt * g.theta_implicit * broadcasted * spatial_mat
-        lhs_vec = -g.theta_implicit * dt * transient_coeff * spatial_vec
+        lhs_mat = g.identity_matrix - dt * g.theta_imp * broadcasted * spatial_mat
+        lhs_vec = -g.theta_imp * dt * transient_coeff * spatial_vec
         right_transient = jnp.diag(jnp.squeeze(tc_in_old / tc_in_new))
         rhs = jnp.dot(right_transient, state) - lhs_vec
         pred = jnp.linalg.solve(lhs_mat, rhs)
     t = t + dt
     state = pred
     history.append((t, state))
-    if t >= (g.t_final - g.tolerance):
+    if t >= (g.t_end - g.tol):
         break
 
 t_history, state_history = zip(*history)
