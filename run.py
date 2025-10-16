@@ -57,12 +57,8 @@ def build_grad_operator(nx, inv_dx, bc):
             D[i, i] = inv_dx[i-1]
         dx0 = inv_dx[0]
         dxN = inv_dx[-1]
-    
-    if bc[0] is not None:
-        D[0, 0] = 2.0 * dx0
-        b[0] = -2.0 * dx0 * bc[0]
-    else:
-        b[0] = bc[2] if bc[2] is not None else 0.0
+
+    b[0] = bc[2] if bc[2] is not None else 0.0
     
     if bc[1] is not None:
         D[nx, nx-1] = -2.0 * dxN
