@@ -1066,13 +1066,9 @@ with open("run.raw", "wb") as f:
     t_out.tofile(f)
     rho.tofile(f)
     for var_name, var_bc, var_slice in zip(var_names, var_bcs, var_slices):
-        var_data = []
-        for state in state_history:
-            v = state[var_slice]
-            left = v[0:1]
-            right = jnp.array([var_bc[1]]) if var_bc[1] is not None else v[-1:] + var_bc[3] * g.dx / 2
-            var_data.append(jnp.concatenate([left, v, right]))
-        var = np.stack(var_data)
+        var = np.stack([jnp.concatenate([v[0:1], v, 
+                                         jnp.array([var_bc[1]]) if var_bc[1] is not None else v[-1:] + var_bc[3] * g.dx / 2])
+                        for v in [s[var_slice] for s in state_history]])
         var.tofile(f)
         if not (np.isnan(var).any() or np.isinf(var).any()):
             lo, hi = np.min(var), np.max(var)
