@@ -50,13 +50,11 @@ def build_grad_operator(nx, inv_dx, bc):
         for i in range(1, nx):
             D[i, i - 1] = -inv_dx
             D[i, i] = inv_dx
-        dx0 = inv_dx
         dxN = inv_dx
     else:
         for i in range(1, nx):
             D[i, i - 1] = -inv_dx[i - 1]
             D[i, i] = inv_dx[i - 1]
-        dx0 = inv_dx[0]
         dxN = inv_dx[-1]
 
     b[0] = bc[2] if bc[2] is not None else 0.0
@@ -299,7 +297,7 @@ def calculate_external_current_source():
     return source_psi_external
 
 
-def calculate_fusion_sources(T_i, T_e, T_i_face, n_i_face):
+def calculate_fusion_sources(T_e, T_i_face, n_i_face):
     product = 1.0
     for fraction, symbol in zip(g.main_ion_fractions, g.main_ion_names):
         if symbol == "D" or symbol == "T":
