@@ -1056,23 +1056,21 @@ while True:
     state = pred
     history.append((t, np.array(pred)))
     if t >= g.t_end - g.tol: break
-t_history, state_history = zip(*history)
-var_names = ("T_i", "T_e", "psi", "n_e")
-var_slices = (l.i, l.e, l.p, l.n)
-t_out = np.array(t_history)
+t_out, states = zip(*history)
+t_out = np.array(t_out)
 rho = np.asarray(g.cell_centers)
-nt = len(t_out)
+states = np.array(states)
 with open("run.raw", "wb") as f:
     t_out.tofile(f)
     rho.tofile(f)
-    for var_name, var_slice in zip(var_names, var_slices):
-        var = np.array([s[var_slice] for s in state_history])
-        var.tofile(f)
-        if not (np.isnan(var).any() or np.isinf(var).any()):
-            lo, hi = np.min(var), np.max(var)
-            for j, idx in enumerate([0, nt // 4, nt // 2, 3 * nt // 4, nt - 1]):
-                plt.title(f"time: {t_out[idx]:8.3e}")
-                plt.axis([None, None, lo, hi])
-                plt.plot(rho, var[idx], "o-")
-                plt.savefig(f"{var_name}.{j:04d}.png")
-                plt.close()
+    states.tofile(f)
+nt = len(t_out)
+for var_name, var_slice in zip(("T_i", "T_e", "psi", "n_e"), (l.i, l.e, l.p, l.n)):
+    var = states[:, var_slice]
+    lo, hi = np.min(var), np.max(var)
+    for k, idx in enumerate([0, nt // 4, nt // 2, 3 * nt // 4, nt - 1]):
+        plt.title(f"time: {t_out[idx]:8.3e}")
+        plt.axis([None, None, lo, hi])
+        plt.plot(rho, var[idx], "o-")
+        plt.savefig(f"{var_name}.{k:04d}.png")
+        plt.close()

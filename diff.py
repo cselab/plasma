@@ -37,44 +37,34 @@ if len(data1) != len(data2):
     print(f"  Difference: {len(data1) - len(data2)} values")
     sys.exit(1)
 
-# Deduce structure: time, rho, then 4 variables (T_i, T_e, psi, n_e)
-# File format: nt values (time), nx+2 values (rho), then 4 * nt * (nx+2) values
-# Total: nt + (nx+2) + 4*nt*(nx+2)
-# Assume nx=25 (fixed)
 nx = 25
-nrho = nx + 2  # rho has boundaries: [0.0, cell_centers..., 1.0]
 n_vars = 4
-
-# Solve for nt: total = nt + nrho + n_vars*nt*nrho
-# total = nt(1 + n_vars*nrho) + nrho
-# nt = (total - nrho) / (1 + n_vars*nrho)
 total_size = len(data1)
-nt = (total_size - nrho) // (1 + n_vars * nrho)
+nt = (total_size - nx) // (1 + n_vars * nx)
 
 print(f"\nDeduced structure:")
 print(f"  nx (cells): {nx}")
-print(f"  nrho (with boundaries): {nrho}")
 print(f"  nt (time steps): {nt}")
 print(f"  n_vars (fields): {n_vars}")
 
-# Parse data
 offset = 0
 time1 = data1[offset:offset+nt]
 time2 = data2[offset:offset+nt]
 offset += nt
 
-rho1 = data1[offset:offset+nrho]
-rho2 = data2[offset:offset+nrho]
-offset += nrho
+rho1 = data1[offset:offset+nx]
+rho2 = data2[offset:offset+nx]
+offset += nx
+
+state1 = data1[offset:].reshape(nt, n_vars * nx)
+state2 = data2[offset:].reshape(nt, n_vars * nx)
 
 var_names = ['T_i', 'T_e', 'psi', 'n_e']
 vars1 = {}
 vars2 = {}
-for var_name in var_names:
-    var_size = nt * nrho
-    vars1[var_name] = data1[offset:offset+var_size].reshape(nt, nrho)
-    vars2[var_name] = data2[offset:offset+var_size].reshape(nt, nrho)
-    offset += var_size
+for i, var_name in enumerate(var_names):
+    vars1[var_name] = state1[:, i*nx:(i+1)*nx]
+    vars2[var_name] = state2[:, i*nx:(i+1)*nx]
 
 # Check if bitwise identical
 if np.array_equal(data1, data2):
