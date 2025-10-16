@@ -1196,30 +1196,30 @@ while True:
             ions.Z_eff_face,
         )
         n_i_face_chi = compute_face_value(ions.n_i, ions.n_i_bc[1], ions.n_i_bc[3])
-        full_chi_face_ion = g.geo_g1_keV * n_i_face_chi * turbulent_transport[0]
-        full_chi_face_el = g.geo_g1_keV * n_e_face * turbulent_transport[1]
-        full_d_face_el = g.geo_g1_over_vpr_face * turbulent_transport[2]
-        full_v_face_el = g.geo_g0_face * turbulent_transport[3]
+        d_face_Ti = g.geo_g1_keV * n_i_face_chi * turbulent_transport[0]
+        d_face_Te = g.geo_g1_keV * n_e_face * turbulent_transport[1]
+        d_face_ne = g.geo_g1_over_vpr_face * turbulent_transport[2]
+        v_face_ne = g.geo_g0_face * turbulent_transport[3]
         source_n_e = source_n_e * g.geo_vpr + g.mask_adaptive_n * g.n_e_ped
         source_mat_nn = -g.mask_adaptive_n
-        chi_face_per_ion = g.geo_g1_keV * n_i_face_chi * g.chi_pereverzev
-        chi_face_per_el = g.geo_g1_keV * n_e_face * g.chi_pereverzev
-        d_face_per_el = g.D_pereverzev
-        v_face_per_el = n_e_face_grad / n_e_face * d_face_per_el * g.geo_factor_pereverzev
-        chi_face_per_ion = jnp.where(g.pedestal_mask_face, 0.0, chi_face_per_ion)
-        chi_face_per_el = jnp.where(g.pedestal_mask_face, 0.0, chi_face_per_el)
-        v_heat_face_ion = T_i_face_grad / T_i_face * chi_face_per_ion
-        v_heat_face_el = T_e_face_grad / T_e_face * chi_face_per_el
-        d_face_per_el = jnp.where(g.pedestal_mask_face, 0.0,
-                                  d_face_per_el * g.geo_g1_over_vpr_face)
-        v_face_per_el = jnp.where(g.pedestal_mask_face, 0.0,
-                                  v_face_per_el * g.geo_g0_face)
-        chi_face_per_ion = chi_face_per_ion.at[0].set(chi_face_per_ion[1])
-        chi_face_per_el = chi_face_per_el.at[0].set(chi_face_per_el[1])
-        full_chi_face_ion += chi_face_per_ion
-        full_chi_face_el += chi_face_per_el
-        full_d_face_el += d_face_per_el
-        full_v_face_el += v_face_per_el
+        chi_face_neo_Ti = g.geo_g1_keV * n_i_face_chi * g.chi_pereverzev
+        chi_face_neo_Te = g.geo_g1_keV * n_e_face * g.chi_pereverzev
+        d_face_neo_ne = g.D_pereverzev
+        v_face_neo_ne = n_e_face_grad / n_e_face * d_face_neo_ne * g.geo_factor_pereverzev
+        chi_face_neo_Ti = jnp.where(g.pedestal_mask_face, 0.0, chi_face_neo_Ti)
+        chi_face_neo_Te = jnp.where(g.pedestal_mask_face, 0.0, chi_face_neo_Te)
+        v_face_Ti = T_i_face_grad / T_i_face * chi_face_neo_Ti
+        v_face_Te = T_e_face_grad / T_e_face * chi_face_neo_Te
+        d_face_neo_ne = jnp.where(g.pedestal_mask_face, 0.0,
+                                  d_face_neo_ne * g.geo_g1_over_vpr_face)
+        v_face_neo_ne = jnp.where(g.pedestal_mask_face, 0.0,
+                                  v_face_neo_ne * g.geo_g0_face)
+        chi_face_neo_Ti = jnp.concatenate([jnp.array([chi_face_neo_Ti[1]]), chi_face_neo_Ti[1:]])
+        chi_face_neo_Te = jnp.concatenate([jnp.array([chi_face_neo_Te[1]]), chi_face_neo_Te[1:]])
+        d_face_Ti += chi_face_neo_Ti
+        d_face_Te += chi_face_neo_Te
+        d_face_ne += d_face_neo_ne
+        v_face_ne += v_face_neo_ne
         source_i = source_T_i * g.geo_vpr + g.mask_adaptive_T * g.T_i_ped
         source_e = source_T_e * g.geo_vpr + g.mask_adaptive_T * g.T_e_ped
         source_mat_ii = qei_implicit_ii * g.geo_vpr
@@ -1230,35 +1230,45 @@ while True:
         source_mat_ee -= g.mask_adaptive_T
         transient_out_cell = (g.toc_temperature_factor, g.toc_temperature_factor, toc_psi, g.ones_like_vpr)
         transient_in_cell = (tic_T_i, tic_T_e, g.ones_vec, g.geo_vpr)
-        d_face = (full_chi_face_ion, full_chi_face_el, g.geo_g2g3_over_rhon_face, full_d_face_el)
-        v_face = (v_heat_face_ion, v_heat_face_el, g.v_face_psi_zero, full_v_face_el)
+        d_face = (d_face_Ti, d_face_Te, g.geo_g2g3_over_rhon_face, d_face_ne)
+        v_face = (v_face_Ti, v_face_Te, g.v_face_psi_zero, v_face_ne)
         if tc_in_old is None:
             tc_in_old = jnp.concatenate(transient_in_cell)
         tc_out_new = jnp.concatenate(transient_out_cell)
         tc_in_new = jnp.concatenate(transient_in_cell)
         
-        c_mat = [g.zero_row_of_blocks.copy() for _ in range(g.num_channels)]
-        c = g.zero_block_vec.copy()
-        for i in range(g.num_channels):
-            diffusion_mat, diffusion_vec = make_diffusion_terms(d_face[i], g.dx_array, g.bcs[i])
-            c_mat[i][i] += diffusion_mat
-            c[i] += diffusion_vec
-        for i in range(g.num_channels):
-            conv_mat, conv_vec = make_convection_terms(v_face[i], d_face[i], g.dx_array, g.bcs[i])
-            c_mat[i][i] += conv_mat
-            c[i] += conv_vec
-        c_mat[0][0] += jnp.diag(source_mat_ii)
-        c_mat[0][1] += jnp.diag(source_mat_ie)
-        c_mat[1][0] += jnp.diag(source_mat_ei)
-        c_mat[1][1] += jnp.diag(source_mat_ee)
-        c_mat[3][3] += jnp.diag(source_mat_nn)
-        c[0] += source_i
-        c[1] += source_e
-        c[2] += source_psi
-        c[3] += source_n_e
+        transport_TiTi, b_Ti = make_diffusion_terms(d_face[0], g.dx_array, g.bcs[0])
+        conv_mat, conv_vec = make_convection_terms(v_face[0], d_face[0], g.dx_array, g.bcs[0])
+        transport_TiTi += conv_mat
+        b_Ti += conv_vec
         
-        spatial_mat = jnp.block(c_mat)
-        spatial_vec = jnp.block(c)
+        transport_TeTe, b_Te = make_diffusion_terms(d_face[1], g.dx_array, g.bcs[1])
+        conv_mat, conv_vec = make_convection_terms(v_face[1], d_face[1], g.dx_array, g.bcs[1])
+        transport_TeTe += conv_mat
+        b_Te += conv_vec
+        
+        transport_psipsi, b_psi = make_diffusion_terms(d_face[2], g.dx_array, g.bcs[2])
+        conv_mat, conv_vec = make_convection_terms(v_face[2], d_face[2], g.dx_array, g.bcs[2])
+        transport_psipsi += conv_mat
+        b_psi += conv_vec
+        
+        transport_nene, b_ne = make_diffusion_terms(d_face[3], g.dx_array, g.bcs[3])
+        conv_mat, conv_vec = make_convection_terms(v_face[3], d_face[3], g.dx_array, g.bcs[3])
+        transport_nene += conv_mat
+        b_ne += conv_vec
+        
+        C_TiTi = transport_TiTi + jnp.diag(source_mat_ii)
+        C_TiTe = jnp.diag(source_mat_ie)
+        C_TeTi = jnp.diag(source_mat_ei)
+        C_TeTe = transport_TeTe + jnp.diag(source_mat_ee)
+        C_psipsi = transport_psipsi
+        C_nene = transport_nene + jnp.diag(source_mat_nn)
+        
+        spatial_mat = jnp.block([[C_TiTi, C_TiTe, g.zero_block, g.zero_block],
+                                 [C_TeTi, C_TeTe, g.zero_block, g.zero_block],
+                                 [g.zero_block, g.zero_block, C_psipsi, g.zero_block],
+                                 [g.zero_block, g.zero_block, g.zero_block, C_nene]])
+        spatial_vec = jnp.concatenate([b_Ti + source_i, b_Te + source_e, b_psi + source_psi, b_ne + source_n_e])
         transient_coeff = 1 / (tc_out_new * tc_in_new)
         broadcasted = jnp.expand_dims(transient_coeff, 1)
         lhs_mat = g.identity_matrix - dt * g.theta_implicit * broadcasted * spatial_mat
