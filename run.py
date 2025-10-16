@@ -1068,9 +1068,9 @@ nt = len(t_out)
 for var_name, var_slice in zip(("T_i", "T_e", "psi", "n_e"), (l.i, l.e, l.p, l.n)):
     var = states[:, var_slice]
     lo, hi = np.min(var), np.max(var)
-    for k, idx in enumerate([0, nt // 4, nt // 2, 3 * nt // 4, nt - 1]):
+    for idx in [0, nt // 4, nt // 2, 3 * nt // 4, nt - 1]:
         plt.title(f"time: {t_out[idx]:8.3e}")
         plt.axis([None, None, lo, hi])
         plt.plot(rho, var[idx], "o-")
-        plt.savefig(f"{var_name}.{k:04d}.png")
+        plt.savefig(f"{var_name}.{idx:04d}.png")
         plt.close()
