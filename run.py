@@ -107,8 +107,10 @@ def conv_terms(v_face, d_face, bc):
         alpha = jnp.where(p < -10.0, alpha_plneg10, alpha)
         return alpha
 
-    la, ra = peclet_to_alpha(left_peclet), peclet_to_alpha(right_peclet)
-    lv, rv = v_face[:-1], v_face[1:]
+    la = peclet_to_alpha(left_peclet)
+    ra = peclet_to_alpha(right_peclet)
+    lv = v_face[:-1]
+    rv = v_face[1:]
     diag = (la * lv - ra * rv) * g.inv_dx
     above = -(1 - ra[:-1]) * rv[:-1] * g.inv_dx
     below = (1 - la[1:]) * lv[1:] * g.inv_dx
@@ -129,13 +131,14 @@ def conv_terms(v_face, d_face, bc):
 
 def diff_terms(d, bc):
     diag = jnp.asarray(-d[1:] - d[:-1]).at[0].set(-d[1])
-    off, vec = d[1:-1], jnp.zeros(g.n).at[0].set(-d[0] * bc[2] * g.inv_dx)
+    off = d[1:-1]
+    vec = jnp.zeros(g.n).at[0].set(-d[0] * bc[2] * g.inv_dx)
     if bc[1] is not None:
-        diag, vec = diag.at[-1].set(-2 * d[-1] - d[-2]), vec.at[-1].set(
-            2 * d[-1] * bc[1] * g.inv_dx_sq)
+        diag = diag.at[-1].set(-2 * d[-1] - d[-2])
+        vec = vec.at[-1].set(2 * d[-1] * bc[1] * g.inv_dx_sq)
     else:
-        diag, vec = diag.at[-1].set(-d[-2]), vec.at[-1].set(d[-1] * bc[3] *
-                                                            g.inv_dx)
+        diag = diag.at[-1].set(-d[-2])
+        vec = vec.at[-1].set(d[-1] * bc[3] * g.inv_dx)
     return (jnp.diag(diag) + jnp.diag(off, 1) +
             jnp.diag(off, -1)) * g.inv_dx_sq, vec
 
@@ -301,7 +304,8 @@ def bootstrap_current(i_f, e_f, n_f, ni_f, p_g, q, i_g, e_g, n_g, ni_g, Zi_f,
     alph = ((a0 + 0.25 *
              (1 - ft**2) * jnp.sqrt(nui)) / (1 + 0.5 * jnp.sqrt(nui)) +
             0.315 * nui**2 * ft**6) / (1 + 0.15 * nui**2 * ft**6)
-    pe, pi = n_f * e_f * 1.6e-16, ni_f * i_f * 1.6e-16
+    pe = n_f * e_f * 1.6e-16
+    pi = ni_f * i_f * 1.6e-16
     gc = jnp.r_[jnp.zeros(1), -g.geo_F_face[1:] * 2 * jnp.pi / (g.geo_B_0 * p_g[1:])]
     jbs = gc * (L31 * (pe * n_g / n_f + pi * ni_g / ni_f) +
                 (L31 + F32ee + F32ei) * pe * e_g / e_f +
@@ -905,25 +909,29 @@ while True:
     dt = min(g.dt, g.t_end - t)
     pred, tc_in_old = state, None
     for _ in range(g.n_corr + 1):
-        i, e, p, n = pred[l.i], pred[l.e], pred[l.p], pred[l.n]
-        i_face, i_grad, i_grad_r = g.I_i @ i + g.b_i_face, g.D_i @ i + g.b_i_grad, g.D_i_r @ i + g.b_i_grad_r
-        e_face, e_grad, e_grad_r = g.I_e @ e + g.b_e_face, g.D_e @ e + g.b_e_grad, g.D_e_r @ e + g.b_e_grad_r
-        n_face, n_grad, n_grad_r = g.I_n @ n + g.b_n_face, g.D_n @ n + g.b_n_grad, g.D_n_r @ n + g.b_n_grad_r
+        i = pred[l.i]
+        e = pred[l.e]
+        p = pred[l.p]
+        n = pred[l.n]
+        i_face = g.I_i @ i + g.b_i_face
+        e_face = g.I_e @ e + g.b_e_face
+        n_face = g.I_n @ n + g.b_n_face
+        i_grad = g.D_i @ i + g.b_i_grad
+        e_grad = g.D_e @ e + g.b_e_grad
+        n_grad = g.D_n @ n + g.b_n_grad
         p_grad = g.D_p @ p + g.b_p_grad
+        i_grad_r = g.D_i_r @ i + g.b_i_grad_r
+        e_grad_r = g.D_e_r @ e + g.b_e_grad_r
+        n_grad_r = g.D_n_r @ n + g.b_n_grad_r     
         (ions_n_i, ions_n_impurity, ions_Z_i, ions_Z_i_face, ions_Z_impurity,
          ions_Z_eff_face, ions_n_i_bc, ions_n_impurity_bc) = ions_update(n, e, e_face)
         q_face = jnp.r_[jnp.abs(g.q_factor_axis / (p_grad[1] * g.inv_dx))[None],
             jnp.abs(g.q_factor_bulk * g.face_centers[1:] / p_grad[1:])]
-        ni_face, ni_grad, ni_grad_r = (g.I_ni @ ions_n_i +
-                                       g.b_r * ions_n_i_bc[1],
-                                       g.D_ni_rho @ ions_n_i +
-                                       g.b_r_grad * ions_n_i_bc[1],
-                                       g.D_ni_rmid @ ions_n_i +
-                                       g.b_r_grad_r * ions_n_i_bc[1])
-        nz_face, nz_grad_r = (g.I_nimp @ ions_n_impurity +
-                              g.b_r * ions_n_impurity_bc[1],
-                              g.D_nimp_rmid @ ions_n_impurity +
-                              g.b_r_grad_r * ions_n_impurity_bc[1])
+        ni_face = g.I_ni @ ions_n_i + g.b_r * ions_n_i_bc[1]
+        ni_grad = g.D_ni_rho @ ions_n_i + g.b_r_grad * ions_n_i_bc[1]
+        ni_grad_r = g.D_ni_rmid @ ions_n_i + g.b_r_grad_r * ions_n_i_bc[1]
+        nz_face = g.I_nimp @ ions_n_impurity + g.b_r * ions_n_impurity_bc[1]
+        nz_grad_r = g.D_nimp_rmid @ ions_n_impurity + g.b_r_grad_r * ions_n_impurity_bc[1]
         sigma = neoclassical_conductivity(e_face, n_face, q_face, ions_Z_eff_face)
         si_fus, se_fus = fusion_source(e, i_face, ni_face)
         j_bs = bootstrap_current(i_face, e_face, n_face, ni_face, p_grad,
