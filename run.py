@@ -1191,147 +1191,143 @@ C = (g.nbar * nGW - 0.5 * n_e_face[-1] * dr_edge / a_minor_out) / (
     nbar_from_n_e_face_inner + 0.5 * n_e_face[-2] * dr_edge / a_minor_out)
 n_e_initial = C * n_e_value
 psi_initial = g.geo_psi_from_Ip_base * (g.Ip / g.geo_Ip_profile_face_base[-1])
-s = jnp.concatenate([T_i_initial, T_e_initial, psi_initial, n_e_initial])
+state = jnp.concatenate([T_i_initial, T_e_initial, psi_initial, n_e_initial])
 t = 0.0
-history = [(t, s)]
+history = [(t, state)]
 while True:
     dt = g.dt_fixed
     if t + dt > g.t_final:
         dt = g.t_final - t
-    p = s
+    pred = state
     tc_in_old = None
     for _ in range(g.n_corrector_steps + 1):
-        T_i = p[l.Ti]
-        T_e = p[l.Te]
-        psi = p[l.psi]
-        n_e = p[l.ne]
+        i = pred[l.Ti]
+        e = pred[l.Te]
+        p = pred[l.psi]
+        n = pred[l.ne]
 
-        T_i_face = g.I_Ti @ T_i + g.b_face_Ti
-        T_i_face_grad = g.D_Ti_rho @ T_i + g.b_Ti_rho
-        T_i_face_grad_rmid = g.D_Ti_rmid @ T_i + g.b_Ti_rmid
+        i_face = g.I_Ti @ i + g.b_face_Ti
+        i_grad = g.D_Ti_rho @ i + g.b_Ti_rho
+        i_grad_r = g.D_Ti_rmid @ i + g.b_Ti_rmid
 
-        T_e_face = g.I_Te @ T_e + g.b_face_Te
-        ions = get_updated_ions(n_e, T_e, T_e_face)
+        e_face = g.I_Te @ e + g.b_face_Te
+        ions = get_updated_ions(n, e, e_face)
 
-        T_e_face_grad = g.D_Te_rho @ T_e + g.b_Te_rho
-        T_e_face_grad_rmid = g.D_Te_rmid @ T_e + g.b_Te_rmid
+        e_grad = g.D_Te_rho @ e + g.b_Te_rho
+        e_grad_r = g.D_Te_rmid @ e + g.b_Te_rmid
 
-        n_e_face = g.I_ne @ n_e + g.b_face_ne
-        n_e_face_grad = g.D_ne_rho @ n_e + g.b_ne_rho
-        n_e_face_grad_rmid = g.D_ne_rmid @ n_e + g.b_ne_rmid
+        n_face = g.I_ne @ n + g.b_face_ne
+        n_grad = g.D_ne_rho @ n + g.b_ne_rho
+        n_grad_r = g.D_ne_rmid @ n + g.b_ne_rmid
 
-        psi_face_grad = g.D_psi_rho @ psi + g.b_psi_rho
+        p_grad = g.D_psi_rho @ p + g.b_psi_rho
         q_face = jnp.concatenate([
             jnp.expand_dims(
-                jnp.abs(g.q_factor_axis / (psi_face_grad[1] * g.inv_dx)), 0),
-            jnp.abs(g.q_factor_bulk * g.face_centers[1:] / psi_face_grad[1:]),
+                jnp.abs(g.q_factor_axis / (p_grad[1] * g.inv_dx)), 0),
+            jnp.abs(g.q_factor_bulk * g.face_centers[1:] / p_grad[1:]),
         ])
 
-        n_i_face = g.I_ni @ ions.n_i + g.b_template_right * ions.n_i_bc[1]
-        n_i_face_grad = g.D_ni_rho @ ions.n_i + g.b_template_right_grad_rho * ions.n_i_bc[
+        ni_face = g.I_ni @ ions.n_i + g.b_template_right * ions.n_i_bc[1]
+        ni_grad = g.D_ni_rho @ ions.n_i + g.b_template_right_grad_rho * ions.n_i_bc[
             1]
-        n_i_face_grad_rmid = g.D_ni_rmid @ ions.n_i + g.b_template_right_grad_rmid * ions.n_i_bc[
-            1]
-
-        n_impurity_face = g.I_nimp @ ions.n_impurity + g.b_template_right * ions.n_impurity_bc[
-            1]
-        n_impurity_face_grad_rmid = g.D_nimp_rmid @ ions.n_impurity + g.b_template_right_grad_rmid * ions.n_impurity_bc[
+        ni_grad_r = g.D_ni_rmid @ ions.n_i + g.b_template_right_grad_rmid * ions.n_i_bc[
             1]
 
-        sigma = calculate_neoclassical_conductivity(T_e_face, n_e_face, q_face,
+        nz_face = g.I_nimp @ ions.n_impurity + g.b_template_right * ions.n_impurity_bc[
+            1]
+        nz_grad_r = g.D_nimp_rmid @ ions.n_impurity + g.b_template_right_grad_rmid * ions.n_impurity_bc[
+            1]
+
+        sigma = calculate_neoclassical_conductivity(e_face, n_face, q_face,
                                                     ions.Z_eff_face)
 
-        source_Ti_fusion, source_Te_fusion = calculate_fusion_sources(
-            T_e, T_i_face, n_i_face)
+        source_i_fusion, source_e_fusion = calculate_fusion_sources(
+            e, i_face, ni_face)
         j_bootstrap = calculate_bootstrap_current_source(
-            T_i_face, T_e_face, n_e_face, n_i_face, psi_face_grad, q_face,
-            T_i_face_grad, T_e_face_grad, n_e_face_grad, n_i_face_grad,
+            i_face, e_face, n_face, ni_face, p_grad, q_face,
+            i_grad, e_grad, n_grad, ni_grad,
             ions.Z_i_face, ions.Z_eff_face)
-        qei_mat_TiTi, qei_mat_TeTe, qei_mat_TiTe, qei_mat_TeTi = calculate_qei_coupling_matrices(
-            T_e, n_e, ions.n_i, ions.n_impurity, ions.Z_i, ions.Z_impurity,
+        qei_mat_ii, qei_mat_ee, qei_mat_ie, qei_mat_ei = calculate_qei_coupling_matrices(
+            e, n, ions.n_i, ions.n_impurity, ions.Z_i, ions.Z_impurity,
             ions.A_i, ions.A_impurity)
 
-        source_Ti = g.source_Ti_external + source_Ti_fusion
-        source_Te = g.source_Te_external + source_Te_fusion
-        source_psi = -(j_bootstrap + g.source_psi_external) * g.source_psi_coeff
+        source_i = g.source_Ti_external + source_i_fusion
+        source_e = g.source_Te_external + source_e_fusion
+        source_p = -(j_bootstrap + g.source_psi_external) * g.source_psi_coeff
 
-        source_i = g.source_i_external + source_Ti_fusion * g.geo_vpr + g.source_i_adaptive
-        source_e = g.source_e_external + source_Te_fusion * g.geo_vpr + g.source_e_adaptive
-        source_n_e = g.source_n_e_constant
+        src_i = g.source_i_external + source_i_fusion * g.geo_vpr + g.source_i_adaptive
+        src_e = g.source_e_external + source_e_fusion * g.geo_vpr + g.source_e_adaptive
+        src_n = g.source_n_e_constant
 
-        source_mat_TiTi = qei_mat_TiTi + g.source_mat_adaptive_T
-        source_mat_TeTe = qei_mat_TeTe + g.source_mat_adaptive_T
-        source_mat_TiTe = qei_mat_TiTe
-        source_mat_TeTi = qei_mat_TeTi
-        source_mat_nene = g.source_mat_adaptive_n
+        S_ii = qei_mat_ii + g.source_mat_adaptive_T
+        S_ee = qei_mat_ee + g.source_mat_adaptive_T
+        S_ie = qei_mat_ie
+        S_ei = qei_mat_ei
+        S_nn = g.source_mat_adaptive_n
 
-        tic_Ti = ions.n_i * g.vpr_5_3
-        tic_Te = n_e * g.vpr_5_3
-        tic_psipsi = g.ones_vec
-        tic_nene = g.geo_vpr
+        a_i = ions.n_i * g.vpr_5_3
+        a_e = n * g.vpr_5_3
+        a_p = g.ones_vec
+        a_n = g.geo_vpr
 
-        toc_TiTi = g.toc_temperature_factor
-        toc_TeTe = g.toc_temperature_factor
-        toc_psipsi = g.toc_psipsi_coeff * sigma
-        toc_nene = g.ones_like_vpr
+        c_i = g.toc_temperature_factor
+        c_e = g.toc_temperature_factor
+        c_p = g.toc_psipsi_coeff * sigma
+        c_n = g.ones_like_vpr
 
-        d_face_Ti, d_face_Te, d_face_ne, v_face_ne = calculate_turbulent_transport(
-            T_i_face, T_i_face_grad_rmid, T_e_face, T_e_face_grad_rmid,
-            n_e_face, n_e_face_grad, n_e_face_grad_rmid, n_i_face,
-            n_i_face_grad_rmid, n_impurity_face, n_impurity_face_grad_rmid,
-            psi_face_grad, q_face, ions)
+        chi_i, chi_e, D_n, v_n = calculate_turbulent_transport(
+            i_face, i_grad_r, e_face, e_grad_r,
+            n_face, n_grad, n_grad_r, ni_face,
+            ni_grad_r, nz_face, nz_grad_r,
+            p_grad, q_face, ions)
 
-        v_face_Ti, v_face_Te, chi_face_neo_Ti, chi_face_neo_Te, d_face_neo_ne, v_face_neo_ne = calculate_neoclassical_transport(
-            T_i_face, T_e_face, n_e_face, n_i_face, T_i_face_grad,
-            T_e_face_grad, n_e_face_grad)
-        d_face_Ti += chi_face_neo_Ti
-        d_face_Te += chi_face_neo_Te
-        d_face_ne += d_face_neo_ne
-        v_face_ne += v_face_neo_ne
+        v_i, v_e, chi_neo_i, chi_neo_e, D_neo_n, v_neo_n = calculate_neoclassical_transport(
+            i_face, e_face, n_face, ni_face, i_grad,
+            e_grad, n_grad)
+        chi_i += chi_neo_i
+        chi_e += chi_neo_e
+        D_n += D_neo_n
+        v_n += v_neo_n
 
         if tc_in_old is None:
-            tc_in_old = jnp.concatenate([tic_Ti, tic_Te, tic_psipsi, tic_nene])
-        tc_out_new = jnp.concatenate(
-            [toc_TiTi, toc_TeTe, toc_psipsi, toc_nene])
-        tc_in_new = jnp.concatenate([tic_Ti, tic_Te, tic_psipsi, tic_nene])
+            tc_in_old = jnp.concatenate([a_i, a_e, a_p, a_n])
+        tc_out_new = jnp.concatenate([c_i, c_e, c_p, c_n])
+        tc_in_new = jnp.concatenate([a_i, a_e, a_p, a_n])
 
-        transport_TiTi, b_Ti = make_transport_terms(v_face_Ti, d_face_Ti,
-                                                    g.bcs[0])
-        transport_TeTe, b_Te = make_transport_terms(v_face_Te, d_face_Te,
-                                                    g.bcs[1])
-        transport_nene, b_ne = make_transport_terms(v_face_ne, d_face_ne,
-                                                    g.bcs[3])
+        A_i, b_i = make_transport_terms(v_i, chi_i, g.bcs[0])
+        A_e, b_e = make_transport_terms(v_e, chi_e, g.bcs[1])
+        A_n, b_n = make_transport_terms(v_n, D_n, g.bcs[3])
 
-        C_TiTi = transport_TiTi + jnp.diag(source_mat_TiTi)
-        C_TiTe = jnp.diag(source_mat_TiTe)
-        C_TeTi = jnp.diag(source_mat_TeTi)
-        C_TeTe = transport_TeTe + jnp.diag(source_mat_TeTe)
-        C_psipsi = g.transport_psipsi
-        C_nene = transport_nene + jnp.diag(source_mat_nene)
+        C_ii = A_i + jnp.diag(S_ii)
+        C_ie = jnp.diag(S_ie)
+        C_ei = jnp.diag(S_ei)
+        C_ee = A_e + jnp.diag(S_ee)
+        C_pp = g.transport_psipsi
+        C_nn = A_n + jnp.diag(S_nn)
 
         spatial_mat = jnp.block(
-            [[C_TiTi, C_TiTe, g.zero_block, g.zero_block],
-             [C_TeTi, C_TeTe, g.zero_block, g.zero_block],
-             [g.zero_block, g.zero_block, C_psipsi, g.zero_block],
-             [g.zero_block, g.zero_block, g.zero_block, C_nene]])
+            [[C_ii, C_ie, g.zero_block, g.zero_block],
+             [C_ei, C_ee, g.zero_block, g.zero_block],
+             [g.zero_block, g.zero_block, C_pp, g.zero_block],
+             [g.zero_block, g.zero_block, g.zero_block, C_nn]])
         spatial_vec = jnp.concatenate([
-            b_Ti + source_i, b_Te + source_e, g.b_psi + source_psi,
-            b_ne + source_n_e
+            b_i + src_i, b_e + src_e, g.b_psi + source_p,
+            b_n + src_n
         ])
         transient_coeff = 1 / (tc_out_new * tc_in_new)
         broadcasted = jnp.expand_dims(transient_coeff, 1)
         lhs_mat = g.identity_matrix - dt * g.theta_implicit * broadcasted * spatial_mat
         lhs_vec = -g.theta_implicit * dt * transient_coeff * spatial_vec
         right_transient = jnp.diag(jnp.squeeze(tc_in_old / tc_in_new))
-        rhs = jnp.dot(right_transient, s) - lhs_vec
-        p = jnp.linalg.solve(lhs_mat, rhs)
+        rhs = jnp.dot(right_transient, state) - lhs_vec
+        pred = jnp.linalg.solve(lhs_mat, rhs)
     t = t + dt
-    s = p
-    history.append((t, s))
+    state = pred
+    history.append((t, state))
     if t >= (g.t_final - g.tolerance):
         break
 
-t_history, s_history = zip(*history)
+t_history, state_history = zip(*history)
 var_names = ("T_i", "T_e", "psi", "n_e")
 var_bcs = (g.T_i_bc, g.T_e_bc, g.psi_bc, g.n_e_bc)
 var_slices = (l.Ti, l.Te, l.psi, l.ne)
@@ -1342,7 +1338,7 @@ with open("run.raw", "wb") as f:
     t_out.tofile(f)
     rho.tofile(f)
     for var_name, var_bc, var_slice in zip(var_names, var_bcs, var_slices):
-        var_history = [s[var_slice] for s in s_history]
+        var_history = [x[var_slice] for x in state_history]
         var_data = []
         for var_value in var_history:
             left_value = var_value[..., 0:1]
