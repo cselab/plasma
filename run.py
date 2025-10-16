@@ -230,7 +230,7 @@ def calculate_nu_i_star(q, n_i, T_i, Z_eff, log_lambda_ii):
             (((T_i * 1e3)**2) * (g.geo_epsilon_face + g.eps)**1.5))
 
 
-def gaussian_profile(*, center, width, total):
+def gaussian_profile(center, width, total):
     r = g.cell_centers
     S = jnp.exp(-((r - center)**2) / (2 * width**2))
     C = total / jnp.sum(S * g.geo_vpr * g.dx)
@@ -273,26 +273,26 @@ g.rho_smoothing_limit = 0.1
 
 
 def calculate_external_heating_sources():
-    profile = gaussian_profile(center=g.generic_heat_location,
-                               width=g.generic_heat_width,
-                               total=g.generic_heat_P_total)
-    source_Ti = profile * (1 - g.generic_heat_electron_fraction)
-    source_Te = profile * g.generic_heat_electron_fraction
-    return source_Ti, source_Te
+    profile = gaussian_profile(g.generic_heat_location,
+                               g.generic_heat_width,
+                               g.generic_heat_P_total)
+    source_i = profile * (1 - g.generic_heat_electron_fraction)
+    source_e = profile * g.generic_heat_electron_fraction
+    return source_i, source_e
 
 
 def calculate_particle_sources():
-    source_ne = gaussian_profile(center=g.generic_particle_location,
-                                 width=g.generic_particle_width,
-                                 total=g.generic_particle_S_total)
-    source_ne += gaussian_profile(center=g.pellet_location,
-                                  width=g.pellet_width,
-                                  total=g.pellet_S_total)
+    source_n = gaussian_profile(g.generic_particle_location,
+                                 g.generic_particle_width,
+                                 g.generic_particle_S_total)
+    source_n += gaussian_profile(g.pellet_location,
+                                  g.pellet_width,
+                                  g.pellet_S_total)
     r = g.cell_centers
     S = jnp.exp(-(1.0 - r) / g.gas_puff_decay_length)
     C = g.gas_puff_S_total / jnp.sum(S * g.geo_vpr * g.dx)
-    source_ne += C * S
-    return source_ne
+    source_n += C * S
+    return source_n
 
 
 def calculate_external_current_source():
@@ -301,8 +301,8 @@ def calculate_external_current_source():
         -((g.cell_centers - g.generic_current_location)**2) /
         (2 * g.generic_current_width**2))
     Cext = I_generic / jnp.sum(generic_current_form * g.geo_spr * g.dx)
-    source_psi_external = Cext * generic_current_form
-    return source_psi_external
+    source_p_external = Cext * generic_current_form
+    return source_p_external
 
 
 def calculate_fusion_sources(T_e, T_i_face, n_i_face):
@@ -335,9 +335,9 @@ def calculate_fusion_sources(T_e, T_i_face, n_i_face):
                     (2.0 * x - 1.0) / jnp.sqrt(3)) + jnp.pi / 6) / jnp.sqrt(3))
                       / x_squared)
             frac_e = 1.0 - frac_i
-            source_Ti_fusion = Pfus_cell * frac_i * g.fusion_alpha_fraction
-            source_Te_fusion = Pfus_cell * frac_e * g.fusion_alpha_fraction
-    return source_Ti_fusion, source_Te_fusion
+            source_i_fusion = Pfus_cell * frac_i * g.fusion_alpha_fraction
+            source_e_fusion = Pfus_cell * frac_e * g.fusion_alpha_fraction
+    return source_i_fusion, source_e_fusion
 
 
 def calculate_qei_coupling_matrices(T_e, n_e, n_i, n_impurity, Z_i, Z_impurity,
@@ -1076,7 +1076,7 @@ g.geo_g1_over_vpr2_face = np.concatenate(
 g.pi_16_squared = 16 * np.pi**2
 g.pi_16_cubed = 16 * np.pi**3
 g.toc_temperature_factor = 1.5 * g.geo_vpr**(-2.0 / 3.0) * g.keV_to_J
-g.source_psi_coeff = 8 * g.geo_vpr * np.pi**2 * g.geo_B_0 * g.mu_0 * g.geo_Phi_b / g.geo_F**2
+g.source_p_coeff = 8 * g.geo_vpr * np.pi**2 * g.geo_B_0 * g.mu_0 * g.geo_Phi_b / g.geo_F**2
 g.vpr_5_3 = g.geo_vpr**(5.0 / 3.0)
 g.mu0_pi16sq_Phib_sq_over_F_sq = g.mu_0 * g.pi_16_squared * g.geo_Phi_b**2 / g.geo_F**2
 g.pi16cubed_mu0_Phib = g.pi_16_cubed * g.mu_0 * g.geo_Phi_b
@@ -1147,7 +1147,7 @@ g.state_size = 4 * nc
 g.zero_block = jnp.zeros((g.num_cells, g.num_cells))
 g.zero_vec = jnp.zeros(g.num_cells)
 g.ones_vec = jnp.ones(g.num_cells)
-g.v_face_psi_zero = jnp.zeros_like(g.geo_g2g3_over_rhon_face)
+g.v_p_zero = jnp.zeros_like(g.geo_g2g3_over_rhon_face)
 g.ones_like_vpr = jnp.ones_like(g.geo_vpr)
 g.identity_matrix = jnp.eye(g.state_size)
 g.zero_row_of_blocks = [g.zero_block] * g.num_channels
@@ -1155,23 +1155,24 @@ g.zero_block_vec = [g.zero_vec] * g.num_channels
 g.bcs = (g.bc_i, g.bc_e, g.bc_p, g.bc_n)
 
 # Precompute time-independent external sources
-g.source_Ti_external, g.source_Te_external = calculate_external_heating_sources()
-g.source_ne_external = calculate_particle_sources()
-g.source_psi_external = calculate_external_current_source()
+source_i_ext, source_e_ext = calculate_external_heating_sources()
+source_n_ext = calculate_particle_sources()
+source_p_ext = calculate_external_current_source()
 
 # Precompute constant source terms
-g.source_i_external = g.source_Ti_external * g.geo_vpr
-g.source_e_external = g.source_Te_external * g.geo_vpr
+g.source_i_external = source_i_ext * g.geo_vpr
+g.source_e_external = source_e_ext * g.geo_vpr
 g.source_i_adaptive = g.mask_adaptive_T * g.i_ped
 g.source_e_adaptive = g.mask_adaptive_T * g.e_ped
-g.source_n_constant = g.source_ne_external * g.geo_vpr + g.mask_adaptive_n * g.n_ped
+g.source_n_constant = source_n_ext * g.geo_vpr + g.mask_adaptive_n * g.n_ped
+g.source_p_external = source_p_ext
 g.source_mat_adaptive_T = -g.mask_adaptive_T
 g.source_mat_adaptive_n = -g.mask_adaptive_n
-g.toc_psipsi_coeff = g.cell_centers * g.mu0_pi16sq_Phib_sq_over_F_sq / g.resistivity_multiplier
+g.c_p_coeff = g.cell_centers * g.mu0_pi16sq_Phib_sq_over_F_sq / g.resistivity_multiplier
 
 # Precompute constant PSI transport (v=0, constant diffusion, constant BC)
-g.transport_psipsi, g.b_psi = make_transport_terms(
-    g.v_face_psi_zero, g.geo_g2g3_over_rhon_face, g.bcs[2])
+g.A_p, g.b_p = make_transport_terms(
+    g.v_p_zero, g.geo_g2g3_over_rhon_face, g.bcs[2])
 
 i_initial = np.interp(g.cell_centers, g.i_profile_x, g.i_profile_y)
 e_initial = np.interp(g.cell_centers, g.e_profile_x, g.e_profile_y)
@@ -1251,10 +1252,7 @@ while True:
             e, n, ions.n_i, ions.n_impurity, ions.Z_i, ions.Z_impurity,
             ions.A_i, ions.A_impurity)
 
-        source_i = g.source_Ti_external + source_i_fusion
-        source_e = g.source_Te_external + source_e_fusion
-        source_p = -(j_bootstrap + g.source_psi_external) * g.source_psi_coeff
-
+        source_p = -(j_bootstrap + g.source_p_external) * g.source_p_coeff
         src_i = g.source_i_external + source_i_fusion * g.geo_vpr + g.source_i_adaptive
         src_e = g.source_e_external + source_e_fusion * g.geo_vpr + g.source_e_adaptive
         src_n = g.source_n_constant
@@ -1272,7 +1270,7 @@ while True:
 
         c_i = g.toc_temperature_factor
         c_e = g.toc_temperature_factor
-        c_p = g.toc_psipsi_coeff * sigma
+        c_p = g.c_p_coeff * sigma
         c_n = g.ones_like_vpr
 
         chi_i, chi_e, D_n, v_n = calculate_turbulent_transport(
@@ -1302,7 +1300,7 @@ while True:
         C_ie = jnp.diag(S_ie)
         C_ei = jnp.diag(S_ei)
         C_ee = A_e + jnp.diag(S_ee)
-        C_pp = g.transport_psipsi
+        C_pp = g.A_p
         C_nn = A_n + jnp.diag(S_nn)
 
         spatial_mat = jnp.block(
@@ -1311,7 +1309,7 @@ while True:
              [g.zero_block, g.zero_block, C_pp, g.zero_block],
              [g.zero_block, g.zero_block, g.zero_block, C_nn]])
         spatial_vec = jnp.concatenate([
-            b_i + src_i, b_e + src_e, g.b_psi + source_p,
+            b_i + src_i, b_e + src_e, g.b_p + source_p,
             b_n + src_n
         ])
         transient_coeff = 1 / (tc_out_new * tc_in_new)
