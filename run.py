@@ -431,19 +431,13 @@ def calculate_neoclassical_conductivity(T_e_face, n_e_face, q_face, Z_eff_face):
     return sigma
 
 
-def calculate_turbulent_transport(p, ions, q_face):
-    T_i = p[l.Ti]
-    T_e = p[l.Te]
-    psi = p[l.psi]
-    n_e = p[l.ne]
-    T_i_face = compute_face_value(T_i, g.T_i_bc[1], g.T_i_bc[3])
-    T_i_face_grad_rmid = compute_face_grad(T_i, g.T_i_bc[0], g.T_i_bc[1], g.T_i_bc[2], g.T_i_bc[3], x=g.geo_rmid)
-    T_e_face = compute_face_value(T_e, g.T_e_bc[1], g.T_e_bc[3])
-    T_e_face_grad_rmid = compute_face_grad(T_e, g.T_e_bc[0], g.T_e_bc[1], g.T_e_bc[2], g.T_e_bc[3], x=g.geo_rmid)
-    n_e_face = compute_face_value(n_e, g.n_e_bc[1], g.n_e_bc[3])
-    n_e_face_grad_rmid = compute_face_grad(n_e, g.n_e_bc[0], g.n_e_bc[1], g.n_e_bc[2], g.n_e_bc[3], x=g.geo_rmid)
-    n_e_face_grad = compute_face_grad(n_e, g.n_e_bc[0], g.n_e_bc[1], g.n_e_bc[2], g.n_e_bc[3])
-    psi_face_grad = compute_face_grad(psi, g.psi_bc[0], g.psi_bc[1], g.psi_bc[2], g.psi_bc[3])
+def calculate_turbulent_transport(
+        T_i_face, T_i_face_grad_rmid,
+        T_e_face, T_e_face_grad_rmid,
+        n_e_face, n_e_face_grad, n_e_face_grad_rmid,
+        n_i_face, n_i_face_grad_rmid,
+        n_impurity_face, n_impurity_face_grad_rmid,
+        psi_face_grad, q_face, ions):
     chiGB = ((ions.A_i * g.m_amu)**0.5 / (g.geo_B_0 * g.q_e)**2 *
              (T_i_face * g.keV_to_J)**1.5 / g.geo_a_minor)
     lref_over_lti_result = jnp.where(
@@ -467,21 +461,17 @@ def calculate_turbulent_transport(p, ions, q_face):
     )
     lref_over_lne = jnp.where(
         jnp.abs(lref_over_lne_result) < g.eps, g.eps, lref_over_lne_result)
-    n_i_face = compute_face_value(ions.n_i, ions.n_i_bc[1], ions.n_i_bc[3])
-    n_i_face_grad = compute_face_grad(ions.n_i, ions.n_i_bc[0], ions.n_i_bc[1], ions.n_i_bc[2], ions.n_i_bc[3], x=g.geo_rmid)
     lref_over_lni0_result = jnp.where(
         jnp.abs(n_i_face) < g.eps,
         g.eps,
-        -g.R_major * n_i_face_grad / n_i_face,
+        -g.R_major * n_i_face_grad_rmid / n_i_face,
     )
     lref_over_lni0 = jnp.where(
         jnp.abs(lref_over_lni0_result) < g.eps, g.eps, lref_over_lni0_result)
-    n_impurity_face = compute_face_value(ions.n_impurity, ions.n_impurity_bc[1], ions.n_impurity_bc[3])
-    n_impurity_face_grad = compute_face_grad(ions.n_impurity, ions.n_impurity_bc[0], ions.n_impurity_bc[1], ions.n_impurity_bc[2], ions.n_impurity_bc[3], x=g.geo_rmid)
     lref_over_lni1_result = jnp.where(
         jnp.abs(n_impurity_face) < g.eps,
         g.eps,
-        -g.R_major * n_impurity_face_grad / n_impurity_face,
+        -g.R_major * n_impurity_face_grad_rmid / n_impurity_face,
     )
     lref_over_lni1 = jnp.where(
         jnp.abs(lref_over_lni1_result) < g.eps, g.eps, lref_over_lni1_result)
@@ -635,16 +625,15 @@ def calculate_turbulent_transport(p, ions, q_face):
     chi_face_el = smooth_single_coeff(chi_face_el)
     d_face_el = smooth_single_coeff(d_face_el)
     v_face_el = smooth_single_coeff(v_face_el)
-    n_i_face_chi = compute_face_value(ions.n_i, ions.n_i_bc[1], ions.n_i_bc[3])
-    d_face_Ti = g.geo_g1_keV * n_i_face_chi * chi_face_ion
+    d_face_Ti = g.geo_g1_keV * n_i_face * chi_face_ion
     d_face_Te = g.geo_g1_keV * n_e_face * chi_face_el
     d_face_ne = g.geo_g1_over_vpr_face * d_face_el
     v_face_ne = g.geo_g0_face * v_face_el
     return d_face_Ti, d_face_Te, d_face_ne, v_face_ne
 
 
-def calculate_neoclassical_transport(T_i_face, T_e_face, n_e_face, n_i_face_chi, T_i_face_grad, T_e_face_grad, n_e_face_grad):
-    chi_face_neo_Ti = g.geo_g1_keV * n_i_face_chi * g.chi_pereverzev
+def calculate_neoclassical_transport(T_i_face, T_e_face, n_e_face, n_i_face, T_i_face_grad, T_e_face_grad, n_e_face_grad):
+    chi_face_neo_Ti = g.geo_g1_keV * n_i_face * g.chi_pereverzev
     chi_face_neo_Te = g.geo_g1_keV * n_e_face * g.chi_pereverzev
     d_face_neo_ne = g.D_pereverzev
     v_face_neo_ne = n_e_face_grad / n_e_face * d_face_neo_ne * g.geo_factor_pereverzev
@@ -1155,30 +1144,41 @@ while True:
         psi = p[l.psi]
         n_e = p[l.ne]
         ions = get_updated_ions(n_e, T_e)
+        
+        T_i_face = compute_face_value(T_i, g.T_i_bc[1], g.T_i_bc[3])
+        T_i_face_grad = compute_face_grad(T_i, g.T_i_bc[0], g.T_i_bc[1], g.T_i_bc[2], g.T_i_bc[3])
+        T_i_face_grad_rmid = compute_face_grad(T_i, g.T_i_bc[0], g.T_i_bc[1], g.T_i_bc[2], g.T_i_bc[3], x=g.geo_rmid)
+        
+        T_e_face = compute_face_value(T_e, g.T_e_bc[1], g.T_e_bc[3])
+        T_e_face_grad = compute_face_grad(T_e, g.T_e_bc[0], g.T_e_bc[1], g.T_e_bc[2], g.T_e_bc[3])
+        T_e_face_grad_rmid = compute_face_grad(T_e, g.T_e_bc[0], g.T_e_bc[1], g.T_e_bc[2], g.T_e_bc[3], x=g.geo_rmid)
+        
+        n_e_face = compute_face_value(n_e, g.n_e_bc[1], g.n_e_bc[3])
+        n_e_face_grad = compute_face_grad(n_e, g.n_e_bc[0], g.n_e_bc[1], g.n_e_bc[2], g.n_e_bc[3])
+        n_e_face_grad_rmid = compute_face_grad(n_e, g.n_e_bc[0], g.n_e_bc[1], g.n_e_bc[2], g.n_e_bc[3], x=g.geo_rmid)
+        
         psi_face_grad = compute_face_grad(psi, g.psi_bc[0], g.psi_bc[1], g.psi_bc[2], g.psi_bc[3])
         q_face = jnp.concatenate([
             jnp.expand_dims(jnp.abs(g.q_factor_axis * g.dx_array / psi_face_grad[1]), 0),
             jnp.abs(g.q_factor_bulk * g.face_centers[1:] / psi_face_grad[1:]),
         ])
-        T_i_face = compute_face_value(T_i, g.T_i_bc[1], g.T_i_bc[3])
-        T_i_face_grad = compute_face_grad(T_i, g.T_i_bc[0], g.T_i_bc[1], g.T_i_bc[2], g.T_i_bc[3])
-        T_e_face = compute_face_value(T_e, g.T_e_bc[1], g.T_e_bc[3])
-        T_e_face_grad = compute_face_grad(T_e, g.T_e_bc[0], g.T_e_bc[1], g.T_e_bc[2], g.T_e_bc[3])
-        n_e_face = compute_face_value(n_e, g.n_e_bc[1], g.n_e_bc[3])
-        n_e_face_grad = compute_face_grad(n_e, g.n_e_bc[0], g.n_e_bc[1], g.n_e_bc[2], g.n_e_bc[3])
+        
+        n_i_face = compute_face_value(ions.n_i, ions.n_i_bc[1], ions.n_i_bc[3])
+        n_i_face_grad = compute_face_grad(ions.n_i, ions.n_i_bc[0], ions.n_i_bc[1], ions.n_i_bc[2], ions.n_i_bc[3])
+        n_i_face_grad_rmid = compute_face_grad(ions.n_i, ions.n_i_bc[0], ions.n_i_bc[1], ions.n_i_bc[2], ions.n_i_bc[3], x=g.geo_rmid)
+        
+        n_impurity_face = compute_face_value(ions.n_impurity, ions.n_impurity_bc[1], ions.n_impurity_bc[3])
+        n_impurity_face_grad_rmid = compute_face_grad(ions.n_impurity, ions.n_impurity_bc[0], ions.n_impurity_bc[1], ions.n_impurity_bc[2], ions.n_impurity_bc[3], x=g.geo_rmid)
         
         sigma = calculate_neoclassical_conductivity(T_e_face, n_e_face, q_face, ions.Z_eff_face)
         
         source_Ti_external, source_Te_external = calculate_external_heating_sources()
         source_ne = calculate_particle_sources()
         source_psi_external = calculate_external_current_source()
-        n_i_face_fusion = compute_face_value(ions.n_i, ions.n_i_bc[1], ions.n_i_bc[3])
-        source_Ti_fusion, source_Te_fusion = calculate_fusion_sources(T_i, T_e, n_i_face_fusion)
-        n_i_face_bootstrap = compute_face_value(ions.n_i, ions.n_i_bc[1], ions.n_i_bc[3])
-        n_i_face_grad_bootstrap = compute_face_grad(ions.n_i, ions.n_i_bc[0], ions.n_i_bc[1], ions.n_i_bc[2], ions.n_i_bc[3])
+        source_Ti_fusion, source_Te_fusion = calculate_fusion_sources(T_i, T_e, n_i_face)
         j_bootstrap = calculate_bootstrap_current_source(
-            T_i_face, T_e_face, n_e_face, n_i_face_bootstrap, psi_face_grad, q_face,
-            T_i_face_grad, T_e_face_grad, n_e_face_grad, n_i_face_grad_bootstrap,
+            T_i_face, T_e_face, n_e_face, n_i_face, psi_face_grad, q_face,
+            T_i_face_grad, T_e_face_grad, n_e_face_grad, n_i_face_grad,
             ions.Z_i_face, ions.Z_eff_face)
         qei_mat_TiTi, qei_mat_TeTe, qei_mat_TiTe, qei_mat_TeTi = calculate_qei_coupling_matrices(
             T_e, n_e, ions.n_i, ions.n_impurity, ions.Z_i, ions.Z_impurity, ions.A_i, ions.A_impurity)
@@ -1208,11 +1208,16 @@ while True:
                       sigma * g.mu0_pi16sq_Phib_sq_over_F_sq)
         toc_nene = g.ones_like_vpr
         
-        d_face_Ti, d_face_Te, d_face_ne, v_face_ne = calculate_turbulent_transport(p, ions, q_face)
+        d_face_Ti, d_face_Te, d_face_ne, v_face_ne = calculate_turbulent_transport(
+            T_i_face, T_i_face_grad_rmid,
+            T_e_face, T_e_face_grad_rmid,
+            n_e_face, n_e_face_grad, n_e_face_grad_rmid,
+            n_i_face, n_i_face_grad_rmid,
+            n_impurity_face, n_impurity_face_grad_rmid,
+            psi_face_grad, q_face, ions)
         
-        n_i_face_chi = compute_face_value(ions.n_i, ions.n_i_bc[1], ions.n_i_bc[3])
         v_face_Ti, v_face_Te, chi_face_neo_Ti, chi_face_neo_Te, d_face_neo_ne, v_face_neo_ne = calculate_neoclassical_transport(
-            T_i_face, T_e_face, n_e_face, n_i_face_chi, T_i_face_grad, T_e_face_grad, n_e_face_grad)
+            T_i_face, T_e_face, n_e_face, n_i_face, T_i_face_grad, T_e_face_grad, n_e_face_grad)
         d_face_Ti += chi_face_neo_Ti
         d_face_Te += chi_face_neo_Te
         d_face_ne += d_face_neo_ne
