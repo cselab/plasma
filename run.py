@@ -737,7 +737,7 @@ def get_updated_ions(n_e, T_e, T_e_face):
         (Z_i_face[-1] * (Z_impurity_face[-1] - Z_i_face[-1])),
     )
     n_i = n_e * dilution_factor
-    n_i_bc = (None, g.n_e_bc[1] * dilution_factor_edge, 0.0, 0.0)
+    n_i_bc = (None, g.bc_n[1] * dilution_factor_edge, 0.0, 0.0)
     n_impurity_value = jnp.where(
         dilution_factor == 1.0,
         0.0,
@@ -746,11 +746,11 @@ def get_updated_ions(n_e, T_e, T_e_face):
     n_impurity_right_face_constraint = jnp.where(
         dilution_factor_edge == 1.0,
         0.0,
-        (g.n_e_bc[1] - n_i_bc[1] * Z_i_face[-1]) / Z_impurity_face[-1],
+        (g.bc_n[1] - n_i_bc[1] * Z_i_face[-1]) / Z_impurity_face[-1],
     )
     n_impurity = n_impurity_value
     n_impurity_bc = (None, n_impurity_right_face_constraint, 0.0, 0.0)
-    n_e_face = g.I_ne @ n_e + g.b_face_ne
+    n_e_face = g.I_n @ n_e + g.b_n_face
     n_i_face = g.I_ni @ n_i + g.b_template_right * n_i_bc[1]
     n_impurity_face = g.I_nimp @ n_impurity + g.b_template_right * n_impurity_bc[
         1]
@@ -816,20 +816,20 @@ g.inv_dx_sq = g.inv_dx ** 2
 g.face_centers = np.arange(g.n + 1) * g.dx
 g.cell_centers = (np.arange(g.n) + 0.5) * g.dx
 g.Ip = 10.5e6
-g.T_i_right_bc = 0.2
-g.T_e_right_bc = 0.2
-g.n_e_right_bc = 0.25e20
+g.i_right_bc = 0.2
+g.e_right_bc = 0.2
+g.n_right_bc = 0.25e20
 g.nbar = 0.8
-g.T_i_profile_dict = {0.0: 15.0, 1.0: 0.2}
-g.T_e_profile_dict = {0.0: 15.0, 1.0: 0.2}
-g.n_e_profile_dict = {0.0: 1.5, 1.0: 1.0}
-g.T_i_profile_x = np.array(list(g.T_i_profile_dict.keys()))
-g.T_i_profile_y = np.array(list(g.T_i_profile_dict.values()))
-g.T_e_profile_x = np.array(list(g.T_e_profile_dict.keys()))
-g.T_e_profile_y = np.array(list(g.T_e_profile_dict.values()))
-g.n_e_profile_x = np.array(list(g.n_e_profile_dict.keys()))
-g.n_e_profile_y = np.array(list(g.n_e_profile_dict.values()))
-g.n_e = np.interp(g.cell_centers, g.n_e_profile_x, g.n_e_profile_y)
+g.i_profile_dict = {0.0: 15.0, 1.0: 0.2}
+g.e_profile_dict = {0.0: 15.0, 1.0: 0.2}
+g.n_profile_dict = {0.0: 1.5, 1.0: 1.0}
+g.i_profile_x = np.array(list(g.i_profile_dict.keys()))
+g.i_profile_y = np.array(list(g.i_profile_dict.values()))
+g.e_profile_x = np.array(list(g.e_profile_dict.keys()))
+g.e_profile_y = np.array(list(g.e_profile_dict.values()))
+g.n_profile_x = np.array(list(g.n_profile_dict.keys()))
+g.n_profile_y = np.array(list(g.n_profile_dict.values()))
+g.n_profile = np.interp(g.cell_centers, g.n_profile_x, g.n_profile_y)
 g.chi_pereverzev = 30
 g.D_pereverzev = 15
 g.theta_implicit = 1.0
@@ -843,9 +843,9 @@ g.ITG_flux_ratio_correction = 1
 g.hires_factor = 4
 g.Qei_multiplier = 1.0
 g.rho_norm_ped_top = 0.9
-g.n_e_ped = 0.62e20
-g.T_i_ped = 4.5
-g.T_e_ped = 4.5
+g.n_ped = 0.62e20
+g.i_ped = 4.5
+g.e_ped = 4.5
 g.rho_norm_ped_top = 0.91
 g.D_e_inner = 0.25
 g.V_e_inner = 0.0
@@ -1101,27 +1101,27 @@ g.mask[rho_norm_ped_top_idx] = True
 g.pedestal_mask_face = g.face_centers > g.rho_norm_ped_top
 g.mask_adaptive_T = g.mask * g.adaptive_T_source_prefactor
 g.mask_adaptive_n = g.mask * g.adaptive_n_source_prefactor
-g.T_i_bc = (None, g.T_i_right_bc, 0.0, 0.0)
-g.T_e_bc = (None, g.T_e_right_bc, 0.0, 0.0)
+g.bc_i = (None, g.i_right_bc, 0.0, 0.0)
+g.bc_e = (None, g.e_right_bc, 0.0, 0.0)
 g.dpsi_drhonorm_edge = (g.Ip * g.pi_16_cubed * g.mu_0 * g.geo_Phi_b /
                         (g.geo_g2g3_over_rhon_face[-1] * g.geo_F_face[-1]))
-g.psi_bc = (None, None, 0.0, g.dpsi_drhonorm_edge)
-g.n_e_bc = (None, g.n_e_right_bc, 0.0, 0.0)
+g.bc_p = (None, None, 0.0, g.dpsi_drhonorm_edge)
+g.bc_n = (None, g.n_right_bc, 0.0, 0.0)
 
-g.D_Ti_rho, g.b_Ti_rho = build_grad_operator_uniform(g.T_i_bc)
-g.D_Te_rho, g.b_Te_rho = build_grad_operator_uniform(g.T_e_bc)
-g.D_ne_rho, g.b_ne_rho = build_grad_operator_uniform(g.n_e_bc)
-g.D_psi_rho, g.b_psi_rho = build_grad_operator_uniform(g.psi_bc)
+g.D_i, g.b_i_grad = build_grad_operator_uniform(g.bc_i)
+g.D_e, g.b_e_grad = build_grad_operator_uniform(g.bc_e)
+g.D_n, g.b_n_grad = build_grad_operator_uniform(g.bc_n)
+g.D_p, g.b_p_grad = build_grad_operator_uniform(g.bc_p)
 
 inv_drmid = 1.0 / np.diff(g.geo_rmid)
-g.D_Ti_rmid, g.b_Ti_rmid = build_grad_operator_nonuniform(inv_drmid, g.T_i_bc)
-g.D_Te_rmid, g.b_Te_rmid = build_grad_operator_nonuniform(inv_drmid, g.T_e_bc)
-g.D_ne_rmid, g.b_ne_rmid = build_grad_operator_nonuniform(inv_drmid, g.n_e_bc)
+g.D_i_r, g.b_i_grad_r = build_grad_operator_nonuniform(inv_drmid, g.bc_i)
+g.D_e_r, g.b_e_grad_r = build_grad_operator_nonuniform(inv_drmid, g.bc_e)
+g.D_n_r, g.b_n_grad_r = build_grad_operator_nonuniform(inv_drmid, g.bc_n)
 
-g.I_Ti, g.b_face_Ti = build_face_operator(g.T_i_bc[1], g.T_i_bc[3])
-g.I_Te, g.b_face_Te = build_face_operator(g.T_e_bc[1], g.T_e_bc[3])
-g.I_ne, g.b_face_ne = build_face_operator(g.n_e_bc[1], g.n_e_bc[3])
-g.I_psi, g.b_face_psi = build_face_operator(g.psi_bc[1], g.psi_bc[3])
+g.I_i, g.b_i_face = build_face_operator(g.bc_i[1], g.bc_i[3])
+g.I_e, g.b_e_face = build_face_operator(g.bc_e[1], g.bc_e[3])
+g.I_n, g.b_n_face = build_face_operator(g.bc_n[1], g.bc_n[3])
+g.I_p, g.b_p_face = build_face_operator(g.bc_p[1], g.bc_p[3])
 
 dummy_bc = (None, 1.0, 0.0, 0.0)
 g.D_ni_rho, _ = build_grad_operator_uniform(dummy_bc)
@@ -1138,12 +1138,12 @@ g.b_template_right_grad_rmid = g.b_template_right * (2.0 * inv_drmid[-1])
 
 g.num_cells = g.n
 g.num_channels = 4
-n = g.num_cells
-l.Ti = np.s_[:n]
-l.Te = np.s_[n:2 * n]
-l.psi = np.s_[2 * n:3 * n]
-l.ne = np.s_[3 * n:4 * n]
-g.state_size = 4 * n
+nc = g.num_cells
+l.i = np.s_[:nc]
+l.e = np.s_[nc:2 * nc]
+l.p = np.s_[2 * nc:3 * nc]
+l.n = np.s_[3 * nc:4 * nc]
+g.state_size = 4 * nc
 g.zero_block = jnp.zeros((g.num_cells, g.num_cells))
 g.zero_vec = jnp.zeros(g.num_cells)
 g.ones_vec = jnp.ones(g.num_cells)
@@ -1152,7 +1152,7 @@ g.ones_like_vpr = jnp.ones_like(g.geo_vpr)
 g.identity_matrix = jnp.eye(g.state_size)
 g.zero_row_of_blocks = [g.zero_block] * g.num_channels
 g.zero_block_vec = [g.zero_vec] * g.num_channels
-g.bcs = (g.T_i_bc, g.T_e_bc, g.psi_bc, g.n_e_bc)
+g.bcs = (g.bc_i, g.bc_e, g.bc_p, g.bc_n)
 
 # Precompute time-independent external sources
 g.source_Ti_external, g.source_Te_external = calculate_external_heating_sources()
@@ -1162,9 +1162,9 @@ g.source_psi_external = calculate_external_current_source()
 # Precompute constant source terms
 g.source_i_external = g.source_Ti_external * g.geo_vpr
 g.source_e_external = g.source_Te_external * g.geo_vpr
-g.source_i_adaptive = g.mask_adaptive_T * g.T_i_ped
-g.source_e_adaptive = g.mask_adaptive_T * g.T_e_ped
-g.source_n_e_constant = g.source_ne_external * g.geo_vpr + g.mask_adaptive_n * g.n_e_ped
+g.source_i_adaptive = g.mask_adaptive_T * g.i_ped
+g.source_e_adaptive = g.mask_adaptive_T * g.e_ped
+g.source_n_constant = g.source_ne_external * g.geo_vpr + g.mask_adaptive_n * g.n_ped
 g.source_mat_adaptive_T = -g.mask_adaptive_T
 g.source_mat_adaptive_n = -g.mask_adaptive_n
 g.toc_psipsi_coeff = g.cell_centers * g.mu0_pi16sq_Phib_sq_over_F_sq / g.resistivity_multiplier
@@ -1173,14 +1173,14 @@ g.toc_psipsi_coeff = g.cell_centers * g.mu0_pi16sq_Phib_sq_over_F_sq / g.resisti
 g.transport_psipsi, g.b_psi = make_transport_terms(
     g.v_face_psi_zero, g.geo_g2g3_over_rhon_face, g.bcs[2])
 
-i_initial = np.interp(g.cell_centers, g.T_i_profile_x, g.T_i_profile_y)
-e_initial = np.interp(g.cell_centers, g.T_e_profile_x, g.T_e_profile_y)
+i_initial = np.interp(g.cell_centers, g.i_profile_x, g.i_profile_y)
+e_initial = np.interp(g.cell_centers, g.e_profile_x, g.e_profile_y)
 nGW = g.Ip / 1e6 / (np.pi * g.geo_a_minor**2) * g.scaling_n_e
-n_value = g.n_e * nGW
+n_value = g.n_profile * nGW
 n_face_init = np.concatenate([
     n_value[0:1],
     (n_value[:-1] + n_value[1:]) / 2.0,
-    np.array([g.n_e_right_bc]),
+    np.array([g.n_right_bc]),
 ])
 a_minor_out = g.geo_R_out_face[-1] - g.geo_R_out_face[0]
 nbar_from_n_face_inner = (
@@ -1201,26 +1201,26 @@ while True:
     pred = state
     tc_in_old = None
     for _ in range(g.n_corrector_steps + 1):
-        i = pred[l.Ti]
-        e = pred[l.Te]
-        p = pred[l.psi]
-        n = pred[l.ne]
+        i = pred[l.i]
+        e = pred[l.e]
+        p = pred[l.p]
+        n = pred[l.n]
 
-        i_face = g.I_Ti @ i + g.b_face_Ti
-        i_grad = g.D_Ti_rho @ i + g.b_Ti_rho
-        i_grad_r = g.D_Ti_rmid @ i + g.b_Ti_rmid
+        i_face = g.I_i @ i + g.b_i_face
+        i_grad = g.D_i @ i + g.b_i_grad
+        i_grad_r = g.D_i_r @ i + g.b_i_grad_r
 
-        e_face = g.I_Te @ e + g.b_face_Te
+        e_face = g.I_e @ e + g.b_e_face
         ions = get_updated_ions(n, e, e_face)
 
-        e_grad = g.D_Te_rho @ e + g.b_Te_rho
-        e_grad_r = g.D_Te_rmid @ e + g.b_Te_rmid
+        e_grad = g.D_e @ e + g.b_e_grad
+        e_grad_r = g.D_e_r @ e + g.b_e_grad_r
 
-        n_face = g.I_ne @ n + g.b_face_ne
-        n_grad = g.D_ne_rho @ n + g.b_ne_rho
-        n_grad_r = g.D_ne_rmid @ n + g.b_ne_rmid
+        n_face = g.I_n @ n + g.b_n_face
+        n_grad = g.D_n @ n + g.b_n_grad
+        n_grad_r = g.D_n_r @ n + g.b_n_grad_r
 
-        p_grad = g.D_psi_rho @ p + g.b_psi_rho
+        p_grad = g.D_p @ p + g.b_p_grad
         q_face = jnp.concatenate([
             jnp.expand_dims(
                 jnp.abs(g.q_factor_axis / (p_grad[1] * g.inv_dx)), 0),
@@ -1257,7 +1257,7 @@ while True:
 
         src_i = g.source_i_external + source_i_fusion * g.geo_vpr + g.source_i_adaptive
         src_e = g.source_e_external + source_e_fusion * g.geo_vpr + g.source_e_adaptive
-        src_n = g.source_n_e_constant
+        src_n = g.source_n_constant
 
         S_ii = qei_mat_ii + g.source_mat_adaptive_T
         S_ee = qei_mat_ee + g.source_mat_adaptive_T
@@ -1329,8 +1329,8 @@ while True:
 
 t_history, state_history = zip(*history)
 var_names = ("T_i", "T_e", "psi", "n_e")
-var_bcs = (g.T_i_bc, g.T_e_bc, g.psi_bc, g.n_e_bc)
-var_slices = (l.Ti, l.Te, l.psi, l.ne)
+var_bcs = (g.bc_i, g.bc_e, g.bc_p, g.bc_n)
+var_slices = (l.i, l.e, l.p, l.n)
 t_out = np.array(t_history)
 rho = np.concatenate([[0.0], np.asarray(g.cell_centers), [1.0]])
 (nt, ) = np.shape(t_out)
