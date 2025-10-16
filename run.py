@@ -1061,9 +1061,9 @@ t_out = np.array(t_out)
 rho = np.asarray(g.cell_centers)
 states = np.array(states)
 with open("run.raw", "wb") as f:
+    states.tofile(f)
     t_out.tofile(f)
     rho.tofile(f)
-    states.tofile(f)
 nt = len(t_out)
 for var_name, var_slice in zip(("T_i", "T_e", "psi", "n_e"), (l.i, l.e, l.p, l.n)):
     var = states[:, var_slice]

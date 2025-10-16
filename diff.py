@@ -39,32 +39,28 @@ if len(data1) != len(data2):
 
 nx = 25
 n_vars = 4
-total_size = len(data1)
-nt = (total_size - nx) // (1 + n_vars * nx)
+nt = (len(data1) - nx) // (1 + n_vars * nx)
 
 print(f"\nDeduced structure:")
 print(f"  nx (cells): {nx}")
 print(f"  nt (time steps): {nt}")
 print(f"  n_vars (fields): {n_vars}")
 
-offset = 0
-time1 = data1[offset:offset+nt]
-time2 = data2[offset:offset+nt]
-offset += nt
+o = 0
+state1 = data1[o:o + nt * n_vars * nx].reshape(nt, n_vars * nx)
+state2 = data2[o:o + nt * n_vars * nx].reshape(nt, n_vars * nx)
+o += nt * n_vars * nx
 
-rho1 = data1[offset:offset+nx]
-rho2 = data2[offset:offset+nx]
-offset += nx
+time1 = data1[o:o+nt]
+time2 = data2[o:o+nt]
+o += nt
 
-state1 = data1[offset:].reshape(nt, n_vars * nx)
-state2 = data2[offset:].reshape(nt, n_vars * nx)
+rho1 = data1[o:o+nx]
+rho2 = data2[o:o+nx]
 
 var_names = ['T_i', 'T_e', 'psi', 'n_e']
-vars1 = {}
-vars2 = {}
-for i, var_name in enumerate(var_names):
-    vars1[var_name] = state1[:, i*nx:(i+1)*nx]
-    vars2[var_name] = state2[:, i*nx:(i+1)*nx]
+vars1 = {var_names[i]: state1[:, i*nx:(i+1)*nx] for i in range(n_vars)}
+vars2 = {var_names[i]: state2[:, i*nx:(i+1)*nx] for i in range(n_vars)}
 
 # Check if bitwise identical
 if np.array_equal(data1, data2):
