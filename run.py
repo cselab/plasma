@@ -43,16 +43,16 @@ g.A = dict(zip(g.sym, [2.0141, 3.0160, 20.180]))
 
 
 def build_grad_operator(nx, inv_dx, bc):
-    D = np.zeros((nx + 1, nx))
-    b = np.zeros(nx + 1)
+    D = np.zeros((g.n_rho + 1, g.n_rho))
+    b = np.zeros(g.n_rho + 1)
 
     if np.ndim(inv_dx) == 0:
-        for i in range(1, nx):
+        for i in range(1, g.n_rho):
             D[i, i - 1] = -inv_dx
             D[i, i] = inv_dx
         dxN = inv_dx
     else:
-        for i in range(1, nx):
+        for i in range(1, g.n_rho):
             D[i, i - 1] = -inv_dx[i - 1]
             D[i, i] = inv_dx[i - 1]
         dxN = inv_dx[-1]
@@ -60,10 +60,10 @@ def build_grad_operator(nx, inv_dx, bc):
     b[0] = bc[2] if bc[2] is not None else 0.0
 
     if bc[1] is not None:
-        D[nx, nx - 1] = -2.0 * dxN
-        b[nx] = 2.0 * dxN * bc[1]
+        D[g.n_rho, g.n_rho - 1] = -2.0 * dxN
+        b[g.n_rho] = 2.0 * dxN * bc[1]
     else:
-        b[nx] = bc[3] if bc[3] is not None else 0.0
+        b[g.n_rho] = bc[3] if bc[3] is not None else 0.0
 
     return jnp.array(D), jnp.array(b)
 
@@ -1225,7 +1225,7 @@ while True:
         source_ne = calculate_particle_sources()
         source_psi_external = calculate_external_current_source()
         source_Ti_fusion, source_Te_fusion = calculate_fusion_sources(
-            T_i, T_e, T_i_face, n_i_face)
+            T_e, T_i_face, n_i_face)
         j_bootstrap = calculate_bootstrap_current_source(
             T_i_face, T_e_face, n_e_face, n_i_face, psi_face_grad, q_face,
             T_i_face_grad, T_e_face_grad, n_e_face_grad, n_i_face_grad,
