@@ -509,13 +509,8 @@ def ions(n_e, T_e, T_e_face):
     ), 0.0, 0.0)
     Z_eff_face = (Z_i_face**2 * (g.I_ni @ n_i + g.b_r * n_i_bc[1]) +
                   Z_impurity_face**2 * (g.I_nimp @ n_impurity + g.b_r * n_impurity_bc[1])) / (g.I_n @ n_e + g.b_n_f)
-    j_f = g.I_ni @ n_i + g.b_r * n_i_bc[1]
-    j_g = g.D_ni_rho @ n_i + g.b_r_g * n_i_bc[1]
-    j_r = g.D_ni_rmid @ n_i + g.b_r_r * n_i_bc[1]
-    z_f = g.I_nimp @ n_impurity + g.b_r * n_impurity_bc[1]
-    z_r = g.D_nimp_rmid @ n_impurity + g.b_r_r * n_impurity_bc[1]
     return (n_i, n_impurity, Z_i, Z_i_face, Z_impurity, Z_eff_face,
-            j_f, j_g, j_r, z_f, z_r)
+            n_i_bc, n_impurity_bc)
 
 
 g.curr_frac = 0.46
@@ -874,8 +869,12 @@ while True:
         i_r = g.D_i_r @ i + g.b_i_r
         e_r = g.D_e_r @ e + g.b_e_r
         n_r = g.D_n_r @ n + g.b_n_r     
-        (j, z, k, k_f, w, u_f,
-         j_f, j_g, j_r, z_f, z_r) = ions(n, e, e_f)
+        (j, z, k, k_f, w, u_f, j_bc, z_bc) = ions(n, e, e_f)
+        j_f = g.I_ni @ j + g.b_r * j_bc[1]
+        j_g = g.D_ni_rho @ j + g.b_r_g * j_bc[1]
+        j_r = g.D_ni_rmid @ j + g.b_r_r * j_bc[1]
+        z_f = g.I_nimp @ z + g.b_r * z_bc[1]
+        z_r = g.D_nimp_rmid @ z + g.b_r_r * z_bc[1]
         q_f = jnp.r_[jnp.abs(g.q_factor_axis / (p_g[1] * g.inv_dx))[None],
             jnp.abs(g.q_factor_bulk * g.face_centers[1:] / p_g[1:])]
         sigma = neoclassical_conductivity(e_f, n_f, q_f, u_f)
