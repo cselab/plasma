@@ -476,41 +476,40 @@ def smooth_savgol(data, idx_limit, polyorder):
 
 
 def ions(n_e, T_e, T_e_face):
-    Z_i_avg, Z_i_Z2_avg, _ = z_avg(g.ion_names, T_e, g.ion_fractions)
-    Z_i = Z_i_Z2_avg / Z_i_avg
-    Z_i_face_avg, Z_i_face_Z2_avg, _ = z_avg(g.ion_names, T_e_face, g.ion_fractions)
-    Z_i_face = Z_i_face_Z2_avg / Z_i_face_avg
-    Z_impurity_avg, Z_impurity_Z2_avg, _ = z_avg(g.impurity_names, T_e, g.impurity_fractions)
-    Z_impurity = Z_impurity_Z2_avg / Z_impurity_avg
-    Z_impurity_face_avg, Z_impurity_face_Z2_avg, _ = z_avg(g.impurity_names, T_e_face, g.impurity_fractions_face)
-    Z_impurity_face = Z_impurity_face_Z2_avg / Z_impurity_face_avg
+    k_avg, k_Z2_avg, _ = z_avg(g.ion_names, T_e, g.ion_fractions)
+    k = k_Z2_avg / k_avg
+    k_f_avg, k_f_Z2_avg, _ = z_avg(g.ion_names, T_e_face, g.ion_fractions)
+    k_f = k_f_Z2_avg / k_f_avg
+    w_avg, w_Z2_avg, _ = z_avg(g.impurity_names, T_e, g.impurity_fractions)
+    w = w_Z2_avg / w_avg
+    w_f_avg, w_f_Z2_avg, _ = z_avg(g.impurity_names, T_e_face, g.impurity_fractions_face)
+    w_f = w_f_Z2_avg / w_f_avg
     dilution_factor = jnp.where(
         g.Z_eff == 1.0,
         1.0,
-        (Z_impurity - g.Z_eff) / (Z_i * (Z_impurity - Z_i)),
+        (w - g.Z_eff) / (k * (w - k)),
     )
     dilution_factor_edge = jnp.where(
         g.Z_eff == 1.0,
         1.0,
-        (Z_impurity_face[-1] - g.Z_eff) /
-        (Z_i_face[-1] * (Z_impurity_face[-1] - Z_i_face[-1])),
+        (w_f[-1] - g.Z_eff) /
+        (k_f[-1] * (w_f[-1] - k_f[-1])),
     )
-    n_i = n_e * dilution_factor
-    n_i_bc = (None, g.bc_n[1] * dilution_factor_edge, 0.0, 0.0)
-    n_impurity = jnp.where(
+    j = n_e * dilution_factor
+    j_bc = (None, g.bc_n[1] * dilution_factor_edge, 0.0, 0.0)
+    z = jnp.where(
         dilution_factor == 1.0,
         0.0,
-        (n_e - n_i * Z_i) / Z_impurity,
+        (n_e - j * k) / w,
     )
-    n_impurity_bc = (None, jnp.where(
+    z_bc = (None, jnp.where(
         dilution_factor_edge == 1.0,
         0.0,
-        (g.bc_n[1] - n_i_bc[1] * Z_i_face[-1]) / Z_impurity_face[-1],
+        (g.bc_n[1] - j_bc[1] * k_f[-1]) / w_f[-1],
     ), 0.0, 0.0)
-    Z_eff_face = (Z_i_face**2 * (g.I_j @ n_i + g.b_r * n_i_bc[1]) +
-                  Z_impurity_face**2 * (g.I_z @ n_impurity + g.b_r * n_impurity_bc[1])) / (g.I_n @ n_e + g.b_n_f)
-    return (n_i, n_impurity, Z_i, Z_i_face, Z_impurity, Z_eff_face,
-            n_i_bc, n_impurity_bc)
+    u_f = (k_f**2 * (g.I_j @ j + g.b_r * j_bc[1]) +
+           w_f**2 * (g.I_z @ z + g.b_r * z_bc[1])) / (g.I_n @ n_e + g.b_n_f)
+    return (j, z, k, k_f, w, u_f, j_bc, z_bc)
 
 
 g.curr_frac = 0.46
