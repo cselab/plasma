@@ -1,820 +1,573 @@
-# Tokamak Plasma Transport Simulation - Numerical Implementation
+# Plasma Transport Simulation - Matrix Structure and Linear Algebra
 
-## Overview
+## State Vector
 
-This code implements a 1D radial transport simulation for tokamak plasmas, solving coupled partial differential equations for ion temperature (`T_i`), electron temperature (`T_e`), electron density (`n_e`), and poloidal magnetic flux (`psi`). The simulation uses a finite volume method with implicit time stepping.
-
-## Coordinate System and Grid
-
-### Radial Coordinate
-- **Primary coordinate**: `rho_norm` - normalized toroidal flux coordinate from 0 (magnetic axis) to 1 (last closed flux surface)
-- **Grid resolution**: `g.n_rho = 25` cells
-- **Grid spacing**: `g.dx = 1 / g.n_rho = 0.04`
-
-### Grid Structure
-```
-Cell centers: g.cell_centers = [0.5*dx, 1.5*dx, ..., (n_rho - 0.5)*dx]
-Face centers: g.face_centers = [0, dx, 2*dx, ..., n_rho*dx]
-```
-
-The grid uses a **staggered mesh**:
-- **Cell-centered quantities**: `T_i`, `T_e`, `n_e`, `psi` (unknowns at cell centers)
-- **Face-centered quantities**: diffusion coefficients `d_face`, convection velocities `v_face`, gradients
-
-## State Variables
-
-The simulation state is stored in a **single array** `s` with slicing:
-- **`s[l.Ti]`** - Ion temperature [keV] (cells 0:25)
-- **`s[l.Te]`** - Electron temperature [keV] (cells 25:50)
-- **`s[l.psi]`** - Poloidal magnetic flux [Wb] (cells 50:75)
-- **`s[l.ne]`** - Electron density [m⁻³] (cells 75:100)
-- **`t`** - Current simulation time [s] (scalar)
-
-Where `l` is a namespace for array slices:
-```python
-n = g.num_cells = 25
-l.Ti = np.s_[:n]
-l.Te = np.s_[n:2*n]
-l.psi = np.s_[2*n:3*n]
-l.ne = np.s_[3*n:4*n]
-```
-
-This structure allows efficient matrix operations on the full state vector.
-
-## Evolved Variables
-
-The code evolves **4 coupled variables** in a single state array of size 100 (4 channels × 25 cells).
-
-### Density Scaling
-For numerical convenience, density uses a reference scale:
-```python
-g.scaling_n_e = 1e20     # 10²⁰ m⁻³ (Greenwald density scale)
-```
-All other variables (`T_i`, `T_e`, `psi`) remain in physical units throughout.
-
-## Governing Equations
-
-Each variable satisfies a transport equation of the form:
+The simulation evolves a **state vector** of size `4n` where `n=25`:
 
 ```
-∂/∂t (tic * x) = (1/toc) * [ ∇·(d ∇x - v x) + S_mat * x + S ]
+state = [i, e, p, n]  (100 elements total)
 ```
 
 Where:
-- **`tic`** = transient coefficient in (time derivative)
-- **`toc`** = transient coefficient out (normalization)
-- **`d`** = diffusion coefficient (face-centered)
-- **`v`** = convection velocity (face-centered)
-- **`S_mat`** = implicit source matrix coupling
-- **`S`** = explicit source term
+- `i = state[l.i]` - Ion temperature [keV], cells 0:25
+- `e = state[l.e]` - Electron temperature [keV], cells 25:50  
+- `p = state[l.p]` - Poloidal flux [Wb], cells 50:75
+- `n = state[l.n]` - Electron density [m⁻³], cells 75:100
 
-### Temperature Equations
-
-**Ion temperature** (`T_i`):
-```
-tic_T_i = n_i * vpr^(5/3)
-toc_T_i = 1.5 * vpr^(-2/3) * keV_to_J
-d_face = chi_face_ion * (n_i_face * g1_over_vpr_face * keV_to_J)
-v_face = v_heat_face_ion (temperature gradient driven)
-S = heating sources + fusion power + Q_ei (electron-ion heat exchange)
+Slices defined as:
+```python
+nc = 25
+l.i = np.s_[:nc]
+l.e = np.s_[nc:2*nc]
+l.p = np.s_[2*nc:3*nc]
+l.n = np.s_[3*nc:4*nc]
 ```
 
-**Electron temperature** (`T_e`):
-```
-tic_T_e = n_e * vpr^(5/3)
-toc_T_e = 1.5 * vpr^(-2/3) * keV_to_J
-d_face = chi_face_el * (n_e_face * g1_over_vpr_face * keV_to_J)
-v_face = v_heat_face_el
-S = heating sources + fusion power - Q_ei
-```
+## Differential Operators
 
-**Coupling**: `Q_ei` couples ion and electron temperatures via implicit terms `implicit_ii`, `implicit_ee`, `implicit_ie`, `implicit_ei`.
+Three fundamental operators map cell values to face values/gradients.
 
-### Density Equation
+### Interpolation Operator `I` (Face values)
 
-**Electron density** (`n_e`):
+Matrix `I: R^n → R^(n+1)` computes face values from cell centers:
+
 ```
-tic_dens_el = vpr
-toc_dens_el = 1.0
-d_face = full_d_face_el = g1_over_vpr_face * D_el_total
-v_face = full_v_face_el = g0_face * V_el_total
-S = particle sources (gas puff, pellets, NBI)
+I @ x + b_face = x_face
 ```
 
-### Magnetic Flux Equation
-
-**Poloidal flux** (`psi`):
+Structure `(n+1) × n`:
 ```
-tic_psi = 1.0
-toc_psi = (1/resistivity_multiplier) * rho_norm * sigma * (mu_0 * 16π² * Phi_b² / F²)
-d_face = g2g3_over_rhon_face (geometric factor)
-v_face = 0 (no convection)
-S = -(8 * vpr * π² * B_0 * mu_0 * Phi_b / F²) * (j_bootstrap + j_external)
+[1   0   0  ...  0  ]   [x_0]     [x_0        ]
+[0.5 0.5 0  ...  0  ]   [x_1]     [(x_0+x_1)/2]
+[0  0.5 0.5 ...  0  ] @ [x_2]  +  [(x_1+x_2)/2]
+[...            ... ]   [...]  b  [...]
+[0   0   0  ... 1  ]   [x_n]     [x_n + b*bc ]
 ```
 
-The safety factor `q` is derived from `psi`:
+Where `b_face` applies right boundary condition (value or gradient-based).
+
+### Gradient Operator `D` (Normalized coordinates)
+
+Matrix `D: R^n → R^(n+1)` computes gradients w.r.t. normalized rho:
+
 ```
-q_face = 2 * Phi_b * rho_face_norm / |∂psi/∂rho_norm|
+D @ x + b_grad = ∂x/∂ρ_norm
 ```
 
-## Boundary Conditions
+Structure `(n+1) × n` with `inv_dx = n`:
+```
+[0      0     0  ...  0    ]   [x_0]     [bc_left      ]
+[-inv_dx inv_dx 0 ...  0   ]   [x_1]     [(x_1-x_0)*n  ]
+[0    -inv_dx inv_dx ... 0 ] @ [x_2]  +  [(x_2-x_1)*n  ]
+[...                    ... ]   [...]  b  [...]
+[special boundary handling  ]   [x_n]     [bc_right     ]
+```
 
-Boundary conditions are stored as tuples with format:
+Right boundary:
+- If gradient BC: `[-2*inv_dx]` in last row, `b[-1] = 2*inv_dx*bc_grad`
+- If value BC: different structure
+
+### Gradient Operator `D_r` (Physical coordinates)
+
+Matrix `D_r: R^n → R^(n+1)` computes gradients w.r.t. midplane radius `r_mid`:
+
+```
+D_r @ x + b_grad_r = ∂x/∂r_mid
+```
+
+Similar to `D` but with non-uniform `inv_dr[i] = 1/Δr_mid[i]`.
+
+## Transport Operators
+
+For each variable, transport has form:
+
+```
+∂/∂t(tic * x) = (1/toc) * [∇·(d∇x - vx) + S_mat*x + S]
+```
+
+### Transport Terms Matrix `A`
+
+Function `trans_terms(v, d, bc)` returns `(A, b)` where:
+
+```
+A @ x + b = ∇·(d∇x - vx)
+```
+
+Combines:
+- **Diffusion**: `A_diff, b_diff = diff_terms(d, bc)`
+- **Convection**: `A_conv, b_conv = conv_terms(v, d, bc)`
+- **Sum**: `A = A_diff + A_conv`, `b = b_diff + b_conv`
+
+### Diffusion Matrix `A_diff`
+
+For `∇·(d∇x)` discretization (size `n × n`):
+
+```
+A_diff = (1/dx²) * tridiag(off, diag, off)
+```
+
+Where:
+```python
+diag[i] = -(d_face[i+1] + d_face[i])
+off[i] = d_face[i+1]
+```
+
+This is a **symmetric negative definite** tridiagonal matrix.
+
+### Convection Matrix `A_conv`
+
+For `∇·(vx)` with exponential fitting (size `n × n`):
+
+```
+A_conv = (1/dx) * tridiag(below, diag, above)
+```
+
+Where Peclet number `P[i] = v[i]*dx/d[i]` determines upwind factor `α(P)`:
+
+```python
+diag[i] = (α_L[i] * v[i] - α_R[i] * v[i+1]) / dx
+above[i] = -(1 - α_R[i]) * v[i+1] / dx
+below[i] = (1 - α_L[i+1]) * v[i+1] / dx
+```
+
+This is a **non-symmetric** tridiagonal matrix with upwind bias.
+
+## Block Matrix Structure
+
+The full spatial operator is a **4×4 block matrix** where each block is `n×n`:
+
+```
+spatial_mat (100×100) = 
+┌─────────────────────────────────────┐
+│ A_i+Q_ii   Q_ie       0        0    │  i (25×25 blocks)
+│ Q_ei     A_e+Q_ee     0        0    │  e
+│ 0          0        A_p        0    │  p
+│ 0          0          0      A_n    │  n
+└─────────────────────────────────────┘
+```
+
+Where:
+- `A_i, A_e, A_p, A_n` - Transport matrices (tridiagonal from `trans_terms`)
+- `Q_ii, Q_ee, Q_ie, Q_ei` - Electron-ion coupling (diagonal matrices from `qei_coupling`)
+- Adaptive sources added as diagonal modifications
+
+### Block Matrix Assembly
+
+```python
+spatial_mat = jnp.block([
+    [A_i + jnp.diag(Qei_ii + g.source_mat_adaptive_T),
+     jnp.diag(Qei_ie), g.zero_block, g.zero_block],
+    [jnp.diag(Qei_ei),
+     A_e + jnp.diag(Qei_ee + g.source_mat_adaptive_T),
+     g.zero_block, g.zero_block],
+    [g.zero_block, g.zero_block, g.A_p, g.zero_block],
+    [g.zero_block, g.zero_block, g.zero_block,
+     A_n + jnp.diag(g.source_mat_adaptive_n)]
+])
+```
+
+**Structure properties:**
+- **Banded**: Only 3 diagonals per block + coupling terms
+- **Block sparse**: Many zero blocks
+- **Asymmetric**: Convection terms break symmetry
+- **Indefinite**: Mixed signs from different physics
+
+## Transient Coefficients
+
+Each variable has different time derivative scaling:
+
+```python
+tc_in = [ions_n_i * vpr^(5/3),    # i: heat capacity
+         n * vpr^(5/3),            # e: heat capacity  
+         ones,                     # p: no scaling
+         vpr]                      # n: volume
+
+tc_out = [1.5 * vpr^(-2/3) * keV_to_J,  # i: temperature factor
+          1.5 * vpr^(-2/3) * keV_to_J,  # e: temperature factor
+          c_p_coeff * sigma,             # p: conductivity
+          ones]                          # n: no scaling
+```
+
+Combined transient coefficient:
+```python
+tc = 1 / (tc_out * tc_in)  # element-wise, size 100
+```
+
+## Implicit Time Step
+
+The implicit system at each time step:
+
+```
+[I - dt*θ*diag(tc)*spatial_mat] * pred = (tc_old/tc_in)*state + dt*θ*tc*spatial_vec
+```
+
+### Left-Hand Side Matrix
+
+```python
+lhs = g.identity - dt * g.theta_imp * jnp.expand_dims(tc, 1) * spatial_mat
+```
+
+This is a **100×100 dense matrix** (originally sparse but broadcasting makes dense):
+- `jnp.expand_dims(tc, 1)` → shape `(100, 1)`
+- Broadcasting: `(100, 1) * (100, 100)` → `(100, 100)`
+- Each row `i` scaled by `tc[i]`
+
+**Properties:**
+- **Non-symmetric** due to convection
+- **Diagonally dominant** for small `dt`
+- **Well-conditioned** with `θ=1` (backward Euler)
+
+### Right-Hand Side Vector
+
+```python
+rhs = (tc_old / tc_in) * state + g.theta_imp * dt * tc * spatial_vec
+```
+
+**First term**: Ratio of old to new transient coefficients (element-wise)
+**Second term**: Implicit source contribution
+
+### Linear Solve
+
+```python
+pred = jnp.linalg.solve(lhs, rhs)
+```
+
+Uses **LU decomposition** (default for `jnp.linalg.solve`):
+- Factorization: `P*L*U = lhs`
+- Forward solve: `L*y = P*rhs`
+- Backward solve: `U*pred = y`
+
+Cost: **O(n³)** = O(100³) ≈ 1M operations per solve
+
+## Operator Precomputation
+
+### Static Operators (Geometry-dependent)
+
+Computed once during initialization:
+
+```python
+# Interpolation operators (26×25)
+g.I_i, g.b_i_face = face_op(bc_i)
+g.I_e, g.b_e_face = face_op(bc_e)
+g.I_n, g.b_n_face = face_op(bc_n)
+g.I_p, g.b_p_face = face_op(bc_p)
+
+# Gradient operators (26×25)  
+g.D_i, g.b_i_grad = grad_op(bc_i)
+g.D_e, g.b_e_grad = grad_op(bc_e)
+g.D_n, g.b_n_grad = grad_op(bc_n)
+g.D_p, g.b_p_grad = grad_op(bc_p)
+
+# Physical coordinate gradients (26×25)
+g.D_i_r, g.b_i_grad_r = grad_op_nu(inv_drmid, bc_i)
+g.D_e_r, g.b_e_grad_r = grad_op_nu(inv_drmid, bc_e)
+g.D_n_r, g.b_n_grad_r = grad_op_nu(inv_drmid, bc_n)
+
+# Psi transport (constant diffusion)
+g.A_p, g.b_p = trans_terms(v_zero, g.geo_g2g3_over_rhon_face, bc_p)
+```
+
+### Per-Iteration Operators (State-dependent)
+
+Computed each iteration:
+
+```python
+# Temperature transport (depends on χ from turbulence model)
+A_i, b_i = trans_terms(v_i, chi_i, bc_i)
+A_e, b_e = trans_terms(v_e, chi_e, bc_e)
+
+# Density transport (depends on D, V from turbulence)
+A_n, b_n = trans_terms(v_n, D_n, bc_n)
+```
+
+Each `trans_terms` call builds a tridiagonal matrix from diffusion and convection.
+
+## Face/Gradient Computations
+
+For each state variable, compute three quantities:
+
+```python
+# Example for ion temperature
+i_face = g.I_i @ i + g.b_i_face          # Size 26 (faces)
+i_grad = g.D_i @ i + g.b_i_grad          # Size 26 (∂i/∂ρ)
+i_grad_r = g.D_i_r @ i + g.b_i_grad_r    # Size 26 (∂i/∂r_mid)
+```
+
+Pattern repeated for `e`, `n`, `p`, and derived quantities (`n_i`, `n_impurity`).
+
+## Boundary Condition Encoding
+
+Boundary conditions stored as 4-tuples:
 ```python
 bc = (left_face, right_face, left_grad, right_grad)
 ```
-Where:
-- `left_face`: value at rho=0 (or None for natural BC)
-- `right_face`: value at rho=1 (or None for natural BC)
-- `left_grad`: gradient at rho=0
-- `right_grad`: gradient at rho=1
 
-### Applied Boundary Conditions
-
-**Left boundary (rho=0, magnetic axis)**:
-- `T_i_bc`: zero gradient (symmetry)
-- `T_e_bc`: zero gradient (symmetry)
-- `n_e_bc`: natural (no explicit constraint)
-- `psi_bc`: natural
-
-**Right boundary (rho=1, edge)**:
-- `T_i_bc`: fixed value = `g.T_i_right_bc = 0.2` keV
-- `T_e_bc`: fixed value = `g.T_e_right_bc = 0.2` keV
-- `n_e_bc`: fixed value = `g.n_e_right_bc = 0.25e20` m⁻³
-- `psi_bc`: fixed gradient from total plasma current `dpsi_drhonorm_edge`
-
-## Numerical Discretization
-
-### Spatial Discretization
-
-The code uses **finite volume method** with exponential fitting for Peclet number control.
-
-#### Face Values from Cell Values
+Examples:
 ```python
-compute_face_value(value, dr, bc):
-    left_face = value[0]  # left boundary
-    inner = (value[:-1] + value[1:]) / 2.0  # linear interpolation
-    right_face = value[-1] + (right_grad * dr / 2)  # from BC
-    return [left_face, inner, right_face]
+g.bc_i = (None, 0.2, 0.0, 0.0)      # Right face = 0.2 keV, left grad = 0
+g.bc_e = (None, 0.2, 0.0, 0.0)      # Right face = 0.2 keV, left grad = 0
+g.bc_n = (None, 0.25e20, 0.0, 0.0)  # Right face = 0.25e20 m⁻³
+g.bc_p = (None, None, 0.0, dp_edge) # Right grad from current
 ```
 
-#### Face Gradients from Cell Values
-```python
-compute_face_grad(value, dr, bc):
-    forward_diff = diff(value) / dr
-    left_grad = constrained_grad(left_bc, value[0])
-    right_grad = constrained_grad(right_bc, value[-1])
-    return [left_grad, forward_diff, right_grad]
-```
+Operators `I`, `D` use these to set `b_face`, `b_grad` vectors.
 
-### Diffusion Terms
+## Coupling Structure
 
-`make_diffusion_terms(d_face, dr, bc)` returns matrices `(mat, vec)` implementing:
-```
-div(d * grad(x)) ≈ (d[i+1]*(x[i+1]-x[i]) - d[i]*(x[i]-x[i-1])) / dr²
-```
-
-Discretization:
-```python
-diag = -(d_face[1:] + d_face[:-1]) / dr²
-off_diag = d_face[1:-1] / dr²
-```
-
-**Boundary handling**:
-- Left: zero-gradient → `diag[0] = -d_face[1] / dr²`, `vec[0] = -d_face[0] * left_grad / dr`
-- Right (fixed value): `diag[-1] = (-2*d_face[-1] - d_face[-2]) / dr²`, `vec[-1] = 2*d_face[-1]*right_value / dr²`
-- Right (fixed grad): `diag[-1] = -d_face[-2] / dr²`, `vec[-1] = d_face[-1]*right_grad / dr`
-
-### Convection Terms
-
-`make_convection_terms(v_face, d_face, dr, bc)` uses **exponential fitting scheme** to handle high Peclet numbers.
-
-**Peclet number**:
-```python
-P[i] = (v_face[i] * dr) / d_face[i]
-```
-
-**Upwind factor** `alpha(P)`:
-```python
-if P > 10:        alpha = (P-1)/P              # full upwind
-if 0 < P < 10:    alpha = ((P-1) + (1-P/10)⁵)/P  # smooth transition
-if P ≈ 0:         alpha = 0.5                  # central difference
-if -10 < P < 0:   alpha = ((1+P/10)⁵ - 1)/P
-if P < -10:       alpha = -1/P
-```
-
-This prevents oscillations when `|v*dr/d|` is large (convection-dominated flows).
-
-### Temporal Discretization
-
-**Implicit theta method** with `g.theta_implicit = 1.0` (fully implicit/backward Euler):
-
-```
-(tic_new / toc_new) * (x_new - x_old) / dt = 
-    theta * RHS(x_new) + (1-theta) * RHS(x_old)
-```
-
-With `theta=1.0`, this becomes:
-```
-[I - dt * theta * (1/(toc*tic)) * C_mat] * x_new = x_old + dt * (1/(toc*tic)) * c_vec
-```
-
-Where `C_mat` includes diffusion, convection, and source coupling matrices.
-
-**Matrix assembly**:
-```python
-# Transient scaling
-broadcasted = 1 / (tc_out_new * tc_in_new)
-lhs_mat = I - dt * theta * broadcasted * c_mat_new
-lhs_vec = -theta * dt * broadcasted * c_new
-
-# Right hand side (with old time step)
-right_transient = diag(tc_in_old / tc_in_new)
-rhs = dot(right_transient, x_old) - lhs_vec
-
-# Solve
-x_new = solve(lhs_mat, rhs)
-```
-
-## Time Stepping
-
-### Main Time Loop Structure
-
-The code uses **predictor-corrector time stepping** with state array `s`:
+### Temperature Coupling (Electron-Ion Heat Exchange)
 
 ```python
-# Initialize state array
-s = jnp.concatenate([T_i_initial, T_e_initial, psi_initial, n_e_initial])
-t = 0.0
-history = [(t, s)]
+Qei_ii, Qei_ee, Qei_ie, Qei_ei = qei_coupling(...)
+```
 
-while True:
-    # Compute dt from current state
-    dt = compute_initial_dt(s)
+Returns **diagonal coupling coefficients** (size 25 each):
+- `Qei_ii` - Ion self-coupling (cooling)
+- `Qei_ee` - Electron self-coupling (cooling)  
+- `Qei_ie` - Ion←Electron transfer (heating)
+- `Qei_ei` - Electron←Ion transfer (heating)
+
+These create **off-diagonal 25×25 blocks** in the spatial matrix:
+```
+[A_i + diag(Qei_ii)    diag(Qei_ie)    ]
+[diag(Qei_ei)      A_e + diag(Qei_ee)  ]
+```
+
+The coupling is **energy-conserving**: `Qei_ie = -Qei_ei`, `Qei_ii = -Qei_ee`.
+
+### Decoupled Variables
+
+- **Psi** (poloidal flux): No coupling to other equations
+- **Density**: No coupling to other equations (except via physics feedback)
+
+This gives the **block-sparse** structure shown above.
+
+## Source Vector
+
+```python
+spatial_vec = jnp.r_[b_i + src_i,           # i sources (25)
+                     b_e + src_e,           # e sources (25)
+                     g.b_p + src_p,         # p sources (25)
+                     b_n + g.source_n_constant]  # n sources (25)
+```
+
+Size 100, combining:
+- `b_*` - Boundary condition contributions from operators
+- `src_*` - Physical sources (heating, fusion, particles, current)
+
+## Matrix Assembly Flow
+
+```python
+# 1. Extract state components
+i, e, p, n = pred[l.i], pred[l.e], pred[l.p], pred[l.n]
+
+# 2. Compute face values and gradients (linear operators)
+i_face = g.I_i @ i + g.b_i_face
+i_grad = g.D_i @ i + g.b_i_grad
+i_grad_r = g.D_i_r @ i + g.b_i_grad_r
+# ... repeat for e, n, p
+
+# 3. Update derived quantities
+ions = ions_update(n, e, e_face)  # Returns 8-element tuple
+q_face = compute_q(p_grad)
+
+# 4. Compute transport coefficients (nonlinear)
+chi_i, chi_e, D_n, v_n = turbulent_transport(...)  # QLKNN model
+v_i, v_e, chi_neo_i, chi_neo_e, D_neo_n, v_neo_n = neoclassical_transport(...)
+chi_i += chi_neo_i  # Combine turbulent + neoclassical
+# ...
+
+# 5. Build transport matrices (25×25 each)
+A_i, b_i = trans_terms(v_i, chi_i, g.bcs[0])  # Tridiagonal
+A_e, b_e = trans_terms(v_e, chi_e, g.bcs[1])
+A_n, b_n = trans_terms(v_n, D_n, g.bcs[3])
+# g.A_p precomputed (constant diffusion)
+
+# 6. Assemble 100×100 block matrix
+spatial_mat = jnp.block([
+    [A_i + diag(...), diag(...), 0, 0],
+    [diag(...), A_e + diag(...), 0, 0],
+    [0, 0, A_p, 0],
+    [0, 0, 0, A_n + diag(...)]
+])
+
+# 7. Assemble 100-vector
+spatial_vec = jnp.r_[b_i + src_i, b_e + src_e, g.b_p + src_p, b_n + src_n]
+```
+
+## Implicit System
+
+### Predictor-Corrector Loop
+
+```python
+pred = state  # Initial guess
+tc_in_old = None
+
+for iter in range(g.n_corr + 1):  # 0 (predictor), 1 (corrector)
+    # Compute all matrices/vectors from pred
+    spatial_mat, spatial_vec = assemble(pred)
+    tc_in, tc_out = compute_transients(pred)
     
-    # Predictor-corrector loop
-    p = s  # Working copy
-    x_old = s  # For RHS
-    for _ in range(g.n_corrector_steps + 1):
-        # Extract variables from working state
-        T_i, T_e, psi, n_e = p[l.Ti], p[l.Te], p[l.psi], p[l.ne]
-        
-        # Compute physics (ions, transport, sources)
-        ions = get_updated_ions(n_e, T_e)
-        turbulent_transport = calculate_transport_coeffs(p, ions, ...)
-        
-        # Assemble spatial operators (100×100 matrix)
-        spatial_mat = build_spatial_matrix(d_face, v_face, source_mat)
-        spatial_vec = build_spatial_vector(sources, bcs)
-        
-        # Build and solve linear system
-        lhs = I - dt*θ*transient_coeff*spatial_mat
-        rhs = transient_ratio @ x_old - dt*θ*transient_coeff*spatial_vec
-        p = solve(lhs, rhs)
+    # Build implicit system
+    tc = 1 / (tc_out * tc_in)
+    lhs = I - dt * θ * expand_dims(tc, 1) * spatial_mat
     
-    # Accept step
-    t = t + dt
-    s = p
-    history.append((t, s))
+    # RHS uses ratio of old/new transients
+    tc_old = tc_in if (tc_in_old is None) else tc_in_old
+    rhs = (tc_old / tc_in) * state + θ * dt * tc * spatial_vec
     
-    if t >= t_final:
-        break
+    # Solve
+    pred = solve(lhs, rhs)
+    tc_in_old = tc_in
 ```
 
-### Time Step Calculation
+**Key insight**: After first iteration, `tc_old ≈ tc_in`, so ratio ≈ 1.
 
-**Initial dt estimate**:
+### Matrix Properties
+
+**spatial_mat** (100×100):
+- **Block structure**: 4×4 blocks of 25×25
+- **Sparsity**: Tri-diagonal per block + diagonal coupling
+- **Bandwidth**: 3 within blocks, full coupling across i-e
+- **Condition number**: ~O(n²) from diffusion, improved by upwinding
+
+**lhs** (100×100):
+- Form: `I - dt*θ*D*A` where `D=diag(tc)`, `A=spatial_mat`
+- **M-matrix** structure for small `dt` (positive diagonal, negative off-diagonals)
+- **Invertible** for `dt < dt_max` (stability bound)
+
+## Numerical Linear Algebra Details
+
+### Operator Costs
+
+Per iteration:
+- **7 matrix-vector products**: `I@x`, `D@x` (×3 coord systems × 4 variables) → O(n) each
+- **3 transport matrix builds**: `trans_terms()` → O(n) assembly
+- **1 block matrix build**: `jnp.block()` → O(n²) allocation
+- **1 linear solve**: `jnp.linalg.solve()` → O(n³) = O(1M) operations
+
+Total per iteration: **~1M operations** dominated by dense solve.
+
+### Memory Layout
+
+**State vector** (contiguous):
+```
+state[0:25]   = i  (ion temperature)
+state[25:50]  = e  (electron temperature)
+state[50:75]  = p  (poloidal flux)
+state[75:100] = n  (electron density)
+```
+
+**Matrix storage**:
+- `A_i, A_e, A_n, A_p`: Stored as full `(25, 25)` arrays (not sparse)
+- `spatial_mat`: Full `(100, 100)` array
+- Total: ~80KB for all matrices
+
+### JAX Arrays
+
+All computations use JAX:
 ```python
-chi_max = max(chi_face_ion * g1_over_vpr2_face, 
-              chi_face_el * g1_over_vpr2_face)
-basic_dt = (3/4) * dx² / chi_max             # CFL-like condition
-dt = min(chi_timestep_prefactor * basic_dt, max_dt)
-
-# Ensure we hit t_final exactly
-if current_t + dt > t_final:
-    dt = t_final - current_t
+state = jnp.array(...)     # JAX device array
+spatial_mat = jnp.block()  # JAX array operations
+pred = jnp.linalg.solve()  # JAX linear solver
 ```
 
-Parameters:
-- `g.chi_timestep_prefactor = 50` (safety factor)
-- `g.max_dt = 0.5` s
-- `g.min_dt = 1e-8` s
-- `g.dt_reduction_factor = 3`
+**Benefits**:
+- Automatic differentiation available
+- GPU-ready (not currently used)
+- JIT compilation potential
+- Immutable arrays (functional style)
 
-### Predictor-Corrector
+## Exponential Fitting Details
 
-The code uses **`g.n_corrector_steps = 1`** corrector iteration:
+### Peclet Number and Upwind Factor
 
-1. **Predictor** (iter 0): Solve with coefficients from `x_old`
-2. **Corrector** (iter 1): Re-solve with coefficients from predicted `x_new`
-
-This improves accuracy by making the scheme more consistent with the implicit formulation.
-
-## Transport Coefficients
-
-### Turbulent Transport (QLKNN Model)
-
-The function `calculate_transport_coeffs()` (lines 779-1066) computes turbulent transport via the **QLKNN neural network surrogate** for QuaLiKiz gyrokinetic turbulence:
-
-**Inputs to QLKNN**:
-```python
-QualikizInputs:
-    Ati = lref_over_lti = -R_major * (∇T_i / T_i)     # Normalized T_i gradient
-    Ate = lref_over_lte = -R_major * (∇T_e / T_e)     # Normalized T_e gradient
-    Ane = lref_over_lne = -R_major * (∇n_e / n_e)     # Normalized n_e gradient
-    Ani = lref_over_lni0 = -R_major * (∇n_i / n_i)    # Ion density gradient
-    q = safety factor
-    smag = magnetic shear = -(r/iota) * (∂iota/∂r)
-    x = rho_face_norm * epsilon_lcfs / EPSILON_NN     # Normalized radius
-    Ti_Te = T_i / T_e                                  # Temperature ratio
-    LogNuStar = log10(nu_star)                        # Collisionality
-    Z_eff_face = effective charge
-    chiGB = gyro-Bohm normalization
-```
-
-**Outputs from QLKNN**:
-```python
-qi_itg, qi_tem      # Ion heat flux (ITG, TEM modes)
-qe_itg, qe_tem, qe_etg  # Electron heat flux (ITG, TEM, ETG modes)
-pfe_itg, pfe_tem    # Electron particle flux
-```
-
-**Conversion to transport coefficients**:
-```python
-# Heat diffusivities
-chi_face_ion = (qi_itg + qi_tem) * chiGB / lref_over_lti * (R_major / a_minor)
-chi_face_el = (qe_itg + qe_tem + qe_etg) * chiGB / lref_over_lte * (R_major / a_minor)
-
-# Particle transport
-pfe_SI = pfe * n_e_face * chiGB / a_minor
-D_el = -pfe_SI / (∇n_e * geometric_factor)  if consistent sign
-V_el = pfe_SI / (n_e * geometric_factor)    otherwise
-```
-
-**Masking and bounds** (lines 961-1002):
-- Active region: `transport_rho_min < rho < transport_rho_max`
-- Clipping: `chi_min = 0.05`, `chi_max = 100`, `D_e_min = 0.05`, `D_e_max = 100`
-- Inner core override: `chi_i_inner = 1.0`, `chi_e_inner = 1.0` for `rho < rho_inner`
-
-### Smoothing
-
-Transport coefficients are smoothed via **Gaussian kernel convolution** (lines 1030-1064):
-```python
-kernel = exp(-log(2) * (rho_i - rho_j)² / smoothing_width²)
-chi_smooth = dot(normalized_kernel, chi_raw)
-```
-with `g.smoothing_width = 0.1`.
-
-### Neoclassical Transport
-
-**Pereverzev model** adds neoclassical transport in pedestal (lines 1877-1896):
-```python
-if rho > rho_norm_ped_top:
-    chi_face_per_ion = g1_over_vpr_face * n_i_face * keV_to_J * chi_pereverzev
-    chi_face_per_el = g1_over_vpr_face * n_e_face * keV_to_J * chi_pereverzev
-    d_face_per_el = D_pereverzev * g1_over_vpr_face
-    v_face_per_el = (∇n_e / n_e) * D_pereverzev * geo_factor
-```
-with `g.chi_pereverzev = 30`, `g.D_pereverzev = 15`.
-
-## Current and Conductivity
-
-### Bootstrap Current
-
-`_calculate_bootstrap_current()` (lines 392-450) implements the **Sauter-Angioni model**:
+For convection coefficient at face `i`:
 
 ```python
-# Collisionality parameters
-nu_e_star = 6.921e-18 * q * R * n_e * Z_eff * log_lambda / (T_e² * epsilon^1.5)
-nu_i_star = 4.9e-18 * q * R * n_i * Z_eff⁴ * log_lambda_ii / (T_i² * epsilon^1.5)
-
-# Trapped particle fraction
-f_trap = 1 - sqrt((1-epsilon)/(1+epsilon)) * (1-epsilon_eff) / (1+2*sqrt(epsilon_eff))
-
-# Transport coefficients
-L31 = calculate_L31(f_trap, nu_e_star, Z_eff)  # pressure-driven
-L32 = calculate_L32(f_trap, nu_e_star, Z_eff)  # temperature-driven electron
-L34 = calculate_L34(f_trap, nu_e_star, Z_eff)  # temperature-driven ion
-alpha = calculate_alpha(f_trap, nu_i_star)     # ion-electron coupling
-
-# Bootstrap current density
-j_bootstrap = (F/(2π * B_0)) * (1/∂psi/∂rho) * [
-    L31 * (p_e * ∇ln(n_e) + p_i * ∇ln(n_i)) +
-    (L31 + L32) * p_e * ∇ln(T_e) +
-    (L31 + alpha*L34) * p_i * ∇ln(T_i)
-]
+P = v_face[i] * dx / d_face[i]
+α(P) = upwind_factor(P)
 ```
 
-### Plasma Conductivity
-
-`calculate_conductivity()` (lines 353-375) uses **Sauter neoclassical resistivity**:
+The function `α(P)` smoothly transitions:
 
 ```python
-# Spitzer conductivity
-sigma_Spitzer = 1.9012e4 * (T_e[keV])^1.5 / (Z_eff * NZ * log_lambda_ei)
-where NZ = 0.58 + 0.74/(0.76 + Z_eff)
-
-# Neoclassical correction
-ft33 = f_trap / (1 + (0.55 - 0.1*f_trap)*sqrt(nu_e_star) + 
-                 0.45*(1-f_trap)*nu_e_star / Z_eff^1.5)
-sigma_neo = 1 - ft33 * (1 + 0.36/Z_eff - ft33*(0.59/Z_eff - 0.23*ft33/Z_eff))
-
-sigma = sigma_Spitzer * sigma_neo
+def peclet_to_alpha(P):
+    if abs(P) < 0.001:
+        return 0.5  # Central difference
+    elif P > 10:
+        return (P - 1) / P  # Full upwind
+    elif 0 < P < 10:
+        return ((P-1) + (1 - P/10)^5) / P  # Smooth transition
+    elif -10 < P < 0:
+        return ((1 + P/10)^5 - 1) / P
+    else:  # P < -10
+        return -1 / P
 ```
 
-## Source Terms
+**Key property**: For large |P|, this recovers pure upwinding which is stable.
 
-Sources are computed explicitly and accumulated into source variables:
+### Matrix Stencil
 
-```python
-source_T_i = jnp.zeros_like(T_i)  # Ion temperature source
-source_T_e = jnp.zeros_like(T_e)  # Electron temperature source  
-source_psi_current = jnp.zeros_like(psi)  # Current source
-source_n_e = jnp.zeros_like(n_e)  # Particle source
+The convection matrix stencil for cell `i`:
 
-# Add various sources (heating, fusion, particles)
-source_T_i += generic_heat + fusion_heat_i
-source_T_e += generic_heat + fusion_heat_e
-source_psi_current += external_current
-source_n_e += gas_puff + pellet + particle_source
+```
+[... , (1-α_L)*v_L/dx , (α_L*v_L - α_R*v_R)/dx , -(1-α_R)*v_R/dx , ...]
+       i-1                      i                       i+1
 ```
 
-### Generic Heating Source
+Where `v_L = v_face[i]`, `v_R = v_face[i+1]`.
 
-```python
-"generic_heat": (T_i, T_e) sources
-    profile = gaussian_profile(center, width, total_power)
-    ion_source = profile * (1 - electron_fraction)
-    el_source = profile * electron_fraction
-```
-Parameters: `P_total = 51 MW`, `location = 0.127`, `width = 0.073`, `electron_fraction = 0.68`
-
-### Fusion Source
-
-```python
-"fusion": (T_i, T_e) alpha heating
-    # D-T fusion reaction rate
-    sigma_v = Bosch_Hale_formula(T_i)
-    P_fus = DT_fraction² * n_i² * sigma_v * E_fusion
-    
-    # Alpha slowing down (energy deposition)
-    critical_energy = 10 * A_alpha * T_e
-    energy_ratio = birth_energy / critical_energy
-    frac_i = alpha_slowing_formula(energy_ratio)
-    frac_e = 1 - frac_i
-    
-    P_alpha_i = 0.2 * P_fus  # 3.5/17.6 MeV to alphas, rest to neutrons
-    P_alpha_e = 0.2 * P_fus * frac_e
-```
-
-### Particle Sources
-
-```python
-"generic_particle": Gaussian profile
-    S = gaussian_profile(center=0.3, width=0.25, total=2.05e20)
-
-"gas_puff": Edge exponential decay
-    S = exp(-(1-rho)/decay_length) normalized to total=6e21
-
-"pellet": Gaussian injection
-    S = gaussian_profile(center=0.85, width=0.1, total=0)  # Currently off
-```
-
-### Current Source
-
-```python
-"generic_current": External current drive (NBI, ECCD, etc.)
-    profile = exp(-((rho - location)² / (2*width²)))
-    I_external = Ip * generic_current_fraction
-    j_external = I_external * profile / integral(profile * spr)
-```
-Parameters: `fraction = 0.46`, `location = 0.36`, `width = 0.075`
-
-### Adaptive Sources
-
-Pedestal temperature/density control (lines 1873-1907):
-```python
-source_i += mask * adaptive_prefactor * T_i_pedestal
-source_mat_ii -= mask * adaptive_prefactor
-
-# This adds: adaptive_prefactor * (T_i_pedestal - T_i)
-# at the pedestal location (rho = rho_norm_ped_top)
-```
-
-## Charge State and Impurities
-
-### Ion Composition
-
-Main ions: `g.main_ion_names = ("D", "T")` with equal fractions `[0.5, 0.5]`
-Impurity: `g.impurity_names = ("Ne",)` (Neon)
-Effective charge: `g.Z_eff = 1.6`
-
-### Density Relationships
-
-Quasi-neutrality: `n_e = Z_i * n_i + Z_impurity * n_impurity`
-
-Given `Z_eff = (Z_i² * n_i + Z_impurity² * n_impurity) / n_e`, solve for dilution:
-```python
-dilution_factor = (Z_impurity - Z_eff) / (Z_i * (Z_impurity - Z_i))
-n_i = n_e * dilution_factor
-n_impurity = (n_e - Z_i * n_i) / Z_impurity
-```
-
-### Average Charge States
-
-For Neon, use **Mavrin et al. model** (lines 282-293):
-```python
-if ion in MAVRIN_Z_COEFFS:
-    interval_idx = searchsorted(TEMPERATURE_INTERVALS, T_e)
-    coeffs = MAVRIN_Z_COEFFS[interval_idx]
-    Z_avg = 10^(polyval(coeffs, log10(T_e)))
-else:
-    Z_avg = Z_nominal
-```
-
-For D, T: `Z_avg = 1.0` (fully ionized)
-
-## Geometry
-
-The code uses **CHEASE equilibrium data** from `geo/ITER_hybrid_citrin_equil_cheasedata.mat2cols`.
-
-### Key Geometric Quantities
-
-All quantities interpolated from CHEASE `rho_norm_intermediate` to simulation grid:
-
-**Flux surface volumes**:
-- `vpr = dvol/drho_norm` (volume derivative)
-- `spr = darea/drho_norm` (surface area derivative)
-
-**Magnetic field geometry**:
-- `F = R * B_phi` (poloidal current function)
-- `Phi = toroidal flux`
-- `g0, g1, g2, g3` = metric coefficients
-- `g2g3_over_rhon` = appears in diffusion of psi
-
-**Miller parameters**:
-- `elongation` = kappa (vertical elongation)
-- `delta_face` = triangularity
-- `epsilon_face = (R_out - R_in)/(R_out + R_in)` (inverse aspect ratio)
-
-**Derived quantities**:
-- `g0_over_vpr_face` for convection in cylindrical limit
-- `g1_over_vpr_face`, `g1_over_vpr2_face` for transport coefficient normalization
-
-### Smoothing (lines 1405-1409)
-
-Some geometric quantities are Savitzky-Golay filtered near the axis:
-```python
-idx_limit = argmin(|rhon - rho_smoothing_limit|)  # rho < 0.1
-smoothed = savgol_filter(data, window_length=5, polyorder=1 or 2)
-data[:idx_limit] = smoothed[:idx_limit]
-```
-
-This removes noise from numerical differentiation near the magnetic axis.
-
-## Variable Naming Conventions
-
-### Prefixes and Suffixes
-
-- `**_face`: Defined at cell faces (N+1 points)
-- `**_cell` or no suffix: Defined at cell centers (N points)
-- `**_bc`: Boundary condition dictionary
-- `**_hires`: High-resolution grid for interpolation
-- `**_profile`: 1D array across radius
-- `geo_**: Geometric quantity from equilibrium
-- `n_**`: Number/count (e.g., `n_rho`, `n_corrector_steps`)
-- `d_face`: Diffusion coefficient
-- `v_face`: Convection velocity
-- `chi_face`: Heat diffusivity
-- `sigma`: Electrical conductivity
-
-### Physics Prefixes
-
-- `j_`: Current density [A/m²]
-- `q_` or `Q_`: Heat flux or heating power
-- `p_` or `P_`: Power
-- `log_`: Natural logarithm (e.g., `log_lambda_ei`)
-- `nu_`: Collisionality parameter
-- `Z_`: Charge state
-- `A_`: Atomic mass
-- `f_trap`: Trapped particle fraction
-
-### State Variables
-
-- `s`: State array (100,) = [T_i(25), T_e(25), psi(25), n_e(25)]
-- `p`: Working state during corrector iterations
-- `x_old`: State for RHS (saved at start of time step)
-- `t`: Current simulation time [s]
-- `history`: List of (t, s) tuples
-
-### Transient Coefficients
-
-- `tc_in`, `tc_out`: Transient coefficients (in/out of time derivative)
-- `tic_T_i`, `tic_T_e`: Transient in for temperatures = n * vpr^(5/3)
-- `toc_psi`: Transient out for psi = resistivity factors
-- Concatenated into 100-vectors for matrix operations
-
-### Matrix/Vector Notation
-
-- `**_mat`: Matrix (2D array or block matrix)
-- `**_vec`: Vector (1D array)
-- `spatial_mat`: Combined spatial operator (100×100)
-- `spatial_vec`: Combined spatial source vector (100,)
-- `lhs_mat`: Left-hand side of linear system (100×100)
-- `rhs`: Right-hand side vector (100,)
-- `c_mat`: List of 4×4 blocks (each 25×25)
-- `c`: List of 4 vectors (each 25,)
-
-## Loop Structure
-
-### Main Time Loop
-```python
-while True:
-    # Compute q_face from current psi
-    # Update ions
-    # Calculate transport coefficients
-    # Compute dt
-    
-    # Predictor-corrector loop
-    p = s  # Working copy
-    x_old = s  # For RHS
-    for _ in range(g.n_corrector_steps + 1):
-        # Extract T_i, T_e, psi, n_e from p
-        # Compute physics (ions, sigma, bootstrap, sources, transport)
-        # Assemble spatial operators
-        # Build and solve linear system
-        # Update p
-    
-    # Accept step
-    t = t + dt
-    s = p
-    history.append((t, s))
-    
-    # Check if finished
-    if t >= t_final: break
-```
-
-### Coefficients Computation
-
-This large block computes all coefficients needed for the linear system at a given state:
-
-1. **Extract variables** from solver tuple
-2. **Update ions** based on quasi-neutrality
-3. **Compute q_face** from psi gradients
-4. **Compute face values and gradients** for all variables
-5. **Calculate conductivity**
-6. **Build source profiles** including bootstrap current
-7. **Compute transient coefficients**
-8. **Calculate transport coefficients** from QLKNN
-9. **Build diffusion terms**
-10. **Add Pereverzev neoclassical**
-11. **Compute sources**
-12. **Package as tuples** for solver
-
-### Linear System Assembly
-
-Builds 100×100 block system (4 channels × 25 cells) for coupled equations:
-
-```python
-# Initialize 4×4 block matrix (each block is 25×25)
-c_mat = [g.zero_row_of_blocks.copy() for _ in range(4)]
-c = g.zero_block_vec.copy()
-
-# Add diffusion and convection (diagonal blocks only)
-for i in range(4):
-    diffusion_mat, diffusion_vec = make_diffusion_terms(d_face[i], g.dx_array, g.bcs[i])
-    conv_mat, conv_vec = make_convection_terms(v_face[i], d_face[i], g.dx_array, g.bcs[i])
-    c_mat[i][i] += diffusion_mat + conv_mat  # Tridiagonal 25×25
-    c[i] += diffusion_vec + conv_vec
-
-# Add source coupling (explicit which channels couple)
-c_mat[0][0] += jnp.diag(source_mat_ii)  # T_i self-coupling
-c_mat[0][1] += jnp.diag(source_mat_ie)  # T_i → T_e (Q_ei)
-c_mat[1][0] += jnp.diag(source_mat_ei)  # T_e → T_i (Q_ei)
-c_mat[1][1] += jnp.diag(source_mat_ee)  # T_e self-coupling
-c_mat[3][3] += jnp.diag(source_mat_nn)  # n_e self-coupling (adaptive)
-# c_mat[2][*] = 0  (psi has no coupling)
-
-# Add explicit sources
-c[0] += source_i   # Ion heating
-c[1] += source_e   # Electron heating  
-c[2] += source_psi # Current sources
-c[3] += source_n_e # Particle sources
-
-# Assemble into single 100×100 matrix
-spatial_mat = jnp.block(c_mat)
-spatial_vec = jnp.block(c)
-
-# Build implicit system
-transient_coeff = 1 / (tc_out_new * tc_in_new)
-broadcasted = jnp.expand_dims(transient_coeff, 1)
-lhs_mat = g.identity_matrix - dt * g.theta_implicit * broadcasted * spatial_mat
-lhs_vec = -g.theta_implicit * dt * transient_coeff * spatial_vec
-right_transient = jnp.diag(tc_in_old / tc_in_new)
-rhs = jnp.dot(right_transient, x_old) - lhs_vec
-
-# Solve dense 100×100 linear system
-p = jnp.linalg.solve(lhs_mat, rhs)
-```
-
-### Post-Processing Loop
-
-Write outputs:
-```python
-for var_name in evolving_names:
-    # Compute cell+boundaries for all time steps
-    var_data = [compute_cell_plus_boundaries_bc(var[t], dx, bc) 
-                for t in range(nt)]
-    
-    # Write binary data
-    var.tofile(f)
-    
-    # Plot snapshots at 0%, 25%, 50%, 75%, 100% of simulation
-    for j, idx in enumerate([0, nt//4, nt//2, 3*nt//4, nt-1]):
-        plot(rho, var[idx])
-        savefig(f"{var_name}.{j:04d}.png")
-```
-
-## Physical Constants
-
-All defined in the global namespace `g` (lines 28-44):
-```python
-g.keV_to_J = 1.602176634e-16    # keV to Joules
-g.eV_to_J = 1.602176634e-19     # eV to Joules
-g.m_amu = 1.6605390666e-27      # Atomic mass unit [kg]
-g.q_e = 1.602176634e-19         # Elementary charge [C]
-g.m_e = 9.1093837e-31           # Electron mass [kg]
-g.epsilon_0 = 8.85418782e-12    # Permittivity [F/m]
-g.mu_0 = 4π × 10⁻⁷              # Permeability [H/m]
-g.k_B = 1.380649e-23            # Boltzmann constant [J/K]
-```
-
-## Tolerances and Numerics
-
-```python
-g.TOLERANCE = 1e-6              # General tolerance
-g.eps = 1e-7                    # Small number to avoid division by zero
-g.EPS_CONVECTION = 1e-20        # Minimum diffusivity for convection scheme
-g.EPS_PECLET = 1e-3             # Peclet number threshold for alpha calculation
-g.tolerance = 1e-7              # Time stepping tolerance
-```
+For **pure diffusion** (`v=0`): reduces to standard central difference.
+For **pure convection** (`d→0`, `P→∞`): becomes first-order upwind.
 
 ## Output Format
 
-Binary file `run.raw` structure:
+### Binary File Structure
+
+File `run.raw` contains:
 ```
-t[nt]           : float64, nt time points
-rho[nr]         : float64, nr = n_rho + 2 (with boundaries)
-T_i[nt, nr]     : float64
-T_e[nt, nr]     : float64  
-psi[nt, nr]     : float64
-n_e[nt, nr]     : float64
+For each time step:
+    t (float64)           # 1 value
+    state (float64)       # 100 values (4*25)
 ```
 
-PNG plots: `{variable}.{j:04d}.png` where j ∈ {0,1,2,3,4} for time snapshots.
+Total size: `nt * (1 + 4*n) * 8` bytes where `nt = t_end/dt ≈ 26`.
 
-## Key Numerical Features
+### Memory-Mapped Reading
 
-1. **Implicit method**: Unconditionally stable, allows large time steps
-2. **Exponential fitting**: Handles convection-dominated flows without oscillations
-3. **Predictor-corrector**: Improves accuracy of nonlinear coupling
-4. **Adaptive time stepping**: Automatically reduces dt on convergence failure
-5. **Block-coupled system**: All 4 equations solved simultaneously with cross-coupling
-6. **Adaptive sources**: Pedestal control via feedback terms
-7. **JAX**: Enables future GPU acceleration and automatic differentiation
-8. **Staggered grid**: Natural for finite volume, avoids checkerboard instabilities
+In `plot.py`:
+```python
+rc = 1 + 4 * n  # Record size = 101
+sz = np.float64.itemsize  # 8 bytes
 
-## Simulation Parameters
+# Memory map with custom strides
+mm = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
+nt = len(mm) // (rc * sz)
 
-**Plasma**:
-- Major radius: `R_major = 6.2` m
-- Minor radius: `a_minor = 2.0` m  
-- Magnetic field: `B_0 = 5.3` T
-- Plasma current: `Ip = 10.5` MA
-- Effective charge: `Z_eff = 1.6`
+# Time array with stride = rc*sz (skip state data)
+t_out = np.ndarray(shape=(nt,), dtype=np.float64, buffer=mm,
+                   offset=0, strides=(rc*sz,))
 
-**Time**:
-- Initial: `t_initial = 0` s
-- Final: `t_final = 5` s
-- Max timestep: `max_dt = 0.5` s
+# State array with stride = (rc*sz, n*sz, sz)
+states = np.ndarray(shape=(nt, 4, n), dtype=np.float64, buffer=mm,
+                    offset=sz, strides=(rc*sz, n*sz, sz))
+```
 
-**Transport**:
-- Model: QLKNN-10D neural network
-- Smoothing width: `0.1` in rho_norm
-- Active region: `0 < rho < 0.91`
-
-**Resistivity**: `resistivity_multiplier = 200` (slows psi evolution for numerical stability)
+This enables **zero-copy** access to specific time slices without loading full file.
 
 ## Summary
 
-This code implements a sophisticated 1D tokamak transport solver with:
-- **4 coupled evolution equations** (T_i, T_e, n_e, psi)
-- **Implicit finite volume method** with exponential fitting
-- **Adaptive predictor-corrector time stepping**
-- **Neural network turbulence model** (QLKNN)
-- **Neoclassical effects** (bootstrap current, Sauter conductivity)
-- **Realistic sources** (heating, fusion, fueling)
-- **ITER-like geometry** from CHEASE equilibrium
+This implementation uses:
 
-The numerical scheme is designed for **robustness** (implicit, adaptive) and **accuracy** (exponential fitting, predictor-corrector) while handling the **stiff multi-physics coupling** inherent to tokamak transport.
+1. **Finite volume method** with exponential fitting for stability
+2. **Implicit backward Euler** (`θ=1`) for unconditional stability
+3. **Block-coupled system** (100×100) solving all 4 variables simultaneously
+4. **Predictor-corrector** for nonlinear transport coefficients
+5. **Precomputed operators** (I, D) applied via matrix-vector products
+6. **Tridiagonal blocks** within each variable
+7. **Diagonal coupling** between i-e temperatures
+8. **Dense linear solver** (LU decomposition) for full system
+9. **JAX arrays** for potential GPU acceleration
+10. **Memory-mapped I/O** for efficient post-processing
 
+The matrix structure balances **sparsity** (tridiagonal blocks) with **coupling** (off-diagonal blocks), solved via dense methods for simplicity and robustness.
