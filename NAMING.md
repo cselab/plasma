@@ -13,50 +13,54 @@ Combined in state vector: `state = [i, e, p, n]` (size 100 = 4×25)
 ## Location/Derivative Suffixes
 
 ### Primary Suffixes
-- **`_face`** = values at cell faces (n+1 points), e.g., `i_face`, `e_face`, `n_face`
-- **`_grad`** = gradient w.r.t. normalized ρ (ρ_norm), e.g., `i_grad`, `e_grad`
-- **`_grad_r`** = gradient w.r.t. midplane radius (r_mid), e.g., `i_grad_r`, `e_grad_r`
+- **`_f`** = values at cell faces (n+1 points), e.g., `i_f`, `e_f`, `n_f`
+- **`_g`** = gradient w.r.t. normalized ρ (ρ_norm), e.g., `i_g`, `e_g`
+- **`_r`** = gradient w.r.t. midplane radius (r_mid), e.g., `i_r`, `e_r`
 
 ### Examples
 ```python
-i = pred[l.i]                        # Cell center (25)
-i_face = g.I_i @ i + g.b_i_face      # Faces (26)
-i_grad = g.D_i @ i + g.b_i_grad      # Gradient ∂i/∂ρ (26)
-i_grad_r = g.D_i_r @ i + g.b_i_grad_r  # Gradient ∂i/∂r (26)
+i = pred[l.i]                    # Cell center (25)
+i_f = g.I_i @ i + g.b_i_f        # Faces (26)
+i_g = g.D_i @ i + g.b_i_g        # Gradient ∂i/∂ρ (26)
+i_r = g.D_i_r @ i + g.b_i_r      # Gradient ∂i/∂r (26)
 ```
 
-Pattern: `{var}_{location}_{coord}` where coordinate is optional (defaults to ρ).
+Pattern: `{var}_{location}` where location is `f` (face), `g` (gradient ρ), or `r` (gradient r_mid).
 
 ## Ion/Impurity Variables
 
-Prefix convention for derived species:
-- **`ions_`** prefix for tuple-unpacked ion quantities
-- **`ni`** = main ion density (shorter than `n_i` for symmetry with `n`)
-- **`nz`** = impurity density (z for high-Z impurities)
+Single ASCII letters for ion-related quantities:
+- **`j`** = main ion density [m⁻³] (cell centers)
+- **`z`** = impurity density [m⁻³] (cell centers)
+- **`k`** = main ion effective charge (cell centers)
+- **`k_f`** = main ion effective charge (faces)
+- **`w`** = impurity effective charge (cell centers)
+- **`u_f`** = Z_eff (effective charge at faces)
+- **`j_bc`** = main ion boundary conditions tuple
+- **`z_bc`** = impurity boundary conditions tuple
 
-### Ion Tuple Unpacking
+### Ion Function
 ```python
-(ions_n_i, ions_n_impurity, ions_Z_i, ions_Z_i_face, ions_Z_impurity,
- ions_Z_eff_face, ions_n_i_bc, ions_n_impurity_bc) = ions_update(n, e, e_face)
+j, z, k, k_f, w, u_f, j_bc, z_bc = ions(n_e, T_e, T_e_face)
 ```
 
-Components:
-- `ions_n_i` = main ion density
-- `ions_n_impurity` = impurity density
-- `ions_Z_i` = main ion charge state
-- `ions_Z_i_face` = main ion charge (faces)
-- `ions_Z_impurity` = impurity charge state
-- `ions_Z_eff_face` = effective charge (faces)
-- `ions_n_i_bc` = ion density boundary conditions
-- `ions_n_impurity_bc` = impurity density boundary conditions
+Returns:
+- `j` = main ion density
+- `z` = impurity density
+- `k` = main ion charge state Z_i = ⟨Z²⟩/⟨Z⟩
+- `k_f` = main ion charge (faces)
+- `w` = impurity charge state
+- `u_f` = effective charge Z_eff (faces)
+- `j_bc` = ion density boundary conditions
+- `z_bc` = impurity density boundary conditions
 
 ### Derived Ion Quantities
 ```python
-ni_face = g.I_ni @ ions_n_i + g.b_r * ions_n_i_bc[1]
-ni_grad = g.D_ni_rho @ ions_n_i + ...
-ni_grad_r = g.D_ni_rmid @ ions_n_i + ...
-nz_face = g.I_nimp @ ions_n_impurity + ...
-nz_grad_r = g.D_nimp_rmid @ ions_n_impurity + ...
+j_f = g.I_j @ j + g.b_r * j_bc[1]
+j_g = g.D_j @ j + g.b_r_g * j_bc[1]
+j_r = g.D_j_r @ j + g.b_r_r * j_bc[1]
+z_f = g.I_z @ z + g.b_r * z_bc[1]
+z_r = g.D_z_r @ z + g.b_r_r * z_bc[1]
 ```
 
 ## Matrix/Operator Naming
@@ -66,12 +70,24 @@ nz_grad_r = g.D_nimp_rmid @ ions_n_impurity + ...
 - **`D_*`** = gradient operator (ρ coords), e.g., `g.D_i`, `g.D_e`, `g.D_n`, `g.D_p`
 - **`D_*_r`** = gradient operator (r_mid coords), e.g., `g.D_i_r`, `g.D_e_r`, `g.D_n_r`
 
+Ion operators:
+- **`I_j`** = main ion interpolation (was `I_ni`)
+- **`D_j`** = main ion gradient ρ (was `D_ni_rho`)
+- **`D_j_r`** = main ion gradient r (was `D_ni_rmid`)
+- **`I_z`** = impurity interpolation (was `I_nimp`)
+- **`D_z_r`** = impurity gradient r (was `D_nimp_rmid`)
+
 All are `(n+1) × n` matrices.
 
 ### Boundary Vectors (Precomputed)
-- **`b_*_face`** = face boundary contributions, e.g., `g.b_i_face`, `g.b_e_face`
-- **`b_*_grad`** = gradient boundary contributions, e.g., `g.b_i_grad`, `g.b_p_grad`
-- **`b_*_grad_r`** = r_mid gradient boundaries, e.g., `g.b_i_grad_r`, `g.b_e_grad_r`
+- **`b_*_f`** = face boundary contributions, e.g., `g.b_i_f`, `g.b_e_f`
+- **`b_*_g`** = gradient boundary contributions, e.g., `g.b_i_g`, `g.b_p_g`
+- **`b_*_r`** = r_mid gradient boundaries, e.g., `g.b_i_r`, `g.b_e_r`
+
+Special boundary vectors:
+- **`b_r`** = right boundary selector [0,0,...,0,1]
+- **`b_r_g`** = right boundary for gradient (with 2*dx factor)
+- **`b_r_r`** = right boundary for r_mid gradient
 
 All are size `n+1`.
 
@@ -79,19 +95,59 @@ All are size `n+1`.
 - **`A_*`** = transport operator matrix (`n × n`), e.g., `A_i`, `A_e`, `A_n`
 - **`b_*`** = transport RHS vector (size `n`), e.g., `b_i`, `b_e`, `b_n`
 
-Built from: `A, b = trans_terms(v_face, d_face, bc)`
+Built from: `A, b = transport(v_f, d_f, bc)`
 
-### Block Matrix
-- **`spatial_mat`** = full 100×100 block-assembled transport operator
-- **`spatial_vec`** = full 100-element RHS vector
+### Block Matrix Structure
+
+The implicit solve uses textbook linear algebra form: `M @ x_new = rhs`
+
+```python
+# Build block components
+A_ii = A_i + jnp.diag(qei_ii + g.ped_i)
+A_ie = jnp.diag(qei_ie)
+A_ei = jnp.diag(qei_ei)
+A_ee = A_e + jnp.diag(qei_ee + g.ped_e)
+A_pp = g.A_p
+A_nn = A_n + jnp.diag(g.ped_n)
+
+# Assemble spatial operator
+A = jnp.block([
+    [A_ii,    A_ie,    g.zero, g.zero],
+    [A_ei,    A_ee,    g.zero, g.zero],
+    [g.zero,  g.zero,  A_pp,   g.zero],
+    [g.zero,  g.zero,  g.zero, A_nn  ]
+])
+
+# Assemble RHS
+b = jnp.r_[b_i + src_i, b_e + src_e, g.b_p + src_p, b_n + g.src_n]
+
+# Time coefficients
+tc = 1 / (tc_out * tc_in)
+
+# System matrix and RHS
+M = g.identity - dt * g.theta * jnp.expand_dims(tc, 1) * A
+rhs = (tc_prev / tc_in) * state + g.theta * dt * tc * b
+
+# Solve
+pred = jnp.linalg.solve(M, rhs)
+```
+
+Components:
+- **`A_ii`, `A_ee`** = diagonal blocks with transport + coupling + pedestal
+- **`A_ie`, `A_ei`** = off-diagonal electron-ion coupling
+- **`A_pp`, `A_nn`** = decoupled psi and density blocks
+- **`A`** = full spatial operator (100×100)
+- **`M`** = system matrix (identity - dt*theta*tc*A)
+- **`rhs`** = right-hand side vector
+- **`b`** = spatial RHS before time scaling
 
 ## Transport Coefficients
 
 ### Diffusivities
 - `chi_i`, `chi_e` = thermal diffusivities [m²/s] at faces
 - `chi_neo_i`, `chi_neo_e` = neoclassical thermal diffusivities
-- `D_n` = particle diffusivity [m²/s] at faces
-- `D_neo_n` = neoclassical particle diffusivity
+- `chi_n` = particle diffusivity [m²/s] at faces
+- `chi_neo_n` = neoclassical particle diffusivity
 
 ### Convection
 - `v_i`, `v_e` = heat convection [m²/s] at faces
@@ -117,12 +173,21 @@ Pattern: Add `_neo` suffix for neoclassical contribution, then sum with turbulen
 
 ## Source Terms
 
-Pattern: `src_*` for sources after all transformations:
+Pattern: `src_*` for sources in main loop:
 ```python
-src_i = g.source_i_external + si_fus * g.geo_vpr + g.source_i_adaptive
-src_e = g.source_e_external + se_fus * g.geo_vpr + g.source_e_adaptive  
-src_p = -(j_bs + g.source_p_external) * g.source_p_coeff
+src_i = g.src_i_ext + si_fus * g.geo_vpr + g.src_i_ped
+src_e = g.src_e_ext + se_fus * g.geo_vpr + g.src_e_ped  
+src_p = -(j_bs + g.src_p_ext) * g.source_p_coeff
+# g.src_n is precomputed and constant
 ```
+
+Global precomputed sources (in `g.*`):
+- `g.src_i_ext` = external ion heating
+- `g.src_e_ext` = external electron heating
+- `g.src_p_ext` = external current drive
+- `g.src_n` = constant particle sources (gas puff + pellets + pedestal)
+- `g.src_i_ped` = pedestal feedback (ion)
+- `g.src_e_ped` = pedestal feedback (electron)
 
 Temporary intermediate sources use descriptive names: `si_fus`, `se_fus`, `j_bs`
 
@@ -130,15 +195,15 @@ Temporary intermediate sources use descriptive names: `si_fus`, `se_fus`, `j_bs`
 
 Electron-ion heat exchange returns 4 diagonal vectors:
 ```python
-Qei_ii, Qei_ee, Qei_ie, Qei_ei = qei_coupling(...)
+qei_ii, qei_ee, qei_ie, qei_ei = qei_coupling(...)
 ```
 
-- `Qei_ii` = ion self-coupling (implicit cooling)
-- `Qei_ee` = electron self-coupling (implicit cooling)
-- `Qei_ie` = ion ← electron heat transfer
-- `Qei_ei` = electron ← ion heat transfer
+- `qei_ii` = ion self-coupling (implicit cooling)
+- `qei_ee` = electron self-coupling (implicit cooling)
+- `qei_ie` = ion ← electron heat transfer
+- `qei_ei` = electron ← ion heat transfer
 
-Energy conserving: `Qei_ie + Qei_ei = 0`, `Qei_ii + Qei_ee = 0`
+Energy conserving: `qei_ie + qei_ei = 0`, `qei_ii + qei_ee = 0`
 
 ## Transient Coefficients
 
@@ -146,7 +211,7 @@ Time derivative scaling:
 - `tc_in` = coefficient inside time derivative (size 100)
 - `tc_out` = coefficient outside time derivative (size 100)
 - `tc` = combined `1/(tc_out * tc_in)` (size 100)
-- `tc_old` = saved from previous iteration for RHS
+- `tc_prev` = saved from previous iteration for RHS
 
 ## Temporary Variables
 
@@ -159,7 +224,7 @@ lni0, lni1 = ...                # Ion/impurity gradient lengths
 ### Angles and Upwind
 ```python
 la, ra = peclet_to_alpha(...)   # Left/right upwind factors
-lv, rv = v_face[:-1], v_face[1:]  # Left/right velocities
+lv, rv = v_f[:-1], v_f[1:]      # Left/right velocities
 ```
 
 ### Matrix Building
@@ -199,9 +264,11 @@ g.geo_rho_b, g.geo_rho_face         # Minor radius
 g.I_i, g.I_e, g.I_n, g.I_p          # Interpolation (26×25)
 g.D_i, g.D_e, g.D_n, g.D_p          # Gradient ρ (26×25)
 g.D_i_r, g.D_e_r, g.D_n_r           # Gradient r (26×25)
-g.b_i_face, g.b_e_face, ...         # Boundary vectors (26)
-g.b_i_grad, g.b_e_grad, ...         # Boundary vectors (26)
-g.b_i_grad_r, g.b_e_grad_r, ...     # Boundary vectors (26)
+g.I_j, g.D_j, g.D_j_r               # Main ion operators
+g.I_z, g.D_z_r                      # Impurity operators
+g.b_i_f, g.b_e_f, ...               # Face boundary vectors (26)
+g.b_i_g, g.b_e_g, ...               # Gradient boundary vectors (26)
+g.b_i_r, g.b_e_r, ...               # r_mid boundary vectors (26)
 ```
 
 ### Configuration
@@ -216,15 +283,22 @@ g.cell_centers              # 0.02, 0.06, ..., 0.98 (25)
 
 ### Precomputed Sources
 ```python
-g.source_i_external         # External heating (ion)
-g.source_e_external         # External heating (electron)
-g.source_p_external         # External current drive
-g.source_n_constant         # Particle sources (gas puff + pellets)
-g.source_i_adaptive         # Pedestal control (ion)
-g.source_e_adaptive         # Pedestal control (electron)
-g.source_mat_adaptive_T     # Temperature implicit control
-g.source_mat_adaptive_n     # Density implicit control
+g.src_i_ext         # External heating (ion)
+g.src_e_ext         # External heating (electron)
+g.src_p_ext         # External current drive
+g.src_n             # Particle sources (gas puff + pellets + pedestal)
+g.src_i_ped         # Pedestal control (ion)
+g.src_e_ped         # Pedestal control (electron)
 ```
+
+### Pedestal Control Matrices
+```python
+g.ped_i             # Temperature implicit control (ion)
+g.ped_e             # Temperature implicit control (electron)
+g.ped_n             # Density implicit control
+```
+
+These are diagonal matrices added to `A_ii`, `A_ee`, `A_nn` respectively.
 
 ### Boundary Conditions
 ```python
@@ -232,7 +306,14 @@ g.bc_i = (None, 0.2, 0.0, 0.0)      # (left_face, right_face, left_grad, right_g
 g.bc_e = (None, 0.2, 0.0, 0.0)
 g.bc_p = (None, None, 0.0, dp_edge)
 g.bc_n = (None, 0.25e20, 0.0, 0.0)
-g.bcs = (g.bc_i, g.bc_e, g.bc_p, g.bc_n)
+```
+
+### Time Integration
+```python
+g.theta = 1.0       # Implicit parameter (1=backward Euler, 0.5=Crank-Nicolson)
+g.dt = 0.2          # Time step [s]
+g.t_end = 5.0       # End time [s]
+g.n_corr = 1        # Number of corrector iterations
 ```
 
 ## Function Return Patterns
@@ -245,25 +326,28 @@ sigma = neoclassical_conductivity(...)
 
 ### Tuple Returns (Ordered by Type)
 ```python
-A, b = trans_terms(v, d, bc)                          # Matrix, vector
-diff_mat, diff_vec = diff_terms(d, bc)                # Matrix, vector
-conv_mat, conv_vec = conv_terms(v, d, bc)             # Matrix, vector
-si_fus, se_fus = fusion_source(e, i_f, ni_f)          # Ion, electron
-Qei_ii, Qei_ee, Qei_ie, Qei_ei = qei_coupling(...)    # 4 coupling terms
+A, b = transport(v, d, bc)                         # Matrix, vector
+diff_mat, diff_vec = diff_terms(d, bc)             # Matrix, vector
+conv_mat, conv_vec = conv_terms(v, d, bc)          # Matrix, vector
+si_fus, se_fus = fusion_source(e, i_f, j_f)        # Ion, electron
+qei_ii, qei_ee, qei_ie, qei_ei = qei_coupling(...) # 4 coupling terms
+k1, k2 = z_avg(symbols, T_e, fractions)            # ⟨Z⟩, ⟨Z²⟩
 ```
 
-### Transport Returns (4-element)
+### Transport Returns (Velocities, then Diffusivities)
 ```python
-chi_i, chi_e, D_n, v_n = turbulent_transport(...)
-v_i, v_e, chi_neo_i, chi_neo_e, D_neo_n, v_neo_n = neoclassical_transport(...)
+# Turbulent: diffusivities only (v=0 for turbulence)
+chi_i, chi_e, chi_n, v_n = turbulent_transport(...)
+
+# Neoclassical: velocities first, then diffusivities
+v_i, v_e, chi_neo_i, chi_neo_e, chi_neo_n, v_neo_n = neoclassical_transport(...)
 ```
 
-Order: ion, electron, particle_D, particle_v
+Order: ion, electron, particle
 
-### Ion Update (8-element tuple)
+### Ion Function (8-element tuple)
 ```python
-(ions_n_i, ions_n_impurity, ions_Z_i, ions_Z_i_face, ions_Z_impurity,
- ions_Z_eff_face, ions_n_i_bc, ions_n_impurity_bc) = ions_update(n, e, e_face)
+j, z, k, k_f, w, u_f, j_bc, z_bc = ions(n_e, T_e, T_e_face)
 ```
 
 ## Matrix Variable Patterns
@@ -276,21 +360,29 @@ Order: ion, electron, particle_D, particle_v
 - Capital letter: `A_i`, `A_e`, `A_p`, `A_n`
 - Lowercase for vectors: `b_i`, `b_e`, `b_p`, `b_n`
 
+### Block Components
+- **`A_ii`, `A_ie`, `A_ei`, `A_ee`** = 2×2 ion-electron coupled block
+- **`A_pp`** = psi block (decoupled)
+- **`A_nn`** = density block (decoupled)
+- **`A`** = full spatial operator (100×100)
+- **`M`** = system matrix for implicit solve
+- **`b`** = global RHS vector
+
 ### Block Utilities
 ```python
-g.zero_block  # (25, 25) zeros
-g.zero_vec    # (25,) zeros
-g.ones_vec    # (25,) ones  
-g.ones_vpr    # (25,) ones
-g.identity    # (100, 100) identity
+g.zero      # (25, 25) zeros (was g.zero_block)
+g.zero_vec  # (25,) zeros
+g.ones_vec  # (25,) ones  
+g.ones_vpr  # (25,) ones
+g.identity  # (100, 100) identity
 ```
 
 ## Abbreviations
 
 ### Physics
-- `q` = safety factor (not `q_face` to match physics convention)
+- `q` = safety factor (not `q_f` to match physics convention)
 - `ft` = trapped fraction (from `g.f_trap`)
-- `Qei` = electron-ion heat exchange
+- `qei` = electron-ion heat exchange (lowercase)
 - `chi` = thermal diffusivity (χ)
 - `sigma` = conductivity (σ)
 - `eps` = small number OR inverse aspect ratio (context-dependent)
@@ -301,10 +393,9 @@ g.identity    # (100, 100) identity
 - `spr` = ∂A/∂ρ (surface prime)
 - `rmid` = midplane radius
 - `Phi` = toroidal flux (Φ)
-- `Zeff` = effective charge (Z_eff)
+- `u_f` = Z_eff (effective charge at faces)
 
 ### Grids/Indices
-- `nc` = num_cells (25)
 - `rc` = record size for binary I/O (101 = 1 + 4×25)
 - `sz` = float64 size in bytes (8)
 - `nt` = number of time steps
@@ -319,11 +410,12 @@ g.identity    # (100, 100) identity
 Use `np.r_[]` or `jnp.r_[]` for row stacking:
 ```python
 x = jnp.r_[a, b, c]           # Stack arrays
+x = jnp.r_[0.5, ones, 0.5]    # Scalars automatically broadcast
 ```
 
 Use `jnp.c_[]` for column stacking:
 ```python
-features = jnp.c_[lti, lte, lne, lni0, q, smag, x, TiTe, nu_star, normni]
+features = jnp.c_[lti, lte, lne, lni0, q, smag, x, TiTe, nu_star, j_f / n_f]
 ```
 
 ## Variable Scope
@@ -332,18 +424,27 @@ features = jnp.c_[lti, lte, lne, lni0, q, smag, x, TiTe, nu_star, normni]
 Short, descriptive names: `la`, `ra`, `lv`, `rv`, `diag`, `off`, `vec`
 
 ### Module-level (via `g.*`)
-Fully qualified: `g.source_i_external`, `g.geo_vpr_face`
+Fully qualified: `g.src_i_ext`, `g.geo_vpr_face`
 
 ### Return values
-Match caller expectation: `A, b` for matrix operators, `chi_i, chi_e, D_n, v_n` for transport
+Match caller expectation: `A, b` for matrix operators, `chi_i, chi_e, chi_n, v_n` for transport
 
 ## Time Loop Variables
 
 ```python
 state      # Current accepted state (100,)
 pred       # Predictor/corrector working state (100,)
-tc_in_old  # Saved transient from previous iteration
+tc_prev    # Saved transient from previous iteration
 dt         # Current timestep [s]
 t          # Current time [s]
 ```
 
+## Key Design Principles
+
+1. **Single-letter suffixes**: `_f`, `_g`, `_r` instead of `_face`, `_grad`, `_grad_r`
+2. **Single-letter ions**: `j`, `z`, `k`, `w`, `u_f` for ion quantities
+3. **Lowercase coupling**: `qei_*` not `Qei_*`
+4. **Consistent ordering**: i, e, p, n everywhere (functions, returns, blocks)
+5. **Textbook linear algebra**: `M @ x = rhs` instead of cryptic variable names
+6. **No abbreviations in `g.*`**: Full names for globals (`g.src_i_ext` not `g.si`)
+7. **Descriptive intermediates**: `si_fus`, `se_fus`, `j_bs` for clarity in physics

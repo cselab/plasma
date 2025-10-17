@@ -174,21 +174,21 @@ def z_avg_species(T_e, ion_symbol):
         return jnp.ones_like(T_e) * g.z[ion_symbol]
     T_e = jnp.clip(T_e, *g.T_E_ALLOWED_RANGE)
     interval_indices = jnp.searchsorted(g.T_intervals[ion_symbol], T_e)
-    Zavg_coeffs_in_range = jnp.take(g.MAVRIN_Z_COEFFS[ion_symbol],
-                                    interval_indices,
-                                    axis=0).transpose()
+    coeffs = jnp.take(g.MAVRIN_Z_COEFFS[ion_symbol],
+                      interval_indices,
+                      axis=0).transpose()
     X = jnp.log10(T_e)
-    Zavg = jnp.polyval(Zavg_coeffs_in_range, X)
-    return Zavg
+    Z = jnp.polyval(coeffs, X)
+    return Z
 
 
 def z_avg(ion_symbols, T_e, fractions):
-    Z_per_species = jnp.stack(
+    Z_species = jnp.stack(
         [z_avg_species(T_e, ion_symbol) for ion_symbol in ion_symbols])
     fractions = fractions if fractions.ndim == 2 else fractions[:, jnp.newaxis]
-    Z_avg = jnp.sum(fractions * Z_per_species, axis=0)
-    Z2_avg = jnp.sum(fractions * Z_per_species**2, axis=0)
-    return Z_avg, Z2_avg, Z_per_species
+    Z1 = jnp.sum(fractions * Z_species, axis=0)
+    Z2 = jnp.sum(fractions * Z_species**2, axis=0)
+    return Z1, Z2
 
 
 def nu_e_star(q, n_e, T_e, Z_eff, log_lambda_ei):
@@ -476,14 +476,14 @@ def smooth_savgol(data, idx_limit, polyorder):
 
 
 def ions(n_e, T_e, T_e_face):
-    k_avg, k_Z2_avg, _ = z_avg(g.ion_names, T_e, g.ion_fractions)
-    k = k_Z2_avg / k_avg
-    k_f_avg, k_f_Z2_avg, _ = z_avg(g.ion_names, T_e_face, g.ion_fractions)
-    k_f = k_f_Z2_avg / k_f_avg
-    w_avg, w_Z2_avg, _ = z_avg(g.impurity_names, T_e, g.impurity_fractions)
-    w = w_Z2_avg / w_avg
-    w_f_avg, w_f_Z2_avg, _ = z_avg(g.impurity_names, T_e_face, g.impurity_fractions_face)
-    w_f = w_f_Z2_avg / w_f_avg
+    k1, k2 = z_avg(g.ion_names, T_e, g.ion_fractions)
+    w1, w2 = z_avg(g.impurity_names, T_e, g.impurity_fractions)
+    k1_f, k2_f = z_avg(g.ion_names, T_e_face, g.ion_fractions)
+    w1_f, w2_f = z_avg(g.impurity_names, T_e_face, g.impurity_fractions_face)
+    k = k2 / k1
+    w = w2 / w1
+    k_f = k2_f / k1_f
+    w_f = w2_f / w1_f
     dilution_factor = jnp.where(
         g.Z_eff == 1.0,
         1.0,
