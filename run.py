@@ -914,17 +914,18 @@ while True:
         A_ee = A_e + jnp.diag(Qei_ee + g.ped_mat_T)
         A_pp = g.A_p
         A_nn = A_n + jnp.diag(g.ped_mat_n)
-        spatial_mat = jnp.block(
+        A = jnp.block(
             [[A_ii,  A_ie,  g.zero, g.zero],
              [A_ei,  A_ee,  g.zero, g.zero],
              [g.zero, g.zero, A_pp,   g.zero],
              [g.zero, g.zero, g.zero, A_nn  ]])
-        spatial_vec = jnp.r_[b_i + src_i, b_e + src_e, g.b_p + src_p, b_n + g.source_n_constant]
+        b = jnp.r_[b_i + src_i, b_e + src_e, g.b_p + src_p, b_n + g.source_n_constant]
         tc = 1 / (tc_out * tc_in)
-        lhs = g.identity - dt * g.theta_imp * jnp.expand_dims(tc, 1) * spatial_mat
+        theta = g.theta_imp
         tc_prev = tc_in if tc_in_old is None else tc_in_old
-        rhs = (tc_prev / tc_in) * state + g.theta_imp * dt * tc * spatial_vec
-        pred = jnp.linalg.solve(lhs, rhs)
+        M = g.identity - dt * theta * jnp.expand_dims(tc, 1) * A
+        rhs = (tc_prev / tc_in) * state + theta * dt * tc * b
+        pred = jnp.linalg.solve(M, rhs)
         tc_in_old = tc_in
     t += dt
     state = pred
