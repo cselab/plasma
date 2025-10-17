@@ -96,9 +96,8 @@ def diff_terms(d, bc):
 
 def conv_terms(v_face, d_face, bc):
     eps = g.EPS_CONVECTION
-    is_neg = d_face < 0.0
-    nonzero_sign = jnp.ones_like(is_neg) - 2 * is_neg
-    d_face = nonzero_sign * jnp.maximum(eps, jnp.abs(d_face))
+    sign = jnp.where(d_face < 0.0, -1.0, 1.0)
+    d_face = sign * jnp.maximum(eps, jnp.abs(d_face))
     ones = jnp.ones_like(v_face[1:-1])
     scale = jnp.r_[0.5, ones, 0.5]
     ratio = scale * g.dx * v_face / d_face
@@ -145,12 +144,10 @@ def transport(v, d, bc):
 
 
 def solve_implicit_tridiag(lower_A, diag_A, upper_A, tc, θdt, rhs):
-    return jax.lax.linalg.tridiagonal_solve(
-        jnp.r_[0.0, -θdt * tc[1:] * lower_A],
-        1.0 - θdt * tc * diag_A,
-        jnp.r_[-θdt * tc[:-1] * upper_A, 0.0],
-        rhs[:, None]
-    ).squeeze()
+    a = jnp.r_[0.0, -θdt * tc[1:] * lower_A]
+    b = 1.0 - θdt * tc * diag_A
+    c = jnp.r_[-θdt * tc[:-1] * upper_A, 0.0]
+    return jax.lax.linalg.tridiagonal_solve(a, b, c, rhs)[:, 0]
 
 
 def solve_implicit_coupled_2x2(lower_Aii, diag_Aii, upper_Aii,
@@ -905,12 +902,12 @@ while True:
         tc_prev = tc_in if tc_in_old is None else tc_in_old
         θdt = g.theta * dt
         b = jnp.r_[b_i + src_i, b_e + src_e, g.b_p + src_p, b_n + g.src_n]
-        rhs = (tc_prev / tc_in) * state + θdt * tc * b       
+        rhs = ((tc_prev / tc_in) * state + θdt * tc * b)[:, None]
         pred_i, pred_e = solve_implicit_coupled_2x2(
             lower_Ai, diag_Ai + qei_ii + g.ped_i, upper_Ai,
             lower_Ae, diag_Ae + qei_ee + g.ped_e, upper_Ae,
             qei_ie, qei_ei,
-            tc[l.i], tc[l.e], θdt, rhs[l.i], rhs[l.e]
+            tc[l.i], tc[l.e], θdt, rhs[l.i, 0], rhs[l.e, 0]
         )
         sol_p = solve_implicit_tridiag(g.A_p_lower, g.A_p_diag, g.A_p_upper, tc[l.p], θdt, rhs[l.p])
         sol_n = solve_implicit_tridiag(lower_An, diag_An + g.ped_n, upper_An, tc[l.n], θdt, rhs[l.n])
