@@ -467,9 +467,8 @@ def neoclassical_transport(i_f, e_f, n_f, ni_f, i_g, e_g, n_g):
 
 
 def smooth_savgol(data, idx_limit, polyorder):
-    window_length = g.savgol_w
     smoothed_data = scipy.signal.savgol_filter(data,
-                                               window_length,
+                                               g.savgol_w,
                                                polyorder,
                                                mode="nearest")
     return np.r_[np.array([data[0]]), smoothed_data[1:idx_limit], data[idx_limit:]]
