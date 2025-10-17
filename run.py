@@ -872,8 +872,7 @@ while True:
         j_r = g.D_j_r @ j + g.b_r_r * j_bc[1]
         z_f = g.I_z @ z + g.b_r * z_bc[1]
         z_r = g.D_z_r @ z + g.b_r_r * z_bc[1]
-        q_f = jnp.r_[jnp.abs(g.q_factor_axis / (p_g[1] * g.n))[None],
-            jnp.abs(g.q_factor_bulk * g.face_centers[1:] / p_g[1:])]
+        q_f = jnp.abs(g.q_factor_axis * jnp.r_[1.0 / (p_g[1] * g.n), g.face_centers[1:] / p_g[1:]])
         sigma = neoclassical_conductivity(e_f, n_f, q_f, u_f)
         si_fus, se_fus = fusion_source(e, i_f, j_f)
         j_bs = bootstrap_current(i_f, e_f, n_f, j_f, p_g, q_f, i_g, e_g, n_g,
