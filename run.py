@@ -140,7 +140,7 @@ def diff_terms(d, bc):
             jnp.diag(off, -1)) * g.inv_dx_sq, vec
 
 
-def trans_terms(v, d, bc):
+def transport(v, d, bc):
     diff_mat, diff_vec = diff_terms(d, bc)
     conv_mat, conv_vec = conv_terms(v, d, bc)
     return diff_mat + conv_mat, diff_vec + conv_vec
@@ -264,7 +264,7 @@ def qei_coupling(e, n, ni, nz, Zi, Zz, Ai, Az):
     log_tau = _calculate_log_tau_e_Z1(e, n, log_lambda_ei(n, e))
     Zw = (ni * Zi**2 / Ai + nz * Zz**2 / Az) / n
     Q = jnp.exp(
-        jnp.log(g.Qei_multiplier * 1.5 * n) + jnp.log(g.keV_to_J / g.m_amu) +
+        jnp.log(g.qei_multiplier * 1.5 * n) + jnp.log(g.keV_to_J / g.m_amu) +
         jnp.log(2 * g.m_e) + jnp.log(Zw) - log_tau) * g.geo_vpr
     return -Q, -Q, Q, Q
 
@@ -576,7 +576,7 @@ g.adapt_T_prefac = 2.0e10
 g.adapt_n_prefac = 2.0e8
 g.ITG_flux_ratio_correction = 1
 g.hires_factor = 4
-g.Qei_multiplier = 1.0
+g.qei_multiplier = 1.0
 g.rho_norm_ped_top = 0.9
 g.n_ped = 0.62e20
 g.i_ped = 4.5
@@ -836,7 +836,7 @@ g.ped_i = -g.ped_mask_T
 g.ped_e = -g.ped_mask_T
 g.ped_n = -g.ped_mask_n
 g.tc_p_base = g.cell_centers * g.mu0_pi16sq_Phib_sq_over_F_sq / g.resist_mult
-g.A_p, g.b_p = trans_terms(g.v_p_zero, g.geo_g2g3_over_rhon_face, g.bc_p)
+g.A_p, g.b_p = transport(g.v_p_zero, g.geo_g2g3_over_rhon_face, g.bc_p)
 i_initial = np.interp(g.cell_centers, g.i_profile_x, g.i_profile_y)
 e_initial = np.interp(g.cell_centers, g.e_profile_x, g.e_profile_y)
 nGW = g.Ip / 1e6 / (np.pi * g.a_minor**2) * g.scaling_n_e
@@ -883,7 +883,7 @@ while True:
         j_bs = bootstrap_current(i_f, e_f, n_f, j_f, p_g,
                                  q_f, i_g, e_g, n_g, j_g,
                                  k_f, u_f)
-        Qei_ii, Qei_ee, Qei_ie, Qei_ei = qei_coupling(
+        qei_ii, qei_ee, qei_ie, qei_ei = qei_coupling(
             e, n, j, z, k, w,
             g.ion_A_avg, g.impurity_A_avg)
         src_i = g.src_i_ext + si_fus * g.geo_vpr + g.src_i_ped
@@ -900,14 +900,14 @@ while True:
         chi_e += chi_neo_e
         chi_n += chi_neo_n
         v_n += v_neo_n
-        A_i, b_i = trans_terms(v_i, chi_i, g.bc_i)
-        A_e, b_e = trans_terms(v_e, chi_e, g.bc_e)
-        A_n, b_n = trans_terms(v_n, chi_n, g.bc_n)
+        A_i, b_i = transport(v_i, chi_i, g.bc_i)
+        A_e, b_e = transport(v_e, chi_e, g.bc_e)
+        A_n, b_n = transport(v_n, chi_n, g.bc_n)
         b = jnp.r_[b_i + src_i, b_e + src_e, g.b_p + src_p, b_n + g.src_n]
-        A_ii = A_i + jnp.diag(Qei_ii + g.ped_i)
-        A_ie = jnp.diag(Qei_ie)
-        A_ei = jnp.diag(Qei_ei)
-        A_ee = A_e + jnp.diag(Qei_ee + g.ped_e)
+        A_ii = A_i + jnp.diag(qei_ii + g.ped_i)
+        A_ie = jnp.diag(qei_ie)
+        A_ei = jnp.diag(qei_ei)
+        A_ee = A_e + jnp.diag(qei_ee + g.ped_e)
         A_pp = g.A_p
         A_nn = A_n + jnp.diag(g.ped_n)
         A = jnp.block(
