@@ -883,22 +883,43 @@ while True:
         A_i, b_i = transport(v_i, chi_i, g.bc_i)
         A_e, b_e = transport(v_e, chi_e, g.bc_e)
         A_n, b_n = transport(v_n, chi_n, g.bc_n)
-        b = jnp.r_[b_i + src_i, b_e + src_e, g.b_p + src_p, b_n + g.src_n]
         A_ii = A_i + jnp.diag(qei_ii + g.ped_i)
         A_ie = jnp.diag(qei_ie)
         A_ei = jnp.diag(qei_ei)
         A_ee = A_e + jnp.diag(qei_ee + g.ped_e)
         A_pp = g.A_p
         A_nn = A_n + jnp.diag(g.ped_n)
-        A = jnp.block([[A_ii, A_ie, g.zero, g.zero],
-                       [A_ei, A_ee, g.zero, g.zero],
-                       [g.zero, g.zero, A_pp, g.zero],
-                       [g.zero, g.zero, g.zero, A_nn]])
-        tc = 1 / (tc_out * tc_in)
+        tc = 1.0 / (tc_out * tc_in)
         tc_prev = tc_in if tc_in_old is None else tc_in_old
-        M = g.identity - dt * g.theta * jnp.expand_dims(tc, 1) * A
-        rhs = (tc_prev / tc_in) * state + g.theta * dt * tc * b
-        pred = jnp.linalg.solve(M, rhs)
+        tp = tc_prev / tc_in
+        θdt = g.theta * dt
+        
+        tc_i, tc_e, tc_p, tc_n = tc[l.i], tc[l.e], tc[l.p], tc[l.n]
+        tp_i, tp_e, tp_p, tp_n = tp[l.i], tp[l.e], tp[l.p], tp[l.n]
+        
+        rhs_i = tp_i * state[l.i] + θdt * tc_i * (b_i + src_i)
+        rhs_e = tp_e * state[l.e] + θdt * tc_e * (b_e + src_e)
+        rhs_p = tp_p * state[l.p] + θdt * tc_p * (g.b_p + src_p)
+        rhs_n = tp_n * state[l.n] + θdt * tc_n * (b_n + g.src_n)
+        
+        DiAii = tc_i[:, None] * A_ii
+        DiAie = tc_i[:, None] * A_ie
+        DeAei = tc_e[:, None] * A_ei
+        DeAee = tc_e[:, None] * A_ee
+        DpApp = tc_p[:, None] * A_pp
+        DnAnn = tc_n[:, None] * A_nn
+        
+        M_ie = jnp.block([[jnp.eye(g.n) - θdt * DiAii, -θdt * DiAie],
+                          [-θdt * DeAei, jnp.eye(g.n) - θdt * DeAee]])
+        M_p = jnp.eye(g.n) - θdt * DpApp
+        M_n = jnp.eye(g.n) - θdt * DnAnn
+        
+        rhs_ie = jnp.r_[rhs_i, rhs_e]
+        sol_ie = jnp.linalg.solve(M_ie, rhs_ie)
+        sol_p = jnp.linalg.solve(M_p, rhs_p)
+        sol_n = jnp.linalg.solve(M_n, rhs_n)
+        
+        pred = jnp.r_[sol_ie, sol_p, sol_n]
         tc_in_old = tc_in
     t += dt
     state = pred
