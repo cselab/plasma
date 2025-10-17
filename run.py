@@ -244,7 +244,7 @@ def current_source():
 
 def fusion_source(e, i_f, ni_f):
     prod = 1.0
-    for frac, sym in zip(g.main_ion_fractions, g.main_ion_names):
+    for frac, sym in zip(g.ion_fractions, g.ion_names):
         if sym in ("D", "T"):
             prod *= frac
     theta = i_f / (1 - (i_f * (g.fusion_C2 + i_f *
@@ -335,7 +335,7 @@ def safe_lref(v, grad):
 
 def turbulent_transport(i_f, i_r, e_f, e_r, n_f, n_g, n_r, ni_f, ni_r, nz_f,
                         nz_r, p_g, q, ions_Z_eff_face):
-    chiGB = ((g.main_ion_A_avg * g.m_amu)**0.5 / (g.geo_B_0 * g.q_e)**2 *
+    chiGB = ((g.ion_A_avg * g.m_amu)**0.5 / (g.geo_B_0 * g.q_e)**2 *
              (i_f * g.keV_to_J)**1.5 / g.geo_a_minor)
     lti = safe_lref(i_f, i_r)
     lte = safe_lref(e_f, e_r)
@@ -481,9 +481,9 @@ def smooth_savgol(data, idx_limit, polyorder):
 
 
 def ions_update(n_e, T_e, T_e_face):
-    Z_i_avg, Z_i_Z2_avg, _ = z_avg(g.main_ion_names, T_e, g.main_ion_fractions)
+    Z_i_avg, Z_i_Z2_avg, _ = z_avg(g.ion_names, T_e, g.ion_fractions)
     Z_i = Z_i_Z2_avg / Z_i_avg
-    Z_i_face_avg, Z_i_face_Z2_avg, _ = z_avg(g.main_ion_names, T_e_face, g.main_ion_fractions)
+    Z_i_face_avg, Z_i_face_Z2_avg, _ = z_avg(g.ion_names, T_e_face, g.ion_fractions)
     Z_i_face = Z_i_face_Z2_avg / Z_i_face_avg
     Z_impurity_avg, Z_impurity_Z2_avg, _ = z_avg(g.impurity_names, T_e, g.impurity_fractions)
     Z_impurity = Z_impurity_Z2_avg / Z_impurity_avg
@@ -543,13 +543,12 @@ g.tol = 1e-7
 g.n_corr = 1
 g.Z_eff = 1.6
 g.impurity_names = ("Ne", )
-g.main_ion_names = "D", "T"
+g.ion_names = "D", "T"
 g.impurity_fractions = np.array([1.0])
 g.impurity_fractions_face = np.array([1.0])
 g.impurity_A_avg = g.A["Ne"]
-g.impurity_A_avg_face = g.A["Ne"]
-g.main_ion_fractions = np.array([0.5, 0.5])
-g.main_ion_A_avg = 0.5 * g.A["D"] + 0.5 * g.A["T"]
+g.ion_fractions = np.array([0.5, 0.5])
+g.ion_A_avg = 0.5 * g.A["D"] + 0.5 * g.A["T"]
 g.n = 25
 g.dx = 1 / g.n
 g.inv_dx = 1.0 / g.dx
@@ -940,7 +939,7 @@ while True:
                                  ions_Z_i_face, ions_Z_eff_face)
         Qei_ii, Qei_ee, Qei_ie, Qei_ei = qei_coupling(
             e, n, ions_n_i, ions_n_impurity, ions_Z_i, ions_Z_impurity,
-            g.main_ion_A_avg, g.impurity_A_avg)
+            g.ion_A_avg, g.impurity_A_avg)
         src_p = -(j_bs + g.source_p_external) * g.source_p_coeff
         src_i = g.source_i_external + si_fus * g.geo_vpr + g.source_i_adaptive
         src_e = g.source_e_external + se_fus * g.geo_vpr + g.source_e_adaptive
