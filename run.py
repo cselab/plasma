@@ -509,13 +509,13 @@ def ions(n_e, T_e, T_e_face):
     ), 0.0, 0.0)
     Z_eff_face = (Z_i_face**2 * (g.I_ni @ n_i + g.b_r * n_i_bc[1]) +
                   Z_impurity_face**2 * (g.I_nimp @ n_impurity + g.b_r * n_impurity_bc[1])) / (g.I_n @ n_e + g.b_n_face)
-    ni_face = g.I_ni @ n_i + g.b_r * n_i_bc[1]
-    ni_grad = g.D_ni_rho @ n_i + g.b_r_grad * n_i_bc[1]
-    ni_grad_r = g.D_ni_rmid @ n_i + g.b_r_grad_r * n_i_bc[1]
-    nz_face = g.I_nimp @ n_impurity + g.b_r * n_impurity_bc[1]
-    nz_grad_r = g.D_nimp_rmid @ n_impurity + g.b_r_grad_r * n_impurity_bc[1]
+    j_f = g.I_ni @ n_i + g.b_r * n_i_bc[1]
+    j_g = g.D_ni_rho @ n_i + g.b_r_grad * n_i_bc[1]
+    j_r = g.D_ni_rmid @ n_i + g.b_r_grad_r * n_i_bc[1]
+    z_f = g.I_nimp @ n_impurity + g.b_r * n_impurity_bc[1]
+    z_r = g.D_nimp_rmid @ n_impurity + g.b_r_grad_r * n_impurity_bc[1]
     return (n_i, n_impurity, Z_i, Z_i_face, Z_impurity, Z_eff_face,
-            ni_face, ni_grad, ni_grad_r, nz_face, nz_grad_r)
+            j_f, j_g, j_r, z_f, z_r)
 
 
 g.curr_frac = 0.46
@@ -874,28 +874,28 @@ while True:
         i_grad_r = g.D_i_r @ i + g.b_i_grad_r
         e_grad_r = g.D_e_r @ e + g.b_e_grad_r
         n_grad_r = g.D_n_r @ n + g.b_n_grad_r     
-        (ions_n_i, ions_n_impurity, ions_Z_i, ions_Z_i_face, ions_Z_impurity, ions_Z_eff_face,
-         ni_face, ni_grad, ni_grad_r, nz_face, nz_grad_r) = ions(n, e, e_face)
+        (j, z, k, k_f, w, u_f,
+         j_f, j_g, j_r, z_f, z_r) = ions(n, e, e_face)
         q_face = jnp.r_[jnp.abs(g.q_factor_axis / (p_grad[1] * g.inv_dx))[None],
             jnp.abs(g.q_factor_bulk * g.face_centers[1:] / p_grad[1:])]
-        sigma = neoclassical_conductivity(e_face, n_face, q_face, ions_Z_eff_face)
-        si_fus, se_fus = fusion_source(e, i_face, ni_face)
-        j_bs = bootstrap_current(i_face, e_face, n_face, ni_face, p_grad,
-                                 q_face, i_grad, e_grad, n_grad, ni_grad,
-                                 ions_Z_i_face, ions_Z_eff_face)
+        sigma = neoclassical_conductivity(e_face, n_face, q_face, u_f)
+        si_fus, se_fus = fusion_source(e, i_face, j_f)
+        j_bs = bootstrap_current(i_face, e_face, n_face, j_f, p_grad,
+                                 q_face, i_grad, e_grad, n_grad, j_g,
+                                 k_f, u_f)
         Qei_ii, Qei_ee, Qei_ie, Qei_ei = qei_coupling(
-            e, n, ions_n_i, ions_n_impurity, ions_Z_i, ions_Z_impurity,
+            e, n, j, z, k, w,
             g.ion_A_avg, g.impurity_A_avg)
         src_i = g.src_i_ext + si_fus * g.geo_vpr + g.src_i_ped
         src_e = g.src_e_ext + se_fus * g.geo_vpr + g.src_e_ped
         src_p = -(j_bs + g.src_p_ext) * g.source_p_coeff
-        tc_in = jnp.r_[ions_n_i * g.vpr_5_3, n * g.vpr_5_3, g.ones_vec, g.geo_vpr]
+        tc_in = jnp.r_[j * g.vpr_5_3, n * g.vpr_5_3, g.ones_vec, g.geo_vpr]
         tc_out = jnp.r_[g.tc_T, g.tc_T, g.tc_p_base * sigma, g.ones_vpr]
         v_n, chi_i, chi_e, chi_n = turbulent_transport(
             i_face, i_grad_r, e_face, e_grad_r, n_face, n_grad, n_grad_r,
-            ni_face, ni_grad_r, nz_face, nz_grad_r, p_grad, q_face, ions_Z_eff_face)
+            j_f, j_r, z_f, z_r, p_grad, q_face, u_f)
         v_i, v_e, v_neo_n, chi_neo_i, chi_neo_e, chi_neo_n = neoclassical_transport(
-            i_face, e_face, n_face, ni_face, i_grad, e_grad, n_grad)
+            i_face, e_face, n_face, j_f, i_grad, e_grad, n_grad)
         chi_i += chi_neo_i
         chi_e += chi_neo_e
         chi_n += chi_neo_n
