@@ -778,8 +778,8 @@ rho_norm_ped_top_idx = np.abs(g.cell_centers - g.rho_norm_ped_top).argmin()
 g.mask = np.zeros(g.n, dtype=bool)
 g.mask[rho_norm_ped_top_idx] = True
 g.pedestal_mask_face = g.face_centers > g.rho_norm_ped_top
-g.mask_adaptive_T = g.mask * g.adapt_T_prefac
-g.mask_adaptive_n = g.mask * g.adapt_n_prefac
+g.ped_mask_T = g.mask * g.adapt_T_prefac
+g.ped_mask_n = g.mask * g.adapt_n_prefac
 g.bc_i = (None, g.i_right_bc, 0.0, 0.0)
 g.bc_e = (None, g.e_right_bc, 0.0, 0.0)
 g.dp_edge = (g.Ip * g.pi_16_cubed * g.mu_0 * g.geo_Phi_b /
@@ -816,7 +816,7 @@ l.e = np.s_[nc:2 * nc]
 l.p = np.s_[2 * nc:3 * nc]
 l.n = np.s_[3 * nc:4 * nc]
 g.state_size = 4 * nc
-g.zero_block = np.zeros((g.num_cells, g.num_cells))
+g.zero = np.zeros((g.num_cells, g.num_cells))
 g.zero_vec = np.zeros(g.num_cells)
 g.ones_vec = np.ones(g.num_cells)
 g.v_p_zero = np.zeros(g.n + 1)
@@ -828,12 +828,12 @@ source_n_ext = particle_source()
 source_p_ext = current_source()
 g.source_i_external = source_i_ext * g.geo_vpr
 g.source_e_external = source_e_ext * g.geo_vpr
-g.source_i_adaptive = g.mask_adaptive_T * g.i_ped
-g.source_e_adaptive = g.mask_adaptive_T * g.e_ped
-g.source_n_constant = source_n_ext * g.geo_vpr + g.mask_adaptive_n * g.n_ped
+g.source_i_ped = g.ped_mask_T * g.i_ped
+g.source_e_ped = g.ped_mask_T * g.e_ped
+g.source_n_constant = source_n_ext * g.geo_vpr + g.ped_mask_n * g.n_ped
 g.source_p_external = source_p_ext
-g.source_mat_adaptive_T = -g.mask_adaptive_T
-g.source_mat_adaptive_n = -g.mask_adaptive_n
+g.ped_mat_T = -g.ped_mask_T
+g.ped_mat_n = -g.ped_mask_n
 g.c_p_coeff = g.cell_centers * g.mu0_pi16sq_Phib_sq_over_F_sq / g.resist_mult
 g.A_p, g.b_p = trans_terms(g.v_p_zero, g.geo_g2g3_over_rhon_face, g.bcs[2])
 i_initial = np.interp(g.cell_centers, g.i_profile_x, g.i_profile_y)
@@ -891,8 +891,8 @@ while True:
             e, n, ions_n_i, ions_n_impurity, ions_Z_i, ions_Z_impurity,
             g.ion_A_avg, g.impurity_A_avg)
         src_p = -(j_bs + g.source_p_external) * g.source_p_coeff
-        src_i = g.source_i_external + si_fus * g.geo_vpr + g.source_i_adaptive
-        src_e = g.source_e_external + se_fus * g.geo_vpr + g.source_e_adaptive
+        src_i = g.source_i_external + si_fus * g.geo_vpr + g.source_i_ped
+        src_e = g.source_e_external + se_fus * g.geo_vpr + g.source_e_ped
         tc_in = jnp.r_[ions_n_i * g.vpr_5_3, n * g.vpr_5_3, g.ones_vec, g.geo_vpr]
         tc_out = jnp.r_[g.toc_temperature_factor, g.toc_temperature_factor,
             g.c_p_coeff * sigma, g.ones_vpr]
@@ -905,31 +905,27 @@ while True:
         chi_e += chi_neo_e
         D_n += D_neo_n
         v_n += v_neo_n
-        tc_old = tc_in if tc_in_old is None else tc_in_old
-        tc_in_old = tc_in
         A_i, b_i = trans_terms(v_i, chi_i, g.bcs[0])
         A_e, b_e = trans_terms(v_e, chi_e, g.bcs[1])
         A_n, b_n = trans_terms(v_n, D_n, g.bcs[3])
+        A_ii = A_i + jnp.diag(Qei_ii + g.ped_mat_T)
+        A_ie = jnp.diag(Qei_ie)
+        A_ei = jnp.diag(Qei_ei)
+        A_ee = A_e + jnp.diag(Qei_ee + g.ped_mat_T)
+        A_pp = g.A_p
+        A_nn = A_n + jnp.diag(g.ped_mat_n)
         spatial_mat = jnp.block(
-            [[
-                A_i + jnp.diag(Qei_ii + g.source_mat_adaptive_T),
-                jnp.diag(Qei_ie), g.zero_block, g.zero_block
-            ],
-             [
-                 jnp.diag(Qei_ei),
-                 A_e + jnp.diag(Qei_ee + g.source_mat_adaptive_T),
-                 g.zero_block, g.zero_block
-             ], [g.zero_block, g.zero_block, g.A_p, g.zero_block],
-             [
-                 g.zero_block, g.zero_block, g.zero_block,
-                 A_n + jnp.diag(g.source_mat_adaptive_n)
-             ]])
+            [[A_ii,  A_ie,  g.zero, g.zero],
+             [A_ei,  A_ee,  g.zero, g.zero],
+             [g.zero, g.zero, A_pp,   g.zero],
+             [g.zero, g.zero, g.zero, A_nn  ]])
         spatial_vec = jnp.r_[b_i + src_i, b_e + src_e, g.b_p + src_p, b_n + g.source_n_constant]
         tc = 1 / (tc_out * tc_in)
-        lhs = g.identity - dt * g.theta_imp * jnp.expand_dims(tc,
-                                                              1) * spatial_mat
-        rhs = (tc_old / tc_in) * state + g.theta_imp * dt * tc * spatial_vec
+        lhs = g.identity - dt * g.theta_imp * jnp.expand_dims(tc, 1) * spatial_mat
+        tc_prev = tc_in if tc_in_old is None else tc_in_old
+        rhs = (tc_prev / tc_in) * state + g.theta_imp * dt * tc * spatial_vec
         pred = jnp.linalg.solve(lhs, rhs)
+        tc_in_old = tc_in
     t += dt
     state = pred
 f.close()
