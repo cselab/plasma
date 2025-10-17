@@ -314,18 +314,6 @@ g.identity    # (100, 100) identity
 - `out` = QLKNN output dictionary
 - `lti, lte, lne, lni0, lni1` = normalized gradient scale lengths (L_ref/L_var)
 
-## Positional Arguments (No Keywords)
-
-Function calls use **positional arguments only**:
-
-```python
-# Good
-z_avg(g.ion_names, T_e, g.ion_fractions)
-
-# Avoid
-z_avg(ion_symbols=g.ion_names, T_e=T_e, fractions=g.ion_fractions)
-```
-
 ## Array Construction
 
 Use `np.r_[]` or `jnp.r_[]` for row stacking:
@@ -338,8 +326,6 @@ Use `jnp.c_[]` for column stacking:
 features = jnp.c_[lti, lte, lne, lni0, q, smag, x, TiTe, nu_star, normni]
 ```
 
-Avoid: `np.concatenate([a, b, c])`, `np.array([...]).T`
-
 ## Variable Scope
 
 ### Function-local
@@ -351,25 +337,6 @@ Fully qualified: `g.source_i_external`, `g.geo_vpr_face`
 ### Return values
 Match caller expectation: `A, b` for matrix operators, `chi_i, chi_e, D_n, v_n` for transport
 
-## Anti-Patterns (Avoid)
-
-- ❌ Keyword arguments: `func(x=val, y=val)`
-- ❌ Parallel assignment: `a, b = val1, val2` (use separate lines)
-- ❌ `concatenate()`: use `r_[]` or `c_[]` instead
-- ❌ Magic numbers: `1.6e-16` (use `g.keV_m3_to_Pa`)
-- ❌ Dataclasses for simple tuples
-- ❌ Intermediate name mapping dictionaries
-
-## Consistency Rules
-
-1. **Suffixes ordered by specificity**: `var_location_coordinate`
-2. **Prefixes for namespacing**: `ions_`, `geo_`, `source_`
-3. **Underscores separate concepts**: `tc_in_old` not `tcInOld`
-4. **Single letter when unambiguous**: `i`, `e`, `p`, `n` for state
-5. **Physics notation when standard**: `q`, `chi`, `sigma`, not `safety_factor`, `diffusivity`, `conductivity`
-6. **Matrix operations explicit**: `@` for matmul, `*` for element-wise
-7. **Types in names**: `_mat` for matrices, `_vec` for vectors, `_coeff` for scalars
-
 ## Time Loop Variables
 
 ```python
@@ -380,12 +347,3 @@ dt         # Current timestep [s]
 t          # Current time [s]
 ```
 
-## Summary
-
-The naming scheme prioritizes:
-1. **Brevity** for frequently-used variables (`i`, `e`, `p`, `n`)
-2. **Clarity** through systematic suffixes (`_face`, `_grad`, `_grad_r`)
-3. **Consistency** in patterns (all operators follow same structure)
-4. **Physics convention** for standard quantities (`q`, `chi`, `sigma`)
-5. **No redundancy** (avoid `main_ion_`, use `ion_`)
-6. **Tuple unpacking** over dataclasses for simple structures
