@@ -916,8 +916,22 @@ while True:
         
         rhs_ie = jnp.r_[rhs_i, rhs_e]
         sol_ie = jnp.linalg.solve(M_ie, rhs_ie)
-        sol_p = jnp.linalg.solve(M_p, rhs_p)
-        sol_n = jnp.linalg.solve(M_n, rhs_n)
+        
+        lower_App = jnp.diag(A_pp, -1)
+        diag_App = jnp.diag(A_pp, 0)
+        upper_App = jnp.diag(A_pp, 1)
+        dl_p = jnp.r_[0.0, -θdt * tc_p[1:] * lower_App]
+        d_p = 1.0 - θdt * tc_p * diag_App
+        du_p = jnp.r_[-θdt * tc_p[:-1] * upper_App, 0.0]
+        sol_p = jax.lax.linalg.tridiagonal_solve(dl_p, d_p, du_p, rhs_p[:, None]).squeeze()
+        
+        lower_Ann = jnp.diag(A_nn, -1)
+        diag_Ann = jnp.diag(A_nn, 0)
+        upper_Ann = jnp.diag(A_nn, 1)
+        dl_n = jnp.r_[0.0, -θdt * tc_n[1:] * lower_Ann]
+        d_n = 1.0 - θdt * tc_n * diag_Ann
+        du_n = jnp.r_[-θdt * tc_n[:-1] * upper_Ann, 0.0]
+        sol_n = jax.lax.linalg.tridiagonal_solve(dl_n, d_n, du_n, rhs_n[:, None]).squeeze()
         
         pred = jnp.r_[sol_ie, sol_p, sol_n]
         tc_in_old = tc_in
