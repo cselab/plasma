@@ -757,7 +757,7 @@ bulk = g.geo_g1_face[1:] / g.geo_vpr_face[1:]**2
 g.geo_g1_over_vpr2_face = np.r_[1.0 / g.geo_rho_b**2, bulk]
 g.pi_16_squared = 16 * np.pi**2
 g.pi_16_cubed = 16 * np.pi**3
-g.toc_temperature_factor = 1.5 * g.geo_vpr**(-2.0 / 3.0) * g.keV_to_J
+g.tc_T = 1.5 * g.geo_vpr**(-2.0 / 3.0) * g.keV_to_J
 g.source_p_coeff = 8 * g.geo_vpr * np.pi**2 * g.B_0 * g.mu_0 * g.geo_Phi_b / g.geo_F**2
 g.vpr_5_3 = g.geo_vpr**(5.0 / 3.0)
 g.mu0_pi16sq_Phib_sq_over_F_sq = g.mu_0 * g.pi_16_squared * g.geo_Phi_b**2 / g.geo_F**2
@@ -830,7 +830,7 @@ g.src_n = source_n_ext * g.geo_vpr + g.ped_mask_n * g.n_ped
 g.ped_i = -g.ped_mask_T
 g.ped_e = -g.ped_mask_T
 g.ped_n = -g.ped_mask_n
-g.c_p_coeff = g.cell_centers * g.mu0_pi16sq_Phib_sq_over_F_sq / g.resist_mult
+g.tc_p_base = g.cell_centers * g.mu0_pi16sq_Phib_sq_over_F_sq / g.resist_mult
 g.A_p, g.b_p = trans_terms(g.v_p_zero, g.geo_g2g3_over_rhon_face, g.bc_p)
 i_initial = np.interp(g.cell_centers, g.i_profile_x, g.i_profile_y)
 e_initial = np.interp(g.cell_centers, g.e_profile_x, g.e_profile_y)
@@ -890,8 +890,7 @@ while True:
         src_e = g.src_e_ext + se_fus * g.geo_vpr + g.src_e_ped
         src_p = -(j_bs + g.src_p_ext) * g.source_p_coeff
         tc_in = jnp.r_[ions_n_i * g.vpr_5_3, n * g.vpr_5_3, g.ones_vec, g.geo_vpr]
-        tc_out = jnp.r_[g.toc_temperature_factor, g.toc_temperature_factor,
-            g.c_p_coeff * sigma, g.ones_vpr]
+        tc_out = jnp.r_[g.tc_T, g.tc_T, g.tc_p_base * sigma, g.ones_vpr]
         v_n, chi_i, chi_e, chi_n = turbulent_transport(
             i_face, i_grad_r, e_face, e_grad_r, n_face, n_grad, n_grad_r,
             ni_face, ni_grad_r, nz_face, nz_grad_r, p_grad, q_face, ions_Z_eff_face)
