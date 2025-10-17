@@ -82,9 +82,8 @@ def conv_terms(v_face, d_face, bc):
     is_neg = d_face < 0.0
     nonzero_sign = jnp.ones_like(is_neg) - 2 * is_neg
     d_face = nonzero_sign * jnp.maximum(eps, jnp.abs(d_face))
-    half = jnp.array([0.5], dtype=jnp.float64)
     ones = jnp.ones_like(v_face[1:-1])
-    scale = jnp.r_[half, ones, half]
+    scale = jnp.r_[0.5, ones, 0.5]
     ratio = scale * g.dx * v_face / d_face
     left_peclet = -ratio[:-1]
     right_peclet = ratio[1:]
@@ -471,7 +470,7 @@ def smooth_savgol(data, idx_limit, polyorder):
                                                g.savgol_w,
                                                polyorder,
                                                mode="nearest")
-    return np.r_[np.array([data[0]]), smoothed_data[1:idx_limit], data[idx_limit:]]
+    return np.r_[data[:1], smoothed_data[1:idx_limit], data[idx_limit:]]
 
 
 
@@ -652,9 +651,9 @@ C4 = flux_surf_avg_R2Bp2 * C1
 g0 = C0 * 2 * np.pi
 g1 = C1 * C4 * 4 * np.pi**2
 g2 = C1 * C3 * 4 * np.pi**2
-g3 = np.r_[[1 / R_in_chease[0]**2], C2[1:] / C1[1:]]
-g2g3_over_rhon = np.r_[np.zeros(1), g2[1:] * g3[1:] / rho_norm_intermediate[1:]]
-dpsidrhon = np.r_[np.zeros(1), Ip_chease[1:] * 16 * g.mu_0 * np.pi**3 * Phi[-1] /
+g3 = np.r_[1 / R_in_chease[0]**2, C2[1:] / C1[1:]]
+g2g3_over_rhon = np.r_[0.0, g2[1:] * g3[1:] / rho_norm_intermediate[1:]]
+dpsidrhon = np.r_[0.0, Ip_chease[1:] * 16 * g.mu_0 * np.pi**3 * Phi[-1] /
     (g2g3_over_rhon[1:] * F_chease[1:])]
 psi_from_Ip = scipy.integrate.cumulative_trapezoid(y=dpsidrhon,
                                                    x=rho_norm_intermediate,
@@ -751,11 +750,11 @@ g.geo_rho = g.cell_centers * g.geo_rho_b
 g.geo_epsilon_face = (g.geo_R_out_face - g.geo_R_in_face) / (g.geo_R_out_face +
                                                              g.geo_R_in_face)
 bulk = g.geo_g0_face[1:] / g.geo_vpr_face[1:]
-g.geo_g0_over_vpr_face = np.r_[np.ones(1) / g.geo_rho_b, bulk]
+g.geo_g0_over_vpr_face = np.r_[1.0 / g.geo_rho_b, bulk]
 bulk = g.geo_g1_face[1:] / g.geo_vpr_face[1:]
-g.geo_g1_over_vpr_face = np.r_[np.zeros(1), bulk]
+g.geo_g1_over_vpr_face = np.r_[0.0, bulk]
 bulk = g.geo_g1_face[1:] / g.geo_vpr_face[1:]**2
-g.geo_g1_over_vpr2_face = np.r_[np.ones(1) / g.geo_rho_b**2, bulk]
+g.geo_g1_over_vpr2_face = np.r_[1.0 / g.geo_rho_b**2, bulk]
 g.pi_16_squared = 16 * np.pi**2
 g.pi_16_cubed = 16 * np.pi**3
 g.toc_temperature_factor = 1.5 * g.geo_vpr**(-2.0 / 3.0) * g.keV_to_J
@@ -763,7 +762,7 @@ g.source_p_coeff = 8 * g.geo_vpr * np.pi**2 * g.B_0 * g.mu_0 * g.geo_Phi_b / g.g
 g.vpr_5_3 = g.geo_vpr**(5.0 / 3.0)
 g.mu0_pi16sq_Phib_sq_over_F_sq = g.mu_0 * g.pi_16_squared * g.geo_Phi_b**2 / g.geo_F**2
 g.geo_g1_keV = g.geo_g1_over_vpr_face * g.keV_to_J
-g.geo_factor_pereverzev = np.r_[np.ones(1), g.geo_g1_over_vpr_face[1:] / g.geo_g0_face[1:]]
+g.geo_factor_pereverzev = np.r_[1.0, g.geo_g1_over_vpr_face[1:] / g.geo_g0_face[1:]]
 epsilon_effective = (
     0.67 * (1.0 - 1.4 * np.abs(g.geo_delta_face) * g.geo_delta_face) *
     g.geo_epsilon_face)
@@ -841,7 +840,7 @@ i_initial = np.interp(g.cell_centers, g.i_profile_x, g.i_profile_y)
 e_initial = np.interp(g.cell_centers, g.e_profile_x, g.e_profile_y)
 nGW = g.Ip / 1e6 / (np.pi * g.a_minor**2) * g.scaling_n_e
 n_val = g.n_profile * nGW
-n_face = np.r_[n_val[:1], (n_val[:-1] + n_val[1:]) / 2, [g.n_right_bc]]
+n_face = np.r_[n_val[:1], (n_val[:-1] + n_val[1:]) / 2, g.n_right_bc]
 a_out = g.geo_R_out_face[-1] - g.geo_R_out_face[0]
 nbar_inner = jax.scipy.integrate.trapezoid(n_face[:-1],
                                            g.geo_R_out_face[:-1]) / a_out
