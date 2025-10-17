@@ -37,12 +37,12 @@ def grad_op(bc):
     D = np.zeros((g.n + 1, g.n))
     b = np.zeros(g.n + 1)
     for i in range(1, g.n):
-        D[i, i - 1] = -g.inv_dx
-        D[i, i] = g.inv_dx
+        D[i, i - 1] = -g.n
+        D[i, i] = g.n
     b[0] = bc[2] if bc[2] is not None else 0.0
     if bc[1] is not None:
-        D[g.n, g.n - 1] = -2.0 * g.inv_dx
-        b[g.n] = 2.0 * g.inv_dx * bc[1]
+        D[g.n, g.n - 1] = -2.0 * g.n
+        b[g.n] = 2.0 * g.n * bc[1]
     else:
         b[g.n] = bc[3] if bc[3] is not None else 0.0
     return D, b
@@ -108,20 +108,20 @@ def conv_terms(v_face, d_face, bc):
     ra = peclet_to_alpha(right_peclet)
     lv = v_face[:-1]
     rv = v_face[1:]
-    diag = (la * lv - ra * rv) * g.inv_dx
-    above = -(1 - ra[:-1]) * rv[:-1] * g.inv_dx
-    below = (1 - la[1:]) * lv[1:] * g.inv_dx
+    diag = (la * lv - ra * rv) * g.n
+    above = -(1 - ra[:-1]) * rv[:-1] * g.n
+    below = (1 - la[1:]) * lv[1:] * g.n
     mat = jnp.diag(diag) + jnp.diag(above, 1) + jnp.diag(below, -1)
     vec = jnp.zeros_like(diag)
-    mat = mat.at[0, 0].set((v_face[0] - ra[0] * v_face[1]) * g.inv_dx)
+    mat = mat.at[0, 0].set((v_face[0] - ra[0] * v_face[1]) * g.n)
     vec = vec.at[0].set(-v_face[0] * (1 - la[0]) * bc[2])
     if bc[1] is not None:
         mat = mat.at[-1, -1].set(
-            (v_face[-2] * la[-1] + v_face[-1] * (1 - 2 * ra[-1])) * g.inv_dx)
-        vec = vec.at[-1].set(-2 * v_face[-1] * (1 - ra[-1]) * bc[1] * g.inv_dx)
+            (v_face[-2] * la[-1] + v_face[-1] * (1 - 2 * ra[-1])) * g.n)
+        vec = vec.at[-1].set(-2 * v_face[-1] * (1 - ra[-1]) * bc[1] * g.n)
     else:
         mat = mat.at[-1,
-                     -1].set(-(v_face[-1] - v_face[-2] * la[-1]) * g.inv_dx)
+                     -1].set(-(v_face[-1] - v_face[-2] * la[-1]) * g.n)
         vec = vec.at[-1].set(-v_face[-1] * (1 - ra[-1]) * bc[3])
     return mat, vec
 
@@ -129,15 +129,15 @@ def conv_terms(v_face, d_face, bc):
 def diff_terms(d, bc):
     diag = jnp.asarray(-d[1:] - d[:-1]).at[0].set(-d[1])
     off = d[1:-1]
-    vec = jnp.zeros(g.n).at[0].set(-d[0] * bc[2] * g.inv_dx)
+    vec = jnp.zeros(g.n).at[0].set(-d[0] * bc[2] * g.n)
     if bc[1] is not None:
         diag = diag.at[-1].set(-2 * d[-1] - d[-2])
-        vec = vec.at[-1].set(2 * d[-1] * bc[1] * g.inv_dx_sq)
+        vec = vec.at[-1].set(2 * d[-1] * bc[1] * g.n**2)
     else:
         diag = diag.at[-1].set(-d[-2])
-        vec = vec.at[-1].set(d[-1] * bc[3] * g.inv_dx)
+        vec = vec.at[-1].set(d[-1] * bc[3] * g.n)
     return (jnp.diag(diag) + jnp.diag(off, 1) +
-            jnp.diag(off, -1)) * g.inv_dx_sq, vec
+            jnp.diag(off, -1)) * g.n**2, vec
 
 
 def transport(v, d, bc):
@@ -336,7 +336,7 @@ def turbulent_transport(i_f, i_r, e_f, e_r, n_f, n_g, n_r, j_f, j_r, z_f, z_r,
     lni0 = safe_lref(j_f, j_r)
     lni1 = safe_lref(z_f, z_r)
     iota = jnp.abs(p_g[1:] / g.face_centers[1:])
-    iota = jnp.r_[jnp.abs(p_g[1] * g.inv_dx)[None], iota]
+    iota = jnp.r_[jnp.abs(p_g[1] * g.n)[None], iota]
     rm = g.geo_rmid_face
     smag = -rm * jnp.gradient(iota, rm) / iota
     eps_lcfs = rm[-1] / g.R_major
@@ -529,8 +529,6 @@ g.ion_fractions = np.array([0.5, 0.5])
 g.ion_A_avg = 0.5 * g.A["D"] + 0.5 * g.A["T"]
 g.n = 25
 g.dx = 1 / g.n
-g.inv_dx = 1 / g.dx
-g.inv_dx_sq = g.inv_dx**2
 g.face_centers = np.arange(g.n + 1) * g.dx
 g.cell_centers = (np.arange(g.n) + 0.5) * g.dx
 g.Ip = 10.5e6
@@ -790,7 +788,7 @@ g.D_z_r, _ = grad_op_nu(inv_drmid, dummy_bc)
 g.I_z, _ = face_op(1.0, 0.0)
 g.b_r = np.zeros(g.n + 1)
 g.b_r[-1] = 1.0
-g.b_r_g = g.b_r * (2.0 * g.inv_dx)
+g.b_r_g = g.b_r * (2.0 * g.n)
 g.b_r_r = g.b_r * (2.0 * inv_drmid[-1])
 l.i = np.s_[:g.n]
 l.e = np.s_[g.n:2 * g.n]
@@ -859,8 +857,8 @@ while True:
         j_r = g.D_j_r @ j + g.b_r_r * j_bc[1]
         z_f = g.I_z @ z + g.b_r * z_bc[1]
         z_r = g.D_z_r @ z + g.b_r_r * z_bc[1]
-        q_f = jnp.r_[jnp.abs(g.q_factor_axis / (p_g[1] * g.inv_dx))[None],
-                     jnp.abs(g.q_factor_bulk * g.face_centers[1:] / p_g[1:])]
+        q_f = jnp.r_[jnp.abs(g.q_factor_axis / (p_g[1] * g.n))[None],
+            jnp.abs(g.q_factor_bulk * g.face_centers[1:] / p_g[1:])]
         sigma = neoclassical_conductivity(e_f, n_f, q_f, u_f)
         si_fus, se_fus = fusion_source(e, i_f, j_f)
         j_bs = bootstrap_current(i_f, e_f, n_f, j_f, p_g, q_f, i_g, e_g, n_g,
