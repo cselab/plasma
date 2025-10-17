@@ -19,6 +19,7 @@ g.interp_fn = jax.jit(jnp.interp)
 g.TOLERANCE = 1e-6
 g.keV_to_J = 1e3 * 1.602176634e-19
 g.eV_to_J = 1.602176634e-19
+g.keV_m3_to_Pa = 1.6e-16
 g.m_amu = 1.6605390666e-27
 g.q_e = 1.602176634e-19
 g.m_e = 9.1093837e-31
@@ -304,8 +305,8 @@ def bootstrap_current(i_f, e_f, n_f, ni_f, p_g, q, i_g, e_g, n_g, ni_g, Zi_f,
     alph = ((a0 + 0.25 *
              (1 - ft**2) * jnp.sqrt(nui)) / (1 + 0.5 * jnp.sqrt(nui)) +
             0.315 * nui**2 * ft**6) / (1 + 0.15 * nui**2 * ft**6)
-    pe = n_f * e_f * 1.6e-16
-    pi = ni_f * i_f * 1.6e-16
+    pe = n_f * e_f * g.keV_m3_to_Pa
+    pi = ni_f * i_f * g.keV_m3_to_Pa
     gc = jnp.r_[jnp.zeros(1), -g.geo_F_face[1:] * 2 * jnp.pi / (g.geo_B_0 * p_g[1:])]
     jbs = gc * (L31 * (pe * n_g / n_f + pi * ni_g / ni_f) +
                 (L31 + F32ee + F32ei) * pe * e_g / e_f +
