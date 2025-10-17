@@ -144,6 +144,27 @@ def transport(v, d, bc):
     return lower_diff + lower_conv, diag_diff + diag_conv, upper_diff + upper_conv, vec_diff + vec_conv
 
 
+def solve_implicit_tridiag(lower_A, diag_A, upper_A, tc, θdt, rhs):
+    return jax.lax.linalg.tridiagonal_solve(
+        jnp.r_[0.0, -θdt * tc[1:] * lower_A],
+        1.0 - θdt * tc * diag_A,
+        jnp.r_[-θdt * tc[:-1] * upper_A, 0.0],
+        rhs[:, None]
+    ).squeeze()
+
+
+def solve_implicit_coupled_2x2(lower_Aii, diag_Aii, upper_Aii,
+                                lower_Aee, diag_Aee, upper_Aee,
+                                coupling_ie, coupling_ei,
+                                tc_i, tc_e, θdt, rhs_i, rhs_e):
+    return solve_block_tridiag_2x2(
+        -θdt * tc_i[1:] * lower_Aii, 1.0 - θdt * tc_i * diag_Aii, -θdt * tc_i[:-1] * upper_Aii,
+        -θdt * tc_e[1:] * lower_Aee, 1.0 - θdt * tc_e * diag_Aee, -θdt * tc_e[:-1] * upper_Aee,
+        -θdt * tc_i * coupling_ie, -θdt * tc_e * coupling_ei,
+        rhs_i, rhs_e
+    )
+
+
 def log_lambda_ei(n_e, T_e_keV):
     return 31.3 - 0.5 * jnp.log(n_e) + jnp.log(T_e_keV * 1e3)
 
@@ -882,56 +903,19 @@ while True:
         lower_An, diag_An, upper_An, b_n = transport(v_n, chi_n, g.bc_n)
         tc = 1.0 / (tc_out * tc_in)
         tc_prev = tc_in if tc_in_old is None else tc_in_old
-        tp = tc_prev / tc_in
         θdt = g.theta * dt
-        
-        tc_i, tc_e, tc_p, tc_n = tc[l.i], tc[l.e], tc[l.p], tc[l.n]
-        tp_i, tp_e, tp_p, tp_n = tp[l.i], tp[l.e], tp[l.p], tp[l.n]
-        
-        rhs_i = tp_i * state[l.i] + θdt * tc_i * (b_i + src_i)
-        rhs_e = tp_e * state[l.e] + θdt * tc_e * (b_e + src_e)
-        rhs_p = tp_p * state[l.p] + θdt * tc_p * (g.b_p + src_p)
-        rhs_n = tp_n * state[l.n] + θdt * tc_n * (b_n + g.src_n)
-        
-        lower_Aii = lower_Ai
-        diag_Aii = diag_Ai + qei_ii + g.ped_i
-        upper_Aii = upper_Ai
-        
-        lower_Aee = lower_Ae
-        diag_Aee = diag_Ae + qei_ee + g.ped_e
-        upper_Aee = upper_Ae
-        
-        coupling_ie = qei_ie
-        coupling_ei = qei_ei
-        
-        pred_i, pred_e = solve_block_tridiag_2x2(
-            -θdt * tc_i[1:] * lower_Aii,
-            1.0 - θdt * tc_i * diag_Aii,
-            -θdt * tc_i[:-1] * upper_Aii,
-            -θdt * tc_e[1:] * lower_Aee,
-            1.0 - θdt * tc_e * diag_Aee,
-            -θdt * tc_e[:-1] * upper_Aee,
-            -θdt * tc_i * coupling_ie,
-            -θdt * tc_e * coupling_ei,
-            rhs_i, rhs_e
+        b = jnp.r_[b_i + src_i, b_e + src_e, g.b_p + src_p, b_n + g.src_n]
+        rhs = (tc_prev / tc_in) * state + θdt * tc * b       
+        pred_i, pred_e = solve_implicit_coupled_2x2(
+            lower_Ai, diag_Ai + qei_ii + g.ped_i, upper_Ai,
+            lower_Ae, diag_Ae + qei_ee + g.ped_e, upper_Ae,
+            qei_ie, qei_ei,
+            tc[l.i], tc[l.e], θdt, rhs[l.i], rhs[l.e]
         )
-        sol_ie = jnp.r_[pred_i, pred_e]
+        sol_p = solve_implicit_tridiag(g.A_p_lower, g.A_p_diag, g.A_p_upper, tc[l.p], θdt, rhs[l.p])
+        sol_n = solve_implicit_tridiag(lower_An, diag_An + g.ped_n, upper_An, tc[l.n], θdt, rhs[l.n])
         
-        sol_p = jax.lax.linalg.tridiagonal_solve(
-            jnp.r_[0.0, -θdt * tc_p[1:] * g.A_p_lower],
-            1.0 - θdt * tc_p * g.A_p_diag,
-            jnp.r_[-θdt * tc_p[:-1] * g.A_p_upper, 0.0],
-            rhs_p[:, None]
-        ).squeeze()
-        
-        sol_n = jax.lax.linalg.tridiagonal_solve(
-            jnp.r_[0.0, -θdt * tc_n[1:] * lower_An],
-            1.0 - θdt * tc_n * (diag_An + g.ped_n),
-            jnp.r_[-θdt * tc_n[:-1] * upper_An, 0.0],
-            rhs_n[:, None]
-        ).squeeze()
-        
-        pred = jnp.r_[sol_ie, sol_p, sol_n]
+        pred = jnp.r_[pred_i, pred_e, sol_p, sol_n]
         tc_in_old = tc_in
     t += dt
     state = pred
