@@ -366,13 +366,13 @@ def turbulent_transport(i_f, i_r, e_f, e_r, n_f, n_g, n_r, ni_f, ni_r, nz_f,
     smag = jnp.where(smag - alph < -0.2, alph - 0.2, smag)
     features = jnp.c_[lti, lte, lne, lni0, q, smag, x * eps_lcfs / g.EPSILON_NN,
                       TiTe, nu_star, ni_f / n_f]
-    model_predictions = g.model.predict(features)
-    qi_itg_squeezed = model_predictions["efiITG"].squeeze()
-    qi = qi_itg_squeezed + model_predictions["efiTEM"].squeeze()
-    qe = (model_predictions["efeITG"].squeeze() * g.ITG_flux_ratio_correction +
-          model_predictions["efeTEM"].squeeze() +
-          model_predictions["efeETG"].squeeze() * g.ETG_correction_factor)
-    pfe = model_predictions["pfeITG"].squeeze() + model_predictions["pfeTEM"].squeeze()
+    out = g.model.predict(features)
+    qi_itg_squeezed = out["efiITG"].squeeze()
+    qi = qi_itg_squeezed + out["efiTEM"].squeeze()
+    qe = (out["efeITG"].squeeze() * g.ITG_flux_ratio_correction +
+          out["efeTEM"].squeeze() +
+          out["efeETG"].squeeze() * g.ETG_correction_factor)
+    pfe = out["pfeITG"].squeeze() + out["pfeTEM"].squeeze()
     gradient_reference_length = g.R_major
     gyrobohm_flux_reference_length = g.geo_a_minor
     pfe_SI = pfe * n_f * chiGB / gyrobohm_flux_reference_length
