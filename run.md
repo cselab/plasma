@@ -138,31 +138,37 @@ The full spatial operator is a **4×4 block matrix** where each block is `n×n`:
 
 ```
 spatial_mat (100×100) = 
-┌─────────────────────────────────────┐
-│ A_i+Q_ii   Q_ie       0        0    │  i (25×25 blocks)
-│ Q_ei     A_e+Q_ee     0        0    │  e
-│ 0          0        A_p        0    │  p
-│ 0          0          0      A_n    │  n
-└─────────────────────────────────────┘
+┌────────────────────────────────┐
+│ A_ii    A_ie      0        0   │  i (25×25 blocks)
+│ A_ei    A_ee      0        0   │  e
+│ 0       0       A_pp       0   │  p
+│ 0       0        0       A_nn  │  n
+└────────────────────────────────┘
 ```
 
 Where:
-- `A_i, A_e, A_p, A_n` - Transport matrices (tridiagonal from `trans_terms`)
-- `Q_ii, Q_ee, Q_ie, Q_ei` - Electron-ion coupling (diagonal matrices from `qei_coupling`)
-- Adaptive sources added as diagonal modifications
+- `A_ii = A_i + diag(Qei_ii + ped_mat_T)` - Ion transport + self-coupling + pedestal feedback
+- `A_ee = A_e + diag(Qei_ee + ped_mat_T)` - Electron transport + self-coupling + pedestal feedback
+- `A_ie = diag(Qei_ie)` - Ion ← electron heat exchange
+- `A_ei = diag(Qei_ei)` - Electron ← ion heat exchange
+- `A_pp = g.A_p` - Psi transport (precomputed, constant)
+- `A_nn = A_n + diag(ped_mat_n)` - Density transport + pedestal feedback
 
 ### Block Matrix Assembly
 
 ```python
+A_ii = A_i + jnp.diag(Qei_ii + g.ped_mat_T)
+A_ie = jnp.diag(Qei_ie)
+A_ei = jnp.diag(Qei_ei)
+A_ee = A_e + jnp.diag(Qei_ee + g.ped_mat_T)
+A_pp = g.A_p
+A_nn = A_n + jnp.diag(g.ped_mat_n)
+
 spatial_mat = jnp.block([
-    [A_i + jnp.diag(Qei_ii + g.source_mat_adaptive_T),
-     jnp.diag(Qei_ie), g.zero_block, g.zero_block],
-    [jnp.diag(Qei_ei),
-     A_e + jnp.diag(Qei_ee + g.source_mat_adaptive_T),
-     g.zero_block, g.zero_block],
-    [g.zero_block, g.zero_block, g.A_p, g.zero_block],
-    [g.zero_block, g.zero_block, g.zero_block,
-     A_n + jnp.diag(g.source_mat_adaptive_n)]
+    [A_ii,  A_ie,  g.zero, g.zero],
+    [A_ei,  A_ee,  g.zero, g.zero],
+    [g.zero, g.zero, A_pp,   g.zero],
+    [g.zero, g.zero, g.zero, A_nn  ]
 ])
 ```
 
