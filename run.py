@@ -860,7 +860,7 @@ while True:
         n = pred[l.n]
         i_f = g.I_i @ i + g.b_i_f;  i_r = g.D_i_r @ i + g.b_i_r
         e_f = g.I_e @ e + g.b_e_f;  e_r = g.D_e_r @ e + g.b_e_r
-        n_f = g.I_n @ n + g.b_n_f;  n_g = g.D_n  @ n + g.b_n_g;  n_r = g.D_n_r @ n + g.b_n_r
+        n_f = g.I_n @ n + g.b_n_f;  n_g = g.D_n @ n + g.b_n_g;  n_r = g.D_n_r @ n + g.b_n_r
         p_g = g.D_p @ p + g.b_p_g
         i_g = g.D_i @ i + g.b_i_g
         e_g = g.D_e @ e + g.b_e_g
