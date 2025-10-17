@@ -24,13 +24,10 @@ with open(sys.argv[1], "rb") as f:
     for j, var_name in enumerate(("T_i", "T_e", "psi", "n_e")):
         var = states[:, j]
         lo, hi = np.min(var), np.max(var)
-        plt.figure()
-        plt.title(var_name)
-        plt.axis([None, None, lo, hi])
         for idx in [0, nt // 4, nt // 2, 3 * nt // 4, nt - 1]:
-            plt.plot(cell_centers, var[idx], "o-", label=f"t={t_out[idx]:.3e}s")
-        plt.legend()
-        plt.xlabel("rho_norm")
-        plt.ylabel(var_name)
-        plt.savefig(f"{var_name}.png")
-        plt.show()
+            print(idx)
+            plt.figure()
+            plt.title(f"time: {t_out[idx]:8.3e}")
+            plt.axis([None, None, lo, hi])
+            plt.plot(cell_centers, var[idx], "o-")
+            plt.savefig(f"{var_name}.{idx:04d}.png")
