@@ -26,8 +26,9 @@ with open(sys.argv[1], "rb") as f:
         lo, hi = np.min(var), np.max(var)
         for idx in [0, nt // 4, nt // 2, 3 * nt // 4, nt - 1]:
             print(idx)
+            plt.figure()
             plt.title(f"time: {t_out[idx]:8.3e}")
             plt.axis([None, None, lo, hi])
             plt.plot(cell_centers, var[idx], "o-")
-        plt.savefig(f"{var_name}.{idx:04d}.png")
-        plt.close()
+            plt.savefig(f"{var_name}.{idx:04d}.png")
+            plt.show()
