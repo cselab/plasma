@@ -15,10 +15,7 @@ class l:
 
 
 jax.config.update("jax_enable_x64", True)
-g.interp_fn = jax.jit(jnp.interp)
-g.TOLERANCE = 1e-6
 g.keV_to_J = 1e3 * 1.602176634e-19
-g.eV_to_J = 1.602176634e-19
 g.keV_m3_to_Pa = 1.6e-16
 g.m_amu = 1.6605390666e-27
 g.q_e = 1.602176634e-19
@@ -307,7 +304,7 @@ def bootstrap_current(i_f, e_f, n_f, ni_f, p_g, q, i_g, e_g, n_g, ni_g, Zi_f,
             0.315 * nui**2 * ft**6) / (1 + 0.15 * nui**2 * ft**6)
     pe = n_f * e_f * g.keV_m3_to_Pa
     pi = ni_f * i_f * g.keV_m3_to_Pa
-    gc = jnp.r_[jnp.zeros(1), -g.geo_F_face[1:] * 2 * jnp.pi / (g.geo_B_0 * p_g[1:])]
+    gc = jnp.r_[jnp.zeros(1), -g.geo_F_face[1:] * 2 * jnp.pi / (g.B_0 * p_g[1:])]
     jbs = gc * (L31 * (pe * n_g / n_f + pi * ni_g / ni_f) +
                 (L31 + F32ee + F32ei) * pe * e_g / e_f +
                 (L31 + alph * L34) * pi * i_g / i_f)
@@ -335,8 +332,8 @@ def safe_lref(v, grad):
 
 def turbulent_transport(i_f, i_r, e_f, e_r, n_f, n_g, n_r, ni_f, ni_r, nz_f,
                         nz_r, p_g, q, ions_Z_eff_face):
-    chiGB = ((g.ion_A_avg * g.m_amu)**0.5 / (g.geo_B_0 * g.q_e)**2 *
-             (i_f * g.keV_to_J)**1.5 / g.geo_a_minor)
+    chiGB = ((g.ion_A_avg * g.m_amu)**0.5 / (g.B_0 * g.q_e)**2 *
+             (i_f * g.keV_to_J)**1.5 / g.a_minor)
     lti = safe_lref(i_f, i_r)
     lte = safe_lref(e_f, e_r)
     lne = safe_lref(n_f, n_r)
@@ -357,7 +354,7 @@ def turbulent_transport(i_f, i_r, e_f, e_r, n_f, n_g, n_r, ni_f, ni_r, nz_f,
               q[1] * g.R_major /
               (eps[1]**1.5 * jnp.sqrt(e_f[1] * g.keV_to_J / g.m_e)))
     nu_star = jnp.log10(nu * tb)
-    f0 = 2 * g.keV_to_J / g.geo_B_0**2 * g.mu_0 * q**2
+    f0 = 2 * g.keV_to_J / g.B_0**2 * g.mu_0 * q**2
     alph = f0 * (e_f * n_f * (lte + lne) + ni_f * i_f *
                  (lti + lni0) + nz_f * i_f * (lti + lni1))
     smag = smag - alph / 2
@@ -374,7 +371,7 @@ def turbulent_transport(i_f, i_r, e_f, e_r, n_f, n_g, n_r, ni_f, ni_r, nz_f,
           out["efeETG"].squeeze() * g.ETG_correction_factor)
     pfe = out["pfeITG"].squeeze() + out["pfeTEM"].squeeze()
     gradient_reference_length = g.R_major
-    gyrobohm_flux_reference_length = g.geo_a_minor
+    gyrobohm_flux_reference_length = g.a_minor
     pfe_SI = pfe * n_f * chiGB / gyrobohm_flux_reference_length
     chi_i = ((gradient_reference_length / gyrobohm_flux_reference_length) *
              qi / lti) * chiGB
@@ -518,7 +515,6 @@ def ions_update(n_e, T_e, T_e_face):
             Z_eff_face, n_i_bc, n_impurity_bc)
 
 
-g.MIN_DELTA = 1e-7
 g.curr_frac = 0.46
 g.curr_w = 0.075
 g.curr_loc = 0.36
@@ -560,20 +556,16 @@ g.i_right_bc = 0.2
 g.e_right_bc = 0.2
 g.n_right_bc = 0.25e20
 g.nbar = 0.8
-g.i_profile_dict = {0.0: 15.0, 1.0: 0.2}
-g.e_profile_dict = {0.0: 15.0, 1.0: 0.2}
-g.n_profile_dict = {0.0: 1.5, 1.0: 1.0}
-g.i_profile_x = np.array(list(g.i_profile_dict.keys()))
-g.i_profile_y = np.array(list(g.i_profile_dict.values()))
-g.e_profile_x = np.array(list(g.e_profile_dict.keys()))
-g.e_profile_y = np.array(list(g.e_profile_dict.values()))
-g.n_profile_x = np.array(list(g.n_profile_dict.keys()))
-g.n_profile_y = np.array(list(g.n_profile_dict.values()))
+g.i_profile_x = np.array([0.0, 1.0])
+g.i_profile_y = np.array([15.0, 0.2])
+g.e_profile_x = np.array([0.0, 1.0])
+g.e_profile_y = np.array([15.0, 0.2])
+g.n_profile_x = np.array([0.0, 1.0])
+g.n_profile_y = np.array([1.5, 1.0])
 g.n_profile = np.interp(g.cell_centers, g.n_profile_x, g.n_profile_y)
 g.chi_pereverzev = 30
 g.D_pereverzev = 15
 g.theta_imp = 1.0
-g.theta_exp = 0.0
 g.t_end = 5.0
 g.dt = 0.2
 g.resist_mult = 200
@@ -592,11 +584,6 @@ g.V_e_inner = 0.0
 g.chi_i_inner = 1.0
 g.chi_e_inner = 1.0
 g.rho_inner = 0.2
-g.D_e_outer = 0.1
-g.V_e_outer = 0.0
-g.chi_i_outer = 2.0
-g.chi_e_outer = 2.0
-g.rho_outer = 0.9
 g.chi_min = 0.05
 g.chi_max = 100
 g.fusion_Efus = 17.6 * 1e3 * g.keV_to_J
@@ -611,7 +598,6 @@ g.fusion_C6 = -1.0675e-4
 g.fusion_C7 = 1.366e-5
 g.fusion_alpha_fraction = 3.5 / 17.6
 g.fusion_birth_energy = 3520
-g.fusion_alpha_mass = 4.002602
 g.fusion_critical_energy_coeff = 10 * 4.002602
 g.D_e_min = 0.05
 g.D_e_max = 100.0
@@ -739,53 +725,22 @@ area_face = interp(rho_face_norm, area_intermediate)
 area = interp(rho_norm, area_intermediate)
 g.geo_Phi = Phi
 g.geo_Phi_face = Phi_face
-g.geo_R_major = g.R_major
-g.geo_a_minor = g.a_minor
-g.geo_B_0 = g.B_0
-g.geo_volume = volume
-g.geo_volume_face = volume_face
-g.geo_area = area
-g.geo_area_face = area_face
 g.geo_vpr = vpr
 g.geo_vpr_face = vpr_face
 g.geo_spr = spr_cell
 g.geo_spr_face = spr_face
 g.geo_delta_face = delta_face
-g.geo_elongation = elongation
-g.geo_elongation_face = elongation_face
-g.geo_g0 = g0
 g.geo_g0_face = g0_face
-g.geo_g1 = g1
 g.geo_g1_face = g1_face
-g.geo_g2 = g2
-g.geo_g2_face = g2_face
-g.geo_g3 = g3
-g.geo_g3_face = g3_face
-g.geo_g2g3_over_rhon = g2g3_over_rhon
 g.geo_g2g3_over_rhon_face = g2g3_over_rhon_face
-g.geo_g2g3_over_rhon_hires = g2g3_over_rhon_hires
-g.geo_gm4 = gm4
-g.geo_gm4_face = gm4_face
-g.geo_gm5 = gm5
-g.geo_gm5_face = gm5_face
 g.geo_F = F
 g.geo_F_face = F_face
-g.geo_F_hires = F_hires
-g.geo_R_in = Rin
 g.geo_R_in_face = Rin_face
-g.geo_R_out = Rout
 g.geo_R_out_face = Rout_face
-g.geo_rmid = (g.geo_R_out - g.geo_R_in) * 0.5
-g.geo_rmid_face = (g.geo_R_out_face - g.geo_R_in_face) * 0.5
+g.geo_rmid = (Rout - Rin) * 0.5
+g.geo_rmid_face = (Rout_face - Rin_face) * 0.5
 g.geo_Ip_profile_face_base = Ip_profile_face
-g.geo_psi = psi
 g.geo_psi_from_Ip_base = psi_from_Ip
-g.geo_psi_from_Ip_face_base = psi_from_Ip_face
-g.geo_delta_upper_face = delta_upper_face
-g.geo_delta_lower_face = delta_lower_face
-g.geo_spr_hires = spr_hires
-g.geo_rho_hires_norm = rho_hires_norm
-g.geo_rho_hires = rho_hires
 g.geo_q_correction_factor = 1
 Phi_b = g.geo_Phi_face[..., -1]
 g.geo_Phi_b = Phi_b
@@ -805,10 +760,9 @@ g.geo_g1_over_vpr2_face = np.r_[np.ones(1) / g.geo_rho_b**2, bulk]
 g.pi_16_squared = 16 * np.pi**2
 g.pi_16_cubed = 16 * np.pi**3
 g.toc_temperature_factor = 1.5 * g.geo_vpr**(-2.0 / 3.0) * g.keV_to_J
-g.source_p_coeff = 8 * g.geo_vpr * np.pi**2 * g.geo_B_0 * g.mu_0 * g.geo_Phi_b / g.geo_F**2
+g.source_p_coeff = 8 * g.geo_vpr * np.pi**2 * g.B_0 * g.mu_0 * g.geo_Phi_b / g.geo_F**2
 g.vpr_5_3 = g.geo_vpr**(5.0 / 3.0)
 g.mu0_pi16sq_Phib_sq_over_F_sq = g.mu_0 * g.pi_16_squared * g.geo_Phi_b**2 / g.geo_F**2
-g.pi16cubed_mu0_Phib = g.pi_16_cubed * g.mu_0 * g.geo_Phi_b
 g.geo_g1_keV = g.geo_g1_over_vpr_face * g.keV_to_J
 g.geo_factor_pereverzev = np.r_[np.ones(1), g.geo_g1_over_vpr_face[1:] / g.geo_g0_face[1:]]
 epsilon_effective = (
@@ -870,8 +824,6 @@ g.ones_vec = np.ones(g.num_cells)
 g.v_p_zero = np.zeros(g.n + 1)
 g.ones_vpr = np.ones(g.n)
 g.identity = np.eye(g.state_size)
-g.zero_row_of_blocks = [g.zero_block] * g.num_channels
-g.zero_block_vec = [g.zero_vec] * g.num_channels
 g.bcs = (g.bc_i, g.bc_e, g.bc_p, g.bc_n)
 source_i_ext, source_e_ext = heat_source()
 source_n_ext = particle_source()
@@ -888,7 +840,7 @@ g.c_p_coeff = g.cell_centers * g.mu0_pi16sq_Phib_sq_over_F_sq / g.resist_mult
 g.A_p, g.b_p = trans_terms(g.v_p_zero, g.geo_g2g3_over_rhon_face, g.bcs[2])
 i_initial = np.interp(g.cell_centers, g.i_profile_x, g.i_profile_y)
 e_initial = np.interp(g.cell_centers, g.e_profile_x, g.e_profile_y)
-nGW = g.Ip / 1e6 / (np.pi * g.geo_a_minor**2) * g.scaling_n_e
+nGW = g.Ip / 1e6 / (np.pi * g.a_minor**2) * g.scaling_n_e
 n_val = g.n_profile * nGW
 n_face = np.r_[n_val[:1], (n_val[:-1] + n_val[1:]) / 2, [g.n_right_bc]]
 a_out = g.geo_R_out_face[-1] - g.geo_R_out_face[0]
