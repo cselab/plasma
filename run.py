@@ -475,7 +475,7 @@ def smooth_savgol(data, idx_limit, polyorder):
 
 
 
-def ions_update(n_e, T_e, T_e_face):
+def ions(n_e, T_e, T_e_face):
     Z_i_avg, Z_i_Z2_avg, _ = z_avg(g.ion_names, T_e, g.ion_fractions)
     Z_i = Z_i_Z2_avg / Z_i_avg
     Z_i_face_avg, Z_i_face_Z2_avg, _ = z_avg(g.ion_names, T_e_face, g.ion_fractions)
@@ -509,8 +509,13 @@ def ions_update(n_e, T_e, T_e_face):
     ), 0.0, 0.0)
     Z_eff_face = (Z_i_face**2 * (g.I_ni @ n_i + g.b_r * n_i_bc[1]) +
                   Z_impurity_face**2 * (g.I_nimp @ n_impurity + g.b_r * n_impurity_bc[1])) / (g.I_n @ n_e + g.b_n_face)
-    return (n_i, n_impurity, Z_i, Z_i_face, Z_impurity,
-            Z_eff_face, n_i_bc, n_impurity_bc)
+    ni_face = g.I_ni @ n_i + g.b_r * n_i_bc[1]
+    ni_grad = g.D_ni_rho @ n_i + g.b_r_grad * n_i_bc[1]
+    ni_grad_r = g.D_ni_rmid @ n_i + g.b_r_grad_r * n_i_bc[1]
+    nz_face = g.I_nimp @ n_impurity + g.b_r * n_impurity_bc[1]
+    nz_grad_r = g.D_nimp_rmid @ n_impurity + g.b_r_grad_r * n_impurity_bc[1]
+    return (n_i, n_impurity, Z_i, Z_i_face, Z_impurity, Z_eff_face,
+            ni_face, ni_grad, ni_grad_r, nz_face, nz_grad_r)
 
 
 g.curr_frac = 0.46
@@ -869,15 +874,10 @@ while True:
         i_grad_r = g.D_i_r @ i + g.b_i_grad_r
         e_grad_r = g.D_e_r @ e + g.b_e_grad_r
         n_grad_r = g.D_n_r @ n + g.b_n_grad_r     
-        (ions_n_i, ions_n_impurity, ions_Z_i, ions_Z_i_face, ions_Z_impurity,
-         ions_Z_eff_face, ions_n_i_bc, ions_n_impurity_bc) = ions_update(n, e, e_face)
+        (ions_n_i, ions_n_impurity, ions_Z_i, ions_Z_i_face, ions_Z_impurity, ions_Z_eff_face,
+         ni_face, ni_grad, ni_grad_r, nz_face, nz_grad_r) = ions(n, e, e_face)
         q_face = jnp.r_[jnp.abs(g.q_factor_axis / (p_grad[1] * g.inv_dx))[None],
             jnp.abs(g.q_factor_bulk * g.face_centers[1:] / p_grad[1:])]
-        ni_face = g.I_ni @ ions_n_i + g.b_r * ions_n_i_bc[1]
-        ni_grad = g.D_ni_rho @ ions_n_i + g.b_r_grad * ions_n_i_bc[1]
-        ni_grad_r = g.D_ni_rmid @ ions_n_i + g.b_r_grad_r * ions_n_i_bc[1]
-        nz_face = g.I_nimp @ ions_n_impurity + g.b_r * ions_n_impurity_bc[1]
-        nz_grad_r = g.D_nimp_rmid @ ions_n_impurity + g.b_r_grad_r * ions_n_impurity_bc[1]
         sigma = neoclassical_conductivity(e_face, n_face, q_face, ions_Z_eff_face)
         si_fus, se_fus = fusion_source(e, i_face, ni_face)
         j_bs = bootstrap_current(i_face, e_face, n_face, ni_face, p_grad,
