@@ -140,10 +140,76 @@ def diff_terms(d, bc):
             jnp.diag(off, -1)) * g.n**2, vec
 
 
+def diff_terms_tridiag(d, bc):
+    diag = jnp.asarray(-d[1:] - d[:-1]).at[0].set(-d[1])
+    off = d[1:-1]
+    vec = jnp.zeros(g.n).at[0].set(-d[0] * bc[2] * g.n)
+    if bc[1] is not None:
+        diag = diag.at[-1].set(-2 * d[-1] - d[-2])
+        vec = vec.at[-1].set(2 * d[-1] * bc[1] * g.n**2)
+    else:
+        diag = diag.at[-1].set(-d[-2])
+        vec = vec.at[-1].set(d[-1] * bc[3] * g.n)
+    lower = off * g.n**2
+    main = diag * g.n**2
+    upper = off * g.n**2
+    return lower, main, upper, vec
+
+
+def conv_terms_tridiag(v_face, d_face, bc):
+    eps = g.EPS_CONVECTION
+    is_neg = d_face < 0.0
+    nonzero_sign = jnp.ones_like(is_neg) - 2 * is_neg
+    d_face = nonzero_sign * jnp.maximum(eps, jnp.abs(d_face))
+    ones = jnp.ones_like(v_face[1:-1])
+    scale = jnp.r_[0.5, ones, 0.5]
+    ratio = scale * g.dx * v_face / d_face
+    left_peclet = -ratio[:-1]
+    right_peclet = ratio[1:]
+
+    def peclet_to_alpha(p):
+        eps = g.EPS_PECLET
+        p = jnp.where(jnp.abs(p) < eps, eps, p)
+        alpha_pg10 = (p - 1) / p
+        alpha_p0to10 = ((p - 1) + (1 - p / 10)**5) / p
+        alpha_pneg10to0 = ((1 + p / 10)**5 - 1) / p
+        alpha_plneg10 = -1 / p
+        alpha = 0.5 * jnp.ones_like(p)
+        alpha = jnp.where(p > 10.0, alpha_pg10, alpha)
+        alpha = jnp.where(jnp.logical_and(10.0 >= p, p > eps), alpha_p0to10, alpha)
+        alpha = jnp.where(jnp.logical_and(-eps > p, p >= -10), alpha_pneg10to0, alpha)
+        alpha = jnp.where(p < -10.0, alpha_plneg10, alpha)
+        return alpha
+
+    la = peclet_to_alpha(left_peclet)
+    ra = peclet_to_alpha(right_peclet)
+    lv = v_face[:-1]
+    rv = v_face[1:]
+    diag = (la * lv - ra * rv) * g.n
+    above = -(1 - ra[:-1]) * rv[:-1] * g.n
+    below = (1 - la[1:]) * lv[1:] * g.n
+    vec = jnp.zeros_like(diag)
+    diag = diag.at[0].set((v_face[0] - ra[0] * v_face[1]) * g.n)
+    vec = vec.at[0].set(-v_face[0] * (1 - la[0]) * bc[2])
+    if bc[1] is not None:
+        diag = diag.at[-1].set((v_face[-2] * la[-1] + v_face[-1] * (1 - 2 * ra[-1])) * g.n)
+        vec = vec.at[-1].set(-2 * v_face[-1] * (1 - ra[-1]) * bc[1] * g.n)
+    else:
+        diag = diag.at[-1].set(-(v_face[-1] - v_face[-2] * la[-1]) * g.n)
+        vec = vec.at[-1].set(-v_face[-1] * (1 - ra[-1]) * bc[3])
+    return below, diag, above, vec
+
+
 def transport(v, d, bc):
     diff_mat, diff_vec = diff_terms(d, bc)
     conv_mat, conv_vec = conv_terms(v, d, bc)
     return diff_mat + conv_mat, diff_vec + conv_vec
+
+
+def transport_tridiag(v, d, bc):
+    lower_diff, diag_diff, upper_diff, vec_diff = diff_terms_tridiag(d, bc)
+    lower_conv, diag_conv, upper_conv, vec_conv = conv_terms_tridiag(v, d, bc)
+    return lower_diff + lower_conv, diag_diff + diag_conv, upper_diff + upper_conv, vec_diff + vec_conv
 
 
 def log_lambda_ei(n_e, T_e_keV):
@@ -814,6 +880,7 @@ g.ped_e = -g.ped_mask_T
 g.ped_n = -g.ped_mask_n
 g.tc_p_base = g.cell_centers * g.mu0_pi16sq_Phib_sq_over_F_sq / g.resist_mult
 g.A_p, g.b_p = transport(g.v_p_zero, g.geo_g2g3_over_rhon_face, g.bc_p)
+g.A_p_lower, g.A_p_diag, g.A_p_upper, _ = transport_tridiag(g.v_p_zero, g.geo_g2g3_over_rhon_face, g.bc_p)
 i_initial = np.interp(g.cell_centers, g.i_profile_x, g.i_profile_y)
 e_initial = np.interp(g.cell_centers, g.e_profile_x, g.e_profile_y)
 nGW = g.Ip / 1e6 / (np.pi * g.a_minor**2) * g.scaling_n_e
@@ -882,13 +949,11 @@ while True:
         v_n += v_neo_n
         A_i, b_i = transport(v_i, chi_i, g.bc_i)
         A_e, b_e = transport(v_e, chi_e, g.bc_e)
-        A_n, b_n = transport(v_n, chi_n, g.bc_n)
+        lower_An, diag_An, upper_An, b_n = transport_tridiag(v_n, chi_n, g.bc_n)
         A_ii = A_i + jnp.diag(qei_ii + g.ped_i)
         A_ie = jnp.diag(qei_ie)
         A_ei = jnp.diag(qei_ei)
         A_ee = A_e + jnp.diag(qei_ee + g.ped_e)
-        A_pp = g.A_p
-        A_nn = A_n + jnp.diag(g.ped_n)
         tc = 1.0 / (tc_out * tc_in)
         tc_prev = tc_in if tc_in_old is None else tc_in_old
         tp = tc_prev / tc_in
@@ -906,28 +971,20 @@ while True:
         DiAie = tc_i[:, None] * A_ie
         DeAei = tc_e[:, None] * A_ei
         DeAee = tc_e[:, None] * A_ee
-        DpApp = tc_p[:, None] * A_pp
-        DnAnn = tc_n[:, None] * A_nn
         
         M_ie = jnp.block([[jnp.eye(g.n) - θdt * DiAii, -θdt * DiAie],
                           [-θdt * DeAei, jnp.eye(g.n) - θdt * DeAee]])
-        M_p = jnp.eye(g.n) - θdt * DpApp
-        M_n = jnp.eye(g.n) - θdt * DnAnn
-        
         rhs_ie = jnp.r_[rhs_i, rhs_e]
         sol_ie = jnp.linalg.solve(M_ie, rhs_ie)
         
-        lower_App = jnp.diag(A_pp, -1)
-        diag_App = jnp.diag(A_pp, 0)
-        upper_App = jnp.diag(A_pp, 1)
-        dl_p = jnp.r_[0.0, -θdt * tc_p[1:] * lower_App]
-        d_p = 1.0 - θdt * tc_p * diag_App
-        du_p = jnp.r_[-θdt * tc_p[:-1] * upper_App, 0.0]
+        dl_p = jnp.r_[0.0, -θdt * tc_p[1:] * g.A_p_lower]
+        d_p = 1.0 - θdt * tc_p * g.A_p_diag
+        du_p = jnp.r_[-θdt * tc_p[:-1] * g.A_p_upper, 0.0]
         sol_p = jax.lax.linalg.tridiagonal_solve(dl_p, d_p, du_p, rhs_p[:, None]).squeeze()
         
-        lower_Ann = jnp.diag(A_nn, -1)
-        diag_Ann = jnp.diag(A_nn, 0)
-        upper_Ann = jnp.diag(A_nn, 1)
+        lower_Ann = lower_An
+        diag_Ann = diag_An + g.ped_n
+        upper_Ann = upper_An
         dl_n = jnp.r_[0.0, -θdt * tc_n[1:] * lower_Ann]
         d_n = 1.0 - θdt * tc_n * diag_Ann
         du_n = jnp.r_[-θdt * tc_n[:-1] * upper_Ann, 0.0]
