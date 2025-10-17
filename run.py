@@ -507,8 +507,8 @@ def ions(n_e, T_e, T_e_face):
         0.0,
         (g.bc_n[1] - n_i_bc[1] * Z_i_face[-1]) / Z_impurity_face[-1],
     ), 0.0, 0.0)
-    Z_eff_face = (Z_i_face**2 * (g.I_ni @ n_i + g.b_r * n_i_bc[1]) +
-                  Z_impurity_face**2 * (g.I_nimp @ n_impurity + g.b_r * n_impurity_bc[1])) / (g.I_n @ n_e + g.b_n_f)
+    Z_eff_face = (Z_i_face**2 * (g.I_j @ n_i + g.b_r * n_i_bc[1]) +
+                  Z_impurity_face**2 * (g.I_z @ n_impurity + g.b_r * n_impurity_bc[1])) / (g.I_n @ n_e + g.b_n_f)
     return (n_i, n_impurity, Z_i, Z_i_face, Z_impurity, Z_eff_face,
             n_i_bc, n_impurity_bc)
 
@@ -799,11 +799,11 @@ g.I_e, g.b_e_f = face_op(g.bc_e[1], g.bc_e[3])
 g.I_p, g.b_p_f = face_op(g.bc_p[1], g.bc_p[3])
 g.I_n, g.b_n_f = face_op(g.bc_n[1], g.bc_n[3])
 dummy_bc = (None, 1.0, 0.0, 0.0)
-g.D_ni_rho, _ = grad_op(dummy_bc)
-g.D_ni_rmid, _ = grad_op_nu(inv_drmid, dummy_bc)
-g.I_ni, _ = face_op(1.0, 0.0)
-g.D_nimp_rmid, _ = grad_op_nu(inv_drmid, dummy_bc)
-g.I_nimp, _ = face_op(1.0, 0.0)
+g.D_j, _ = grad_op(dummy_bc)
+g.D_j_r, _ = grad_op_nu(inv_drmid, dummy_bc)
+g.I_j, _ = face_op(1.0, 0.0)
+g.D_z_r, _ = grad_op_nu(inv_drmid, dummy_bc)
+g.I_z, _ = face_op(1.0, 0.0)
 g.b_r = np.zeros(g.n + 1)
 g.b_r[-1] = 1.0
 g.b_r_g = g.b_r * (2.0 * g.inv_dx)
@@ -870,11 +870,11 @@ while True:
         e_r = g.D_e_r @ e + g.b_e_r
         n_r = g.D_n_r @ n + g.b_n_r     
         (j, z, k, k_f, w, u_f, j_bc, z_bc) = ions(n, e, e_f)
-        j_f = g.I_ni @ j + g.b_r * j_bc[1]
-        j_g = g.D_ni_rho @ j + g.b_r_g * j_bc[1]
-        j_r = g.D_ni_rmid @ j + g.b_r_r * j_bc[1]
-        z_f = g.I_nimp @ z + g.b_r * z_bc[1]
-        z_r = g.D_nimp_rmid @ z + g.b_r_r * z_bc[1]
+        j_f = g.I_j @ j + g.b_r * j_bc[1]
+        j_g = g.D_j @ j + g.b_r_g * j_bc[1]
+        j_r = g.D_j_r @ j + g.b_r_r * j_bc[1]
+        z_f = g.I_z @ z + g.b_r * z_bc[1]
+        z_r = g.D_z_r @ z + g.b_r_r * z_bc[1]
         q_f = jnp.r_[jnp.abs(g.q_factor_axis / (p_g[1] * g.inv_dx))[None],
             jnp.abs(g.q_factor_bulk * g.face_centers[1:] / p_g[1:])]
         sigma = neoclassical_conductivity(e_f, n_f, q_f, u_f)
