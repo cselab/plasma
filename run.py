@@ -563,7 +563,7 @@ g.n_profile_y = np.array([1.5, 1.0])
 g.n_profile = np.interp(g.cell_centers, g.n_profile_x, g.n_profile_y)
 g.chi_pereverzev = 30
 g.D_pereverzev = 15
-g.theta_imp = 1.0
+g.theta = 1.0
 g.t_end = 5.0
 g.dt = 0.2
 g.resist_mult = 200
@@ -830,7 +830,7 @@ g.source_i_external = source_i_ext * g.geo_vpr
 g.source_e_external = source_e_ext * g.geo_vpr
 g.source_i_ped = g.ped_mask_T * g.i_ped
 g.source_e_ped = g.ped_mask_T * g.e_ped
-g.source_n_constant = source_n_ext * g.geo_vpr + g.ped_mask_n * g.n_ped
+g.src_n = source_n_ext * g.geo_vpr + g.ped_mask_n * g.n_ped
 g.source_p_external = source_p_ext
 g.ped_mat_T = -g.ped_mask_T
 g.ped_mat_n = -g.ped_mask_n
@@ -919,12 +919,11 @@ while True:
              [A_ei,  A_ee,  g.zero, g.zero],
              [g.zero, g.zero, A_pp,   g.zero],
              [g.zero, g.zero, g.zero, A_nn  ]])
-        b = jnp.r_[b_i + src_i, b_e + src_e, g.b_p + src_p, b_n + g.source_n_constant]
+        b = jnp.r_[b_i + src_i, b_e + src_e, g.b_p + src_p, b_n + g.src_n]
         tc = 1 / (tc_out * tc_in)
-        theta = g.theta_imp
         tc_prev = tc_in if tc_in_old is None else tc_in_old
-        M = g.identity - dt * theta * jnp.expand_dims(tc, 1) * A
-        rhs = (tc_prev / tc_in) * state + theta * dt * tc * b
+        M = g.identity - dt * g.theta * jnp.expand_dims(tc, 1) * A
+        rhs = (tc_prev / tc_in) * state + g.theta * dt * tc * b
         pred = jnp.linalg.solve(M, rhs)
         tc_in_old = tc_in
     t += dt
