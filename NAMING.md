@@ -91,55 +91,66 @@ Special boundary vectors:
 
 All are size `n+1`.
 
-### Transport Matrices (Per-Iteration)
-- **`A_*`** = transport operator matrix (`n × n`), e.g., `A_i`, `A_e`, `A_n`
+### Transport Operators (Per-Iteration)
+
+Transport operators stored as **tridiagonal vectors** (not full matrices):
+- **`lower_A*`** = subdiagonal coefficients (size `n`), e.g., `lower_Ai`, `lower_Ae`, `lower_An`
+- **`diag_A*`** = diagonal coefficients (size `n`), e.g., `diag_Ai`, `diag_Ae`, `diag_An`
+- **`upper_A*`** = superdiagonal coefficients (size `n`), e.g., `upper_Ai`, `upper_Ae`, `upper_An`
 - **`b_*`** = transport RHS vector (size `n`), e.g., `b_i`, `b_e`, `b_n`
 
-Built from: `A, b = transport(v_f, d_f, bc)`
+Built from: `lower, diag, upper, b = transport(v_f, d_f, bc)`
 
-### Block Matrix Structure
+For poloidal flux (precomputed constant):
+- **`g.A_p_lower`**, **`g.A_p_diag`**, **`g.A_p_upper`** = psi transport tridiagonal vectors
 
-The implicit solve uses textbook linear algebra form: `M @ x_new = rhs`
+### Implicit Solver Strategy
+
+The system is **never assembled as a full 100×100 matrix**. Instead, specialized tridiagonal solvers are used:
 
 ```python
-# Build block components
-A_ii = A_i + jnp.diag(qei_ii + g.ped_i)
-A_ie = jnp.diag(qei_ie)
-A_ei = jnp.diag(qei_ei)
-A_ee = A_e + jnp.diag(qei_ee + g.ped_e)
-A_pp = g.A_p
-A_nn = A_n + jnp.diag(g.ped_n)
+# Build transport operators (tridiagonal vectors only)
+lower_Ai, diag_Ai, upper_Ai, b_i = transport(v_i, chi_i, g.bc_i)
+lower_Ae, diag_Ae, upper_Ae, b_e = transport(v_e, chi_e, g.bc_e)
+lower_An, diag_An, upper_An, b_n = transport(v_n, chi_n, g.bc_n)
 
-# Assemble spatial operator
-A = jnp.block([
-    [A_ii,    A_ie,    g.zero, g.zero],
-    [A_ei,    A_ee,    g.zero, g.zero],
-    [g.zero,  g.zero,  A_pp,   g.zero],
-    [g.zero,  g.zero,  g.zero, A_nn  ]
-])
+# Compute coupling and feedback terms (diagonal vectors)
+qei_ii, qei_ee, qei_ie, qei_ei = qei_coupling(...)
 
-# Assemble RHS
+# Assemble global RHS
 b = jnp.r_[b_i + src_i, b_e + src_e, g.b_p + src_p, b_n + g.src_n]
 
 # Time coefficients
 tc = 1 / (tc_out * tc_in)
+θdt = g.theta * dt
+rhs = ((tc_prev / tc_in) * state + θdt * tc * b)[:, None]
 
-# System matrix and RHS
-M = g.identity - dt * g.theta * jnp.expand_dims(tc, 1) * A
-rhs = (tc_prev / tc_in) * state + g.theta * dt * tc * b
+# Solve coupled i-e system (block tridiagonal 2×2)
+pred_i, pred_e = solve_implicit_coupled_2x2(
+    lower_Ai, diag_Ai + qei_ii + g.ped_i, upper_Ai,
+    lower_Ae, diag_Ae + qei_ee + g.ped_e, upper_Ae,
+    qei_ie, qei_ei,
+    tc[l.i], tc[l.e], θdt, rhs[l.i, 0], rhs[l.e, 0]
+)
 
-# Solve
-pred = jnp.linalg.solve(M, rhs)
+# Solve decoupled systems (standard tridiagonal)
+sol_p = solve_implicit_tridiag(g.A_p_lower, g.A_p_diag, g.A_p_upper,
+                                tc[l.p], θdt, rhs[l.p])
+sol_n = solve_implicit_tridiag(lower_An, diag_An + g.ped_n, upper_An,
+                                tc[l.n], θdt, rhs[l.n])
+
+# Combine solutions
+pred = jnp.r_[pred_i, pred_e, sol_p, sol_n]
 ```
 
 Components:
-- **`A_ii`, `A_ee`** = diagonal blocks with transport + coupling + pedestal
-- **`A_ie`, `A_ei`** = off-diagonal electron-ion coupling
-- **`A_pp`, `A_nn`** = decoupled psi and density blocks
-- **`A`** = full spatial operator (100×100)
-- **`M`** = system matrix (identity - dt*theta*tc*A)
-- **`rhs`** = right-hand side vector
+- **`lower_A*`, `diag_A*`, `upper_A*`** = tridiagonal transport operator vectors
+- **`qei_ii`, `qei_ee`, `qei_ie`, `qei_ei`** = diagonal coupling vectors (size 25)
+- **`g.ped_i`, `g.ped_e`, `g.ped_n`** = diagonal pedestal feedback vectors (size 25)
+- **`tc`** = time coefficients (size 100)
+- **`rhs`** = right-hand side vector (size 100)
 - **`b`** = spatial RHS before time scaling
+- **`θdt`** = `g.theta * dt` (time step with implicit parameter)
 
 ## Transport Coefficients
 
@@ -211,7 +222,8 @@ Time derivative scaling:
 - `tc_in` = coefficient inside time derivative (size 100)
 - `tc_out` = coefficient outside time derivative (size 100)
 - `tc` = combined `1/(tc_out * tc_in)` (size 100)
-- `tc_prev` = saved from previous iteration for RHS
+- `tc_in_old` = saved `tc_in` from previous iteration for RHS
+- `tc_prev` = `tc_in` if first iteration, else `tc_in_old`
 
 ## Temporary Variables
 
@@ -227,9 +239,15 @@ la, ra = peclet_to_alpha(...)   # Left/right upwind factors
 lv, rv = v_f[:-1], v_f[1:]      # Left/right velocities
 ```
 
-### Matrix Building
+### Tridiagonal Building
 ```python
-diag, off, vec = ...  # Diagonal, off-diagonal, RHS vector
+lower, diag, upper, vec = ...   # Subdiagonal, diagonal, superdiagonal, RHS vector
+```
+
+### Time Integration Helpers
+```python
+θdt = g.theta * dt              # Implicit parameter × time step
+tc_in_old = tc_in               # Saved transient for next iteration
 ```
 
 ## Global Namespace `g.*`
@@ -326,24 +344,25 @@ sigma = neoclassical_conductivity(...)
 
 ### Tuple Returns (Ordered by Type)
 ```python
-A, b = transport(v, d, bc)                         # Matrix, vector
-diff_mat, diff_vec = diff_terms(d, bc)             # Matrix, vector
-conv_mat, conv_vec = conv_terms(v, d, bc)          # Matrix, vector
+lower, diag, upper, b = transport(v, d, bc)        # Tridiagonal vectors + RHS
+lower, diag, upper, b = diff_terms(d, bc)          # Tridiagonal vectors + RHS
+lower, diag, upper, b = conv_terms(v, d, bc)       # Tridiagonal vectors + RHS
 si_fus, se_fus = fusion_source(e, i_f, j_f)        # Ion, electron
-qei_ii, qei_ee, qei_ie, qei_ei = qei_coupling(...) # 4 coupling terms
+qei_ii, qei_ee, qei_ie, qei_ei = qei_coupling(...) # 4 coupling terms (diagonal vectors)
 k1, k2 = z_avg(symbols, T_e, fractions)            # ⟨Z⟩, ⟨Z²⟩
+pred_i, pred_e = solve_implicit_coupled_2x2(...)   # Coupled solution
 ```
 
 ### Transport Returns (Velocities, then Diffusivities)
 ```python
-# Turbulent: diffusivities only (v=0 for turbulence)
-chi_i, chi_e, chi_n, v_n = turbulent_transport(...)
+# Turbulent: velocity first (only v_n non-zero for turbulence), then diffusivities
+v_n, chi_i, chi_e, chi_n = turbulent_transport(...)
 
 # Neoclassical: velocities first, then diffusivities
-v_i, v_e, chi_neo_i, chi_neo_e, chi_neo_n, v_neo_n = neoclassical_transport(...)
+v_i, v_e, v_neo_n, chi_neo_i, chi_neo_e, chi_neo_n = neoclassical_transport(...)
 ```
 
-Order: ion, electron, particle
+Order: velocities (i, e, n), then diffusivities (i, e, n)
 
 ### Ion Function (8-element tuple)
 ```python
@@ -356,26 +375,28 @@ j, z, k, k_f, w, u_f, j_bc, z_bc = ions(n_e, T_e, T_e_face)
 - Capital letter + variable: `I_i`, `D_i`, `D_i_r`
 - Pattern: `{Operator}_{variable}[_{coordinate}]`
 
-### Transport Matrices (Dynamic)
-- Capital letter: `A_i`, `A_e`, `A_p`, `A_n`
-- Lowercase for vectors: `b_i`, `b_e`, `b_p`, `b_n`
+### Transport Operators (Dynamic - Tridiagonal Vectors)
+- Tridiagonal vectors: `lower_Ai`, `diag_Ai`, `upper_Ai` (size 25)
+- Lowercase for RHS: `b_i`, `b_e`, `b_p`, `b_n` (size 25)
 
-### Block Components
-- **`A_ii`, `A_ie`, `A_ei`, `A_ee`** = 2×2 ion-electron coupled block
-- **`A_pp`** = psi block (decoupled)
-- **`A_nn`** = density block (decoupled)
-- **`A`** = full spatial operator (100×100)
-- **`M`** = system matrix for implicit solve
-- **`b`** = global RHS vector
+Pattern: `{position}_A{variable}` where position is `lower`, `diag`, or `upper`
 
-### Block Utilities
+### Conceptual Block Structure (Not Materialized)
+
+Conceptually represents a 4×4 block system, but **never assembled**:
+- Ion-electron coupling solved via `solve_implicit_coupled_2x2` (tridiagonal 2×2 blocks)
+- Psi solved via `solve_implicit_tridiag` (standard tridiagonal)
+- Density solved via `solve_implicit_tridiag` (standard tridiagonal)
+
+### Utilities
 ```python
-g.zero      # (25, 25) zeros (was g.zero_block)
 g.zero_vec  # (25,) zeros
 g.ones_vec  # (25,) ones  
 g.ones_vpr  # (25,) ones
-g.identity  # (100, 100) identity
+g.v_p_zero  # (26,) zeros for psi velocity (faces)
 ```
+
+Note: `g.zero` (25×25 zero matrix) and `g.identity` (100×100) were removed since full matrices are no longer assembled.
 
 ## Abbreviations
 
@@ -427,16 +448,20 @@ Short, descriptive names: `la`, `ra`, `lv`, `rv`, `diag`, `off`, `vec`
 Fully qualified: `g.src_i_ext`, `g.geo_vpr_face`
 
 ### Return values
-Match caller expectation: `A, b` for matrix operators, `chi_i, chi_e, chi_n, v_n` for transport
+Match caller expectation: `lower, diag, upper, b` for transport operators, `v_n, chi_i, chi_e, chi_n` for turbulent transport
 
 ## Time Loop Variables
 
 ```python
-state      # Current accepted state (100,)
-pred       # Predictor/corrector working state (100,)
-tc_prev    # Saved transient from previous iteration
-dt         # Current timestep [s]
-t          # Current time [s]
+state       # Current accepted state (100,)
+pred        # Predictor/corrector working state (100,)
+tc_in_old   # Saved tc_in from previous iteration (None on first iteration)
+dt          # Current timestep [s]
+t           # Current time [s]
+pred_i      # Ion temperature solution from coupled solver (25,)
+pred_e      # Electron temperature solution from coupled solver (25,)
+sol_p       # Poloidal flux solution from tridiagonal solver (25,)
+sol_n       # Density solution from tridiagonal solver (25,)
 ```
 
 ## Key Design Principles
@@ -445,6 +470,8 @@ t          # Current time [s]
 2. **Single-letter ions**: `j`, `z`, `k`, `w`, `u_f` for ion quantities
 3. **Lowercase coupling**: `qei_*` not `Qei_*`
 4. **Consistent ordering**: i, e, p, n everywhere (functions, returns, blocks)
-5. **Textbook linear algebra**: `M @ x = rhs` instead of cryptic variable names
-6. **No abbreviations in `g.*`**: Full names for globals (`g.src_i_ext` not `g.si`)
-7. **Descriptive intermediates**: `si_fus`, `se_fus`, `j_bs` for clarity in physics
+5. **Tridiagonal vectors**: `lower_A*`, `diag_A*`, `upper_A*` instead of full matrices
+6. **Specialized solvers**: Never assemble full 100×100 system, use tridiagonal solvers
+7. **No abbreviations in `g.*`**: Full names for globals (`g.src_i_ext` not `g.si`)
+8. **Descriptive intermediates**: `si_fus`, `se_fus`, `j_bs` for clarity in physics
+9. **O(n) complexity**: Exploit tridiagonal structure for linear scaling with grid size
