@@ -271,8 +271,9 @@ def fusion_source(e, i_f, j_f):
     x = jnp.sqrt(x2)
     fi = 2 * ((1 / 6) * jnp.log((1 - x + x2) / (1 + 2 * x + x2)) + (jnp.arctan(
         (2 * x - 1) / jnp.sqrt(3)) + jnp.pi / 6) / jnp.sqrt(3)) / x2
-    return Pc * fi * g.fusion_alpha_fraction, Pc * (
-        1 - fi) * g.fusion_alpha_fraction
+    src_fus_i = Pc * fi * g.fusion_alpha_fraction
+    src_fus_e = Pc * (1 - fi) * g.fusion_alpha_fraction
+    return src_fus_i, src_fus_e
 
 
 def qei_coupling(e, n, ni, nz, Zi, Zz, Ai, Az):
@@ -809,12 +810,8 @@ l.i = np.s_[:g.n]
 l.e = np.s_[g.n:2 * g.n]
 l.p = np.s_[2 * g.n:3 * g.n]
 l.n = np.s_[3 * g.n:4 * g.n]
-g.zero = np.zeros((g.n, g.n))
-g.zero_vec = np.zeros(g.n)
-g.ones_vec = np.ones(g.n)
-g.v_p_zero = np.zeros(g.n + 1)
-g.ones_vpr = np.ones(g.n)
-g.identity = np.eye(4 * g.n)
+g.ones = np.ones(g.n)
+g.v_psi = np.zeros(g.n + 1)
 source_i_ext, source_e_ext = heat_source()
 source_p_ext = current_source()
 source_n_ext = particle_source()
@@ -828,7 +825,7 @@ g.ped_i = -g.ped_mask_T
 g.ped_e = -g.ped_mask_T
 g.ped_n = -g.ped_mask_n
 g.tc_p_base = g.cell_centers * g.mu0_pi16sq_Phib_sq_over_F_sq / g.resist_mult
-g.A_p_lower, g.A_p_diag, g.A_p_upper, g.b_p = transport(g.v_p_zero, g.geo_g2g3_over_rhon_face, g.bc_p)
+g.A_p_lower, g.A_p_diag, g.A_p_upper, g.b_p = transport(g.v_psi, g.geo_g2g3_over_rhon_face, g.bc_p)
 i_initial = np.interp(g.cell_centers, g.i_profile_x, g.i_profile_y)
 e_initial = np.interp(g.cell_centers, g.e_profile_x, g.e_profile_y)
 nGW = g.Ip / 1e6 / (np.pi * g.a_minor**2) * g.scaling_n_e
@@ -874,17 +871,17 @@ while True:
         z_r = g.D_z_r @ z + g.b_r_r * z_bc[1]
         q_f = jnp.abs(g.q_factor_axis * jnp.r_[1.0 / (p_g[1] * g.n), g.face_centers[1:] / p_g[1:]])
         sigma = neoclassical_conductivity(e_f, n_f, q_f, u_f)
-        si_fus, se_fus = fusion_source(e, i_f, j_f)
-        j_bs = bootstrap_current(i_f, e_f, n_f, j_f, p_g, q_f, i_g, e_g, n_g,
-                                 j_g, k_f, u_f)
-        qei_ii, qei_ee, qei_ie, qei_ei = qei_coupling(e, n, j, z, k, w,
-                                                      g.ion_A_avg,
-                                                      g.impurity_A_avg)
-        src_i = g.src_i_ext + si_fus * g.geo_vpr + g.src_i_ped
-        src_e = g.src_e_ext + se_fus * g.geo_vpr + g.src_e_ped
-        src_p = -(j_bs + g.src_p_ext) * g.source_p_coeff
-        tc_in = jnp.r_[j * g.vpr_5_3, n * g.vpr_5_3, g.ones_vec, g.geo_vpr]
-        tc_out = jnp.r_[g.tc_T, g.tc_T, g.tc_p_base * sigma, g.ones_vpr]
+        src_fus_i, src_fus_e = fusion_source(e, i_f, j_f)
+        src_bs = bootstrap_current(i_f, e_f, n_f, j_f, p_g, q_f, i_g, e_g, n_g,
+                                    j_g, k_f, u_f)
+        Q_ii, Q_ee, Q_ie, Q_ei = qei_coupling(e, n, j, z, k, w,
+                                              g.ion_A_avg,
+                                              g.impurity_A_avg)
+        src_i = g.src_i_ext + src_fus_i * g.geo_vpr + g.src_i_ped
+        src_e = g.src_e_ext + src_fus_e * g.geo_vpr + g.src_e_ped
+        src_p = -(src_bs + g.src_p_ext) * g.source_p_coeff
+        tc_in = jnp.r_[j * g.vpr_5_3, n * g.vpr_5_3, g.ones, g.geo_vpr]
+        tc_out = jnp.r_[g.tc_T, g.tc_T, g.tc_p_base * sigma, g.ones]
         v_n, chi_i, chi_e, chi_n = turbulent_transport(i_f, i_r, e_f, e_r, n_f,
                                                        n_g, n_r, j_f, j_r, z_f,
                                                        z_r, p_g, q_f, u_f)
@@ -902,16 +899,15 @@ while True:
         θdt = g.theta * dt
         b = jnp.r_[b_i + src_i, b_e + src_e, g.b_p + src_p, b_n + g.src_n]
         rhs = ((tc_prev / tc_in) * state + θdt * tc * b)[:, None]
-        pred_i, pred_e = solve_implicit_coupled_2x2(
-            lower_Ai, diag_Ai + qei_ii + g.ped_i, upper_Ai,
-            lower_Ae, diag_Ae + qei_ee + g.ped_e, upper_Ae,
-            qei_ie, qei_ei,
+        sol_i, sol_e = solve_implicit_coupled_2x2(
+            lower_Ai, diag_Ai + Q_ii + g.ped_i, upper_Ai,
+            lower_Ae, diag_Ae + Q_ee + g.ped_e, upper_Ae,
+            Q_ie, Q_ei,
             tc[l.i], tc[l.e], θdt, rhs[l.i, 0], rhs[l.e, 0]
         )
         sol_p = solve_implicit_tridiag(g.A_p_lower, g.A_p_diag, g.A_p_upper, tc[l.p], θdt, rhs[l.p])
         sol_n = solve_implicit_tridiag(lower_An, diag_An + g.ped_n, upper_An, tc[l.n], θdt, rhs[l.n])
-        
-        pred = jnp.r_[pred_i, pred_e, sol_p, sol_n]
+        pred = jnp.r_[sol_i, sol_e, sol_p, sol_n]
         tc_in_old = tc_in
     t += dt
     state = pred
