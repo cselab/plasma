@@ -34,48 +34,34 @@ g.z = dict(zip(g.sym, [1.0, 1.0, 10.0]))
 g.A = dict(zip(g.sym, [2.0141, 3.0160, 20.180]))
 
 
-def grad_op(bc):
-    D = np.zeros((g.n + 1, g.n))
-    b = np.zeros(g.n + 1)
-    for i in range(1, g.n):
-        D[i, i - 1] = -g.n
-        D[i, i] = g.n
-    b[0] = bc[2] if bc[2] is not None else 0.0
-    if bc[1] is not None:
-        D[g.n, g.n - 1] = -2.0 * g.n
-        b[g.n] = 2.0 * g.n * bc[1]
-    else:
-        b[g.n] = bc[3] if bc[3] is not None else 0.0
-    return D, b
-
-
-def grad_op_nu(inv_dx_array, bc):
-    D = np.zeros((g.n + 1, g.n))
-    b = np.zeros(g.n + 1)
-    for i in range(1, g.n):
-        D[i, i - 1] = -inv_dx_array[i - 1]
-        D[i, i] = inv_dx_array[i - 1]
-    b[0] = bc[2] if bc[2] is not None else 0.0
-    if bc[1] is not None:
-        D[g.n, g.n - 1] = -2.0 * inv_dx_array[-1]
-        b[g.n] = 2.0 * inv_dx_array[-1] * bc[1]
-    return D, b
-
-
-def face_op(bc_right_face, bc_right_grad):
-    I = np.zeros((g.n + 1, g.n))
-    I[0, 0] = 1.0
-    for i in range(1, g.n):
-        I[i, i - 1] = 0.5
-        I[i, i] = 0.5
-    b = np.zeros(g.n + 1)
+def face(x, bc_right_face, bc_right_grad):
+    x_f = jnp.r_[x[:1], 0.5 * (x[:-1] + x[1:])]
     if bc_right_face is not None:
-        b[g.n] = bc_right_face
+        return jnp.r_[x_f, bc_right_face]
     else:
-        I[g.n, g.n - 1] = 1.0
-        b[g.n] = 0.5 * g.dx * (bc_right_grad
-                               if bc_right_grad is not None else 0.0)
-    return I, b
+        bc_val = x[-1] + 0.5 * g.dx * (bc_right_grad if bc_right_grad is not None else 0.0)
+        return jnp.r_[x_f, bc_val]
+
+
+def grad(x, bc_left_grad, bc_right_face, bc_right_grad):
+    x_g_left = bc_left_grad if bc_left_grad is not None else 0.0
+    x_g_interior = g.n * jnp.diff(x)
+    if bc_right_face is not None:
+        x_g_right = g.n * (-2.0 * x[-1] + 2.0 * bc_right_face)
+        return jnp.r_[x_g_left, x_g_interior, x_g_right]
+    else:
+        x_g_right = bc_right_grad if bc_right_grad is not None else 0.0
+        return jnp.r_[x_g_left, x_g_interior, x_g_right]
+
+
+def grad_r(x, inv_dx, bc_left_grad, bc_right_face):
+    x_r_left = bc_left_grad if bc_left_grad is not None else 0.0
+    x_r_interior = inv_dx * jnp.diff(x)
+    if bc_right_face is not None:
+        x_r_right = 2.0 * inv_dx[-1] * (bc_right_face - x[-1])
+        return jnp.r_[x_r_left, x_r_interior, x_r_right]
+    else:
+        return jnp.r_[x_r_left, x_r_interior]
 
 
 def diff_terms(d, bc):
@@ -505,8 +491,10 @@ def ions(n_e, T_e, T_e_face):
                 0.0,
                 (g.bc_n[1] - j_bc[1] * k_f[-1]) / w_f[-1],
             ), 0.0, 0.0)
-    u_f = (k_f**2 * (g.I_j @ j + g.b_r * j_bc[1]) + w_f**2 *
-           (g.I_z @ z + g.b_r * z_bc[1])) / (g.I_n @ n_e + g.b_n_f)
+    j_f = face(j, j_bc[1], 0.0)
+    z_f = face(z, z_bc[1], 0.0)
+    n_e_f = face(n_e, g.bc_n[1], g.bc_n[3])
+    u_f = (k_f**2 * j_f + w_f**2 * z_f) / n_e_f
     return (j, z, k, k_f, w, u_f, j_bc, z_bc)
 
 
@@ -784,28 +772,7 @@ g.dp_edge = (g.Ip * g.pi_16_cubed * g.mu_0 * g.geo_Phi_b /
              (g.geo_g2g3_over_rhon_face[-1] * g.geo_F_face[-1]))
 g.bc_p = (None, None, 0.0, g.dp_edge)
 g.bc_n = (None, g.n_right_bc, 0.0, 0.0)
-g.D_i, g.b_i_g = grad_op(g.bc_i)
-g.D_e, g.b_e_g = grad_op(g.bc_e)
-g.D_p, g.b_p_g = grad_op(g.bc_p)
-g.D_n, g.b_n_g = grad_op(g.bc_n)
-inv_drmid = 1.0 / np.diff(g.geo_rmid)
-g.D_i_r, g.b_i_r = grad_op_nu(inv_drmid, g.bc_i)
-g.D_e_r, g.b_e_r = grad_op_nu(inv_drmid, g.bc_e)
-g.D_n_r, g.b_n_r = grad_op_nu(inv_drmid, g.bc_n)
-g.I_i, g.b_i_f = face_op(g.bc_i[1], g.bc_i[3])
-g.I_e, g.b_e_f = face_op(g.bc_e[1], g.bc_e[3])
-g.I_p, g.b_p_f = face_op(g.bc_p[1], g.bc_p[3])
-g.I_n, g.b_n_f = face_op(g.bc_n[1], g.bc_n[3])
-dummy_bc = (None, 1.0, 0.0, 0.0)
-g.D_j, _ = grad_op(dummy_bc)
-g.D_j_r, _ = grad_op_nu(inv_drmid, dummy_bc)
-g.I_j, _ = face_op(1.0, 0.0)
-g.D_z_r, _ = grad_op_nu(inv_drmid, dummy_bc)
-g.I_z, _ = face_op(1.0, 0.0)
-g.b_r = np.zeros(g.n + 1)
-g.b_r[-1] = 1.0
-g.b_r_g = g.b_r * (2.0 * g.n)
-g.b_r_r = g.b_r * (2.0 * inv_drmid[-1])
+g.inv_drmid = 1.0 / np.diff(g.geo_rmid)
 l.i = np.s_[:g.n]
 l.e = np.s_[g.n:2 * g.n]
 l.p = np.s_[2 * g.n:3 * g.n]
@@ -853,22 +820,22 @@ while True:
         e = pred[l.e]
         p = pred[l.p]
         n = pred[l.n]
-        i_f = g.I_i @ i + g.b_i_f
-        e_f = g.I_e @ e + g.b_e_f
-        n_f = g.I_n @ n + g.b_n_f
-        i_g = g.D_i @ i + g.b_i_g
-        e_g = g.D_e @ e + g.b_e_g
-        n_g = g.D_n @ n + g.b_n_g
-        p_g = g.D_p @ p + g.b_p_g
-        i_r = g.D_i_r @ i + g.b_i_r
-        e_r = g.D_e_r @ e + g.b_e_r
-        n_r = g.D_n_r @ n + g.b_n_r
+        i_f = face(i, g.bc_i[1], g.bc_i[3])
+        e_f = face(e, g.bc_e[1], g.bc_e[3])
+        n_f = face(n, g.bc_n[1], g.bc_n[3])
+        i_g = grad(i, g.bc_i[2], g.bc_i[1], g.bc_i[3])
+        e_g = grad(e, g.bc_e[2], g.bc_e[1], g.bc_e[3])
+        n_g = grad(n, g.bc_n[2], g.bc_n[1], g.bc_n[3])
+        p_g = grad(p, g.bc_p[2], g.bc_p[1], g.bc_p[3])
+        i_r = grad_r(i, g.inv_drmid, g.bc_i[2], g.bc_i[1])
+        e_r = grad_r(e, g.inv_drmid, g.bc_e[2], g.bc_e[1])
+        n_r = grad_r(n, g.inv_drmid, g.bc_n[2], g.bc_n[1])
         (j, z, k, k_f, w, u_f, j_bc, z_bc) = ions(n, e, e_f)
-        j_f = g.I_j @ j + g.b_r * j_bc[1]
-        j_g = g.D_j @ j + g.b_r_g * j_bc[1]
-        j_r = g.D_j_r @ j + g.b_r_r * j_bc[1]
-        z_f = g.I_z @ z + g.b_r * z_bc[1]
-        z_r = g.D_z_r @ z + g.b_r_r * z_bc[1]
+        j_f = face(j, j_bc[1], 0.0)
+        j_g = grad(j, 0.0, j_bc[1], 0.0)
+        j_r = grad_r(j, g.inv_drmid, 0.0, j_bc[1])
+        z_f = face(z, z_bc[1], 0.0)
+        z_r = grad_r(z, g.inv_drmid, 0.0, z_bc[1])
         q_f = jnp.abs(g.q_factor_axis * jnp.r_[1.0 / (p_g[1] * g.n), g.face_centers[1:] / p_g[1:]])
         sigma = neoclassical_conductivity(e_f, n_f, q_f, u_f)
         src_fus_i, src_fus_e = fusion_source(e, i_f, j_f)
